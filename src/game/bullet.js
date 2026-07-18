@@ -6,14 +6,13 @@
 // beiden Achsen (Eckenfall), wird auf beiden Achsen reflektiert und
 // trotzdem nur EIN Abpraller abgezogen.
 
-import { BULLET_RADIUS } from '../config.js';
 import { circleOverlapsAABB } from './collision.js';
 
 const TRAIL_MAX = 60; // Ticks Bahnhistorie fuers Debug-Overlay
 
 let nextId = 1;
 
-export function createBullet(x, y, angle, { speed, ricochets, owner }) {
+export function createBullet(x, y, angle, { speed, radius, ricochets, owner }) {
   return {
     id: nextId++,
     x,
@@ -22,7 +21,7 @@ export function createBullet(x, y, angle, { speed, ricochets, owner }) {
     prevY: y,
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
-    radius: BULLET_RADIUS,
+    radius,
     ricochetsLeft: ricochets,
     owner, // Referenz auf den Schuetzen (fuer den 80-ms-Schutz)
     age: 0, // s seit Abschuss

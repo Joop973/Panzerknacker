@@ -1,0 +1,123 @@
+{
+  "physics": {
+    "tankRadius": 12,
+    "bulletRadius": 4,
+    "fireCooldownS": 0.25,
+    "shooterGraceS": 0.08
+  },
+  "speeds": {
+    "fix": 0,
+    "slow": 40,
+    "normal": 70,
+    "fast": 100,
+    "veryfast": 140
+  },
+  "bulletSpeeds": {
+    "bullet": 130,
+    "rocket": 300,
+    "bounce_rocket": 200
+  },
+  "ai": {
+    "raycastStepPx": 4,
+    "raycastMaxPx": 900,
+    "turret": {
+      "random_seek": {
+        "turnSpeed": 1.6,
+        "retargetMinS": 0.8,
+        "retargetMaxS": 2.2
+      },
+      "weak_aim": {
+        "turnSpeed": 2.4,
+        "jitterRad": 0.35,
+        "rejitterS": 0.7,
+        "fireConeRad": 0.12,
+        "muzzleClearPx": 48
+      }
+    },
+    "drive": {
+      "wander": {
+        "turnSpeed": 2.0,
+        "retargetMinS": 1.5,
+        "retargetMaxS": 3.0,
+        "blockedRetargetS": 0.25,
+        "escapeSpreadRad": 1.0
+      }
+    }
+  },
+  "types": {
+    "player": {
+      "speed": "normal",
+      "magazine": 5,
+      "ricochets": 1,
+      "mines": 2,
+      "weapon": "bullet"
+    },
+    "t_brown": {
+      "speed": "fix",
+      "magazine": 1,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "turret": "random_seek",
+      "drive": "none"
+    },
+    "t_grey": {
+      "speed": "slow",
+      "magazine": 1,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "turret": "weak_aim",
+      "drive": "wander"
+    },
+    "t_teal": {
+      "speed": "slow",
+      "magazine": 1,
+      "ricochets": 0,
+      "mines": 0,
+      "weapon": "rocket"
+    },
+    "t_yellow": {
+      "speed": "fast",
+      "magazine": 1,
+      "ricochets": 1,
+      "mines": 4,
+      "weapon": "bullet"
+    },
+    "t_pink": {
+      "speed": "normal",
+      "magazine": 3,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "bullet"
+    },
+    "t_green": {
+      "speed": "fix",
+      "magazine": 2,
+      "ricochets": 2,
+      "mines": 0,
+      "weapon": "bounce_rocket"
+    },
+    "t_purple": {
+      "speed": "fast",
+      "magazine": 5,
+      "ricochets": 1,
+      "mines": 2,
+      "weapon": "bullet"
+    },
+    "t_white": {
+      "speed": "normal",
+      "magazine": 5,
+      "ricochets": 1,
+      "mines": 2,
+      "weapon": "bullet"
+    },
+    "t_black": {
+      "speed": "veryfast",
+      "magazine": 2,
+      "ricochets": 0,
+      "mines": 2,
+      "weapon": "rocket"
+    }
+  }
+}

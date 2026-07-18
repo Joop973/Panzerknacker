@@ -1,28 +1,20 @@
 // Spiel-Zustand und Spiellogik-Schritt (Spec Abschnitt 3: game/state.js).
 //
-// Phase 2: hartcodierte Testarena, Spielerpanzer, Geschosse mit
-// Abprallern. Kein Generator, kein JSON -- das kommt ab Phase 6.
+// Phase 3: hartcodierte Testarena, Spielerpanzer plus Gegner (t_brown,
+// t_grey) mit KI. Alle Balancing-Werte kommen aus data/tanks.json und
+// werden als data-Objekt injiziert (kein fetch hier -- so bleibt die
+// Logik headless testbar). Raumgenerator und JSON-Kacheln ab Phase 6.
 
-import {
-  CELL,
-  COLS,
-  ROWS,
-  BULLET_SPEED,
-  FIRE_COOLDOWN,
-  PLAYER_MAGAZINE,
-  PLAYER_RICOCHETS,
-  SHOOTER_GRACE,
-  RESPAWN_DELAY,
-} from '../config.js';
-import { createPlayer, updatePlayer } from './tank.js';
-import { createBullet, updateBullet } from './bullet.js';
+import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
+import { mulberry32 } from '../core/rng.js';
+import { createTank, moveTank, fireBullet } from './tank.js';
+import { updateBullet } from './bullet.js';
+import { updateEnemy } from './ai.js';
 import { circlesOverlap } from './collision.js';
 
 // Hartcodierte Testarena: 24x16 Zellen.
 //   '#' = solid-Wand (unzerstoerbar, blockiert)
 //   '.' = frei
-// Aussenrand ist geschlossen; die inneren Cluster dienen als Testfaelle
-// fuer Kanten- und Ecken-Sliding sowie Abpraller.
 const ARENA_MAP = [
   '########################',
   '#......................#',
@@ -42,79 +34,79 @@ const ARENA_MAP = [
   '########################',
 ];
 
-const SPAWN = { col: 3, row: 13 };
+const PLAYER_SPAWN = { col: 3, row: 13 };
 
-// Wandeln die ASCII-Karte in eine Liste von AABBs (exakt 32x32) um.
+// Test-Gegner fuer Phase 3 (Spawns kommen ab Phase 6 aus dem Generator).
+const ENEMY_SPAWNS = [
+  { type: 't_brown', col: 12, row: 5 },
+  { type: 't_brown', col: 20, row: 2 },
+  { type: 't_grey', col: 18, row: 9 },
+  { type: 't_grey', col: 6, row: 7 },
+];
+
 function buildWalls(map) {
   const walls = [];
   for (let row = 0; row < ROWS; row++) {
-    const line = map[row];
     for (let col = 0; col < COLS; col++) {
-      if (line[col] === '#') {
-        walls.push({
-          x: col * CELL,
-          y: row * CELL,
-          w: CELL,
-          h: CELL,
-          type: 'solid',
-        });
+      if (map[row][col] === '#') {
+        walls.push({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'solid' });
       }
     }
   }
   return walls;
 }
 
-export function createState() {
-  const walls = buildWalls(ARENA_MAP);
-  const player = createPlayer(
-    SPAWN.col * CELL + CELL / 2,
-    SPAWN.row * CELL + CELL / 2,
-  );
+// Loest einen Typnamen aus tanks.json in ein flaches cfg-Objekt auf.
+function resolveCfg(data, type) {
+  const t = data.types[type];
   return {
-    walls,
-    player,
-    bullets: [],
-    respawnTimer: 0, // > 0 waehrend der Spieler tot ist
+    radius: data.physics.tankRadius,
+    bulletRadius: data.physics.bulletRadius,
+    fireCooldown: data.physics.fireCooldownS,
+    speed: data.speeds[t.speed],
+    magazine: t.magazine,
+    ricochets: t.ricochets,
+    bulletSpeed: data.bulletSpeeds[t.weapon],
+    turret: t.turret,
+    drive: t.drive,
   };
 }
 
-function liveBulletsOf(state, owner) {
-  let n = 0;
-  for (const b of state.bullets) {
-    if (!b.dead && b.owner === owner) n++;
+function cellCenter(col, row) {
+  return { x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 };
+}
+
+export function createState(data, seed = 1) {
+  const walls = buildWalls(ARENA_MAP);
+  const p = cellCenter(PLAYER_SPAWN.col, PLAYER_SPAWN.row);
+  const player = createTank('player', resolveCfg(data, 'player'), p.x, p.y);
+  const tanks = [player];
+  for (const s of ENEMY_SPAWNS) {
+    const c = cellCenter(s.col, s.row);
+    tanks.push(createTank(s.type, resolveCfg(data, s.type), c.x, c.y));
   }
-  return n;
+  return {
+    data,
+    rng: mulberry32(seed),
+    walls,
+    tanks,
+    player,
+    bullets: [],
+    respawnTimer: 0, // > 0 waehrend der Spieler tot ist
+    // Zellgenauer Solid-Test in Pixelkoordinaten (fuer KI-Raycasts).
+    isSolid(px, py) {
+      const col = Math.floor(px / CELL);
+      const row = Math.floor(py / CELL);
+      if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return true;
+      return ARENA_MAP[row][col] === '#';
+    },
+  };
 }
 
-function tryFire(state) {
-  const p = state.player;
-  // Epsilon: 0.25 ist als Summe von 1/60-Schritten nicht exakt
-  // darstellbar; ohne Toleranz feuert man einen Tick zu spaet.
-  if (p.cooldown > 1e-9) return;
-  if (liveBulletsOf(state, p) >= PLAYER_MAGAZINE) return;
-  // Muendung: Spitze des Rohrs.
-  const muzzle = p.radius + 8;
-  state.bullets.push(
-    createBullet(
-      p.x + Math.cos(p.turret) * muzzle,
-      p.y + Math.sin(p.turret) * muzzle,
-      p.turret,
-      { speed: BULLET_SPEED, ricochets: PLAYER_RICOCHETS, owner: p },
-    ),
-  );
-  p.cooldown = FIRE_COOLDOWN;
-}
-
-function killPlayer(state) {
-  state.player.alive = false;
-  state.respawnTimer = RESPAWN_DELAY;
-}
-
-function respawn(state) {
-  const fresh = createPlayer(
-    SPAWN.col * CELL + CELL / 2,
-    SPAWN.row * CELL + CELL / 2,
-  );
+function respawnPlayer(state) {
+  const p = cellCenter(PLAYER_SPAWN.col, PLAYER_SPAWN.row);
+  const fresh = createTank('player', resolveCfg(state.data, 'player'), p.x, p.y);
+  state.tanks[0] = fresh;
   state.player = fresh;
   state.bullets = [];
   state.respawnTimer = 0;
@@ -124,14 +116,25 @@ function respawn(state) {
 export function stepState(state, cmd, dt) {
   const p = state.player;
 
+  for (const t of state.tanks) {
+    if (t.alive) t.cooldown = Math.max(0, t.cooldown - dt);
+  }
+
   if (!p.alive) {
     state.respawnTimer -= dt;
-    if (state.respawnTimer <= 0) respawn(state);
+    if (state.respawnTimer <= 0) respawnPlayer(state);
   } else {
-    updatePlayer(p, cmd.move, state.walls, dt);
+    moveTank(p, cmd.move, state, dt);
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
-    p.cooldown = Math.max(0, p.cooldown - dt);
-    if (cmd.fire) tryFire(state);
+    if (cmd.fire) fireBullet(p, state);
+  }
+
+  // Gegner: getrennte Turm-/Fahr-KI liefert Bewegungsvektor + Schusswunsch.
+  for (const t of state.tanks) {
+    if (t === state.player || !t.alive) continue;
+    const { move, fire } = updateEnemy(t, state, dt);
+    moveTank(t, move, state, dt);
+    if (fire) fireBullet(t, state);
   }
 
   for (const b of state.bullets) updateBullet(b, state.walls, dt);
@@ -139,11 +142,11 @@ export function stepState(state, cmd, dt) {
   // Geschosse zerstoeren sich gegenseitig bei Kollision.
   const bullets = state.bullets;
   for (let i = 0; i < bullets.length; i++) {
-    const a = bullets[i];
-    if (a.dead) continue;
+    if (bullets[i].dead) continue;
     for (let j = i + 1; j < bullets.length; j++) {
+      if (bullets[j].dead) continue;
+      const a = bullets[i];
       const b = bullets[j];
-      if (b.dead) continue;
       if (circlesOverlap(a.x, a.y, a.radius, b.x, b.y, b.radius)) {
         a.dead = true;
         b.dead = true;
@@ -151,15 +154,18 @@ export function stepState(state, cmd, dt) {
     }
   }
 
-  // Geschoss gegen Spieler: toedlich, auch das eigene -- ausser
-  // innerhalb der Schuetzen-Schutzzeit direkt nach dem Abschuss.
-  if (state.player.alive) {
-    for (const b of state.bullets) {
-      if (b.dead) continue;
-      if (b.owner === state.player && b.age < SHOOTER_GRACE) continue;
-      if (circlesOverlap(b.x, b.y, b.radius, p.x, p.y, p.radius)) {
+  // Geschoss gegen Panzer: toedlich fuer JEDEN, auch den Schuetzen --
+  // ausser innerhalb dessen Schutzzeit direkt nach dem Abschuss.
+  const grace = state.data.physics.shooterGraceS;
+  for (const b of state.bullets) {
+    if (b.dead) continue;
+    for (const t of state.tanks) {
+      if (!t.alive) continue;
+      if (b.owner === t && b.age < grace) continue;
+      if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
         b.dead = true;
-        killPlayer(state);
+        t.alive = false;
+        if (t === state.player) state.respawnTimer = RESPAWN_DELAY;
         break;
       }
     }

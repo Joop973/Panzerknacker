@@ -53,10 +53,12 @@ export function createDebugOverlay(ctx) {
   }
 
   function drawPanel(state, fps) {
-    const entities = 1 + state.bullets.length; // Spieler + Geschosse
+    const liveTanks = state.tanks.filter((t) => t.alive).length;
+    const entities = liveTanks + state.bullets.length;
     const lines = [
       `FPS ${fps.toFixed(0)}`,
       `Entities ${entities}`,
+      `Tanks ${liveTanks}/${state.tanks.length}`,
       `Bullets ${state.bullets.length}`,
       `Cooldown ${state.player.cooldown.toFixed(2)}s`,
     ];
@@ -72,8 +74,8 @@ export function createDebugOverlay(ctx) {
   return {
     render(state, fps) {
       drawWallBoxes(state.walls);
-      if (state.player.alive) {
-        drawCircle(state.player.x, state.player.y, state.player.radius);
+      for (const t of state.tanks) {
+        if (t.alive) drawCircle(t.x, t.y, t.cfg.radius);
       }
       for (const b of state.bullets) drawCircle(b.x, b.y, b.radius);
       drawTrails(state.bullets);

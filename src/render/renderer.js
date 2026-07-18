@@ -1,9 +1,8 @@
 // Renderer (Spec Abschnitt 3: render/renderer.js).
 //
-// Phase 2: Boden, solid-Waende, Spielerpanzer (Rumpf + getrennter Turm)
-// und Geschosse. Positionen werden zwischen zwei Physikschritten
-// interpoliert (alpha), damit die Bewegung bei entkoppeltem Rendering
-// fluessig bleibt. Reifenspuren, Kamera und Effekte folgen spaeter.
+// Phase 3: Boden, Reifenspuren-Schicht, Waende, alle Panzer (Spieler +
+// Gegner, farbcodiert) und Geschosse. Positionen werden zwischen zwei
+// Physikschritten interpoliert (alpha).
 
 import { WIDTH, HEIGHT, CELL } from '../config.js';
 
@@ -12,18 +11,23 @@ const COLORS = {
   grid: '#22222c',
   wall: '#4a4a5a',
   wallEdge: '#5e5e72',
-  tankBody: '#c8b24a',
-  tankOutline: '#2a2410',
-  barrel: '#2a2410',
   bullet: '#e8e4d8',
   bulletOutline: '#8a8578',
+  outline: '#1a1408',
+};
+
+// Rumpffarben je Panzertyp (eigene Pixel-Art kommt in Phase 10).
+const TANK_COLORS = {
+  player: '#c8b24a',
+  t_brown: '#8a5a33',
+  t_grey: '#9aa0a8',
 };
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
-export function createRenderer(ctx) {
+export function createRenderer(ctx, tracks) {
   function drawFloor() {
     ctx.fillStyle = COLORS.floor;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -53,15 +57,15 @@ export function createRenderer(ctx) {
     }
   }
 
-  function drawPlayer(player, alpha) {
-    if (!player.alive) return;
-    const x = lerp(player.prevX, player.x, alpha);
-    const y = lerp(player.prevY, player.y, alpha);
-    const r = player.radius;
+  function drawTank(t, alpha) {
+    if (!t.alive) return;
+    const x = lerp(t.prevX, t.x, alpha);
+    const y = lerp(t.prevY, t.y, alpha);
+    const r = t.cfg.radius;
 
     // Rumpf.
-    ctx.fillStyle = COLORS.tankBody;
-    ctx.strokeStyle = COLORS.tankOutline;
+    ctx.fillStyle = TANK_COLORS[t.type] || '#ffffff';
+    ctx.strokeStyle = COLORS.outline;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -69,14 +73,11 @@ export function createRenderer(ctx) {
     ctx.stroke();
 
     // Rohr in Turm-Richtung (unabhaengig vom Rumpf).
-    ctx.strokeStyle = COLORS.barrel;
+    ctx.strokeStyle = COLORS.outline;
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(x, y);
-    ctx.lineTo(
-      x + Math.cos(player.turret) * (r + 8),
-      y + Math.sin(player.turret) * (r + 8),
-    );
+    ctx.lineTo(x + Math.cos(t.turret) * (r + 8), y + Math.sin(t.turret) * (r + 8));
     ctx.stroke();
   }
 
@@ -97,8 +98,9 @@ export function createRenderer(ctx) {
   return {
     render(state, alpha) {
       drawFloor();
+      tracks.draw(ctx);
       drawWalls(state.walls);
-      drawPlayer(state.player, alpha);
+      for (const t of state.tanks) drawTank(t, alpha);
       drawBullets(state.bullets, alpha);
     },
   };
