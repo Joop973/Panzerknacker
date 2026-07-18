@@ -9,6 +9,23 @@ function clamp(v, min, max) {
   return v < min ? min : v > max ? max : v;
 }
 
+// Reiner Ueberlappungstest Kreis gegen AABB (ohne Aufloesung).
+export function circleOverlapsAABB(cx, cy, r, wall) {
+  const nx = clamp(cx, wall.x, wall.x + wall.w);
+  const ny = clamp(cy, wall.y, wall.y + wall.h);
+  const dx = cx - nx;
+  const dy = cy - ny;
+  return dx * dx + dy * dy < r * r;
+}
+
+// Ueberlappungstest Kreis gegen Kreis.
+export function circlesOverlap(ax, ay, ar, bx, by, br) {
+  const dx = ax - bx;
+  const dy = ay - by;
+  const rr = ar + br;
+  return dx * dx + dy * dy < rr * rr;
+}
+
 // Schiebt den Kreis (Objekt mit x, y) aus einer einzelnen AABB heraus,
 // falls er sie ueberlappt. Gibt true zurueck, wenn korrigiert wurde.
 function resolveCircleAABB(circle, r, wall) {

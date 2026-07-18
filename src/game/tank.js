@@ -1,7 +1,8 @@
 // Panzer-Entity (Spec Abschnitt 5).
 //
-// Phase 1: nur der Spielerpanzer, nur Fahren mit Sliding-Kollision.
-// Gegner, Turm-KI, Schiessen und Minen kommen ab Phase 2/3.
+// Phase 2: Spielerpanzer mit Fahren (Sliding) und getrenntem Turm.
+// Rumpf (heading) zeigt in Fahrtrichtung, Turm (turret) zielt zur Maus.
+// Gegner und deren KI kommen ab Phase 3.
 
 import { PLAYER_RADIUS, PLAYER_SPEED } from '../config.js';
 import { resolveCircleWalls } from './collision.js';
@@ -15,8 +16,13 @@ export function createPlayer(x, y) {
     prevY: y,
     radius: PLAYER_RADIUS,
     speed: PLAYER_SPEED,
-    // Blickrichtung (rad). Zeigt in die zuletzt gefahrene Richtung.
+    // Rumpf-Blickrichtung (rad). Zeigt in die zuletzt gefahrene Richtung.
     heading: -Math.PI / 2, // nach oben
+    // Turm-Richtung (rad), unabhaengig vom Rumpf.
+    turret: -Math.PI / 2,
+    // Restzeit des Feuerraten-Cooldowns (s).
+    cooldown: 0,
+    alive: true,
   };
 }
 
