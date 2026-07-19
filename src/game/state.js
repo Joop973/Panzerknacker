@@ -12,10 +12,7 @@ import { updateBullet } from './bullet.js';
 import { updateMines } from './mine.js';
 import { updateEnemy } from './ai.js';
 import { circlesOverlap } from './collision.js';
-import { generateRoom } from './generator.js';
-
-// Test-Zusammenstellung; ab Phase 7 kauft das Gefahrenbudget ein.
-const ENEMY_TYPES = ['t_brown', 't_grey', 't_teal', 't_pink', 't_yellow', 't_green'];
+import { generateRoom, buildFixedRoom } from './generator.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
 const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole' };
@@ -54,9 +51,17 @@ function resolveCfg(data, type) {
   };
 }
 
-export function createState(data, tiles, seed = 1) {
-  const genRng = mulberry32(seed);
-  const room = generateRoom(tiles, genRng, ENEMY_TYPES.length);
+// Baut den Zustand fuer EINEN Raum.
+// opts: { genRng      -- Seed-RNG-Strom fuer den Raumbau (Pflicht)
+//         enemyTypes  -- Typliste der Gegner dieses Raums
+//         aiSeed      -- Seed fuer den KI-RNG-Strom
+//         fixedRoom   -- optionales festes Layout (Finalraum)
+//         weights     -- optionale Kachelgewichte (Raumcharakter) }
+export function createState(data, tiles, opts) {
+  const { genRng, enemyTypes, aiSeed, fixedRoom, weights } = opts;
+  const room = fixedRoom
+    ? buildFixedRoom(fixedRoom, enemyTypes.length)
+    : generateRoom(tiles, genRng, enemyTypes.length, weights);
   const grid = room.grid;
   const walls = buildWalls(grid);
 
@@ -67,7 +72,7 @@ export function createState(data, tiles, seed = 1) {
     room.playerSpawn.y,
   );
   const tanks = [player];
-  ENEMY_TYPES.forEach((type, i) => {
+  enemyTypes.forEach((type, i) => {
     const s = room.enemySpawns[i];
     const t = createTank(type, resolveCfg(data, type), s.x, s.y);
     t.spawnX = s.x;
@@ -78,11 +83,11 @@ export function createState(data, tiles, seed = 1) {
   const state = {
     data,
     tiles,
-    seed,
-    genRng,
-    rng: mulberry32((seed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
+    rng: mulberry32((aiSeed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
     playerSpawn: room.playerSpawn,
     emergencyRoom: room.emergency,
+    enemyKills: 0, // in diesem Raum getoetete Gegner
+    playerDeaths: 0, // Tode des Spielers in diesem Raum
     walls,
     tanks,
     player,
@@ -108,12 +113,21 @@ export function createState(data, tiles, seed = 1) {
     },
     killTank(tank) {
       tank.alive = false;
-      if (tank === state.player) state.respawnTimer = RESPAWN_DELAY;
+      if (tank === state.player) {
+        state.playerDeaths++;
+        state.respawnTimer = RESPAWN_DELAY;
+      } else {
+        state.enemyKills++;
+      }
     },
   };
   return state;
 }
 
+// Raum-Neustart nach Spielertod (Spec Abschnitt 8): identisches Layout,
+// getoetete Gegner bleiben tot, lebende starten auf ihren urspruenglichen
+// Spawns; Geschosse und Minen werden entfernt; zerstoerte Waende bleiben
+// zerstoert.
 function respawnPlayer(state) {
   const fresh = createTank(
     'player',
@@ -123,8 +137,19 @@ function respawnPlayer(state) {
   );
   state.tanks[0] = fresh;
   state.player = fresh;
-  // Wie beim Raum-Neustart (Spec Abschnitt 8): Geschosse und Minen
-  // werden entfernt; zerstoerte Waende bleiben zerstoert.
+  for (const t of state.tanks) {
+    if (t === fresh || !t.alive) continue;
+    t.x = t.spawnX;
+    t.y = t.spawnY;
+    t.prevX = t.spawnX;
+    t.prevY = t.spawnY;
+    t.vx = 0;
+    t.vy = 0;
+    t.cooldown = 0;
+    t.turret = -Math.PI / 2;
+    t.heading = -Math.PI / 2;
+    t.ai = {};
+  }
   state.bullets = [];
   state.mines = [];
   state.explosions = [];

@@ -1,46 +1,61 @@
 // Einstiegspunkt (Spec Abschnitt 3: main.js).
 //
-// Laedt die Balancing-Daten aus /data/*.json, verdrahtet dann
-// Fixed-Timestep-Loop, Eingabe, Zustand, Renderer, Reifenspuren und
-// Debug-Overlay. Phase 3: Gegner (t_brown, t_grey) mit KI.
+// Laedt die Daten aus /data/*.json, zeigt den Start-Screen mit
+// Seed-Eingabe und verdrahtet Loop, Eingabe, Run-Controller, Renderer,
+// Reifenspuren, HUD und Debug-Overlay.
 
 import { STEP } from './config.js';
 import { createLoop } from './core/loop.js';
 import { createInput } from './core/input.js';
 import { createAudio } from './core/audio.js';
-import { createState, stepState } from './game/state.js';
+import { createRun, stepRun } from './game/run.js';
 import { createRenderer } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
+import { createHud } from './ui/hud.js';
 
 async function init() {
-  const [tanksData, tilesData] = await Promise.all([
+  const [tanksData, tilesData, diffData] = await Promise.all([
     fetch('data/tanks.json').then((r) => r.json()),
     fetch('data/tiles.json').then((r) => r.json()),
+    fetch('data/difficulty.json').then((r) => r.json()),
   ]);
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
+  const startOverlay = document.getElementById('start');
+  const seedInput = document.getElementById('seedInput');
+  const startBtn = document.getElementById('startBtn');
 
   const input = createInput(window, canvas);
   const audio = createAudio();
-  // Browser geben Audio erst nach einer Nutzergeste frei.
   window.addEventListener('pointerdown', audio.unlock);
   window.addEventListener('keydown', audio.unlock);
-  // Seed: bis zur Seed-Eingabe im UI (Phase 7) einfach aus der Uhr.
-  const state = createState(tanksData, tilesData, Date.now() >>> 0);
-  const tracks = createTracks();
-  const renderer = createRenderer(ctx, tracks);
-  const debugOverlay = createDebugOverlay(ctx);
 
-  // FPS-Messung fuers Debug-Overlay: Render-Frames pro halber Sekunde.
+  const tracks = createTracks();
+  const renderer = createRenderer(ctx);
+  const debugOverlay = createDebugOverlay(ctx);
+  const hud = createHud(ctx);
+
+  let run = null;
+  let lastRoomState = null;
+
   let fps = 0;
   let frameCount = 0;
   let fpsWindowStart = performance.now();
 
+  function startRun() {
+    const raw = seedInput.value.trim();
+    const seed = raw === '' ? Date.now() >>> 0 : Number(raw) >>> 0;
+    seedInput.value = String(seed);
+    run = createRun(tanksData, tilesData, diffData, seed);
+    startOverlay.classList.add('hidden');
+  }
+
   function update(dt) {
-    stepState(
-      state,
+    if (!run) return;
+    stepRun(
+      run,
       {
         move: input.getMoveAxis(),
         aim: input.getAim(),
@@ -49,14 +64,22 @@ async function init() {
       },
       dt,
     );
-    tracks.stamp(state.tanks);
-    // Von der Spiellogik gemeldete Audio-Ereignisse abspielen.
-    for (const name of state.sounds.splice(0)) audio.play(name);
+    // Raumwechsel erkennen -> Reifenspuren-Buffer leeren.
+    if (run.state !== lastRoomState) {
+      tracks.clear();
+      lastRoomState = run.state;
+    }
+    if (run.phase === 'playing') tracks.stamp(run.state.tanks);
+    for (const name of run.state.sounds.splice(0)) audio.play(name);
   }
 
   function render(alpha) {
-    renderer.render(state, alpha);
-    if (input.isDebug()) debugOverlay.render(state, fps);
+    if (!run) return;
+    renderer.render(run.state, alpha, tracks);
+    if (input.isDebug() && run.phase === 'playing') {
+      debugOverlay.render(run.state, fps);
+    }
+    hud.render(run);
 
     frameCount++;
     const now = performance.now();
@@ -69,8 +92,21 @@ async function init() {
 
   const loop = createLoop({ update, render, step: STEP });
 
-  // Auto-Pause bei Tab-Wechsel (Spec Abschnitt 9). Verhindert zusaetzlich,
-  // dass sich nach langer Inaktivitaet Aufholschritte stauen.
+  startBtn.addEventListener('click', startRun);
+  seedInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') startRun();
+  });
+  // Enter auf Endscreens: zurueck zum Start-Screen (Seed vorbefuellt).
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !run) return;
+    if (run.phase === 'gameover' || run.phase === 'victory') {
+      startOverlay.classList.remove('hidden');
+      seedInput.select();
+      run = null;
+    }
+  });
+
+  // Auto-Pause bei Tab-Wechsel (Spec Abschnitt 9).
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) loop.stop();
     else loop.start();

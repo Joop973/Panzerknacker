@@ -10,6 +10,12 @@
   <main id="game">
     <canvas id="canvas" width="768" height="512"></canvas>
     <p class="hint">WASD: fahren &middot; Maus: zielen &middot; Klick: schie&szlig;en &middot; Leertaste: Mine &middot; F1: Debug</p>
+    <div id="start" class="overlay">
+      <h1>PANZERKNACKER</h1>
+      <label for="seedInput">Seed (leer = zufällig)</label>
+      <input id="seedInput" inputmode="numeric" autocomplete="off" placeholder="z.B. 4711" />
+      <button id="startBtn">Start</button>
+    </div>
   </main>
   <script type="module" src="src/main.js"></script>
 </body>

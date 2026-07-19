@@ -57,7 +57,7 @@ export function whiteAlpha(state) {
   return phase < w.shimmerDurationS ? 0.3 : 0;
 }
 
-export function createRenderer(ctx, tracks) {
+export function createRenderer(ctx) {
   function drawFloor() {
     ctx.fillStyle = COLORS.floor;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -224,7 +224,7 @@ export function createRenderer(ctx, tracks) {
   }
 
   return {
-    render(state, alpha) {
+    render(state, alpha, tracks) {
       drawFloor();
       tracks.draw(ctx);
       drawMines(state);

@@ -1,0 +1,23 @@
+{
+  "lives": 3,
+  "extraLifeEveryClearedRooms": 5,
+  "roomsBeforeFinal": 15,
+  "maxEnemiesPerRoom": 8,
+  "budget": { "base": 2, "perRoom": 1.6 },
+  "danger": {
+    "t_brown": { "points": 1, "unlockRoom": 1 },
+    "t_grey": { "points": 2, "unlockRoom": 1 },
+    "t_teal": { "points": 4, "unlockRoom": 2 },
+    "t_yellow": { "points": 3, "unlockRoom": 3 },
+    "t_pink": { "points": 5, "unlockRoom": 4 },
+    "t_green": { "points": 6, "unlockRoom": 5 },
+    "t_purple": { "points": 9, "unlockRoom": 7 },
+    "t_white": { "points": 8, "unlockRoom": 9 },
+    "t_black": { "points": 12, "unlockRoom": 11 }
+  },
+  "finalRoom": { "fixed": ["t_black", "t_black"], "supportBudget": 12 },
+  "roomCharacters": [
+    { "name": "offen", "weights": { "open": 4, "pillars": 2, "corner": 1.5, "corridor": 0.5, "cross": 1, "pocket": 1 } },
+    { "name": "eng", "weights": { "corridor": 4, "cross": 2, "pocket": 2, "corner": 2, "open": 0.5, "pillars": 1 } }
+  ]
+}

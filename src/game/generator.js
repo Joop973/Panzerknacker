@@ -38,13 +38,30 @@ function pick(rng, arr) {
   return arr[Math.floor(rng() * arr.length)];
 }
 
-// Baut das 24x16-Rohlayout aus 3x2 zufaelligen Kacheln.
-function buildGrid(tilesData, rng) {
+// Gewichtete Kachelwahl nach Kategorie (Raumcharakter, Spec Abschnitt 7B).
+function pickTile(tilesData, rng, weights) {
   const names = Object.keys(tilesData.tiles);
+  if (!weights) return tilesData.tiles[pick(rng, names)];
+  let total = 0;
+  const w = names.map((n) => {
+    const v = weights[tilesData.tiles[n].category] ?? 1;
+    total += v;
+    return v;
+  });
+  let roll = rng() * total;
+  for (let i = 0; i < names.length; i++) {
+    roll -= w[i];
+    if (roll <= 0) return tilesData.tiles[names[i]];
+  }
+  return tilesData.tiles[names[names.length - 1]];
+}
+
+// Baut das 24x16-Rohlayout aus 3x2 zufaelligen Kacheln.
+function buildGrid(tilesData, rng, weights) {
   const grid = Array.from({ length: ROWS }, () => new Array(COLS).fill('.'));
   for (let ty = 0; ty < 2; ty++) {
     for (let tx = 0; tx < 3; tx++) {
-      let rows = tilesData.tiles[pick(rng, names)].rows;
+      let rows = pickTile(tilesData, rng, weights).rows;
       const rot = Math.floor(rng() * 4);
       for (let i = 0; i < rot; i++) rows = rot90(rows);
       if (rng() < 0.5) rows = mirror(rows);
@@ -162,9 +179,9 @@ export function buildFixedRoom(roomDef, enemyCount) {
 }
 
 // Hauptfunktion: generiert einen validierten Raum.
-export function generateRoom(tilesData, rng, enemyCount) {
+export function generateRoom(tilesData, rng, enemyCount, weights) {
   for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
-    const grid = buildGrid(tilesData, rng);
+    const grid = buildGrid(tilesData, rng, weights);
     const share = wallShare(grid);
     if (share < WALL_MIN || share > WALL_MAX) continue;
     const spawns = placeSpawns(grid, rng, enemyCount);
