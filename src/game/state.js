@@ -51,14 +51,29 @@ function resolveCfg(data, type) {
   };
 }
 
+// Upgrade-Level auf das Spieler-cfg anwenden (Spec Abschnitt 8).
+function applyUpgrades(cfg, ups) {
+  if (!ups) return cfg;
+  const l = (k) => ups[k] || 0;
+  cfg.magazine += 2 * l('magazin');
+  cfg.ricochets += l('abpraller'); // Basis 1, max +1 => harte Grenze 2
+  cfg.bulletSpeed *= Math.pow(1.2, l('ladung'));
+  cfg.mines += l('kettenglied');
+  cfg.mineRadiusMult = Math.pow(1.3, l('sprengkraft'));
+  cfg.speed *= Math.pow(1.12, l('kettenantrieb'));
+  cfg.tungsten = l('wolframkern') > 0;
+  return cfg;
+}
+
 // Baut den Zustand fuer EINEN Raum.
 // opts: { genRng      -- Seed-RNG-Strom fuer den Raumbau (Pflicht)
 //         enemyTypes  -- Typliste der Gegner dieses Raums
 //         aiSeed      -- Seed fuer den KI-RNG-Strom
 //         fixedRoom   -- optionales festes Layout (Finalraum)
-//         weights     -- optionale Kachelgewichte (Raumcharakter) }
+//         weights     -- optionale Kachelgewichte (Raumcharakter)
+//         playerUpgrades -- Upgrade-Level {id: stufe} }
 export function createState(data, tiles, opts) {
-  const { genRng, enemyTypes, aiSeed, fixedRoom, weights } = opts;
+  const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades } = opts;
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
     : generateRoom(tiles, genRng, enemyTypes.length, weights);
@@ -67,7 +82,7 @@ export function createState(data, tiles, opts) {
 
   const player = createTank(
     'player',
-    resolveCfg(data, 'player'),
+    applyUpgrades(resolveCfg(data, 'player'), playerUpgrades),
     room.playerSpawn.x,
     room.playerSpawn.y,
   );
@@ -83,6 +98,7 @@ export function createState(data, tiles, opts) {
   const state = {
     data,
     tiles,
+    playerUpgrades,
     rng: mulberry32((aiSeed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
     playerSpawn: room.playerSpawn,
     emergencyRoom: room.emergency,
@@ -131,7 +147,7 @@ export function createState(data, tiles, opts) {
 function respawnPlayer(state) {
   const fresh = createTank(
     'player',
-    resolveCfg(state.data, 'player'),
+    applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades),
     state.playerSpawn.x,
     state.playerSpawn.y,
   );
@@ -187,7 +203,7 @@ export function stepState(state, cmd, dt) {
     if (mine) layMine(t, state);
   }
 
-  for (const b of state.bullets) updateBullet(b, state.walls, dt);
+  for (const b of state.bullets) updateBullet(b, state, dt);
 
   // Geschosse zerstoeren sich gegenseitig bei Kollision.
   const bullets = state.bullets;

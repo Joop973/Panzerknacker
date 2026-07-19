@@ -94,3 +94,36 @@ html, body {
 .overlay button:hover {
   background: #e0ca5e;
 }
+
+/* Upgrade-Karten */
+.cards {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.cards .card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 200px;
+  min-height: 110px;
+  padding: 16px;
+  background: #1b1b22;
+  border: 2px solid #c8b24a;
+  color: #e8e4d8;
+  font-family: monospace;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.cards .card strong {
+  color: #c8b24a;
+  font-size: 15px;
+}
+
+.cards .card:hover {
+  background: #2a2a33;
+}

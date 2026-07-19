@@ -106,6 +106,7 @@ export function fireBullet(tank, state) {
       ricochets: tank.cfg.ricochets,
       owner: tank,
       kind: tank.cfg.weapon,
+      tungsten: tank.cfg.tungsten || false,
     }),
   );
   // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.

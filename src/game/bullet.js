@@ -12,7 +12,7 @@ const TRAIL_MAX = 60; // Ticks Bahnhistorie fuers Debug-Overlay
 
 let nextId = 1;
 
-export function createBullet(x, y, angle, { speed, radius, ricochets, owner, kind }) {
+export function createBullet(x, y, angle, { speed, radius, ricochets, owner, kind, tungsten }) {
   return {
     id: nextId++,
     x,
@@ -23,6 +23,7 @@ export function createBullet(x, y, angle, { speed, radius, ricochets, owner, kin
     vy: Math.sin(angle) * speed,
     radius,
     kind: kind || 'bullet', // 'bullet' | 'rocket' | 'bounce_rocket'
+    tungsten: tungsten || false, // Wolframkern-Upgrade (Spec Abschnitt 8)
     ricochetsLeft: ricochets,
     owner, // Referenz auf den Schuetzen (fuer den 80-ms-Schutz)
     age: 0, // s seit Abschuss
@@ -31,14 +32,22 @@ export function createBullet(x, y, angle, { speed, radius, ricochets, owner, kin
   };
 }
 
-// Bewegt das Geschoss auf einer Achse und reflektiert an solid-Waenden.
+// Bewegt das Geschoss auf einer Achse und reflektiert an Waenden.
+// Wolframkern (Spec Abschnitt 8): trifft ein Wolfram-Geschoss eine
+// zerstoerbare Wand, wird die Wand zerstoert und das Geschoss
+// verschwindet; solid-Waende bleiben normale Abpraller.
 // Gibt true zurueck, wenn eine Wand getroffen wurde.
-function moveAxis(b, walls, axis, dt) {
+function moveAxis(b, state, axis, dt) {
   b[axis] += (axis === 'x' ? b.vx : b.vy) * dt;
   let hit = false;
-  for (const wall of walls) {
+  for (const wall of [...state.walls]) {
     if (wall.type === 'hole') continue; // Geschosse fliegen ueber Loecher
     if (!circleOverlapsAABB(b.x, b.y, b.radius, wall)) continue;
+    if (b.tungsten && wall.type === 'breakable') {
+      state.destroyWall(wall);
+      b.dead = true;
+      return true;
+    }
     hit = true;
     if (axis === 'x') {
       b.x = b.vx > 0 ? wall.x - b.radius : wall.x + wall.w + b.radius;
@@ -51,14 +60,16 @@ function moveAxis(b, walls, axis, dt) {
   return hit;
 }
 
-export function updateBullet(b, walls, dt) {
+export function updateBullet(b, state, dt) {
   if (b.dead) return;
   b.prevX = b.x;
   b.prevY = b.y;
   b.age += dt;
 
-  const hitX = moveAxis(b, walls, 'x', dt);
-  const hitY = moveAxis(b, walls, 'y', dt);
+  const hitX = moveAxis(b, state, 'x', dt);
+  if (b.dead) return;
+  const hitY = moveAxis(b, state, 'y', dt);
+  if (b.dead) return;
 
   if (hitX || hitY) {
     // Ein Wandkontakt pro Schritt kostet genau einen Abpraller --

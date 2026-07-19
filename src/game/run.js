@@ -62,6 +62,7 @@ function startRoom(run) {
     aiSeed: (run.seed + run.roomIndex * 7919) >>> 0,
     fixedRoom,
     weights,
+    playerUpgrades: run.upgrades,
   });
   run.phase = 'transition';
   run.transitionTimer = TRANSITION_S;
@@ -69,11 +70,15 @@ function startRoom(run) {
   run.seenRoomDeaths = 0;
 }
 
-export function createRun(data, tiles, difficulty, seed) {
+export function createRun(data, tiles, difficulty, upgradesData, seed) {
   const run = {
     data,
     tiles,
     difficulty,
+    upgradesData,
+    upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}
+    upgradeChoices: 0,
+    pendingOffers: null,
     seed: seed >>> 0,
     genRng: mulberry32(seed >>> 0),
     roomIndex: 1,
@@ -144,9 +149,58 @@ export function stepRun(run, cmd, dt) {
       finishRun(run, true);
       return;
     }
+    // Nach jedem 3. Raum (3, 6, 9, 12, 15): Upgrade-Screen.
+    const u = run.upgradesData;
+    if (u && run.roomIndex % u.everyNRooms === 0) {
+      run.pendingOffers = rollOffers(run);
+      run.phase = 'upgrade';
+      return;
+    }
     run.roomIndex++;
     startRoom(run);
   }
+}
+
+// 3 zufaellige Angebote aus dem Pool (Seed-RNG -> deterministisch).
+// Ausgemaxte Upgrades fliegen raus; fehlende Slots fuellt "+1 Leben".
+function rollOffers(run) {
+  const u = run.upgradesData;
+  const avail = Object.entries(u.upgrades)
+    .filter(([id, def]) => (run.upgrades[id] || 0) < def.max)
+    .map(([id, def]) => ({
+      id,
+      name: def.name,
+      desc: def.desc,
+      level: (run.upgrades[id] || 0) + 1,
+      max: def.max,
+      fallback: false,
+    }));
+  // Fisher-Yates ueber den genRng-Strom.
+  for (let i = avail.length - 1; i > 0; i--) {
+    const j = Math.floor(run.genRng() * (i + 1));
+    [avail[i], avail[j]] = [avail[j], avail[i]];
+  }
+  const offers = avail.slice(0, u.offersPerScreen);
+  while (offers.length < u.offersPerScreen) {
+    offers.push({ id: null, name: u.fallback.name, desc: u.fallback.desc, fallback: true });
+  }
+  return offers;
+}
+
+// Auswahl anwenden und den Run fortsetzen.
+export function chooseUpgrade(run, index) {
+  if (run.phase !== 'upgrade' || !run.pendingOffers) return;
+  const offer = run.pendingOffers[index];
+  if (!offer) return;
+  if (offer.fallback) {
+    run.lives++;
+  } else {
+    run.upgrades[offer.id] = (run.upgrades[offer.id] || 0) + 1;
+  }
+  run.upgradeChoices++;
+  run.pendingOffers = null;
+  run.roomIndex++;
+  startRoom(run);
 }
 
 // Fuer HUD: "4/7"-Restzaehler.

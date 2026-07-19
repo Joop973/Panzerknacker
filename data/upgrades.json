@@ -1,0 +1,14 @@
+{
+  "everyNRooms": 3,
+  "offersPerScreen": 3,
+  "upgrades": {
+    "magazin": { "name": "Magazin", "desc": "+2 gleichzeitige Geschosse", "max": 3 },
+    "abpraller": { "name": "Abpraller", "desc": "+1 Abpraller pro Geschoss", "max": 1 },
+    "ladung": { "name": "Ladung", "desc": "Geschossgeschwindigkeit +20 %", "max": 3 },
+    "kettenglied": { "name": "Kettenglied", "desc": "+1 gleichzeitige Mine", "max": 2 },
+    "sprengkraft": { "name": "Sprengkraft", "desc": "Minen-Explosionsradius +30 %", "max": 2 },
+    "kettenantrieb": { "name": "Kettenantrieb", "desc": "Bewegungstempo +12 %", "max": 3 },
+    "wolframkern": { "name": "Wolframkern", "desc": "Geschoss zerstört zerstörbare Wand — und verschwindet dabei", "max": 1 }
+  },
+  "fallback": { "name": "+1 Leben", "desc": "Ein zusätzliches Leben" }
+}

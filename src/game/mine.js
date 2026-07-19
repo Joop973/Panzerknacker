@@ -37,7 +37,8 @@ function explode(mine, state) {
   if (mine.dead) return;
   mine.dead = true;
   const mcfg = state.data.mine;
-  const R = mcfg.explosionRadiusPx;
+  // Sprengkraft-Upgrade: Radius-Multiplikator des Legers.
+  const R = mcfg.explosionRadiusPx * (mine.owner?.cfg?.mineRadiusMult || 1);
 
   state.explosions.push({ x: mine.x, y: mine.y, age: 0 });
 

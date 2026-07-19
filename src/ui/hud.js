@@ -64,7 +64,7 @@ export function createHud(ctx) {
       [
         [title, 'bold 40px monospace', color],
         [`Zeit ${fmtTime(run.playTime)}   Kills ${run.kills}   Tode ${run.deaths}`, '16px monospace', '#e8e4d8'],
-        [`Raeume geschafft: ${run.roomsCleared}`, '16px monospace', '#e8e4d8'],
+        [`Raeume: ${run.roomsCleared}   Upgrades: ${run.upgradeChoices}`, '16px monospace', '#e8e4d8'],
         [`Seed: ${run.seed}`, 'bold 16px monospace', '#8ecae6'],
         [
           `Best: ${s.mostRooms ?? 0} Raeume | ${s.totalKills ?? 0} Kills gesamt` +

@@ -8,17 +8,19 @@ import { STEP } from './config.js';
 import { createLoop } from './core/loop.js';
 import { createInput } from './core/input.js';
 import { createAudio } from './core/audio.js';
-import { createRun, stepRun } from './game/run.js';
+import { createRun, stepRun, chooseUpgrade } from './game/run.js';
+import { createUpgradeScreen } from './ui/upgradescreen.js';
 import { createRenderer } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
 import { createHud } from './ui/hud.js';
 
 async function init() {
-  const [tanksData, tilesData, diffData] = await Promise.all([
+  const [tanksData, tilesData, diffData, upgradesData] = await Promise.all([
     fetch('data/tanks.json').then((r) => r.json()),
     fetch('data/tiles.json').then((r) => r.json()),
     fetch('data/difficulty.json').then((r) => r.json()),
+    fetch('data/upgrades.json').then((r) => r.json()),
   ]);
 
   const canvas = document.getElementById('canvas');
@@ -36,9 +38,11 @@ async function init() {
   const renderer = createRenderer(ctx);
   const debugOverlay = createDebugOverlay(ctx);
   const hud = createHud(ctx);
+  const upgradeScreen = createUpgradeScreen();
 
   let run = null;
   let lastRoomState = null;
+  let upgradeShown = false;
 
   let fps = 0;
   let frameCount = 0;
@@ -48,8 +52,10 @@ async function init() {
     const raw = seedInput.value.trim();
     const seed = raw === '' ? Date.now() >>> 0 : Number(raw) >>> 0;
     seedInput.value = String(seed);
-    run = createRun(tanksData, tilesData, diffData, seed);
+    run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
     startOverlay.classList.add('hidden');
+    upgradeScreen.hide();
+    upgradeShown = false;
   }
 
   function update(dt) {
@@ -71,6 +77,15 @@ async function init() {
     }
     if (run.phase === 'playing') tracks.stamp(run.state.tanks);
     for (const name of run.state.sounds.splice(0)) audio.play(name);
+
+    // Upgrade-Screen genau einmal pro Angebot einblenden.
+    if (run.phase === 'upgrade' && !upgradeShown) {
+      upgradeShown = true;
+      upgradeScreen.show(run.pendingOffers, (idx) => {
+        chooseUpgrade(run, idx);
+        upgradeShown = false;
+      });
+    }
   }
 
   function render(alpha) {
