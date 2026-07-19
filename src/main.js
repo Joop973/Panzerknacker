@@ -208,4 +208,10 @@ async function init() {
   loop.start();
 }
 
+// Offline-Faehigkeit: Service Worker cached alle Dateien beim ersten
+// Besuch (braucht HTTPS oder localhost).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
 init();
