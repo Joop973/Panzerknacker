@@ -16,13 +16,27 @@ function fmtTime(s) {
 export function createHud(ctx) {
   function drawBar(run) {
     const { alive, total } = enemyCount(run);
+    const st = run.state;
+    const p = st.player;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, WIDTH, 22);
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#e8e4d8';
     ctx.fillText(`Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`, 8, 16);
+    // Munition: verbleibende Kugeln (Magazin) und Minen.
+    const liveBullets = st.bullets.filter((b) => b.owner === p && !b.dead).length;
+    const liveMines = st.mines.filter((m) => m.owner === p && !m.dead).length;
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#9aa0a8';
+    ctx.fillText(
+      `Kugeln ${p.cfg.magazine - liveBullets}/${p.cfg.magazine}  Minen ${p.cfg.mines - liveMines}/${p.cfg.mines}`,
+      118,
+      15,
+    );
+    ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
+    ctx.fillStyle = '#e8e4d8';
     ctx.fillText(`Gegner ${alive}/${total}`, WIDTH / 2, 16);
     ctx.textAlign = 'right';
     ctx.fillStyle = '#ff6a5e';
@@ -91,15 +105,22 @@ export function createHud(ctx) {
     ctx.textAlign = 'left';
   }
 
-  function drawPause() {
+  function drawPause(run) {
     dim(0.6);
+    // Aktive Upgrades auflisten (Namen aus upgrades.json).
+    const defs = run.upgradesData?.upgrades || {};
+    const active = Object.entries(run.upgrades || {})
+      .filter(([, lvl]) => lvl > 0)
+      .map(([id, lvl]) => `${defs[id]?.name || id} ${lvl}`)
+      .join(' · ');
     center(
       [
         ['PAUSE', 'bold 36px monospace', '#e8e4d8'],
+        [active ? `Upgrades: ${active}` : 'Noch keine Upgrades', '13px monospace', '#c8b24a'],
         ['Esc/P oder Pause-Button: weiter', '14px monospace', '#9aa0a8'],
       ],
-      HEIGHT / 2,
-      32,
+      HEIGHT / 2 - 16,
+      30,
     );
   }
 
@@ -110,7 +131,7 @@ export function createHud(ctx) {
       if (run.phase === 'transition') drawTransition(run);
       else if (run.phase === 'gameover') drawEnd(run, 'GAME OVER', '#ff6a5e');
       else if (run.phase === 'victory') drawEnd(run, 'SIEG!', '#7ade6a');
-      if (opts.paused && run.phase === 'playing') drawPause();
+      if (opts.paused && run.phase === 'playing') drawPause(run);
     },
   };
 }

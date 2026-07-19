@@ -193,6 +193,18 @@ export function createRenderer(ctx) {
     ctx.strokeRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
     ctx.restore();
 
+    // Ziellinie des Spielers (wichtig fuer Touch/Gamepad ohne Cursor).
+    if (t.type === 'player') {
+      ctx.strokeStyle = 'rgba(200,178,74,0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(t.turret) * (r + 10), y + Math.sin(t.turret) * (r + 10));
+      ctx.lineTo(x + Math.cos(t.turret) * (r + 70), y + Math.sin(t.turret) * (r + 70));
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     // Turm + Rohr, unabhaengig vom Rumpf rotiert.
     ctx.save();
     ctx.translate(x, y);

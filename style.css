@@ -129,11 +129,10 @@ html, body {
 }
 
 /* Pause-Button oben mittig, ausserhalb der Daumenzonen */
-#pauseBtn {
+#pauseBtn,
+#muteBtn {
   position: fixed;
   top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
   z-index: 5;
   background: rgba(27, 27, 34, 0.8);
   border: 1px solid #4a4a5a;
@@ -141,6 +140,20 @@ html, body {
   font-size: 14px;
   padding: 4px 14px;
   cursor: pointer;
+}
+
+#pauseBtn {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+#muteBtn {
+  left: calc(50% + 44px);
+}
+
+#muteBtn.muted {
+  color: #55555f;
+  text-decoration: line-through;
 }
 
 /* Portrait-Overlay: nur im Hochformat sichtbar (Spec Abschnitt 9) */

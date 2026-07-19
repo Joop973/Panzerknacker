@@ -140,7 +140,14 @@ async function init() {
       tracks.stamp(run.state.tanks);
       tracks.fade(dt);
     }
-    for (const name of run.state.sounds.splice(0)) audio.play(name);
+    for (const name of run.state.sounds.splice(0)) {
+      audio.play(name);
+      // Haptik auf Touch-Geraeten (Android; iOS ignoriert vibrate).
+      if (touch.isActive() && navigator.vibrate) {
+        if (name === 'boom') navigator.vibrate(60);
+        else if (name === 'death') navigator.vibrate(40);
+      }
+    }
 
     // Upgrade-Screen genau einmal pro Angebot einblenden.
     if (run.phase === 'upgrade' && !upgradeShown) {
@@ -207,8 +214,12 @@ async function init() {
     if (run && (run.phase === 'gameover' || run.phase === 'victory')) backToStart();
   });
 
-  // Pause-Button oben mittig.
+  // Pause-Button oben mittig, Mute daneben.
   document.getElementById('pauseBtn').addEventListener('click', () => pause.toggle());
+  const muteBtn = document.getElementById('muteBtn');
+  muteBtn.addEventListener('click', () => {
+    muteBtn.classList.toggle('muted', audio.toggleMute());
+  });
 
   // Auto-Pause bei Tab-Wechsel (Spec Abschnitt 9) -- Pflicht, sonst
   // stirbt man bei einem eingehenden Anruf. Beim Zurueckkommen bleibt

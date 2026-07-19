@@ -7,6 +7,7 @@
 
 export function createAudio() {
   let ctx = null;
+  let muted = false;
 
   function unlock() {
     if (!ctx) {
@@ -52,8 +53,14 @@ export function createAudio() {
 
   return {
     unlock,
+    toggleMute() {
+      muted = !muted;
+      return muted;
+    },
+    isMuted: () => muted,
     // Benannte Spiel-Ereignisse -> Toene (aus state.sounds).
     play(name) {
+      if (muted) return;
       if (name === 'tone_high') beep(880, 0.12);
       else if (name === 'tone_low') beep(220, 0.16);
       else if (name === 'shoot') beep(480, 0.07, 0.06, 'square', 220);
