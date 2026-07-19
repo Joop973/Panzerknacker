@@ -10,6 +10,7 @@ export function createInput(target, canvas) {
   // Zielposition in Canvas-Koordinaten (Arena-Pixel).
   const aim = { x: canvas.width / 2, y: 0 };
   let fireQueued = false;
+  let mineQueued = false;
   let debug = false;
 
   function toCanvas(e) {
@@ -25,6 +26,12 @@ export function createInput(target, canvas) {
       // F1 oeffnet sonst die Browser-Hilfe.
       e.preventDefault();
       if (!e.repeat) debug = !debug;
+      return;
+    }
+    if (e.code === 'Space') {
+      // Leertaste scrollt sonst die Seite; kein Auto-Repeat.
+      e.preventDefault();
+      if (!e.repeat) mineQueued = true;
       return;
     }
     pressed.add(e.code);
@@ -77,6 +84,12 @@ export function createInput(target, canvas) {
       const f = fireQueued;
       fireQueued = false;
       return f;
+    },
+    // Liefert genau einmal true pro Leertasten-Druck.
+    consumeMine() {
+      const m = mineQueued;
+      mineQueued = false;
+      return m;
     },
     isDebug() {
       return debug;

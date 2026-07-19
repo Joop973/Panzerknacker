@@ -52,14 +52,30 @@ export function createDebugOverlay(ctx) {
     ctx.textAlign = 'left';
   }
 
+  // Zuendradius scharfer Minen als gestrichelter Kreis.
+  function drawMineRadii(state) {
+    const mcfg = state.data.mine;
+    ctx.strokeStyle = COLORS.trail;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    for (const m of state.mines) {
+      if (m.age < mcfg.armDelayS) continue;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, mcfg.explosionRadiusPx, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
   function drawPanel(state, fps) {
     const liveTanks = state.tanks.filter((t) => t.alive).length;
-    const entities = liveTanks + state.bullets.length;
+    const entities = liveTanks + state.bullets.length + state.mines.length;
     const lines = [
       `FPS ${fps.toFixed(0)}`,
       `Entities ${entities}`,
       `Tanks ${liveTanks}/${state.tanks.length}`,
       `Bullets ${state.bullets.length}`,
+      `Mines ${state.mines.length}`,
       `Cooldown ${state.player.cooldown.toFixed(2)}s`,
     ];
     ctx.fillStyle = COLORS.panelBg;
@@ -78,6 +94,8 @@ export function createDebugOverlay(ctx) {
         if (t.alive) drawCircle(t.x, t.y, t.cfg.radius);
       }
       for (const b of state.bullets) drawCircle(b.x, b.y, b.radius);
+      for (const m of state.mines) drawCircle(m.x, m.y, m.radius);
+      drawMineRadii(state);
       drawTrails(state.bullets);
       drawRicochetCounters(state.bullets);
       drawPanel(state, fps);

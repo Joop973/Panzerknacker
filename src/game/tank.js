@@ -7,6 +7,7 @@
 
 import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
+import { createMine } from './mine.js';
 
 let nextTankId = 1;
 
@@ -104,5 +105,17 @@ export function fireBullet(tank, state) {
     ),
   );
   tank.cooldown = tank.cfg.fireCooldown;
+  return true;
+}
+
+// Legt eine Mine am Ort des Panzers, begrenzt durch das Minen-Limit
+// (gleichzeitig liegende eigene Minen, aus tanks.json).
+export function layMine(tank, state) {
+  let own = 0;
+  for (const m of state.mines) {
+    if (!m.dead && m.owner === tank) own++;
+  }
+  if (own >= tank.cfg.mines) return false;
+  state.mines.push(createMine(tank.x, tank.y, tank, state.data.mine.radiusPx));
   return true;
 }

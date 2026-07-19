@@ -37,6 +37,7 @@ async function init() {
         move: input.getMoveAxis(),
         aim: input.getAim(),
         fire: input.consumeFire(),
+        mine: input.consumeMine(),
       },
       dt,
     );

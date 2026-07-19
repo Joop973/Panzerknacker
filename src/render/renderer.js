@@ -11,9 +11,15 @@ const COLORS = {
   grid: '#22222c',
   wall: '#4a4a5a',
   wallEdge: '#5e5e72',
+  breakable: '#6e5a41',
+  breakableEdge: '#8a7355',
   bullet: '#e8e4d8',
   bulletOutline: '#8a8578',
   outline: '#1a1408',
+  mineBody: '#3c4038',
+  mineLight: '#ffd23c',
+  mineLightHot: '#ff5030',
+  explosion: '#ffb347',
 };
 
 // Rumpffarben je Panzertyp (eigene Pixel-Art kommt in Phase 10).
@@ -49,11 +55,61 @@ export function createRenderer(ctx, tracks) {
 
   function drawWalls(walls) {
     for (const wall of walls) {
-      ctx.fillStyle = COLORS.wall;
+      const breakable = wall.type === 'breakable';
+      ctx.fillStyle = breakable ? COLORS.breakable : COLORS.wall;
       ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
-      ctx.strokeStyle = COLORS.wallEdge;
+      ctx.strokeStyle = breakable ? COLORS.breakableEdge : COLORS.wallEdge;
       ctx.lineWidth = 2;
       ctx.strokeRect(wall.x + 1, wall.y + 1, wall.w - 2, wall.h - 2);
+      if (breakable) {
+        // Riss-Andeutung, bis eigene Pixel-Art kommt (Phase 10).
+        ctx.beginPath();
+        ctx.moveTo(wall.x + 6, wall.y + 24);
+        ctx.lineTo(wall.x + 14, wall.y + 14);
+        ctx.lineTo(wall.x + 12, wall.y + 8);
+        ctx.moveTo(wall.x + 14, wall.y + 14);
+        ctx.lineTo(wall.x + 24, wall.y + 18);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+  }
+
+  function drawMines(state) {
+    const mcfg = state.data.mine;
+    for (const m of state.mines) {
+      ctx.fillStyle = COLORS.mineBody;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Blinklicht: aus im Fluchtfenster, langsam wenn scharf,
+      // schnell + rot kurz vor der Selbstzuendung.
+      const armed = m.age >= mcfg.armDelayS;
+      if (!armed) continue;
+      const remaining = mcfg.selfDetonateS - m.age;
+      const hot = remaining < 2;
+      const freq = hot ? 8 : 3;
+      if (Math.sin(m.age * freq * Math.PI * 2) > 0) {
+        ctx.fillStyle = hot ? COLORS.mineLightHot : COLORS.mineLight;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawExplosions(state) {
+    const R = state.data.mine.explosionRadiusPx;
+    for (const e of state.explosions) {
+      const t = Math.min(e.age / 0.35, 1);
+      ctx.strokeStyle = COLORS.explosion;
+      ctx.globalAlpha = 1 - t;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(e.x, e.y, R * t, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -99,9 +155,11 @@ export function createRenderer(ctx, tracks) {
     render(state, alpha) {
       drawFloor();
       tracks.draw(ctx);
+      drawMines(state);
       drawWalls(state.walls);
       for (const t of state.tanks) drawTank(t, alpha);
       drawBullets(state.bullets, alpha);
+      drawExplosions(state);
     },
   };
 }

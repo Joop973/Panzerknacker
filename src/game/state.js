@@ -7,13 +7,16 @@
 
 import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
 import { mulberry32 } from '../core/rng.js';
-import { createTank, moveTank, fireBullet } from './tank.js';
+import { createTank, moveTank, fireBullet, layMine } from './tank.js';
 import { updateBullet } from './bullet.js';
+import { updateMines } from './mine.js';
 import { updateEnemy } from './ai.js';
 import { circlesOverlap } from './collision.js';
 
 // Hartcodierte Testarena: 24x16 Zellen.
 //   '#' = solid-Wand (unzerstoerbar, blockiert)
+//   'b' = breakable-Wand (durch Minen-Explosion zerstoerbar,
+//         fuer Geschosse wie solid)
 //   '.' = frei
 const ARENA_MAP = [
   '########################',
@@ -22,13 +25,13 @@ const ARENA_MAP = [
   '#...####........####...#',
   '#...#..............#...#',
   '#......................#',
-  '#.......######.........#',
+  '#.......#bbbb#.........#',
   '#......................#',
   '#....##......##........#',
   '#......................#',
-  '#.........####.........#',
+  '#.........bbbb.........#',
   '#......................#',
-  '#...####........####...#',
+  '#...###b........b###...#',
   '#......................#',
   '#......................#',
   '########################',
@@ -44,12 +47,15 @@ const ENEMY_SPAWNS = [
   { type: 't_grey', col: 6, row: 7 },
 ];
 
-function buildWalls(map) {
+const WALL_TYPES = { '#': 'solid', b: 'breakable' };
+
+function buildWalls(grid) {
   const walls = [];
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
-      if (map[row][col] === '#') {
-        walls.push({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'solid' });
+      const type = WALL_TYPES[grid[row][col]];
+      if (type) {
+        walls.push({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, type, col, row });
       }
     }
   }
@@ -66,6 +72,7 @@ function resolveCfg(data, type) {
     speed: data.speeds[t.speed],
     magazine: t.magazine,
     ricochets: t.ricochets,
+    mines: t.mines,
     bulletSpeed: data.bulletSpeeds[t.weapon],
     turret: t.turret,
     drive: t.drive,
@@ -77,7 +84,9 @@ function cellCenter(col, row) {
 }
 
 export function createState(data, seed = 1) {
-  const walls = buildWalls(ARENA_MAP);
+  // Mutables Zellraster (Explosionen entfernen breakable-Waende daraus).
+  const grid = ARENA_MAP.map((row) => row.split(''));
+  const walls = buildWalls(grid);
   const p = cellCenter(PLAYER_SPAWN.col, PLAYER_SPAWN.row);
   const player = createTank('player', resolveCfg(data, 'player'), p.x, p.y);
   const tanks = [player];
@@ -85,22 +94,36 @@ export function createState(data, seed = 1) {
     const c = cellCenter(s.col, s.row);
     tanks.push(createTank(s.type, resolveCfg(data, s.type), c.x, c.y));
   }
-  return {
+  const state = {
     data,
     rng: mulberry32(seed),
     walls,
     tanks,
     player,
     bullets: [],
+    mines: [],
+    explosions: [], // kurzlebige Render-Effekte { x, y, age }
     respawnTimer: 0, // > 0 waehrend der Spieler tot ist
     // Zellgenauer Solid-Test in Pixelkoordinaten (fuer KI-Raycasts).
     isSolid(px, py) {
       const col = Math.floor(px / CELL);
       const row = Math.floor(py / CELL);
       if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return true;
-      return ARENA_MAP[row][col] === '#';
+      return WALL_TYPES[grid[row][col]] !== undefined;
+    },
+    // Entfernt eine (zerstoerbare) Wand aus Liste und Raster.
+    destroyWall(wall) {
+      const i = state.walls.indexOf(wall);
+      if (i >= 0) state.walls.splice(i, 1);
+      grid[wall.row][wall.col] = '.';
+    },
+    // Einheitlicher Panzer-Tod (Geschosse, Minen).
+    killTank(tank) {
+      tank.alive = false;
+      if (tank === state.player) state.respawnTimer = RESPAWN_DELAY;
     },
   };
+  return state;
 }
 
 function respawnPlayer(state) {
@@ -108,11 +131,16 @@ function respawnPlayer(state) {
   const fresh = createTank('player', resolveCfg(state.data, 'player'), p.x, p.y);
   state.tanks[0] = fresh;
   state.player = fresh;
+  // Wie beim Raum-Neustart (Spec Abschnitt 8): Geschosse und Minen
+  // werden entfernt; zerstoerte Waende bleiben zerstoert.
   state.bullets = [];
+  state.mines = [];
+  state.explosions = [];
   state.respawnTimer = 0;
 }
 
-// Ein fester Physikschritt. cmd = { move: {x,y}, aim: {x,y}, fire: bool }.
+// Ein fester Physikschritt.
+// cmd = { move: {x,y}, aim: {x,y}, fire: bool, mine: bool }.
 export function stepState(state, cmd, dt) {
   const p = state.player;
 
@@ -127,6 +155,7 @@ export function stepState(state, cmd, dt) {
     moveTank(p, cmd.move, state, dt);
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
     if (cmd.fire) fireBullet(p, state);
+    if (cmd.mine) layMine(p, state);
   }
 
   // Gegner: getrennte Turm-/Fahr-KI liefert Bewegungsvektor + Schusswunsch.
@@ -164,12 +193,19 @@ export function stepState(state, cmd, dt) {
       if (b.owner === t && b.age < grace) continue;
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
         b.dead = true;
-        t.alive = false;
-        if (t === state.player) state.respawnTimer = RESPAWN_DELAY;
+        state.killTank(t);
         break;
       }
     }
   }
+
+  // Minen: Scharfschalten, Selbstzuendung, Kontakt-/Geschoss-Ausloesung,
+  // Kettenreaktion, Wandzerstoerung.
+  updateMines(state, dt);
+
+  // Explosions-Effekte altern lassen (nur Rendering).
+  for (const e of state.explosions) e.age += dt;
+  state.explosions = state.explosions.filter((e) => e.age < 0.4);
 
   state.bullets = state.bullets.filter((b) => !b.dead);
 }
