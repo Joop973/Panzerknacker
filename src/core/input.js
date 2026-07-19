@@ -1,9 +1,11 @@
-// Desktop-Eingabe fuer Phase 2 (Spec Abschnitt 9: Desktop).
+// Tastatur-/Maus- und Gamepad-Eingabe (Spec Abschnitt 9).
 //
-// WASD / Pfeiltasten = fahren, Maus = zielen, linke Maustaste = schiessen
-// (kein Auto-Fire -- ein Klick, ein Schussversuch; der Cooldown gilt in
-// der Spiellogik). F1 = Debug-Overlay. Touch und Gamepad kommen in
-// Phase 9 dazu; die Schnittstelle bleibt dabei erhalten.
+// Desktop: WASD/Pfeile = fahren, Maus = zielen, Linksklick = schiessen
+// (kein Auto-Fire), Leertaste = Mine, Esc/P = Pause, F1 = Debug.
+// Gamepad: linker Stick = fahren, rechter Stick = zielen + Auto-Fire,
+// rechter Trigger = schiessen (manuell), A/X = Mine. Der Feuerraten-
+// Cooldown gilt auf allen Wegen in der Spiellogik.
+// (Touch liegt in ui/touchcontrols.js.)
 
 export function createInput(target, canvas) {
   const pressed = new Set();
@@ -72,7 +74,37 @@ export function createInput(target, canvas) {
   target.addEventListener('mousemove', onMouseMove);
   target.addEventListener('mousedown', onMouseDown);
 
+  // ---- Gamepad (gepollt, Edge-Erkennung fuer die Minen-Taste) ----
+  let gpMineWasDown = false;
+
+  function pollGamepad() {
+    if (typeof navigator === 'undefined' || !navigator.getGamepads) return null;
+    let gp = null;
+    for (const p of navigator.getGamepads()) {
+      if (p && p.connected) {
+        gp = p;
+        break;
+      }
+    }
+    if (!gp) {
+      gpMineWasDown = false;
+      return null;
+    }
+    const dz = (v) => (Math.abs(v) < 0.2 ? 0 : v);
+    const move = { x: dz(gp.axes[0] || 0), y: dz(gp.axes[1] || 0) };
+    const ax = dz(gp.axes[2] || 0);
+    const ay = dz(gp.axes[3] || 0);
+    // Rechter Stick ausgelenkt -> zielen + Auto-Fire.
+    const aimDir = Math.hypot(ax, ay) > 0.25 ? { x: ax, y: ay } : null;
+    const fireHeld = !!gp.buttons[7]?.pressed; // rechter Trigger (manuell)
+    const mineDown = !!gp.buttons[0]?.pressed; // A (Xbox) / X (PlayStation)
+    const minePressed = mineDown && !gpMineWasDown;
+    gpMineWasDown = mineDown;
+    return { move, aimDir, autoFire: aimDir !== null, fireHeld, minePressed };
+  }
+
   return {
+    pollGamepad,
     // Roher Bewegungsvektor (nicht normalisiert) aus den gedrueckten Tasten.
     getMoveAxis() {
       let x = 0;

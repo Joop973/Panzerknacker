@@ -86,19 +86,34 @@ async function init() {
     if (input.consumePause()) pause.toggle();
     if (pause.isPaused()) return;
 
-    // Tastatur/Maus und Touch zusammenfuehren (Touch hat Vorrang, wenn
-    // aktiv ausgelenkt).
+    // Tastatur/Maus, Gamepad und Touch zusammenfuehren: die gerade
+    // aktive Quelle gewinnt (Fahren: Tastatur > Gamepad > Touch;
+    // Zielen: Gamepad-Stick > Touch-Stick > Maus).
+    const gp = input.pollGamepad();
     const kbMove = input.getMoveAxis();
+    const gpMove = gp && (gp.move.x || gp.move.y) ? gp.move : null;
     const tMove = touch.getMove();
-    const move = kbMove.x || kbMove.y ? kbMove : tMove;
-    const aimDir = touch.getAimDir();
+    const move = kbMove.x || kbMove.y ? kbMove : gpMove || tMove;
+
     const p = run.state.player;
-    const aim = aimDir ? { x: p.x + aimDir.x * 4, y: p.y + aimDir.y * 4 } : input.getAim();
+    const tAim = touch.getAimDir();
+    let aim;
+    let autoFire = false;
+    if (gp && gp.aimDir) {
+      aim = { x: p.x + gp.aimDir.x * 120, y: p.y + gp.aimDir.y * 120 };
+      autoFire = true; // rechter Stick ausgelenkt -> Auto-Fire
+    } else if (tAim) {
+      aim = { x: p.x + tAim.x * 4, y: p.y + tAim.y * 4 };
+      autoFire = true;
+    } else {
+      aim = input.getAim();
+    }
     const cmd = {
       move,
       aim,
-      fire: input.consumeFire() || touch.isAutoFire(),
-      mine: input.consumeMine() || touch.consumeMine(),
+      // Rechter Trigger = manuelles Schiessen (ueberschreibt Auto-Fire).
+      fire: input.consumeFire() || autoFire || !!(gp && gp.fireHeld),
+      mine: input.consumeMine() || touch.consumeMine() || !!(gp && gp.minePressed),
     };
     stepRun(run, cmd, dt);
     toast = tutorial.update(run, cmd, touch.isActive(), dt);
