@@ -79,6 +79,14 @@ async function init() {
     startOverlay.classList.add('hidden');
     upgradeScreen.hide();
     upgradeShown = false;
+    // Touch-Geraete: Vollbild + Landscape-Lock versuchen (Android;
+    // iOS ignoriert es -- dort greift das Portrait-Overlay).
+    if (navigator.maxTouchPoints > 0) {
+      document.documentElement.requestFullscreen?.().then(
+        () => screen.orientation?.lock?.('landscape').catch(() => {}),
+        () => {},
+      );
+    }
   }
 
   function update(dt) {
