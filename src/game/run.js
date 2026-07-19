@@ -63,11 +63,21 @@ function startRoom(run) {
     fixedRoom,
     weights,
     playerUpgrades: run.upgrades,
+    upgradesData: run.upgradesData,
   });
-  run.phase = 'transition';
+  // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
+  // erst der Klick startet den 1,5-s-Uebergang.
+  run.phase = 'preview';
   run.transitionTimer = TRANSITION_S;
   run.seenRoomKills = 0;
   run.seenRoomDeaths = 0;
+}
+
+// Vom "Weiter"-Button der Raumvorschau aufgerufen.
+export function enterRoom(run) {
+  if (run.phase !== 'preview') return;
+  run.phase = 'transition';
+  run.transitionTimer = TRANSITION_S;
 }
 
 export function createRun(data, tiles, difficulty, upgradesData, seed) {

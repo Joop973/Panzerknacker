@@ -63,6 +63,7 @@ export function createAudio() {
         beep(90, 0.3, 0.15, 'sawtooth', 40);
       } else if (name === 'death') beep(500, 0.28, 0.12, 'sawtooth', 60);
       else if (name === 'mine') beep(700, 0.06, 0.08, 'square');
+      else if (name === 'trap') beep(160, 0.25, 0.12, 'sawtooth');
     },
   };
 }

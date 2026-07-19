@@ -9,7 +9,8 @@ import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
 import { mulberry32 } from '../core/rng.js';
 import { createTank, moveTank, fireBullet, layMine } from './tank.js';
 import { updateBullet } from './bullet.js';
-import { updateMines } from './mine.js';
+import { updateMines, explodeAt } from './mine.js';
+import { updateTraps } from './trap.js';
 import { updateEnemy } from './ai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
@@ -50,7 +51,8 @@ function resolveCfg(data, type) {
   return {
     radius: data.physics.tankRadius,
     bulletRadius: data.physics.bulletRadius,
-    fireCooldown: data.physics.fireCooldownS,
+    // Typ-eigene Feuerrate (t_green: 2 s) vor globalem Standard.
+    fireCooldown: t.fireCooldownS ?? data.physics.fireCooldownS,
     speed: data.speeds[t.speed],
     magazine: t.magazine,
     ricochets: t.ricochets,
@@ -65,8 +67,10 @@ function resolveCfg(data, type) {
   };
 }
 
-// Upgrade-Level auf das Spieler-cfg anwenden (Spec Abschnitt 8).
-function applyUpgrades(cfg, ups) {
+// Upgrade-Level auf das Spieler-cfg anwenden (Spec Abschnitt 8 +
+// Erweiterungen). Die Stellwerte der neuen Upgrades kommen aus
+// upgrades.json (upsData).
+function applyUpgrades(cfg, ups, upsData) {
   if (!ups) return cfg;
   const l = (k) => ups[k] || 0;
   cfg.magazine += 2 * l('magazin');
@@ -76,6 +80,22 @@ function applyUpgrades(cfg, ups) {
   cfg.mineRadiusMult = Math.pow(1.3, l('sprengkraft'));
   cfg.speed *= Math.pow(1.12, l('kettenantrieb'));
   cfg.tungsten = l('wolframkern') > 0;
+  const U = upsData ? upsData.upgrades : {};
+  if (l('sprengschuss')) {
+    cfg.explosionEveryShots = U.sprengschuss.everyShots[l('sprengschuss') - 1];
+    cfg.shotExplosionRadius = U.sprengschuss.radiusPx;
+  }
+  if (l('krallenfalle')) {
+    cfg.trapEveryPx = U.krallenfalle.everyPx[l('krallenfalle') - 1];
+    cfg.trapStunS = U.krallenfalle.stunS;
+    cfg.trapRadius = U.krallenfalle.radiusPx;
+    cfg.trapArmS = U.krallenfalle.armDelayS;
+  }
+  if (l('doppelrohr')) {
+    cfg.twinShot = true;
+    cfg.twinSpreadRad = U.doppelrohr.spreadRad;
+  }
+  cfg.radar = l('radar') > 0;
   return cfg;
 }
 
@@ -85,9 +105,10 @@ function applyUpgrades(cfg, ups) {
 //         aiSeed      -- Seed fuer den KI-RNG-Strom
 //         fixedRoom   -- optionales festes Layout (Finalraum)
 //         weights     -- optionale Kachelgewichte (Raumcharakter)
-//         playerUpgrades -- Upgrade-Level {id: stufe} }
+//         playerUpgrades -- Upgrade-Level {id: stufe}
+//         upgradesData -- Inhalt von upgrades.json (Stellwerte) }
 export function createState(data, tiles, opts) {
-  const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades } = opts;
+  const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData } = opts;
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
     : generateRoom(tiles, genRng, enemyTypes.length, weights);
@@ -96,7 +117,7 @@ export function createState(data, tiles, opts) {
 
   const player = createTank(
     'player',
-    applyUpgrades(resolveCfg(data, 'player'), playerUpgrades),
+    applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData),
     room.playerSpawn.x,
     room.playerSpawn.y,
   );
@@ -113,6 +134,7 @@ export function createState(data, tiles, opts) {
     data,
     tiles,
     playerUpgrades,
+    upgradesData,
     rng: mulberry32((aiSeed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
     playerSpawn: room.playerSpawn,
     emergencyRoom: room.emergency,
@@ -123,6 +145,7 @@ export function createState(data, tiles, opts) {
     player,
     bullets: [],
     mines: [],
+    traps: [],
     explosions: [],
     flashes: [],
     sounds: [],
@@ -187,7 +210,7 @@ export function createState(data, tiles, opts) {
 function respawnPlayer(state) {
   const fresh = createTank(
     'player',
-    applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades),
+    applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades, state.upgradesData),
     state.playerSpawn.x,
     state.playerSpawn.y,
   );
@@ -208,6 +231,7 @@ function respawnPlayer(state) {
   }
   state.bullets = [];
   state.mines = [];
+  state.traps = [];
   state.explosions = [];
   state.flashes = [];
   state.respawnTimer = 0;
@@ -220,7 +244,9 @@ export function stepState(state, cmd, dt) {
   state.time += dt;
 
   for (const t of state.tanks) {
-    if (t.alive) t.cooldown = Math.max(0, t.cooldown - dt);
+    if (!t.alive) continue;
+    t.cooldown = Math.max(0, t.cooldown - dt);
+    t.stunTimer = Math.max(0, t.stunTimer - dt);
   }
 
   if (!p.alive) {
@@ -245,7 +271,10 @@ export function stepState(state, cmd, dt) {
 
   for (const b of state.bullets) updateBullet(b, state, dt);
 
-  // Geschosse zerstoeren sich gegenseitig bei Kollision.
+  // Geschosse zerstoeren sich gegenseitig bei Kollision. Ausnahme:
+  // Doppelrohr-Zwillinge -- Kugeln derselben Salve (gleicher Schuetze,
+  // gleiches Alter) starten ueberlappend und ignorieren sich, bis die
+  // Spreizung sie getrennt hat.
   const bullets = state.bullets;
   for (let i = 0; i < bullets.length; i++) {
     if (bullets[i].dead) continue;
@@ -253,6 +282,7 @@ export function stepState(state, cmd, dt) {
       if (bullets[j].dead) continue;
       const a = bullets[i];
       const b = bullets[j];
+      if (a.owner === b.owner && a.age < 0.3 && Math.abs(a.age - b.age) < 1e-6) continue;
       if (circlesOverlap(a.x, a.y, a.radius, b.x, b.y, b.radius)) {
         a.dead = true;
         b.dead = true;
@@ -277,6 +307,16 @@ export function stepState(state, cmd, dt) {
   }
 
   updateMines(state, dt);
+  updateTraps(state, dt);
+
+  // Sprengschuss-Upgrade: markierte Geschosse explodieren beim Tod
+  // (Wandkontakt, Panzertreffer, Geschoss-gegen-Geschoss, Minenzuendung).
+  for (const b of state.bullets) {
+    if (b.dead && b.explosive && !b.detonated) {
+      b.detonated = true;
+      explodeAt(state, b.x, b.y, b.explosionRadius);
+    }
+  }
 
   // Kurzlebige Render-Effekte altern lassen.
   for (const e of state.explosions) e.age += dt;

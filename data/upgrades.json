@@ -1,14 +1,78 @@
 {
-  "everyNRooms": 3,
+  "everyNRooms": 1,
   "offersPerScreen": 3,
   "upgrades": {
-    "magazin": { "name": "Magazin", "desc": "+2 gleichzeitige Geschosse", "max": 3 },
-    "abpraller": { "name": "Abpraller", "desc": "+1 Abpraller pro Geschoss", "max": 1 },
-    "ladung": { "name": "Ladung", "desc": "Geschossgeschwindigkeit +20 %", "max": 3 },
-    "kettenglied": { "name": "Kettenglied", "desc": "+1 gleichzeitige Mine", "max": 2 },
-    "sprengkraft": { "name": "Sprengkraft", "desc": "Minen-Explosionsradius +30 %", "max": 2 },
-    "kettenantrieb": { "name": "Kettenantrieb", "desc": "Bewegungstempo +12 %", "max": 3 },
-    "wolframkern": { "name": "Wolframkern", "desc": "Geschoss zerstört zerstörbare Wand — und verschwindet dabei", "max": 1 }
+    "magazin": {
+      "name": "Magazin",
+      "desc": "+2 gleichzeitige Geschosse",
+      "max": 3
+    },
+    "abpraller": {
+      "name": "Abpraller",
+      "desc": "+1 Abpraller pro Geschoss",
+      "max": 1
+    },
+    "ladung": {
+      "name": "Ladung",
+      "desc": "Geschossgeschwindigkeit +20 %",
+      "max": 3
+    },
+    "kettenglied": {
+      "name": "Kettenglied",
+      "desc": "+1 gleichzeitige Mine",
+      "max": 2
+    },
+    "sprengkraft": {
+      "name": "Sprengkraft",
+      "desc": "Minen-Explosionsradius +30 %",
+      "max": 2
+    },
+    "kettenantrieb": {
+      "name": "Kettenantrieb",
+      "desc": "Bewegungstempo +12 %",
+      "max": 3
+    },
+    "wolframkern": {
+      "name": "Wolframkern",
+      "desc": "Geschoss zerstört zerstörbare Wand — und verschwindet dabei",
+      "max": 1
+    },
+    "sprengschuss": {
+      "name": "Sprengschuss",
+      "desc": "Jeder 20. Schuss trägt eine Sprengladung — explodiert beim Aufprall",
+      "max": 2,
+      "everyShots": [
+        20,
+        12
+      ],
+      "radiusPx": 36
+    },
+    "krallenfalle": {
+      "name": "Krallenfalle",
+      "desc": "Alle 600 gefahrene Pixel bleibt eine Falle liegen: wer hineinfährt (auch du!), steht 4 s still",
+      "max": 2,
+      "everyPx": [
+        600,
+        400
+      ],
+      "stunS": 4.0,
+      "radiusPx": 9,
+      "armDelayS": 0.8
+    },
+    "doppelrohr": {
+      "name": "Doppelrohr",
+      "desc": "Jeder Schuss feuert zwei Kugeln im Spreizwinkel — doppelte Wirkung, doppeltes Abpraller-Risiko",
+      "max": 1,
+      "spreadRad": 0.09
+    },
+    "radar": {
+      "name": "Radar",
+      "desc": "Markiert alle Gegner — auch unsichtbare und hinter Wänden",
+      "max": 1
+    }
   },
-  "fallback": { "name": "+1 Leben", "desc": "Ein zusätzliches Leben" }
+  "fallback": {
+    "name": "+1 Leben",
+    "desc": "Ein zusätzliches Leben"
+  }
 }

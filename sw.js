@@ -2,7 +2,7 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v1';
+const CACHE = 'panzerknacker-v2';
 
 const ASSETS = [
   './',
@@ -32,11 +32,13 @@ const ASSETS = [
   'src/game/run.js',
   'src/game/state.js',
   'src/game/tank.js',
+  'src/game/trap.js',
   'src/render/debug.js',
   'src/render/renderer.js',
   'src/render/tracks.js',
   'src/ui/hud.js',
   'src/ui/pause.js',
+  'src/ui/preview.js',
   'src/ui/touchcontrols.js',
   'src/ui/upgradescreen.js',
 ];

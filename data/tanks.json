@@ -140,7 +140,9 @@
       "mines": 0,
       "weapon": "bullet",
       "turret": "random_seek",
-      "drive": "none"
+      "drive": "none",
+      "label": "Brauner",
+      "desc": "Steht fest. Turm schwenkt suchend und schießt bei freier Sicht."
     },
     "t_grey": {
       "speed": "slow",
@@ -149,7 +151,9 @@
       "mines": 0,
       "weapon": "bullet",
       "turret": "weak_aim",
-      "drive": "wander"
+      "drive": "wander",
+      "label": "Grauer",
+      "desc": "Fährt ziellos umher und zielt ungenau auf dich."
     },
     "t_teal": {
       "speed": "slow",
@@ -158,7 +162,9 @@
       "mines": 0,
       "weapon": "rocket",
       "turret": "strong_aim",
-      "drive": "evade"
+      "drive": "evade",
+      "label": "Türkiser",
+      "desc": "Hält Abstand, weicht Kugeln aus. Schießt schnelle Raketen ohne Abpraller."
     },
     "t_yellow": {
       "speed": "fast",
@@ -172,7 +178,9 @@
       "miner": {
         "intervalMinS": 2.5,
         "intervalMaxS": 6.0
-      }
+      },
+      "label": "Gelber",
+      "desc": "Schnell. Legt wahllos Minen und meidet sie — sperrt sich manchmal selbst ein."
     },
     "t_pink": {
       "speed": "normal",
@@ -181,7 +189,9 @@
       "mines": 0,
       "weapon": "bullet",
       "turret": "aim",
-      "drive": "pursue"
+      "drive": "pursue",
+      "label": "Pinker",
+      "desc": "Verfolgt dich direkt. Bis zu 3 Geschosse gleichzeitig."
     },
     "t_green": {
       "speed": "fix",
@@ -190,7 +200,10 @@
       "mines": 0,
       "weapon": "bounce_rocket",
       "turret": "bounce_solver",
-      "drive": "none"
+      "drive": "none",
+      "label": "Grüner",
+      "desc": "Steht fest. Berechnet Bandenschüsse — trifft dich um Ecken. Lädt 2 s pro Schuss nach.",
+      "fireCooldownS": 2.0
     },
     "t_purple": {
       "speed": "fast",
@@ -204,7 +217,9 @@
         "intervalMinS": 6.0,
         "intervalMaxS": 10.0
       },
-      "avoidMines": true
+      "avoidMines": true,
+      "label": "Lila",
+      "desc": "Schnell und offensiv bei Sichtlinie. Flankiert im Team aus zwei Richtungen."
     },
     "t_white": {
       "speed": "normal",
@@ -219,7 +234,9 @@
         "intervalMinS": 6.0,
         "intervalMaxS": 10.0
       },
-      "avoidMines": true
+      "avoidMines": true,
+      "label": "Weißer",
+      "desc": "Wird nach Rundenstart unsichtbar! Achte auf Spuren, Schimmer und Mündungsblitz."
     },
     "t_black": {
       "speed": "veryfast",
@@ -233,7 +250,9 @@
         "intervalMinS": 5.0,
         "intervalMaxS": 9.0
       },
-      "avoidMines": true
+      "avoidMines": true,
+      "label": "Schwarzer",
+      "desc": "Sehr schnell. Zielt mit Vorhalt — Ausweichen hilft kaum. Flieht vor Beschuss, legt Minen."
     }
   }
 }

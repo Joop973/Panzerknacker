@@ -33,41 +33,44 @@ export function isArmed(mine, mcfg) {
   return mine.age >= mcfg.armDelayS;
 }
 
-function explode(mine, state) {
-  if (mine.dead) return;
-  mine.dead = true;
+// Allgemeine Explosion an einer Position (Minen, Sprengschuss-Upgrade):
+// toetet Panzer im Radius, zerstoert breakable-Waende, zuendet scharfe
+// Minen als Kettenreaktion.
+export function explodeAt(state, x, y, R) {
   const mcfg = state.data.mine;
-  // Sprengkraft-Upgrade: Radius-Multiplikator des Legers.
-  const R = mcfg.explosionRadiusPx * (mine.owner?.cfg?.mineRadiusMult || 1);
-
-  state.explosions.push({ x: mine.x, y: mine.y, age: 0 });
+  state.explosions.push({ x, y, age: 0 });
   state.sounds.push('boom');
   state.addShake?.(6);
-  state.spawnParticles?.(mine.x, mine.y, '#ffb347', 14, 160);
+  state.spawnParticles?.(x, y, '#ffb347', 14, 160);
 
-  // Toetet jeden Panzer, der in den Radius hineinragt -- auch den Leger.
   for (const t of state.tanks) {
     if (!t.alive) continue;
-    if (circlesOverlap(mine.x, mine.y, R, t.x, t.y, t.cfg.radius)) {
+    if (circlesOverlap(x, y, R, t.x, t.y, t.cfg.radius)) {
       state.killTank(t);
     }
   }
 
-  // Zerstoerbare Waende im Radius entfernen.
   for (const wall of [...state.walls]) {
-    if (wall.type === 'breakable' && circleOverlapsAABB(mine.x, mine.y, R, wall)) {
+    if (wall.type === 'breakable' && circleOverlapsAABB(x, y, R, wall)) {
       state.destroyWall(wall);
     }
   }
 
-  // Kettenreaktion: andere scharfe Minen im Radius zuenden verzoegert.
   for (const other of state.mines) {
-    if (other.dead || other === mine || other.fuse !== null) continue;
+    if (other.dead || other.fuse !== null) continue;
     if (!isArmed(other, mcfg)) continue;
-    if (circlesOverlap(mine.x, mine.y, R, other.x, other.y, other.radius)) {
+    if (circlesOverlap(x, y, R, other.x, other.y, other.radius)) {
       other.fuse = mcfg.chainDelayS;
     }
   }
+}
+
+function explode(mine, state) {
+  if (mine.dead) return;
+  mine.dead = true;
+  // Sprengkraft-Upgrade: Radius-Multiplikator des Legers.
+  const R = state.data.mine.explosionRadiusPx * (mine.owner?.cfg?.mineRadiusMult || 1);
+  explodeAt(state, mine.x, mine.y, R);
 }
 
 export function updateMines(state, dt) {

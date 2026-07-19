@@ -12,7 +12,12 @@ const TRAIL_MAX = 60; // Ticks Bahnhistorie fuers Debug-Overlay
 
 let nextId = 1;
 
-export function createBullet(x, y, angle, { speed, radius, ricochets, owner, kind, tungsten }) {
+export function createBullet(
+  x,
+  y,
+  angle,
+  { speed, radius, ricochets, owner, kind, tungsten, explosive, explosionRadius },
+) {
   return {
     id: nextId++,
     x,
@@ -24,6 +29,9 @@ export function createBullet(x, y, angle, { speed, radius, ricochets, owner, kin
     radius,
     kind: kind || 'bullet', // 'bullet' | 'rocket' | 'bounce_rocket'
     tungsten: tungsten || false, // Wolframkern-Upgrade (Spec Abschnitt 8)
+    explosive: explosive || false, // Sprengschuss-Upgrade: explodiert beim Tod
+    explosionRadius: explosionRadius || 0,
+    detonated: false,
     ricochetsLeft: ricochets,
     owner, // Referenz auf den Schuetzen (fuer den 80-ms-Schutz)
     age: 0, // s seit Abschuss

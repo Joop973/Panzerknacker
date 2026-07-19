@@ -22,8 +22,8 @@ const COLORS = {
   explosion: '#ffb347',
 };
 
-// Rumpffarben je Panzertyp (eigene Pixel-Art kommt in Phase 10).
-const TANK_COLORS = {
+// Rumpffarben je Panzertyp (auch von der Raumvorschau genutzt).
+export const TANK_COLORS = {
   player: '#c8b24a',
   t_brown: '#8a5a33',
   t_grey: '#9aa0a8',
@@ -208,6 +208,59 @@ export function createRenderer(ctx) {
     ctx.stroke();
     ctx.restore();
 
+    // Krallenfalle: gefangener Panzer bekommt einen pulsierenden Ring.
+    if (t.stunTimer > 0) {
+      ctx.strokeStyle = '#c25a4a';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.arc(x, y, r + 5 + Math.sin(t.stunTimer * 8) * 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.globalAlpha = 1;
+  }
+
+  // Krallenfallen: dunkelrote Kralle; gedimmt bis zur Scharfschaltung.
+  function drawTraps(state) {
+    for (const tr of state.traps) {
+      const armed = tr.age >= tr.armS;
+      ctx.globalAlpha = armed ? 0.9 : 0.4;
+      ctx.strokeStyle = '#c25a4a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(tr.x, tr.y, tr.radius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const a = (i * Math.PI * 2) / 3 + Math.PI / 6;
+        ctx.moveTo(tr.x, tr.y);
+        ctx.lineTo(tr.x + Math.cos(a) * tr.radius, tr.y + Math.sin(a) * tr.radius);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Radar-Upgrade: markiert alle lebenden Gegner -- auch t_white und
+  // hinter Waenden.
+  function drawRadar(state) {
+    if (!state.player.cfg.radar || !state.player.alive) return;
+    ctx.strokeStyle = '#8ecae6';
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.55 + 0.25 * Math.sin(state.time * 5);
+    for (const t of state.tanks) {
+      if (t === state.player || !t.alive) continue;
+      const r = t.cfg.radius + 6;
+      ctx.beginPath();
+      ctx.moveTo(t.x, t.y - r);
+      ctx.lineTo(t.x + r, t.y);
+      ctx.lineTo(t.x, t.y + r);
+      ctx.lineTo(t.x - r, t.y);
+      ctx.closePath();
+      ctx.stroke();
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -235,6 +288,17 @@ export function createRenderer(ctx) {
         ctx.moveTo(x, y);
         ctx.lineTo(x - (b.vx / sp) * 10, y - (b.vy / sp) * 10);
         ctx.stroke();
+      }
+
+      // Sprengschuss: oranger Glimmer um die Kugel.
+      if (b.explosive) {
+        ctx.strokeStyle = '#ff9a4a';
+        ctx.globalAlpha = 0.8;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, b.radius + 3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
       }
 
       ctx.fillStyle = c.fill;
@@ -270,8 +334,10 @@ export function createRenderer(ctx) {
       drawFloor();
       tracks.draw(ctx);
       drawMines(state);
+      drawTraps(state);
       drawWalls(state.walls);
       for (const t of state.tanks) drawTank(state, t, alpha);
+      drawRadar(state);
       drawBullets(state.bullets, alpha);
       drawFlashes(state);
       drawParticles(state);

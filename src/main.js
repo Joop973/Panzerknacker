@@ -8,8 +8,9 @@ import { STEP } from './config.js';
 import { createLoop } from './core/loop.js';
 import { createInput } from './core/input.js';
 import { createAudio } from './core/audio.js';
-import { createRun, stepRun, chooseUpgrade } from './game/run.js';
+import { createRun, stepRun, chooseUpgrade, enterRoom, totalRooms } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
+import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
 import { createTutorial } from './ui/hud.js';
@@ -58,13 +59,15 @@ async function init() {
   const debugOverlay = createDebugOverlay(ctx);
   const hud = createHud(ctx);
   const upgradeScreen = createUpgradeScreen();
-  const touch = createTouchControls(canvas);
+  const preview = createPreview();
+  const touch = createTouchControls();
   const pause = createPause();
   const tutorial = createTutorial(getFlag('tutorial_seen'));
 
   let run = null;
   let lastRoomState = null;
   let upgradeShown = false;
+  let previewShown = false;
   let toast = null;
 
   let fps = 0;
@@ -78,7 +81,9 @@ async function init() {
     run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
     startOverlay.classList.add('hidden');
     upgradeScreen.hide();
+    preview.hide();
     upgradeShown = false;
+    previewShown = false;
     // Touch-Geraete: Vollbild + Landscape-Lock versuchen (Android;
     // iOS ignoriert es -- dort greift das Portrait-Overlay).
     if (navigator.maxTouchPoints > 0) {
@@ -145,6 +150,20 @@ async function init() {
         upgradeShown = false;
       });
     }
+
+    // Raumvorschau: Gegnerliste + "Weiter"-Button.
+    if (run.phase === 'preview' && !previewShown) {
+      previewShown = true;
+      preview.show(
+        `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
+        run.state.tanks.slice(1).map((t) => t.type),
+        tanksData,
+        () => {
+          enterRoom(run);
+          previewShown = false;
+        },
+      );
+    }
   }
 
   function render(alpha) {
@@ -154,7 +173,6 @@ async function init() {
       debugOverlay.render(run.state, fps);
     }
     hud.render(run, { paused: pause.isPaused(), toast });
-    touch.render(ctx);
 
     frameCount++;
     const now = performance.now();
@@ -171,15 +189,22 @@ async function init() {
   seedInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') startRun();
   });
-  // Enter auf Endscreens: zurueck zum Start-Screen (Seed vorbefuellt).
+  // Endscreens: Enter ODER Tipp/Klick auf das Spielfeld fuehrt zurueck
+  // zum Start-Screen (Seed vorbefuellt) -> neuer Run.
+  function backToStart() {
+    refreshBestStats();
+    startOverlay.classList.remove('hidden');
+    seedInput.select();
+    preview.hide();
+    upgradeScreen.hide();
+    run = null;
+  }
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || !run) return;
-    if (run.phase === 'gameover' || run.phase === 'victory') {
-      refreshBestStats();
-      startOverlay.classList.remove('hidden');
-      seedInput.select();
-      run = null;
-    }
+    if (run.phase === 'gameover' || run.phase === 'victory') backToStart();
+  });
+  canvas.addEventListener('pointerup', () => {
+    if (run && (run.phase === 'gameover' || run.phase === 'victory')) backToStart();
   });
 
   // Pause-Button oben mittig.

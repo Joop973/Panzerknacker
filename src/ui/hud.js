@@ -72,7 +72,7 @@ export function createHud(ctx) {
           '13px monospace',
           '#9aa0a8',
         ],
-        ['Enter: neuer Run', '15px monospace', '#c8b24a'],
+        ['Tippen oder Enter: neuer Run', '15px monospace', '#c8b24a'],
       ],
       HEIGHT / 2 - 70,
       32,

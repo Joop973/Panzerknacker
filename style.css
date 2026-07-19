@@ -167,3 +167,109 @@ html, body {
   font-size: 13px;
   color: #9aa0a8;
 }
+
+/* Vollbild-Touch: floating Sticks als DOM-Elemente (auch neben dem Canvas) */
+.stick-base {
+  position: fixed;
+  width: 96px;
+  height: 96px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.stick-base.hidden {
+  display: none;
+}
+
+.stick-knob {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 50%;
+}
+
+/* Minen-Button unten rechts (eigene Exklusionszone) */
+#mineBtn {
+  display: none;
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(200, 178, 74, 0.55);
+  color: #14120a;
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 13px;
+  z-index: 6;
+  touch-action: none;
+}
+
+body.touch-on #mineBtn {
+  display: block;
+}
+
+/* Raumvorschau */
+.pv-sub {
+  font-family: monospace;
+  font-size: 14px;
+  color: #9aa0a8;
+}
+
+.pv-chips {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 80vw;
+}
+
+.pv-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1b1b22;
+  border: 2px solid #4a4a5a;
+  color: #e8e4d8;
+  font-family: monospace;
+  font-size: 14px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.pv-chip:hover {
+  border-color: #c8b24a;
+}
+
+.pv-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #1a1408;
+  display: inline-block;
+}
+
+.pv-desc {
+  font-family: monospace;
+  font-size: 13px;
+  color: #c8b24a;
+  max-width: 70vw;
+  text-align: center;
+  min-height: 2.6em;
+}
+
+#previewGo {
+  background: #c8b24a;
+  border: none;
+  color: #1a1408;
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 18px;
+  padding: 12px 60px;
+  cursor: pointer;
+}
