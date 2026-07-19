@@ -72,6 +72,7 @@ export function updateBullet(b, state, dt) {
   if (b.dead) return;
 
   if (hitX || hitY) {
+    state.sounds?.push('bounce');
     // Ein Wandkontakt pro Schritt kostet genau einen Abpraller --
     // auch im Eckenfall (hitX && hitY). Bei 0 verbleibenden
     // Abprallern verschwindet das Geschoss.

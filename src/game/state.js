@@ -17,6 +17,20 @@ import { generateRoom, buildFixedRoom } from './generator.js';
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
 const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole' };
 
+// Truemmerfarben fuer Partikel (Politur, Phase 10).
+const DEBRIS_COLORS = {
+  player: '#c8b24a',
+  t_brown: '#8a5a33',
+  t_grey: '#9aa0a8',
+  t_teal: '#3aa8a0',
+  t_yellow: '#d4c23a',
+  t_pink: '#d47ba6',
+  t_green: '#5a9e4a',
+  t_purple: '#8a5ad4',
+  t_white: '#e8e8e8',
+  t_black: '#33333c',
+};
+
 function buildWalls(grid) {
   const walls = [];
   for (let row = 0; row < ROWS; row++) {
@@ -112,6 +126,8 @@ export function createState(data, tiles, opts) {
     explosions: [],
     flashes: [],
     sounds: [],
+    particles: [],
+    shake: 0, // Screenshake-Staerke (nur Rendering)
     time: 0,
     respawnTimer: 0,
     // Solid-Test fuer Geschosse/Sichtlinien: 'o' (hole) blockiert NICHT.
@@ -126,14 +142,38 @@ export function createState(data, tiles, opts) {
       const i = state.walls.indexOf(wall);
       if (i >= 0) state.walls.splice(i, 1);
       grid[wall.row][wall.col] = '.';
+      state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 6, 90);
     },
     killTank(tank) {
       tank.alive = false;
+      state.sounds.push('death');
+      state.addShake(4);
+      state.spawnParticles(tank.x, tank.y, DEBRIS_COLORS[tank.type] || '#fff', 10, 120);
       if (tank === state.player) {
         state.playerDeaths++;
         state.respawnTimer = RESPAWN_DELAY;
       } else {
         state.enemyKills++;
+      }
+    },
+    addShake(amount) {
+      state.shake = Math.min(10, state.shake + amount);
+    },
+    spawnParticles(x, y, color, n, speed) {
+      if (state.particles.length > 280) return; // Deckel
+      for (let i = 0; i < n; i++) {
+        const ang = state.rng() * Math.PI * 2;
+        const v = speed * (0.4 + state.rng() * 0.8);
+        state.particles.push({
+          x,
+          y,
+          vx: Math.cos(ang) * v,
+          vy: Math.sin(ang) * v,
+          age: 0,
+          life: 0.3 + state.rng() * 0.35,
+          size: 1.5 + state.rng() * 2,
+          color,
+        });
       }
     },
   };
@@ -243,6 +283,15 @@ export function stepState(state, cmd, dt) {
   state.explosions = state.explosions.filter((e) => e.age < 0.4);
   for (const f of state.flashes) f.age += dt;
   state.flashes = state.flashes.filter((f) => f.age < 0.08);
+  for (const pt of state.particles) {
+    pt.age += dt;
+    pt.x += pt.vx * dt;
+    pt.y += pt.vy * dt;
+    pt.vx *= 0.94;
+    pt.vy *= 0.94;
+  }
+  state.particles = state.particles.filter((pt) => pt.age < pt.life);
+  state.shake = Math.max(0, state.shake - state.shake * 4 * dt - 0.5 * dt);
 
   state.bullets = state.bullets.filter((b) => !b.dead);
 }

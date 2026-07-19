@@ -18,7 +18,19 @@ export function createTracks() {
   buffer.height = HEIGHT;
   const bctx = buffer.getContext('2d');
 
+  let fadeTimer = 0;
+
   return {
+    // Politur (Spec Abschnitt 10, Punkt 4): Spuren verblassen langsam.
+    fade(dt) {
+      fadeTimer += dt;
+      if (fadeTimer < 2) return;
+      fadeTimer = 0;
+      bctx.globalCompositeOperation = 'destination-out';
+      bctx.fillStyle = 'rgba(0,0,0,0.12)';
+      bctx.fillRect(0, 0, WIDTH, HEIGHT);
+      bctx.globalCompositeOperation = 'source-over';
+    },
     // Pro Physik-Tick aufrufen: stempelt die Spur jedes bewegten Panzers.
     stamp(tanks) {
       bctx.fillStyle = TRACK_COLOR;

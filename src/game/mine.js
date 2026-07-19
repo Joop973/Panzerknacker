@@ -41,6 +41,9 @@ function explode(mine, state) {
   const R = mcfg.explosionRadiusPx * (mine.owner?.cfg?.mineRadiusMult || 1);
 
   state.explosions.push({ x: mine.x, y: mine.y, age: 0 });
+  state.sounds.push('boom');
+  state.addShake?.(6);
+  state.spawnParticles?.(mine.x, mine.y, '#ffb347', 14, 160);
 
   // Toetet jeden Panzer, der in den Radius hineinragt -- auch den Leger.
   for (const t of state.tanks) {

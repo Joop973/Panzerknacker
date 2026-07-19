@@ -111,6 +111,7 @@ export function fireBullet(tank, state) {
   );
   // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.
   state.flashes.push({ x: mx, y: my, age: 0 });
+  state.sounds.push('shoot');
   tank.cooldown = tank.cfg.fireCooldown;
   return true;
 }
@@ -124,5 +125,6 @@ export function layMine(tank, state) {
   }
   if (own >= tank.cfg.mines) return false;
   state.mines.push(createMine(tank.x, tank.y, tank, state.data.mine.radiusPx));
+  state.sounds.push('mine');
   return true;
 }

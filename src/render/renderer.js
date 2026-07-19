@@ -58,23 +58,37 @@ export function whiteAlpha(state) {
 }
 
 export function createRenderer(ctx) {
-  function drawFloor() {
-    ctx.fillStyle = COLORS.floor;
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
-
-    // Dezentes Zellraster als Orientierung.
-    ctx.strokeStyle = COLORS.grid;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
+  // Boden einmalig in ein Offscreen-Canvas backen (Politur: dezentes
+  // Schachbrett statt reiner Rasterlinien, ohne Frame-Kosten).
+  const floorCanvas = document.createElement('canvas');
+  floorCanvas.width = WIDTH;
+  floorCanvas.height = HEIGHT;
+  {
+    const f = floorCanvas.getContext('2d');
+    f.fillStyle = COLORS.floor;
+    f.fillRect(0, 0, WIDTH, HEIGHT);
+    f.fillStyle = 'rgba(255,255,255,0.02)';
+    for (let r = 0; r < HEIGHT / CELL; r++) {
+      for (let c = 0; c < WIDTH / CELL; c++) {
+        if ((r + c) % 2 === 0) f.fillRect(c * CELL, r * CELL, CELL, CELL);
+      }
+    }
+    f.strokeStyle = COLORS.grid;
+    f.lineWidth = 1;
+    f.beginPath();
     for (let x = CELL; x < WIDTH; x += CELL) {
-      ctx.moveTo(x + 0.5, 0);
-      ctx.lineTo(x + 0.5, HEIGHT);
+      f.moveTo(x + 0.5, 0);
+      f.lineTo(x + 0.5, HEIGHT);
     }
     for (let y = CELL; y < HEIGHT; y += CELL) {
-      ctx.moveTo(0, y + 0.5);
-      ctx.lineTo(WIDTH, y + 0.5);
+      f.moveTo(0, y + 0.5);
+      f.lineTo(WIDTH, y + 0.5);
     }
-    ctx.stroke();
+    f.stroke();
+  }
+
+  function drawFloor() {
+    ctx.drawImage(floorCanvas, 0, 0);
   }
 
   function drawWalls(walls) {
@@ -162,25 +176,47 @@ export function createRenderer(ctx) {
     const r = t.cfg.radius;
 
     ctx.globalAlpha = bodyAlpha;
+    const body = TANK_COLORS[t.type] || '#ffffff';
+    const edge = t.type === 't_black' ? '#8a8a99' : COLORS.outline;
 
-    // Rumpf. t_black bekommt einen hellen Rand, sonst verschwindet er
-    // auf dem dunklen Boden.
-    ctx.fillStyle = TANK_COLORS[t.type] || '#ffffff';
-    ctx.strokeStyle = t.type === 't_black' ? '#8a8a99' : COLORS.outline;
+    // Wanne mit Ketten, rotiert in Fahrtrichtung (Politur, Phase 10).
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(t.heading);
+    ctx.fillStyle = edge;
+    ctx.fillRect(-r + 1, -r + 1, 2 * r - 2, 5); // Kette oben
+    ctx.fillRect(-r + 1, r - 6, 2 * r - 2, 5); // Kette unten
+    ctx.fillStyle = body;
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 2;
+    ctx.fillRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
+    ctx.strokeRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
+    ctx.restore();
+
+    // Turm + Rohr, unabhaengig vom Rumpf rotiert.
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(t.turret);
+    ctx.fillStyle = edge;
+    ctx.fillRect(4, -2.5, r + 4, 5); // Rohr
+    ctx.fillStyle = body;
+    ctx.strokeStyle = edge;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.arc(0, 0, 7, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.restore();
 
-    // Rohr in Turm-Richtung (unabhaengig vom Rumpf).
-    ctx.strokeStyle = t.type === 't_black' ? '#8a8a99' : COLORS.outline;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(t.turret) * (r + 8), y + Math.sin(t.turret) * (r + 8));
-    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
 
+  function drawParticles(state) {
+    for (const pt of state.particles) {
+      ctx.globalAlpha = 1 - pt.age / pt.life;
+      ctx.fillStyle = pt.color;
+      ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);
+    }
     ctx.globalAlpha = 1;
   }
 
@@ -225,6 +261,12 @@ export function createRenderer(ctx) {
 
   return {
     render(state, alpha, tracks) {
+      // Screenshake: deterministisches Wackeln aus der Spielzeit.
+      const sh = state.shake || 0;
+      ctx.save();
+      if (sh > 0.1) {
+        ctx.translate(Math.sin(state.time * 47) * sh, Math.cos(state.time * 53) * sh * 0.7);
+      }
       drawFloor();
       tracks.draw(ctx);
       drawMines(state);
@@ -232,7 +274,9 @@ export function createRenderer(ctx) {
       for (const t of state.tanks) drawTank(state, t, alpha);
       drawBullets(state.bullets, alpha);
       drawFlashes(state);
+      drawParticles(state);
       drawExplosions(state);
+      ctx.restore();
     },
   };
 }

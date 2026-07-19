@@ -161,3 +161,9 @@ html, body {
     display: flex;
   }
 }
+
+.beststats {
+  font-family: monospace;
+  font-size: 13px;
+  color: #9aa0a8;
+}

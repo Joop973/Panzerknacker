@@ -13,7 +13,7 @@ import { createUpgradeScreen } from './ui/upgradescreen.js';
 import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
 import { createTutorial } from './ui/hud.js';
-import { getFlag, setFlag } from './core/storage.js';
+import { getFlag, setFlag, loadStats } from './core/storage.js';
 import { createRenderer } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
@@ -32,6 +32,21 @@ async function init() {
   const startOverlay = document.getElementById('start');
   const seedInput = document.getElementById('seedInput');
   const startBtn = document.getElementById('startBtn');
+
+  // Bestwerte auf dem Start-Screen.
+  function refreshBestStats() {
+    const s = loadStats();
+    const el = document.getElementById('beststats');
+    if (!s.runs) {
+      el.textContent = '';
+      return;
+    }
+    const win = s.fastestWinS
+      ? ` · schnellster Sieg ${Math.floor(s.fastestWinS / 60)}:${String(Math.floor(s.fastestWinS % 60)).padStart(2, '0')}`
+      : '';
+    el.textContent = `${s.runs} Runs · beste Räume ${s.mostRooms} · ${s.totalKills} Kills${win}`;
+  }
+  refreshBestStats();
 
   const input = createInput(window, canvas);
   const audio = createAudio();
@@ -93,7 +108,10 @@ async function init() {
       tracks.clear();
       lastRoomState = run.state;
     }
-    if (run.phase === 'playing') tracks.stamp(run.state.tanks);
+    if (run.phase === 'playing') {
+      tracks.stamp(run.state.tanks);
+      tracks.fade(dt);
+    }
     for (const name of run.state.sounds.splice(0)) audio.play(name);
 
     // Upgrade-Screen genau einmal pro Angebot einblenden.
@@ -134,6 +152,7 @@ async function init() {
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || !run) return;
     if (run.phase === 'gameover' || run.phase === 'victory') {
+      refreshBestStats();
       startOverlay.classList.remove('hidden');
       seedInput.select();
       run = null;
