@@ -12,7 +12,7 @@ const TRAIL_MAX = 60; // Ticks Bahnhistorie fuers Debug-Overlay
 
 let nextId = 1;
 
-export function createBullet(x, y, angle, { speed, radius, ricochets, owner }) {
+export function createBullet(x, y, angle, { speed, radius, ricochets, owner, kind }) {
   return {
     id: nextId++,
     x,
@@ -22,6 +22,7 @@ export function createBullet(x, y, angle, { speed, radius, ricochets, owner }) {
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
     radius,
+    kind: kind || 'bullet', // 'bullet' | 'rocket' | 'bounce_rocket'
     ricochetsLeft: ricochets,
     owner, // Referenz auf den Schuetzen (fuer den 80-ms-Schutz)
     age: 0, // s seit Abschuss

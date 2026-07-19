@@ -1,17 +1,18 @@
-// Gegner-KI (Spec Abschnitt 5).
+// Gegner-KI, Dispatcher + gemeinsame Helfer (Spec Abschnitt 5).
 //
-// Zwei GETRENNTE Achsen -- Turmverhalten und Fahrverhalten. Diese
-// Trennung ist laut Spec zentral und darf nicht zusammengelegt werden:
+// Zwei GETRENNTE Achsen -- Turmverhalten (ai_turrets.js) und
+// Fahrverhalten (ai_drives.js). Diese Trennung ist laut Spec zentral:
 // jeder Gegnertyp kombiniert unabhaengig ein TURRET- und ein
-// DRIVE-Verhalten (per Name aus data/tanks.json).
+// DRIVE-Verhalten (per Name aus data/tanks.json). Dazu kommt als
+// optionale dritte Achse das Minenlegen (miner-Eintrag im Typ).
 //
-// Phase 3: random_seek (t_brown), weak_aim (t_grey), wander (t_grey).
-// Alle Stellwerte kommen aus tanks.json (state.data.ai), aller Zufall
-// aus dem Seed-RNG (state.rng).
+// Aller Zufall laeuft ueber den Seed-RNG (state.rng).
 
 import { range } from '../core/rng.js';
+import { TURRETS } from './ai_turrets.js';
+import { DRIVES } from './ai_drives.js';
 
-function angleDiff(a, b) {
+export function angleDiff(a, b) {
   // Kleinste Differenz b - a, gewrappt auf [-PI, PI].
   let d = (b - a) % (Math.PI * 2);
   if (d > Math.PI) d -= Math.PI * 2;
@@ -19,15 +20,32 @@ function angleDiff(a, b) {
   return d;
 }
 
-function turnToward(current, target, maxStep) {
+export function turnToward(current, target, maxStep) {
   const d = angleDiff(current, target);
   if (Math.abs(d) <= maxStep) return target;
   return current + Math.sign(d) * maxStep;
 }
 
+// Ray-March: ist die Strecke (x0,y0)->(x1,y1) frei von Waenden?
+export function clearLine(state, x0, y0, x1, y1) {
+  const step = state.data.ai.raycastStepPx;
+  const dist = Math.hypot(x1 - x0, y1 - y0);
+  if (dist < 1) return true;
+  const dx = ((x1 - x0) / dist) * step;
+  const dy = ((y1 - y0) / dist) * step;
+  let x = x0;
+  let y = y0;
+  for (let d = 0; d < dist; d += step) {
+    if (state.isSolid(x, y)) return false;
+    x += dx;
+    y += dy;
+  }
+  return true;
+}
+
 // Ray-March vom Rohrende entlang der Turmrichtung: trifft der Strahl
 // den Spieler, bevor er in einer Wand endet?
-function playerInSight(tank, state) {
+export function playerInSight(tank, state) {
   const p = state.player;
   if (!p.alive) return false;
   const { raycastStepPx, raycastMaxPx } = state.data.ai;
@@ -49,7 +67,7 @@ function playerInSight(tank, state) {
 
 // Liegt innerhalb von clearPx vor der Muendung eine Wand? (Verhindert
 // staendige Punktblank-Selbsttreffer beim Schiessen direkt an der Wand.)
-function muzzleBlocked(tank, state, clearPx) {
+export function muzzleBlocked(tank, state, clearPx) {
   const step = state.data.ai.raycastStepPx;
   const cos = Math.cos(tank.turret);
   const sin = Math.sin(tank.turret);
@@ -63,100 +81,98 @@ function muzzleBlocked(tank, state, clearPx) {
   return false;
 }
 
-// ---------------------------------------------------------------- Turm
+// Abstossung von liegenden Minen (t_yellow laut Spec; alle Minenleger
+// zusaetzlich, damit sie nicht regelmaessig in die eigenen Minen fahren).
+function mineRepulsion(tank, state) {
+  const R = state.data.ai.mineAvoidRadiusPx;
+  let rx = 0;
+  let ry = 0;
+  let any = false;
+  for (const m of state.mines) {
+    if (m.dead) continue;
+    const dx = tank.x - m.x;
+    const dy = tank.y - m.y;
+    const d = Math.hypot(dx, dy);
+    if (d >= R || d < 0.001) continue;
+    const w = 1 - d / R;
+    rx += (dx / d) * w;
+    ry += (dy / d) * w;
+    any = true;
+  }
+  return any ? { x: rx, y: ry } : null;
+}
 
-const TURRETS = {
-  // t_brown: Turm schwenkt zufaellig suchend; gefeuert wird nur, wenn
-  // der Lauf dabei zufaellig freie Sicht auf den Spieler hat.
-  random_seek(tank, state, dt) {
-    const cfg = state.data.ai.turret.random_seek;
-    const ai = tank.ai;
-    if (ai.seekTimer === undefined) ai.seekTimer = 0;
-    ai.seekTimer -= dt;
-    if (ai.seekTimer <= 0) {
-      ai.seekTarget = range(state.rng, -Math.PI, Math.PI);
-      ai.seekTimer = range(state.rng, cfg.retargetMinS, cfg.retargetMaxS);
-    }
-    tank.turret = turnToward(tank.turret, ai.seekTarget, cfg.turnSpeed * dt);
-    return playerInSight(tank, state);
-  },
+// Gemeinsame Fahr-Basis: weich auf targetAngle zulenken; bei Blockade
+// (kaum Fortschritt trotz Fahrbefehl) fuer escapeHoldS von der Wand
+// wegpivotieren. Fahrende Panzer bleiben dadurch NIE stehen.
+export function steer(tank, state, dt, targetAngle, cfg) {
+  const ai = tank.ai;
 
-  // t_grey: zielt schwach -- auf die aktuelle Spielerposition plus
-  // einen periodisch neu gewuerfelten Fehlerwinkel. Feuert, sobald der
-  // Turm grob ausgerichtet ist und die Muendung frei ist.
-  weak_aim(tank, state, dt) {
-    const cfg = state.data.ai.turret.weak_aim;
-    const ai = tank.ai;
-    const p = state.player;
-    if (ai.jitterTimer === undefined) ai.jitterTimer = 0;
-    ai.jitterTimer -= dt;
-    if (ai.jitterTimer <= 0) {
-      ai.jitter = range(state.rng, -cfg.jitterRad, cfg.jitterRad);
-      ai.jitterTimer = cfg.rejitterS;
+  // Minen-Ausweichen ueberlagert das Wunschziel aller Fahrverhalten.
+  // Stark gewichtet: nahe einer Mine dominiert die Flucht das Ziel.
+  if (tank.cfg.avoidMines) {
+    const rep = mineRepulsion(tank, state);
+    if (rep) {
+      targetAngle = Math.atan2(
+        Math.sin(targetAngle) + rep.y * 2.5,
+        Math.cos(targetAngle) + rep.x * 2.5,
+      );
     }
-    if (!p.alive) return false;
-    const target = Math.atan2(p.y - tank.y, p.x - tank.x) + ai.jitter;
-    tank.turret = turnToward(tank.turret, target, cfg.turnSpeed * dt);
-    return (
-      Math.abs(angleDiff(tank.turret, target)) < cfg.fireConeRad &&
-      !muzzleBlocked(tank, state, cfg.muzzleClearPx)
-    );
-  },
-};
+  }
+  if (ai.driveAngle === undefined) {
+    ai.driveAngle = targetAngle;
+    ai.blockedTime = 0;
+    ai.overrideTimer = 0;
+    ai.overrideAngle = 0;
+  }
+  const moved = Math.hypot(tank.x - tank.prevX, tank.y - tank.prevY);
+  const expected = tank.cfg.speed * dt;
+  if (expected > 0 && moved < expected * 0.3) {
+    ai.blockedTime += dt;
+  } else {
+    ai.blockedTime = 0;
+  }
+  if (ai.blockedTime >= cfg.blockedRetargetS) {
+    ai.overrideAngle =
+      ai.driveAngle + Math.PI + range(state.rng, -cfg.escapeSpreadRad, cfg.escapeSpreadRad);
+    ai.overrideTimer = cfg.escapeHoldS;
+    ai.driveAngle = ai.overrideAngle; // Pivot auf der Stelle
+    ai.blockedTime = 0;
+  }
+  if (ai.overrideTimer > 0) {
+    ai.overrideTimer -= dt;
+    targetAngle = ai.overrideAngle;
+  }
+  ai.driveAngle = turnToward(ai.driveAngle, targetAngle, cfg.turnSpeed * dt);
+  return { x: Math.cos(ai.driveAngle), y: Math.sin(ai.driveAngle) };
+}
 
-// ---------------------------------------------------------- Fahrwerk
-
-const DRIVES = {
-  // Fixe Panzer (t_brown): bewegen sich nicht.
-  none() {
-    return { x: 0, y: 0 };
-  },
-
-  // t_grey: ziellos. Faehrt immer (Spec: fahrende Panzer bleiben NIE
-  // stehen), lenkt weich auf einen Zielwinkel zu, der periodisch oder
-  // bei Blockade neu gewuerfelt wird.
-  wander(tank, state, dt) {
-    const cfg = state.data.ai.drive.wander;
-    const ai = tank.ai;
-    if (ai.driveAngle === undefined) {
-      ai.driveAngle = range(state.rng, -Math.PI, Math.PI);
-      ai.driveTarget = ai.driveAngle;
-      ai.driveTimer = 0;
-      ai.blockedTime = 0;
-    }
-    // Blockade: kaum vorangekommen trotz Fahrbefehl. Nach kurzer Zeit
-    // sofort von der Wand wegschwenken (Pivot) -- ein zufaelliger neuer
-    // Zielwinkel koennte wieder in die Wand zeigen, und fahrende Panzer
-    // duerfen nie stehen bleiben.
-    const moved = Math.hypot(tank.x - tank.prevX, tank.y - tank.prevY);
-    const expected = tank.cfg.speed * dt;
-    if (expected > 0 && moved < expected * 0.3) {
-      ai.blockedTime += dt;
-    } else {
-      ai.blockedTime = 0;
-    }
-    if (ai.blockedTime >= cfg.blockedRetargetS) {
-      const escape =
-        ai.driveAngle + Math.PI + range(state.rng, -cfg.escapeSpreadRad, cfg.escapeSpreadRad);
-      ai.driveTarget = escape;
-      ai.driveAngle = escape; // Pivot auf der Stelle, dann sofort weiterfahren
-      ai.driveTimer = range(state.rng, cfg.retargetMinS, cfg.retargetMaxS);
-      ai.blockedTime = 0;
-    }
-    ai.driveTimer -= dt;
-    if (ai.driveTimer <= 0) {
-      ai.driveTarget = range(state.rng, -Math.PI, Math.PI);
-      ai.driveTimer = range(state.rng, cfg.retargetMinS, cfg.retargetMaxS);
-    }
-    ai.driveAngle = turnToward(ai.driveAngle, ai.driveTarget, cfg.turnSpeed * dt);
-    return { x: Math.cos(ai.driveAngle), y: Math.sin(ai.driveAngle) };
-  },
-};
-
-// Ein KI-Schritt fuer einen Gegner. Gibt { move, fire } zurueck; die
-// Anwendung (Bewegung, Schuss) macht state.js.
+// Ein KI-Schritt fuer einen Gegner. Gibt { move, fire, mine } zurueck;
+// die Anwendung (Bewegung, Schuss, Minenlegen) macht state.js.
 export function updateEnemy(tank, state, dt) {
   const move = DRIVES[tank.cfg.drive](tank, state, dt);
   const fire = TURRETS[tank.cfg.turret](tank, state, dt);
-  return { move, fire };
+
+  // Dritte Achse: Minenleger (t_yellow "ohne taktischen Grund" per
+  // Zufallstimer -- das beabsichtigte Sich-selbst-Einsperren entsteht
+  // von allein; t_purple/t_white/t_black seltener).
+  let mine = false;
+  if (tank.cfg.miner) {
+    const ai = tank.ai;
+    if (ai.mineTimer === undefined) {
+      ai.mineTimer = range(state.rng, tank.cfg.miner.intervalMinS, tank.cfg.miner.intervalMaxS);
+    }
+    ai.mineTimer -= dt;
+    if (ai.mineTimer <= 0) {
+      // Nur bei freier Fahrt legen: ein blockierter Panzer wuerde die
+      // Mine unter sich scharf werden lassen und sich selbst sprengen.
+      const actualSpeed = Math.hypot(tank.vx, tank.vy);
+      if (actualSpeed >= tank.cfg.speed * 0.5) {
+        mine = true;
+        ai.mineTimer = range(state.rng, tank.cfg.miner.intervalMinS, tank.cfg.miner.intervalMaxS);
+      }
+      // sonst: Timer bleibt abgelaufen, naechste freie Fahrt legt sofort
+    }
+  }
+  return { move, fire, mine };
 }

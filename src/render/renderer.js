@@ -27,10 +27,34 @@ const TANK_COLORS = {
   player: '#c8b24a',
   t_brown: '#8a5a33',
   t_grey: '#9aa0a8',
+  t_teal: '#3aa8a0',
+  t_yellow: '#d4c23a',
+  t_pink: '#d47ba6',
+  t_green: '#5a9e4a',
+  t_purple: '#8a5ad4',
+  t_white: '#e8e8e8',
+  t_black: '#33333c',
+};
+
+// Geschossfarben je Waffe.
+const BULLET_COLORS = {
+  bullet: { fill: '#e8e4d8', edge: '#8a8578' },
+  rocket: { fill: '#ff9a4a', edge: '#a05620' },
+  bounce_rocket: { fill: '#7ade6a', edge: '#3d8a30' },
 };
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
+}
+
+// Sichtbarkeit von t_white (Spec Abschnitt 5): unsichtbar ab 1,5 s nach
+// Rundenstart; alle ~2 s flackert die Silhouette kurz auf (Schimmer).
+// Rueckgabe: Alpha fuer das Zeichnen (0 = gar nicht zeichnen).
+export function whiteAlpha(state) {
+  const w = state.data.ai.white;
+  if (state.time < w.invisibleAfterS) return 1;
+  const phase = (state.time - w.invisibleAfterS) % w.shimmerIntervalS;
+  return phase < w.shimmerDurationS ? 0.3 : 0;
 }
 
 export function createRenderer(ctx, tracks) {
@@ -113,15 +137,27 @@ export function createRenderer(ctx, tracks) {
     }
   }
 
-  function drawTank(t, alpha) {
+  function drawTank(state, t, alpha) {
     if (!t.alive) return;
+
+    // t_white: unsichtbar bis auf den Schimmer (Muendungsblitz und
+    // dicke Reifenspuren sind die anderen Tracking-Kanaele).
+    let bodyAlpha = 1;
+    if (t.type === 't_white') {
+      bodyAlpha = whiteAlpha(state);
+      if (bodyAlpha <= 0) return;
+    }
+
     const x = lerp(t.prevX, t.x, alpha);
     const y = lerp(t.prevY, t.y, alpha);
     const r = t.cfg.radius;
 
-    // Rumpf.
+    ctx.globalAlpha = bodyAlpha;
+
+    // Rumpf. t_black bekommt einen hellen Rand, sonst verschwindet er
+    // auf dem dunklen Boden.
     ctx.fillStyle = TANK_COLORS[t.type] || '#ffffff';
-    ctx.strokeStyle = COLORS.outline;
+    ctx.strokeStyle = t.type === 't_black' ? '#8a8a99' : COLORS.outline;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -129,25 +165,52 @@ export function createRenderer(ctx, tracks) {
     ctx.stroke();
 
     // Rohr in Turm-Richtung (unabhaengig vom Rumpf).
-    ctx.strokeStyle = COLORS.outline;
+    ctx.strokeStyle = t.type === 't_black' ? '#8a8a99' : COLORS.outline;
     ctx.lineWidth = 4;
     ctx.beginPath();
     ctx.moveTo(x, y);
     ctx.lineTo(x + Math.cos(t.turret) * (r + 8), y + Math.sin(t.turret) * (r + 8));
     ctx.stroke();
+
+    ctx.globalAlpha = 1;
   }
 
   function drawBullets(bullets, alpha) {
     for (const b of bullets) {
       const x = lerp(b.prevX, b.x, alpha);
       const y = lerp(b.prevY, b.y, alpha);
-      ctx.fillStyle = COLORS.bullet;
-      ctx.strokeStyle = COLORS.bulletOutline;
+      const c = BULLET_COLORS[b.kind] || BULLET_COLORS.bullet;
+
+      // Raketen bekommen einen kurzen Schweif entgegen der Flugrichtung.
+      if (b.kind !== 'bullet') {
+        const sp = Math.hypot(b.vx, b.vy) || 1;
+        ctx.strokeStyle = c.edge;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - (b.vx / sp) * 10, y - (b.vy / sp) * 10);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = c.fill;
+      ctx.strokeStyle = c.edge;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.arc(x, y, b.radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+    }
+  }
+
+  function drawFlashes(state) {
+    for (const f of state.flashes) {
+      const t = 1 - f.age / 0.08;
+      ctx.fillStyle = '#fff2b0';
+      ctx.globalAlpha = t;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, 3 + 4 * (1 - t), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -157,8 +220,9 @@ export function createRenderer(ctx, tracks) {
       tracks.draw(ctx);
       drawMines(state);
       drawWalls(state.walls);
-      for (const t of state.tanks) drawTank(t, alpha);
+      for (const t of state.tanks) drawTank(state, t, alpha);
       drawBullets(state.bullets, alpha);
+      drawFlashes(state);
       drawExplosions(state);
     },
   };

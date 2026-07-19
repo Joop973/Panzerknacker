@@ -28,14 +28,16 @@ export function createTracks() {
         const dy = t.y - t.prevY;
         if (dx * dx + dy * dy < 0.01) continue; // steht -> keine Spur
         // Zwei Streifen links/rechts der Fahrtrichtung (Kettenabstand).
+        // t_white stempelt dicker (Haupt-Tracking-Kanal, Spec Abschnitt 5).
+        const size = t.cfg.trackStampPx || STAMP;
         const perp = t.heading + Math.PI / 2;
         const off = t.cfg.radius * 0.6;
         for (const s of [-1, 1]) {
           bctx.fillRect(
-            t.x + Math.cos(perp) * off * s - STAMP / 2,
-            t.y + Math.sin(perp) * off * s - STAMP / 2,
-            STAMP,
-            STAMP,
+            t.x + Math.cos(perp) * off * s - size / 2,
+            t.y + Math.sin(perp) * off * s - size / 2,
+            size,
+            size,
           );
         }
       }

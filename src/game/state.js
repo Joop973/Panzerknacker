@@ -39,12 +39,19 @@ const ARENA_MAP = [
 
 const PLAYER_SPAWN = { col: 3, row: 13 };
 
-// Test-Gegner fuer Phase 3 (Spawns kommen ab Phase 6 aus dem Generator).
+// Test-Gegner: einer je Typ, t_purple doppelt (Koordinations-Test).
+// Echte Spawns kommen ab Phase 6 aus dem Generator.
 const ENEMY_SPAWNS = [
   { type: 't_brown', col: 12, row: 5 },
-  { type: 't_brown', col: 20, row: 2 },
   { type: 't_grey', col: 18, row: 9 },
-  { type: 't_grey', col: 6, row: 7 },
+  { type: 't_teal', col: 20, row: 2 },
+  { type: 't_yellow', col: 3, row: 1 },
+  { type: 't_pink', col: 20, row: 13 },
+  { type: 't_green', col: 11, row: 8 },
+  { type: 't_purple', col: 16, row: 7 },
+  { type: 't_purple', col: 22, row: 11 },
+  { type: 't_white', col: 2, row: 2 },
+  { type: 't_black', col: 21, row: 5 },
 ];
 
 const WALL_TYPES = { '#': 'solid', b: 'breakable' };
@@ -73,9 +80,13 @@ function resolveCfg(data, type) {
     magazine: t.magazine,
     ricochets: t.ricochets,
     mines: t.mines,
+    weapon: t.weapon,
     bulletSpeed: data.bulletSpeeds[t.weapon],
     turret: t.turret,
     drive: t.drive,
+    avoidMines: t.avoidMines || false,
+    miner: t.miner,
+    trackStampPx: t.trackStampPx || 3,
   };
 }
 
@@ -103,6 +114,9 @@ export function createState(data, seed = 1) {
     bullets: [],
     mines: [],
     explosions: [], // kurzlebige Render-Effekte { x, y, age }
+    flashes: [], // Muendungsblitze { x, y, age }
+    sounds: [], // Audio-Ereignisnamen, von main.js abgespielt
+    time: 0, // s seit Rundenstart (t_white-Unsichtbarkeit)
     respawnTimer: 0, // > 0 waehrend der Spieler tot ist
     // Zellgenauer Solid-Test in Pixelkoordinaten (fuer KI-Raycasts).
     isSolid(px, py) {
@@ -136,6 +150,7 @@ function respawnPlayer(state) {
   state.bullets = [];
   state.mines = [];
   state.explosions = [];
+  state.flashes = [];
   state.respawnTimer = 0;
 }
 
@@ -143,6 +158,7 @@ function respawnPlayer(state) {
 // cmd = { move: {x,y}, aim: {x,y}, fire: bool, mine: bool }.
 export function stepState(state, cmd, dt) {
   const p = state.player;
+  state.time += dt;
 
   for (const t of state.tanks) {
     if (t.alive) t.cooldown = Math.max(0, t.cooldown - dt);
@@ -158,12 +174,14 @@ export function stepState(state, cmd, dt) {
     if (cmd.mine) layMine(p, state);
   }
 
-  // Gegner: getrennte Turm-/Fahr-KI liefert Bewegungsvektor + Schusswunsch.
+  // Gegner: getrennte Turm-/Fahr-KI liefert Bewegung, Schuss- und
+  // Minenwunsch.
   for (const t of state.tanks) {
     if (t === state.player || !t.alive) continue;
-    const { move, fire } = updateEnemy(t, state, dt);
+    const { move, fire, mine } = updateEnemy(t, state, dt);
     moveTank(t, move, state, dt);
     if (fire) fireBullet(t, state);
+    if (mine) layMine(t, state);
   }
 
   for (const b of state.bullets) updateBullet(b, state.walls, dt);
@@ -203,9 +221,11 @@ export function stepState(state, cmd, dt) {
   // Kettenreaktion, Wandzerstoerung.
   updateMines(state, dt);
 
-  // Explosions-Effekte altern lassen (nur Rendering).
+  // Kurzlebige Render-Effekte altern lassen.
   for (const e of state.explosions) e.age += dt;
   state.explosions = state.explosions.filter((e) => e.age < 0.4);
+  for (const f of state.flashes) f.age += dt;
+  state.flashes = state.flashes.filter((f) => f.age < 0.08);
 
   state.bullets = state.bullets.filter((b) => !b.dead);
 }

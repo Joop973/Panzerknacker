@@ -7,6 +7,7 @@
 import { STEP } from './config.js';
 import { createLoop } from './core/loop.js';
 import { createInput } from './core/input.js';
+import { createAudio } from './core/audio.js';
 import { createState, stepState } from './game/state.js';
 import { createRenderer } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
@@ -19,6 +20,10 @@ async function init() {
   const ctx = canvas.getContext('2d');
 
   const input = createInput(window, canvas);
+  const audio = createAudio();
+  // Browser geben Audio erst nach einer Nutzergeste frei.
+  window.addEventListener('pointerdown', audio.unlock);
+  window.addEventListener('keydown', audio.unlock);
   // Seed: bis zur Seed-Eingabe im UI (Phase 7) einfach aus der Uhr.
   const state = createState(tanksData, Date.now() >>> 0);
   const tracks = createTracks();
@@ -42,6 +47,8 @@ async function init() {
       dt,
     );
     tracks.stamp(state.tanks);
+    // Von der Spiellogik gemeldete Audio-Ereignisse abspielen.
+    for (const name of state.sounds.splice(0)) audio.play(name);
   }
 
   function render(alpha) {

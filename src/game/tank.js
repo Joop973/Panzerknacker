@@ -24,6 +24,8 @@ export function createTank(type, cfg, x, y) {
     prevY: y,
     heading: -Math.PI / 2, // Rumpf (Fahrtrichtung)
     turret: -Math.PI / 2, // Turm, unabhaengig vom Rumpf
+    vx: 0, // tatsaechliche Geschwindigkeit (px/s, nach Kollisionen)
+    vy: 0, // -- gebraucht vom Vorhaltezielen (t_black)
     cooldown: 0,
     alive: true,
     ai: {}, // Zustandsspeicher der KI-Verhalten (leer beim Spieler)
@@ -73,6 +75,10 @@ export function moveTank(tank, axis, state, dt) {
   resolveCircleWalls(tank, tank.cfg.radius, state.walls);
   resolveTankBlocking(tank, state.tanks);
   resolveCircleWalls(tank, tank.cfg.radius, state.walls);
+
+  // Tatsaechliche Geschwindigkeit nach allen Kollisionen.
+  tank.vx = (tank.x - tank.prevX) / dt;
+  tank.vy = (tank.y - tank.prevY) / dt;
 }
 
 function liveBulletsOf(state, owner) {
@@ -91,19 +97,19 @@ export function fireBullet(tank, state) {
   if (tank.cooldown > 1e-9) return false;
   if (liveBulletsOf(state, tank) >= tank.cfg.magazine) return false;
   const muzzle = tank.cfg.radius + 8; // Spitze des Rohrs
+  const mx = tank.x + Math.cos(tank.turret) * muzzle;
+  const my = tank.y + Math.sin(tank.turret) * muzzle;
   state.bullets.push(
-    createBullet(
-      tank.x + Math.cos(tank.turret) * muzzle,
-      tank.y + Math.sin(tank.turret) * muzzle,
-      tank.turret,
-      {
-        speed: tank.cfg.bulletSpeed,
-        radius: tank.cfg.bulletRadius,
-        ricochets: tank.cfg.ricochets,
-        owner: tank,
-      },
-    ),
+    createBullet(mx, my, tank.turret, {
+      speed: tank.cfg.bulletSpeed,
+      radius: tank.cfg.bulletRadius,
+      ricochets: tank.cfg.ricochets,
+      owner: tank,
+      kind: tank.cfg.weapon,
+    }),
   );
+  // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.
+  state.flashes.push({ x: mx, y: my, age: 0 });
   tank.cooldown = tank.cfg.fireCooldown;
   return true;
 }
