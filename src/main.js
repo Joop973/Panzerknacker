@@ -14,7 +14,10 @@ import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
 
 async function init() {
-  const tanksData = await (await fetch('data/tanks.json')).json();
+  const [tanksData, tilesData] = await Promise.all([
+    fetch('data/tanks.json').then((r) => r.json()),
+    fetch('data/tiles.json').then((r) => r.json()),
+  ]);
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
@@ -25,7 +28,7 @@ async function init() {
   window.addEventListener('pointerdown', audio.unlock);
   window.addEventListener('keydown', audio.unlock);
   // Seed: bis zur Seed-Eingabe im UI (Phase 7) einfach aus der Uhr.
-  const state = createState(tanksData, Date.now() >>> 0);
+  const state = createState(tanksData, tilesData, Date.now() >>> 0);
   const tracks = createTracks();
   const renderer = createRenderer(ctx, tracks);
   const debugOverlay = createDebugOverlay(ctx);

@@ -37,6 +37,7 @@ function moveAxis(b, walls, axis, dt) {
   b[axis] += (axis === 'x' ? b.vx : b.vy) * dt;
   let hit = false;
   for (const wall of walls) {
+    if (wall.type === 'hole') continue; // Geschosse fliegen ueber Loecher
     if (!circleOverlapsAABB(b.x, b.y, b.radius, wall)) continue;
     hit = true;
     if (axis === 'x') {

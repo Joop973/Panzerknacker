@@ -79,6 +79,15 @@ export function createRenderer(ctx, tracks) {
 
   function drawWalls(walls) {
     for (const wall of walls) {
+      if (wall.type === 'hole') {
+        // Loch: dunkle Grube, Panzer blockiert, Geschosse fliegen drueber.
+        ctx.fillStyle = '#0c0c10';
+        ctx.fillRect(wall.x + 2, wall.y + 2, wall.w - 4, wall.h - 4);
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(wall.x + 3, wall.y + 3, wall.w - 6, wall.h - 6);
+        continue;
+      }
       const breakable = wall.type === 'breakable';
       ctx.fillStyle = breakable ? COLORS.breakable : COLORS.wall;
       ctx.fillRect(wall.x, wall.y, wall.w, wall.h);

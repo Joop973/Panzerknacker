@@ -1,9 +1,9 @@
 // Spiel-Zustand und Spiellogik-Schritt (Spec Abschnitt 3: game/state.js).
 //
-// Phase 3: hartcodierte Testarena, Spielerpanzer plus Gegner (t_brown,
-// t_grey) mit KI. Alle Balancing-Werte kommen aus data/tanks.json und
-// werden als data-Objekt injiziert (kein fetch hier -- so bleibt die
-// Logik headless testbar). Raumgenerator und JSON-Kacheln ab Phase 6.
+// Phase 6: Raeume kommen aus dem Generator (Kachelsystem, data/tiles.json).
+// Zwei getrennte RNG-Stroeme: genRng (Raumbau -- muss unabhaengig vom
+// Spielverlauf deterministisch sein, Spec Abschnitt 6) und aiRng
+// (Gegner-KI). Alle Balancing-Werte kommen aus data/*.json.
 
 import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
 import { mulberry32 } from '../core/rng.js';
@@ -12,49 +12,13 @@ import { updateBullet } from './bullet.js';
 import { updateMines } from './mine.js';
 import { updateEnemy } from './ai.js';
 import { circlesOverlap } from './collision.js';
+import { generateRoom } from './generator.js';
 
-// Hartcodierte Testarena: 24x16 Zellen.
-//   '#' = solid-Wand (unzerstoerbar, blockiert)
-//   'b' = breakable-Wand (durch Minen-Explosion zerstoerbar,
-//         fuer Geschosse wie solid)
-//   '.' = frei
-const ARENA_MAP = [
-  '########################',
-  '#......................#',
-  '#......................#',
-  '#...####........####...#',
-  '#...#..............#...#',
-  '#......................#',
-  '#.......#bbbb#.........#',
-  '#......................#',
-  '#....##......##........#',
-  '#......................#',
-  '#.........bbbb.........#',
-  '#......................#',
-  '#...###b........b###...#',
-  '#......................#',
-  '#......................#',
-  '########################',
-];
+// Test-Zusammenstellung; ab Phase 7 kauft das Gefahrenbudget ein.
+const ENEMY_TYPES = ['t_brown', 't_grey', 't_teal', 't_pink', 't_yellow', 't_green'];
 
-const PLAYER_SPAWN = { col: 3, row: 13 };
-
-// Test-Gegner: einer je Typ, t_purple doppelt (Koordinations-Test).
-// Echte Spawns kommen ab Phase 6 aus dem Generator.
-const ENEMY_SPAWNS = [
-  { type: 't_brown', col: 12, row: 5 },
-  { type: 't_grey', col: 18, row: 9 },
-  { type: 't_teal', col: 20, row: 2 },
-  { type: 't_yellow', col: 3, row: 1 },
-  { type: 't_pink', col: 20, row: 13 },
-  { type: 't_green', col: 11, row: 8 },
-  { type: 't_purple', col: 16, row: 7 },
-  { type: 't_purple', col: 22, row: 11 },
-  { type: 't_white', col: 2, row: 2 },
-  { type: 't_black', col: 21, row: 5 },
-];
-
-const WALL_TYPES = { '#': 'solid', b: 'breakable' };
+// Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
+const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole' };
 
 function buildWalls(grid) {
   const walls = [];
@@ -90,48 +54,58 @@ function resolveCfg(data, type) {
   };
 }
 
-function cellCenter(col, row) {
-  return { x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 };
-}
-
-export function createState(data, seed = 1) {
-  // Mutables Zellraster (Explosionen entfernen breakable-Waende daraus).
-  const grid = ARENA_MAP.map((row) => row.split(''));
+export function createState(data, tiles, seed = 1) {
+  const genRng = mulberry32(seed);
+  const room = generateRoom(tiles, genRng, ENEMY_TYPES.length);
+  const grid = room.grid;
   const walls = buildWalls(grid);
-  const p = cellCenter(PLAYER_SPAWN.col, PLAYER_SPAWN.row);
-  const player = createTank('player', resolveCfg(data, 'player'), p.x, p.y);
+
+  const player = createTank(
+    'player',
+    resolveCfg(data, 'player'),
+    room.playerSpawn.x,
+    room.playerSpawn.y,
+  );
   const tanks = [player];
-  for (const s of ENEMY_SPAWNS) {
-    const c = cellCenter(s.col, s.row);
-    tanks.push(createTank(s.type, resolveCfg(data, s.type), c.x, c.y));
-  }
+  ENEMY_TYPES.forEach((type, i) => {
+    const s = room.enemySpawns[i];
+    const t = createTank(type, resolveCfg(data, type), s.x, s.y);
+    t.spawnX = s.x;
+    t.spawnY = s.y;
+    tanks.push(t);
+  });
+
   const state = {
     data,
-    rng: mulberry32(seed),
+    tiles,
+    seed,
+    genRng,
+    rng: mulberry32((seed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
+    playerSpawn: room.playerSpawn,
+    emergencyRoom: room.emergency,
     walls,
     tanks,
     player,
     bullets: [],
     mines: [],
-    explosions: [], // kurzlebige Render-Effekte { x, y, age }
-    flashes: [], // Muendungsblitze { x, y, age }
-    sounds: [], // Audio-Ereignisnamen, von main.js abgespielt
-    time: 0, // s seit Rundenstart (t_white-Unsichtbarkeit)
-    respawnTimer: 0, // > 0 waehrend der Spieler tot ist
-    // Zellgenauer Solid-Test in Pixelkoordinaten (fuer KI-Raycasts).
+    explosions: [],
+    flashes: [],
+    sounds: [],
+    time: 0,
+    respawnTimer: 0,
+    // Solid-Test fuer Geschosse/Sichtlinien: 'o' (hole) blockiert NICHT.
     isSolid(px, py) {
       const col = Math.floor(px / CELL);
       const row = Math.floor(py / CELL);
       if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return true;
-      return WALL_TYPES[grid[row][col]] !== undefined;
+      const cell = grid[row][col];
+      return cell === '#' || cell === 'b';
     },
-    // Entfernt eine (zerstoerbare) Wand aus Liste und Raster.
     destroyWall(wall) {
       const i = state.walls.indexOf(wall);
       if (i >= 0) state.walls.splice(i, 1);
       grid[wall.row][wall.col] = '.';
     },
-    // Einheitlicher Panzer-Tod (Geschosse, Minen).
     killTank(tank) {
       tank.alive = false;
       if (tank === state.player) state.respawnTimer = RESPAWN_DELAY;
@@ -141,8 +115,12 @@ export function createState(data, seed = 1) {
 }
 
 function respawnPlayer(state) {
-  const p = cellCenter(PLAYER_SPAWN.col, PLAYER_SPAWN.row);
-  const fresh = createTank('player', resolveCfg(state.data, 'player'), p.x, p.y);
+  const fresh = createTank(
+    'player',
+    resolveCfg(state.data, 'player'),
+    state.playerSpawn.x,
+    state.playerSpawn.y,
+  );
   state.tanks[0] = fresh;
   state.player = fresh;
   // Wie beim Raum-Neustart (Spec Abschnitt 8): Geschosse und Minen
@@ -217,8 +195,6 @@ export function stepState(state, cmd, dt) {
     }
   }
 
-  // Minen: Scharfschalten, Selbstzuendung, Kontakt-/Geschoss-Ausloesung,
-  // Kettenreaktion, Wandzerstoerung.
   updateMines(state, dt);
 
   // Kurzlebige Render-Effekte altern lassen.
