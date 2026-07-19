@@ -10,6 +10,10 @@ import { createInput } from './core/input.js';
 import { createAudio } from './core/audio.js';
 import { createRun, stepRun, chooseUpgrade } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
+import { createTouchControls } from './ui/touchcontrols.js';
+import { createPause } from './ui/pause.js';
+import { createTutorial } from './ui/hud.js';
+import { getFlag, setFlag } from './core/storage.js';
 import { createRenderer } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
@@ -39,10 +43,14 @@ async function init() {
   const debugOverlay = createDebugOverlay(ctx);
   const hud = createHud(ctx);
   const upgradeScreen = createUpgradeScreen();
+  const touch = createTouchControls(canvas);
+  const pause = createPause();
+  const tutorial = createTutorial(getFlag('tutorial_seen'));
 
   let run = null;
   let lastRoomState = null;
   let upgradeShown = false;
+  let toast = null;
 
   let fps = 0;
   let frameCount = 0;
@@ -60,16 +68,26 @@ async function init() {
 
   function update(dt) {
     if (!run) return;
-    stepRun(
-      run,
-      {
-        move: input.getMoveAxis(),
-        aim: input.getAim(),
-        fire: input.consumeFire(),
-        mine: input.consumeMine(),
-      },
-      dt,
-    );
+    if (input.consumePause()) pause.toggle();
+    if (pause.isPaused()) return;
+
+    // Tastatur/Maus und Touch zusammenfuehren (Touch hat Vorrang, wenn
+    // aktiv ausgelenkt).
+    const kbMove = input.getMoveAxis();
+    const tMove = touch.getMove();
+    const move = kbMove.x || kbMove.y ? kbMove : tMove;
+    const aimDir = touch.getAimDir();
+    const p = run.state.player;
+    const aim = aimDir ? { x: p.x + aimDir.x * 4, y: p.y + aimDir.y * 4 } : input.getAim();
+    const cmd = {
+      move,
+      aim,
+      fire: input.consumeFire() || touch.isAutoFire(),
+      mine: input.consumeMine() || touch.consumeMine(),
+    };
+    stepRun(run, cmd, dt);
+    toast = tutorial.update(run, cmd, touch.isActive(), dt);
+    if (tutorial.isDone() && !getFlag('tutorial_seen')) setFlag('tutorial_seen');
     // Raumwechsel erkennen -> Reifenspuren-Buffer leeren.
     if (run.state !== lastRoomState) {
       tracks.clear();
@@ -94,7 +112,8 @@ async function init() {
     if (input.isDebug() && run.phase === 'playing') {
       debugOverlay.render(run.state, fps);
     }
-    hud.render(run);
+    hud.render(run, { paused: pause.isPaused(), toast });
+    touch.render(ctx);
 
     frameCount++;
     const now = performance.now();
@@ -121,11 +140,28 @@ async function init() {
     }
   });
 
-  // Auto-Pause bei Tab-Wechsel (Spec Abschnitt 9).
+  // Pause-Button oben mittig.
+  document.getElementById('pauseBtn').addEventListener('click', () => pause.toggle());
+
+  // Auto-Pause bei Tab-Wechsel (Spec Abschnitt 9) -- Pflicht, sonst
+  // stirbt man bei einem eingehenden Anruf. Beim Zurueckkommen bleibt
+  // das Spiel pausiert.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) loop.stop();
-    else loop.start();
+    if (document.hidden) {
+      pause.set(true);
+      loop.stop();
+    } else {
+      loop.start();
+    }
   });
+
+  // Portrait: Overlay kommt per CSS; zusaetzlich pausieren (Touch-Geraete).
+  const portrait = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
+  const onPortrait = () => {
+    if (portrait.matches) pause.set(true);
+  };
+  portrait.addEventListener?.('change', onPortrait);
+  onPortrait();
 
   loop.start();
 }

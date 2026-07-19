@@ -11,6 +11,7 @@ export function createInput(target, canvas) {
   const aim = { x: canvas.width / 2, y: 0 };
   let fireQueued = false;
   let mineQueued = false;
+  let pauseQueued = false;
   let debug = false;
 
   function toCanvas(e) {
@@ -34,6 +35,10 @@ export function createInput(target, canvas) {
       if (!e.repeat) mineQueued = true;
       return;
     }
+    if (e.code === 'Escape' || e.code === 'KeyP') {
+      if (!e.repeat) pauseQueued = true;
+      return;
+    }
     pressed.add(e.code);
     // Pfeiltasten scrollen sonst die Seite.
     if (e.code.startsWith('Arrow')) e.preventDefault();
@@ -53,6 +58,8 @@ export function createInput(target, canvas) {
   }
   function onMouseDown(e) {
     if (e.button !== 0) return;
+    // Klicks auf UI-Elemente (Buttons, Overlays) sind keine Schuesse.
+    if (e.target.closest && e.target.closest('button, input, .overlay')) return;
     const p = toCanvas(e);
     aim.x = p.x;
     aim.y = p.y;
@@ -90,6 +97,12 @@ export function createInput(target, canvas) {
       const m = mineQueued;
       mineQueued = false;
       return m;
+    },
+    // Esc / P (einmal pro Druck).
+    consumePause() {
+      const p = pauseQueued;
+      pauseQueued = false;
+      return p;
     },
     isDebug() {
       return debug;

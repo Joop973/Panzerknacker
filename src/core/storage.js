@@ -38,6 +38,32 @@ function save(stats) {
   }
 }
 
+// Einfache benannte Flags (z. B. Tutorial gesehen).
+const FLAG_PREFIX = 'panzerknacker_flag_';
+const memFlags = {};
+
+export function getFlag(name) {
+  const ls = store();
+  if (!ls) return !!memFlags[name];
+  try {
+    return ls.getItem(FLAG_PREFIX + name) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function setFlag(name) {
+  memFlags[name] = true;
+  const ls = store();
+  if (ls) {
+    try {
+      ls.setItem(FLAG_PREFIX + name, '1');
+    } catch {
+      /* egal */
+    }
+  }
+}
+
 // Traegt einen beendeten Run ein und gibt die neuen Bestwerte zurueck.
 export function recordRun({ won, rooms, kills, timeS }) {
   const s = loadStats();

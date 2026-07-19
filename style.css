@@ -127,3 +127,37 @@ html, body {
 .cards .card:hover {
   background: #2a2a33;
 }
+
+/* Pause-Button oben mittig, ausserhalb der Daumenzonen */
+#pauseBtn {
+  position: fixed;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  background: rgba(27, 27, 34, 0.8);
+  border: 1px solid #4a4a5a;
+  color: #9aa0a8;
+  font-size: 14px;
+  padding: 4px 14px;
+  cursor: pointer;
+}
+
+/* Portrait-Overlay: nur im Hochformat sichtbar (Spec Abschnitt 9) */
+.rotate-overlay {
+  display: none;
+  color: #e8e4d8;
+  font-family: monospace;
+  font-size: 18px;
+}
+
+.rotate-overlay h1 {
+  font-size: 64px;
+  color: #c8b24a;
+}
+
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-overlay {
+    display: flex;
+  }
+}
