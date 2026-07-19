@@ -20,7 +20,7 @@ const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole' };
 
 // Truemmerfarben fuer Partikel (Politur, Phase 10).
 const DEBRIS_COLORS = {
-  player: '#c8b24a',
+  player: '#3d8ef0',
   t_brown: '#8a5a33',
   t_grey: '#9aa0a8',
   t_teal: '#3aa8a0',

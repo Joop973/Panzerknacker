@@ -143,12 +143,11 @@ html, body {
 }
 
 #pauseBtn {
-  left: 50%;
-  transform: translateX(-50%);
+  left: 8px;
 }
 
 #muteBtn {
-  left: calc(50% + 44px);
+  left: 62px;
 }
 
 #muteBtn.muted {

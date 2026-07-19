@@ -24,7 +24,8 @@ const COLORS = {
 
 // Rumpffarben je Panzertyp (auch von der Raumvorschau genutzt).
 export const TANK_COLORS = {
-  player: '#c8b24a',
+  player: '#3d8ef0', // einzige blaue Wanne -- unverwechselbar
+
   t_brown: '#8a5a33',
   t_grey: '#9aa0a8',
   t_teal: '#3aa8a0',
@@ -177,7 +178,24 @@ export function createRenderer(ctx) {
 
     ctx.globalAlpha = bodyAlpha;
     const body = TANK_COLORS[t.type] || '#ffffff';
-    const edge = t.type === 't_black' ? '#8a8a99' : COLORS.outline;
+    const isPlayer = t.type === 'player';
+    const edge = t.type === 't_black' ? '#8a8a99' : isPlayer ? '#eaf2ff' : COLORS.outline;
+
+    // Spieler: sanfter Glow + pulsierender Ring, damit er in jedem
+    // Getuemmel sofort ins Auge springt.
+    if (isPlayer) {
+      ctx.fillStyle = 'rgba(80,160,255,0.14)';
+      ctx.beginPath();
+      ctx.arc(x, y, r + 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(140,200,255,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.4 + 0.25 * Math.sin(state.time * 4);
+      ctx.beginPath();
+      ctx.arc(x, y, r + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = bodyAlpha;
+    }
 
     // Wanne mit Ketten, rotiert in Fahrtrichtung (Politur, Phase 10).
     ctx.save();
@@ -195,7 +213,7 @@ export function createRenderer(ctx) {
 
     // Ziellinie des Spielers (wichtig fuer Touch/Gamepad ohne Cursor).
     if (t.type === 'player') {
-      ctx.strokeStyle = 'rgba(200,178,74,0.35)';
+      ctx.strokeStyle = 'rgba(140,200,255,0.4)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 6]);
       ctx.beginPath();
