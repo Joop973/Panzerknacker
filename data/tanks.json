@@ -1,0 +1,239 @@
+{
+  "physics": {
+    "tankRadius": 12,
+    "bulletRadius": 4,
+    "fireCooldownS": 0.25,
+    "shooterGraceS": 0.08
+  },
+  "mine": {
+    "radiusPx": 7,
+    "armDelayS": 1.0,
+    "selfDetonateS": 10.0,
+    "explosionRadiusPx": 48,
+    "chainDelayS": 0.1
+  },
+  "speeds": {
+    "fix": 0,
+    "slow": 40,
+    "normal": 70,
+    "fast": 100,
+    "veryfast": 140
+  },
+  "bulletSpeeds": {
+    "bullet": 130,
+    "rocket": 300,
+    "bounce_rocket": 200
+  },
+  "ai": {
+    "raycastStepPx": 4,
+    "raycastMaxPx": 900,
+    "mineAvoidRadiusPx": 110,
+    "turret": {
+      "random_seek": {
+        "turnSpeed": 1.6,
+        "retargetMinS": 0.8,
+        "retargetMaxS": 2.2
+      },
+      "weak_aim": {
+        "turnSpeed": 2.4,
+        "jitterRad": 0.35,
+        "rejitterS": 0.7,
+        "fireConeRad": 0.12,
+        "muzzleClearPx": 48
+      },
+      "aim": {
+        "turnSpeed": 3.0,
+        "jitterRad": 0.1,
+        "rejitterS": 0.5,
+        "fireConeRad": 0.12,
+        "muzzleClearPx": 48
+      },
+      "strong_aim": {
+        "turnSpeed": 3.6,
+        "jitterRad": 0.03,
+        "rejitterS": 0.5,
+        "fireConeRad": 0.1,
+        "muzzleClearPx": 48
+      },
+      "predict": {
+        "turnSpeed": 4.0,
+        "fireConeRad": 0.1,
+        "muzzleClearPx": 48
+      },
+      "bounce_solver": {
+        "turnSpeed": 2.2,
+        "fireConeRad": 0.06,
+        "solveIntervalS": 0.4,
+        "angleSamples": 180,
+        "hitTolerancePx": 14,
+        "maxTravelPx": 1200
+      }
+    },
+    "drive": {
+      "wander": {
+        "turnSpeed": 2.0,
+        "retargetMinS": 1.5,
+        "retargetMaxS": 3.0,
+        "blockedRetargetS": 0.25,
+        "escapeSpreadRad": 1.0,
+        "escapeHoldS": 0.8
+      },
+      "pursue": {
+        "turnSpeed": 3.0,
+        "blockedRetargetS": 0.25,
+        "escapeSpreadRad": 1.0,
+        "escapeHoldS": 0.8
+      },
+      "evade": {
+        "turnSpeed": 4.0,
+        "keepDistancePx": 170,
+        "bulletDangerPx": 130,
+        "blockedRetargetS": 0.25,
+        "escapeSpreadRad": 1.0,
+        "escapeHoldS": 0.8,
+        "orbitFlipMinS": 2.0,
+        "orbitFlipMaxS": 5.0,
+        "approachDistancePx": 280
+      },
+      "purple_pack": {
+        "turnSpeed": 3.0,
+        "flankAngleRad": 0.7,
+        "standoffPx": 140,
+        "blockedRetargetS": 0.25,
+        "escapeSpreadRad": 1.0,
+        "escapeHoldS": 0.8
+      },
+      "black_skirmish": {
+        "turnSpeed": 4.5,
+        "minDistPx": 150,
+        "maxDistPx": 300,
+        "bulletDangerPx": 150,
+        "blockedRetargetS": 0.2,
+        "escapeSpreadRad": 1.0,
+        "escapeHoldS": 0.5,
+        "orbitFlipMinS": 1.5,
+        "orbitFlipMaxS": 4.0
+      },
+      "white_phase": {
+        "modeSwitchMinS": 4.0,
+        "modeSwitchMaxS": 8.0
+      }
+    },
+    "white": {
+      "invisibleAfterS": 1.5,
+      "shimmerIntervalS": 2.0,
+      "shimmerDurationS": 0.15
+    }
+  },
+  "types": {
+    "player": {
+      "speed": "normal",
+      "magazine": 5,
+      "ricochets": 1,
+      "mines": 2,
+      "weapon": "bullet"
+    },
+    "t_brown": {
+      "speed": "fix",
+      "magazine": 1,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "turret": "random_seek",
+      "drive": "none"
+    },
+    "t_grey": {
+      "speed": "slow",
+      "magazine": 1,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "turret": "weak_aim",
+      "drive": "wander"
+    },
+    "t_teal": {
+      "speed": "slow",
+      "magazine": 1,
+      "ricochets": 0,
+      "mines": 0,
+      "weapon": "rocket",
+      "turret": "strong_aim",
+      "drive": "evade"
+    },
+    "t_yellow": {
+      "speed": "fast",
+      "magazine": 1,
+      "ricochets": 1,
+      "mines": 4,
+      "weapon": "bullet",
+      "turret": "weak_aim",
+      "drive": "wander",
+      "avoidMines": true,
+      "miner": {
+        "intervalMinS": 2.5,
+        "intervalMaxS": 6.0
+      }
+    },
+    "t_pink": {
+      "speed": "normal",
+      "magazine": 3,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "turret": "aim",
+      "drive": "pursue"
+    },
+    "t_green": {
+      "speed": "fix",
+      "magazine": 2,
+      "ricochets": 2,
+      "mines": 0,
+      "weapon": "bounce_rocket",
+      "turret": "bounce_solver",
+      "drive": "none"
+    },
+    "t_purple": {
+      "speed": "fast",
+      "magazine": 5,
+      "ricochets": 1,
+      "mines": 2,
+      "weapon": "bullet",
+      "turret": "aim",
+      "drive": "purple_pack",
+      "miner": {
+        "intervalMinS": 6.0,
+        "intervalMaxS": 10.0
+      },
+      "avoidMines": true
+    },
+    "t_white": {
+      "speed": "normal",
+      "magazine": 5,
+      "ricochets": 1,
+      "mines": 2,
+      "weapon": "bullet",
+      "turret": "aim",
+      "drive": "white_phase",
+      "trackStampPx": 5,
+      "miner": {
+        "intervalMinS": 6.0,
+        "intervalMaxS": 10.0
+      },
+      "avoidMines": true
+    },
+    "t_black": {
+      "speed": "veryfast",
+      "magazine": 2,
+      "ricochets": 0,
+      "mines": 2,
+      "weapon": "rocket",
+      "turret": "predict",
+      "drive": "black_skirmish",
+      "miner": {
+        "intervalMinS": 5.0,
+        "intervalMaxS": 9.0
+      },
+      "avoidMines": true
+    }
+  }
+}

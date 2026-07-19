@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="theme-color" content="#111111" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <title>PANZERKNACKER</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" href="assets/icon-192.png" />
+  <link rel="apple-touch-icon" href="assets/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main id="game">
+    <button id="pauseBtn" title="Pause">&#10073;&#10073;</button>
+    <canvas id="canvas" width="768" height="512"></canvas>
+    <div id="rotate" class="overlay rotate-overlay">
+      <h1>&#8635;</h1>
+      <p>Bitte Ger&auml;t drehen</p>
+    </div>
+    <p class="hint">WASD: fahren &middot; Maus: zielen &middot; Klick: schie&szlig;en &middot; Leertaste: Mine &middot; F1: Debug</p>
+    <div id="start" class="overlay">
+      <h1>PANZERKNACKER</h1>
+      <label for="seedInput">Seed (leer = zufällig)</label>
+      <input id="seedInput" inputmode="numeric" autocomplete="off" placeholder="z.B. 4711" />
+      <button id="startBtn">Start</button>
+      <p id="beststats" class="beststats"></p>
+    </div>
+  </main>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
