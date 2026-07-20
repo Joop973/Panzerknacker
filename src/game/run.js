@@ -115,6 +115,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     genRng: mulberry32(seed >>> 0),
     roomIndex: 1,
     lives: mode.lives,
+    maxLives: mode.lives, // Bezug fuer Berserker (fehlende Leben)
     kills: 0, // ueber den ganzen Run
     deaths: 0,
     roomsCleared: 0,
@@ -154,6 +155,13 @@ export function stepRun(run, cmd, dt) {
   if (run.phase !== 'playing') return;
 
   const st = run.state;
+  // Berserker: Feuerrate/Tempo steigen mit fehlenden Leben (gedeckelt).
+  const bcfg = st.player.cfg.berserker;
+  if (bcfg) {
+    const stacks = Math.min(bcfg.max, Math.max(0, run.maxLives - run.lives));
+    st.player.berserkerFire = Math.pow(bcfg.fire, stacks);
+    st.player.berserkerSpeed = Math.pow(bcfg.speed, stacks);
+  }
   stepState(st, cmd, dt);
   run.playTime += dt;
 
@@ -267,6 +275,8 @@ export function chooseUpgrade(run, index) {
     run.lives++;
   } else {
     run.upgrades[offer.id] = (run.upgrades[offer.id] || 0) + 1;
+    // Glaskanone: reduziert die Leben dauerhaft auf 1 (starker Trade-off).
+    if (offer.id === 'glaskanone') run.lives = 1;
   }
   run.upgradeChoices++;
   run.pendingOffers = null;

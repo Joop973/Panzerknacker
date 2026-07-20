@@ -38,8 +38,21 @@ export function applyUpgrades(cfg, ups, upsData) {
   cfg.tungsten = l('wolframkern') > 0;
   const U = upsData ? upsData.upgrades : {};
   if (l('sprengschuss')) {
-    cfg.explosionEveryShots = U.sprengschuss.everyShots[l('sprengschuss') - 1];
+    cfg.explosionEveryShots = U.sprengschuss.everyShots; // jeder 12. Schuss
     cfg.shotExplosionRadius = U.sprengschuss.radiusPx;
+  }
+  // Sprengmunition: jede Kugel explodiert, keine Minen, Magazin auf 1 --
+  // skaliert aber mit Magazin-Upgrades weiter (kein harter Deckel).
+  if (l('sprengmunition')) {
+    cfg.allExplosive = true;
+    cfg.shotExplosionRadius = U.sprengmunition.radiusPx;
+    cfg.mines = 0;
+    cfg.magazine = 1 + 2 * l('magazin');
+  }
+  // Durchschlag: Kugeln fliegen durch Waende, dafuer keine Abpraller.
+  if (l('durchschlag')) {
+    cfg.phaseWalls = true;
+    cfg.ricochets = 0;
   }
   if (l('krallenfalle')) {
     cfg.trapEveryPx = U.krallenfalle.everyPx[l('krallenfalle') - 1];
@@ -53,6 +66,46 @@ export function applyUpgrades(cfg, ups, upsData) {
     cfg.twinSpreadRad = U.doppelrohr.spreadRad;
   }
   cfg.radar = l('radar') > 0;
+
+  // --- Neue Build-Upgrades ---
+  if (l('glaskanone')) {
+    cfg.bulletSpeed *= U.glaskanone.speedMult;
+    cfg.allExplosive = true;
+    cfg.shotExplosionRadius = cfg.shotExplosionRadius || U.glaskanone.radiusPx;
+  }
+  if (l('streuschuss')) {
+    cfg.spreadCount = U.streuschuss.count;
+    cfg.spreadRad = U.streuschuss.spreadRad;
+    cfg.ricochets = 0; // Faecher ohne Abpraller (Selbstschutz)
+    cfg.magazine += U.streuschuss.magazineBonus;
+  }
+  if (l('zielsucher')) {
+    cfg.homing = U.zielsucher.turnRateRad;
+    cfg.bulletSpeed *= U.zielsucher.speedMult;
+  }
+  if (l('nachbrenner')) {
+    cfg.afterburnerMult = 1 + (U.nachbrenner.boostMult - 1) * l('nachbrenner');
+    cfg.afterburnerS = U.nachbrenner.boostS;
+  }
+  cfg.scavenger = l('aasgeier') > 0;
+  if (l('kamikaze')) cfg.kamikazeRadius = U.kamikaze.radiusPx;
+  cfg.shield = l('schild') > 0;
+  if (l('dash')) {
+    cfg.dash = { dist: U.dash.distancePx, iframe: U.dash.iframeS, cooldown: U.dash.cooldownS };
+  }
+  if (l('berserker')) {
+    cfg.berserker = {
+      fire: U.berserker.firePerLife,
+      speed: U.berserker.speedPerLife,
+      max: U.berserker.maxStacks,
+    };
+  }
+  cfg.remoteDetonate = l('fernzuender') > 0;
+  if (l('streumine')) cfg.clusterMine = U.streumine.sub;
+  if (l('schockwelle')) {
+    cfg.shockwaveRadius = U.schockwelle.radiusPx;
+    cfg.shockwavePush = U.schockwelle.pushPx;
+  }
   return cfg;
 }
 

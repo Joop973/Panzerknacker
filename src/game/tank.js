@@ -31,6 +31,11 @@ export function createTank(type, cfg, x, y) {
     stunTimer: 0, // > 0: Krallenfalle -- kann nicht fahren
     shots: 0, // Schusszaehler (Sprengschuss-Upgrade)
     trapDist: 0, // gefahrene Strecke seit letzter Falle
+    boostTimer: 0, // Nachbrenner-Restzeit
+    dashCd: 0, // Dash-Cooldown
+    berserkerFire: 1, // dynamischer Feuerraten-Multiplikator (Berserker)
+    berserkerSpeed: 1, // dynamischer Tempo-Multiplikator (Berserker)
+    shieldReady: (cfg && cfg.shield) || false, // Schild aufgeladen?
     alive: true,
     ai: {}, // Zustandsspeicher der KI-Verhalten (leer beim Spieler)
   };
@@ -70,8 +75,11 @@ export function moveTank(tank, axis, state, dt) {
     // Normalisieren, damit Diagonale nicht schneller ist.
     dx /= len;
     dy /= len;
-    tank.x += dx * tank.cfg.speed * dt;
-    tank.y += dy * tank.cfg.speed * dt;
+    // Effektives Tempo: Basis * Berserker * Nachbrenner-Schub.
+    const boost = tank.boostTimer > 0 ? tank.cfg.afterburnerMult || 1 : 1;
+    const spd = tank.cfg.speed * (tank.berserkerSpeed || 1) * boost;
+    tank.x += dx * spd * dt;
+    tank.y += dy * spd * dt;
     tank.heading = Math.atan2(dy, dx);
   }
 
@@ -106,10 +114,21 @@ export function fireBullet(tank, state) {
 
   tank.shots++;
   const explosive =
-    tank.cfg.explosionEveryShots > 0 && tank.shots % tank.cfg.explosionEveryShots === 0;
-  const angles = tank.cfg.twinShot
-    ? [tank.turret - tank.cfg.twinSpreadRad, tank.turret + tank.cfg.twinSpreadRad]
-    : [tank.turret];
+    tank.cfg.allExplosive ||
+    (tank.cfg.explosionEveryShots > 0 && tank.shots % tank.cfg.explosionEveryShots === 0);
+  // Schusswinkel: Streuschuss-Faecher > Doppelrohr > Einzelschuss.
+  let angles;
+  if (tank.cfg.spreadCount > 1) {
+    angles = [];
+    const n = tank.cfg.spreadCount;
+    for (let i = 0; i < n; i++) {
+      angles.push(tank.turret + (i - (n - 1) / 2) * tank.cfg.spreadRad);
+    }
+  } else if (tank.cfg.twinShot) {
+    angles = [tank.turret - tank.cfg.twinSpreadRad, tank.turret + tank.cfg.twinSpreadRad];
+  } else {
+    angles = [tank.turret];
+  }
 
   const muzzle = tank.cfg.radius + 8; // Spitze des Rohrs
   let fired = false;
@@ -126,8 +145,10 @@ export function fireBullet(tank, state) {
         owner: tank,
         kind: tank.cfg.weapon,
         tungsten: tank.cfg.tungsten || false,
-        explosive: explosive && i === 0, // nur die erste Kugel des Abzugs
+        explosive: explosive && (i === 0 || tank.cfg.allExplosive),
         explosionRadius: tank.cfg.shotExplosionRadius,
+        phaseWalls: tank.cfg.phaseWalls || false,
+        homing: tank.cfg.homing || 0,
       }),
     );
     // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.
@@ -139,20 +160,59 @@ export function fireBullet(tank, state) {
     return false;
   }
   if (tank === state.player) state.playerShots++;
+  if (tank.cfg.afterburnerMult) tank.boostTimer = tank.cfg.afterburnerS; // Nachbrenner
   state.sounds.push('shoot');
-  tank.cooldown = tank.cfg.fireCooldown;
+  tank.cooldown = tank.cfg.fireCooldown * (tank.berserkerFire || 1);
+  return true;
+}
+
+// Ausweich-Dash: kurzer Sprung in Fahrt- bzw. Blickrichtung mit
+// Unverwundbarkeit (Upgrade). Gibt true zurueck, wenn ausgefuehrt.
+export function dashTank(tank, state, moveAxis) {
+  if (!tank.cfg.dash || tank.dashCd > 0 || !tank.alive) return false;
+  let a;
+  const len = Math.hypot(moveAxis.x, moveAxis.y);
+  if (len > 0) a = Math.atan2(moveAxis.y, moveAxis.x); // in Fahrtrichtung
+  else a = tank.turret; // sonst in Zielrichtung
+  tank.x += Math.cos(a) * tank.cfg.dash.dist;
+  tank.y += Math.sin(a) * tank.cfg.dash.dist;
+  resolveCircleWalls(tank, tank.cfg.radius, state.walls);
+  resolveTankBlocking(tank, state.tanks);
+  resolveCircleWalls(tank, tank.cfg.radius, state.walls);
+  tank.protect = Math.max(tank.protect, tank.cfg.dash.iframe);
+  tank.dashCd = tank.cfg.dash.cooldown;
+  state.sounds.push('dash');
+  state.spawnParticles?.(tank.x, tank.y, '#8ecaf0', 8, 90);
   return true;
 }
 
 // Legt eine Mine am Ort des Panzers, begrenzt durch das Minen-Limit
 // (gleichzeitig liegende eigene Minen, aus tanks.json).
 export function layMine(tank, state) {
-  let own = 0;
-  for (const m of state.mines) {
-    if (!m.dead && m.owner === tank) own++;
+  const own = state.mines.filter((m) => !m.dead && m.owner === tank);
+  // Fernzuender: sind alle Minen draussen, sprengt die Taste sie alle.
+  if (tank.cfg.remoteDetonate && own.length >= tank.cfg.mines && own.length > 0) {
+    for (const m of own) if (m.fuse === null) m.fuse = 0.001;
+    return true;
   }
-  if (own >= tank.cfg.mines) return false;
+  if (own.length >= tank.cfg.mines) return false;
   state.mines.push(createMine(tank.x, tank.y, tank, state.data.mine.radiusPx));
   state.sounds.push('mine');
+  // Schockwelle: nahe Gegner wegstossen.
+  if (tank.cfg.shockwaveRadius) {
+    const R = tank.cfg.shockwaveRadius;
+    for (const t of state.tanks) {
+      if (t === tank || !t.alive) continue;
+      const dx = t.x - tank.x;
+      const dy = t.y - tank.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0 && d < R) {
+        const push = tank.cfg.shockwavePush * (1 - d / R);
+        t.x += (dx / d) * push;
+        t.y += (dy / d) * push;
+        resolveCircleWalls(t, t.cfg.radius, state.walls);
+      }
+    }
+  }
   return true;
 }

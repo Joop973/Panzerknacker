@@ -14,6 +14,7 @@ export function createInput(target, canvas) {
   let fireQueued = false;
   let mineQueued = false;
   let pauseQueued = false;
+  let dashQueued = false;
   let debug = false;
 
   function toCanvas(e) {
@@ -39,6 +40,10 @@ export function createInput(target, canvas) {
     }
     if (e.code === 'Escape' || e.code === 'KeyP') {
       if (!e.repeat) pauseQueued = true;
+      return;
+    }
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+      if (!e.repeat) dashQueued = true;
       return;
     }
     pressed.add(e.code);
@@ -77,6 +82,7 @@ export function createInput(target, canvas) {
   // ---- Gamepad (gepollt, Edge-Erkennung fuer Minen-/Start-Taste) ----
   let gpMineWasDown = false;
   let gpStartWasDown = false;
+  let gpDashWasDown = false;
 
   function pollGamepad() {
     if (typeof navigator === 'undefined' || !navigator.getGamepads) return null;
@@ -104,7 +110,10 @@ export function createInput(target, canvas) {
     const startDown = !!gp.buttons[9]?.pressed; // Start/Options -> Pause
     const pausePressed = startDown && !gpStartWasDown;
     gpStartWasDown = startDown;
-    return { move, aimDir, autoFire: aimDir !== null, fireHeld, minePressed, pausePressed };
+    const dashDown = !!gp.buttons[1]?.pressed; // B / Circle -> Dash
+    const dashPressed = dashDown && !gpDashWasDown;
+    gpDashWasDown = dashDown;
+    return { move, aimDir, autoFire: aimDir !== null, fireHeld, minePressed, pausePressed, dashPressed };
   }
 
   return {
@@ -139,6 +148,15 @@ export function createInput(target, canvas) {
       const p = pauseQueued;
       pauseQueued = false;
       return p;
+    },
+    // Dash (Umschalt), einmal pro Druck; auch extern setzbar (Touch).
+    consumeDash() {
+      const d = dashQueued;
+      dashQueued = false;
+      return d;
+    },
+    queueDash() {
+      dashQueued = true;
     },
     isDebug() {
       return debug;

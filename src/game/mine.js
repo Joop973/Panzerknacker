@@ -71,6 +71,22 @@ function explode(mine, state) {
   // Sprengkraft-Upgrade: Radius-Multiplikator des Legers.
   const R = state.data.mine.explosionRadiusPx * (mine.owner?.cfg?.mineRadiusMult || 1);
   explodeAt(state, mine.x, mine.y, R);
+  // Streumine-Upgrade: schleudert kleine Splitterminen (die nicht
+  // weiter splittern -> keine Endloskette).
+  const sub = mine.owner?.cfg?.clusterMine;
+  if (sub && !mine.isSub) {
+    for (let i = 0; i < sub; i++) {
+      const a = (i / sub) * Math.PI * 2;
+      const m = createMine(
+        mine.x + Math.cos(a) * 26,
+        mine.y + Math.sin(a) * 26,
+        mine.owner,
+        mine.radius,
+      );
+      m.isSub = true;
+      state.mines.push(m);
+    }
+  }
 }
 
 export function updateMines(state, dt) {
@@ -88,6 +104,12 @@ export function updateMines(state, dt) {
     }
 
     if (!isArmed(m, mcfg)) continue;
+
+    // Fernzuender: diese Minen reagieren NICHT von selbst (kein
+    // Kontakt-, kein Zeitzuender) -- sie warten auf die Sprengtaste.
+    // Splitterminen (isSub) sind davon ausgenommen.
+    const remote = m.owner?.cfg?.remoteDetonate && !m.isSub;
+    if (remote) continue;
 
     // Selbstzuendung nach Ablauf der Lebenszeit.
     if (m.age >= mcfg.selfDetonateS) {

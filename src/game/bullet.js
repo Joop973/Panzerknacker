@@ -7,6 +7,7 @@
 // trotzdem nur EIN Abpraller abgezogen.
 
 import { circleOverlapsAABB } from './collision.js';
+import { WIDTH, HEIGHT } from '../config.js';
 
 const TRAIL_MAX = 60; // Ticks Bahnhistorie fuers Debug-Overlay
 
@@ -16,7 +17,7 @@ export function createBullet(
   x,
   y,
   angle,
-  { speed, radius, ricochets, owner, kind, tungsten, explosive, explosionRadius },
+  { speed, radius, ricochets, owner, kind, tungsten, explosive, explosionRadius, phaseWalls, homing },
 ) {
   return {
     id: nextId++,
@@ -31,6 +32,8 @@ export function createBullet(
     tungsten: tungsten || false, // Wolframkern-Upgrade (Spec Abschnitt 8)
     explosive: explosive || false, // Sprengschuss-Upgrade: explodiert beim Tod
     explosionRadius: explosionRadius || 0,
+    phaseWalls: phaseWalls || false, // Durchschlag-Upgrade
+    homing: homing || 0, // Zielsucher: rad/s Lenkrate (0 = aus)
     detonated: false,
     ricochetsLeft: ricochets,
     ricochetsStart: ricochets, // fuer "Abpraller-Kill"-Feedback
@@ -48,12 +51,19 @@ export function createBullet(
 // Gibt true zurueck, wenn eine Wand getroffen wurde.
 function moveAxis(b, state, axis, dt) {
   b[axis] += (axis === 'x' ? b.vx : b.vy) * dt;
+  if (b.phaseWalls) return false; // Durchschlag: ignoriert alle Waende
   let hit = false;
   for (const wall of [...state.walls]) {
     if (wall.type === 'hole') continue; // Geschosse fliegen ueber Loecher
     if (!circleOverlapsAABB(b.x, b.y, b.radius, wall)) continue;
     if (b.tungsten && wall.type === 'breakable') {
       state.destroyWall(wall);
+      b.dead = true;
+      return true;
+    }
+    // Sprenggeschoss: zuendet am Wandkontakt (statt abzuprallen) -- so
+    // toetet die Explosion einen Panzer hinter der Wand.
+    if (b.explosive) {
       b.dead = true;
       return true;
     }
@@ -69,16 +79,49 @@ function moveAxis(b, state, axis, dt) {
   return hit;
 }
 
+// Lenkt ein Zielsucher-Geschoss weich zum naechsten gegnerischen Panzer.
+function applyHoming(b, state, dt) {
+  const owner = b.owner;
+  let best = null;
+  let bestD = Infinity;
+  for (const t of state.tanks) {
+    if (t === owner || !t.alive) continue;
+    const d = (t.x - b.x) ** 2 + (t.y - b.y) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = t;
+    }
+  }
+  if (!best) return;
+  const speed = Math.hypot(b.vx, b.vy) || 1;
+  const cur = Math.atan2(b.vy, b.vx);
+  const want = Math.atan2(best.y - b.y, best.x - b.x);
+  let diff = ((want - cur + Math.PI) % (Math.PI * 2)) - Math.PI;
+  const step = Math.max(-b.homing * dt, Math.min(b.homing * dt, diff));
+  const na = cur + step;
+  b.vx = Math.cos(na) * speed;
+  b.vy = Math.sin(na) * speed;
+}
+
 export function updateBullet(b, state, dt) {
   if (b.dead) return;
   b.prevX = b.x;
   b.prevY = b.y;
   b.age += dt;
 
+  if (b.homing > 0) applyHoming(b, state, dt);
+
   const hitX = moveAxis(b, state, 'x', dt);
   if (b.dead) return;
   const hitY = moveAxis(b, state, 'y', dt);
   if (b.dead) return;
+
+  // Durchschlag-Geschosse werden von keiner Wand gestoppt -> sonst
+  // fliegen sie ewig. Sterben, sobald sie die Arena verlassen.
+  if (b.phaseWalls && (b.x < 0 || b.x > WIDTH || b.y < 0 || b.y > HEIGHT)) {
+    b.dead = true;
+    return;
+  }
 
   if (hitX || hitY) {
     state.sounds?.push('bounce');

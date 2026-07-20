@@ -18,6 +18,7 @@
     <button id="pauseBtn" title="Pause">&#10073;&#10073;</button>
     <button id="muteBtn" title="Ton an/aus">&#9835;</button>
     <button id="endlessBtn" class="hidden">Endlos weiterspielen &#8594;</button>
+    <button id="dashBtn" class="hidden">DASH</button>
     <canvas id="canvas" width="768" height="512"></canvas>
     <div id="rotate" class="overlay rotate-overlay">
       <h1>&#8635;</h1>
@@ -43,6 +44,35 @@
       <button id="resetBtn" class="linklike">Bestwerte zur&uuml;cksetzen</button>
     </div>
   </main>
+  <!-- Inline-Guard laeuft auch bei file:// (wo Modul-Skripte blockiert
+       werden). Zeigt einen Hinweis, statt einen schwarzen Bildschirm. -->
+  <script>
+    if (location.protocol === 'file:') {
+      document.addEventListener('DOMContentLoaded', function () {
+        var b = document.createElement('div');
+        b.style.cssText =
+          'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;' +
+          'padding:24px;background:#14141a;color:#e8e4d8;font-family:monospace;font-size:15px;' +
+          'text-align:center;white-space:pre-wrap;z-index:99;line-height:1.6';
+        b.textContent =
+          'PANZERKNACKER läuft nicht per Doppelklick (file://).\n\n' +
+          'Bitte über einen Webserver öffnen — z. B. im Projektordner:\n' +
+          '  npx serve .   (dann http://localhost:3000)\n\n' +
+          'oder die veröffentlichte URL (GitHub Pages) verwenden.';
+        document.body.appendChild(b);
+      });
+    } else {
+      window.addEventListener('error', function (e) {
+        if (!/main\.js|src\//.test(e.filename || '')) return;
+        var b = document.createElement('div');
+        b.style.cssText =
+          'position:fixed;bottom:0;left:0;right:0;padding:10px;background:#601010;' +
+          'color:#fff;font-family:monospace;font-size:12px;z-index:99';
+        b.textContent = 'Fehler: ' + e.message + ' (' + (e.filename || '') + ':' + e.lineno + ')';
+        document.body.appendChild(b);
+      });
+    }
+  </script>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

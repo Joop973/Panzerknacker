@@ -7,7 +7,7 @@
 
 import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
 import { mulberry32 } from '../core/rng.js';
-import { createTank, moveTank, fireBullet, layMine } from './tank.js';
+import { createTank, moveTank, fireBullet, layMine, dashTank } from './tank.js';
 import { updateBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
@@ -119,11 +119,23 @@ export function createState(data, tiles, opts) {
       state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 6, 90);
     },
     killTank(tank, cause) {
+      // Schild faengt genau einen toedlichen Treffer ab (laedt pro Leben).
+      if (tank === state.player && tank.shieldReady) {
+        tank.shieldReady = false;
+        tank.protect = Math.max(tank.protect, 0.6);
+        state.sounds.push('shield');
+        state.spawnParticles(tank.x, tank.y, '#8ecaf0', 12, 130);
+        return;
+      }
       tank.alive = false;
       state.sounds.push('death');
       state.addShake(4);
       state.spawnParticles(tank.x, tank.y, DEBRIS_COLORS[tank.type] || '#fff', 10, 120);
       if (tank === state.player) {
+        // Kamikaze: der Spieler explodiert beim Sterben.
+        if (tank.cfg.kamikazeRadius) {
+          explodeAt(state, tank.x, tank.y, tank.cfg.kamikazeRadius);
+        }
         state.playerDeaths++;
         state.lastDeathCause = cause || 'Unbekannt';
         state.damageFlash = 0.5;
@@ -131,6 +143,8 @@ export function createState(data, tiles, opts) {
       } else {
         state.enemyKills++;
         state.killLog.push(tank.type);
+        // Aasgeier: jeder Abschuss laedt die Spielerwaffe sofort nach.
+        if (state.player.alive && state.player.cfg.scavenger) state.player.cooldown = 0;
       }
     },
     addShake(amount) {
@@ -203,12 +217,15 @@ export function stepState(state, cmd, dt) {
     t.cooldown = Math.max(0, t.cooldown - dt);
     t.stunTimer = Math.max(0, t.stunTimer - dt);
     if (t.protect > 0) t.protect = Math.max(0, t.protect - dt);
+    if (t.boostTimer > 0) t.boostTimer = Math.max(0, t.boostTimer - dt);
+    if (t.dashCd > 0) t.dashCd = Math.max(0, t.dashCd - dt);
   }
 
   if (!p.alive) {
     state.respawnTimer -= dt;
     if (state.respawnTimer <= 0) respawnPlayer(state);
   } else {
+    if (cmd.dash) dashTank(p, state, cmd.move); // vor der Bewegung
     moveTank(p, cmd.move, state, dt);
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
     if (cmd.fire) fireBullet(p, state);

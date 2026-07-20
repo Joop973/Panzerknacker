@@ -155,6 +155,17 @@ export function createRenderer(ctx) {
     // Spawn-Schutz: schnelles Blinken (jede zweite Blinkphase unsichtbar).
     if (t.protect > 0 && Math.sin(t.protect * 30) < 0) return;
 
+    // Schild-Ring, solange der Schild geladen ist.
+    if (t.shieldReady) {
+      const sx = lerp(t.prevX, t.x, alpha);
+      const sy = lerp(t.prevY, t.y, alpha);
+      ctx.strokeStyle = 'rgba(140,200,255,0.7)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(sx, sy, t.cfg.radius + 5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     ctx.globalAlpha = bodyAlpha;
     const body = TANK_COLORS[t.type] || '#ffffff';
     const isPlayer = t.type === 'player';

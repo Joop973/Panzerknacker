@@ -20,13 +20,32 @@ import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
 import { createHud } from './ui/hud.js';
 
+async function loadData() {
+  const names = ['tanks', 'tiles', 'difficulty', 'upgrades'];
+  const out = [];
+  for (const n of names) {
+    let res;
+    try {
+      res = await fetch('data/' + n + '.json');
+    } catch (e) {
+      throw new Error(
+        `Konnte data/${n}.json nicht laden (${e.message}).\n\n` +
+          'Wird die Seite per Datei geöffnet (file://)? Dann bitte über ' +
+          'einen Webserver oder die veröffentlichte URL starten.',
+      );
+    }
+    if (!res.ok) throw new Error(`data/${n}.json: HTTP ${res.status}`);
+    try {
+      out.push(await res.json());
+    } catch {
+      throw new Error(`data/${n}.json ist beschädigt (kein gültiges JSON).`);
+    }
+  }
+  return out;
+}
+
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData] = await Promise.all([
-    fetch('data/tanks.json').then((r) => r.json()),
-    fetch('data/tiles.json').then((r) => r.json()),
-    fetch('data/difficulty.json').then((r) => r.json()),
-    fetch('data/upgrades.json').then((r) => r.json()),
-  ]);
+  const [tanksData, tilesData, diffData, upgradesData] = await loadData();
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
@@ -175,7 +194,10 @@ async function init() {
       // Rechter Trigger = manuelles Schiessen (ueberschreibt Auto-Fire).
       fire: input.consumeFire() || autoFire || !!(gp && gp.fireHeld),
       mine: input.consumeMine() || touch.consumeMine() || !!(gp && gp.minePressed),
+      dash: input.consumeDash() || !!(gp && gp.dashPressed),
     };
+    // Dash-Button nur zeigen, wenn das Upgrade aktiv ist.
+    dashBtn.classList.toggle('hidden', !(p.cfg.dash && touch.isActive()));
     stepRun(run, cmd, dt);
     toast = tutorial.update(run, cmd, touch.isActive(), dt);
     if (tutorial.isDone() && !getFlag('tutorial_seen')) setFlag('tutorial_seen');
@@ -294,6 +316,16 @@ async function init() {
     endlessBtn.classList.add('hidden');
     run = null;
   }
+  const dashBtn = document.getElementById('dashBtn');
+  dashBtn.addEventListener(
+    'touchstart',
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      input.queueDash();
+    },
+    { passive: false },
+  );
   const endlessBtn = document.getElementById('endlessBtn');
   endlessBtn.addEventListener('click', () => {
     if (run && run.phase === 'victory') {
@@ -364,4 +396,13 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
-init();
+// Startfehler sichtbar machen statt schwarzem Bildschirm.
+init().catch((err) => {
+  const box = document.createElement('div');
+  box.style.cssText =
+    'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;' +
+    'padding:24px;background:#14141a;color:#e8e4d8;font-family:monospace;font-size:15px;' +
+    'text-align:center;white-space:pre-wrap;z-index:99;line-height:1.5';
+  box.textContent = 'PANZERKNACKER konnte nicht starten:\n\n' + (err?.message || err);
+  document.body.appendChild(box);
+});
