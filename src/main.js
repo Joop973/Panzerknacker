@@ -158,10 +158,21 @@ async function init() {
     }
     for (const name of run.state.sounds.splice(0)) {
       audio.play(name);
-      // Haptik auf Touch-Geraeten (Android; iOS ignoriert vibrate).
+      // Haptik: Touch-Vibration (Android) und Gamepad-Rumble.
       if (touch.isActive() && navigator.vibrate) {
         if (name === 'boom') navigator.vibrate(60);
         else if (name === 'death') navigator.vibrate(40);
+      }
+      if (gp && (name === 'boom' || name === 'death')) {
+        for (const pad of navigator.getGamepads?.() || []) {
+          pad?.vibrationActuator
+            ?.playEffect?.('dual-rumble', {
+              duration: name === 'boom' ? 180 : 100,
+              strongMagnitude: 0.7,
+              weakMagnitude: 0.4,
+            })
+            .catch?.(() => {});
+        }
       }
     }
 

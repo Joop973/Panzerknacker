@@ -149,6 +149,7 @@ export function createHud(ctx) {
       [
         ['PAUSE', 'bold 36px monospace', '#e8e4d8'],
         [active ? `Upgrades: ${active}` : 'Noch keine Upgrades', '13px monospace', '#c8b24a'],
+        [`Seed: ${run.seed}`, '13px monospace', '#8ecae6'],
         ['Esc/P oder Pause-Button: weiter', '14px monospace', '#9aa0a8'],
       ],
       HEIGHT / 2 - 16,

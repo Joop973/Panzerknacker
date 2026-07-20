@@ -12,6 +12,16 @@ export function drawMines(ctx, state) {
     // schnell + rot kurz vor der Selbstzuendung.
     const armed = m.age >= mcfg.armDelayS;
     if (!armed) continue;
+    // Eigene Minen: duenner Ring zeigt die Restzeit bis zur
+    // Selbstzuendung (laeuft im Uhrzeigersinn ab).
+    if (m.owner === state.player) {
+      const frac = 1 - m.age / mcfg.selfDetonateS;
+      ctx.strokeStyle = 'rgba(140,200,255,0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(m.x, m.y, m.radius + 3, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+      ctx.stroke();
+    }
     const hot = mcfg.selfDetonateS - m.age < 2;
     const freq = hot ? 8 : 3;
     if (Math.sin(m.age * freq * Math.PI * 2) > 0) {
