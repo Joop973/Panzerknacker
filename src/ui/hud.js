@@ -23,7 +23,11 @@ export function createHud(ctx) {
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#e8e4d8';
-    ctx.fillText(`Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`, 8, 16);
+    ctx.fillText(
+      run.endless ? `Endlos ${run.roomIndex}` : `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
+      8,
+      16,
+    );
     // Munition: verbleibende Kugeln (Magazin) und Minen.
     const liveBullets = st.bullets.filter((b) => b.owner === p && !b.dead).length;
     const liveMines = st.mines.filter((m) => m.owner === p && !m.dead).length;

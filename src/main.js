@@ -8,7 +8,7 @@ import { STEP } from './config.js';
 import { createLoop } from './core/loop.js';
 import { createInput } from './core/input.js';
 import { createAudio } from './core/audio.js';
-import { createRun, stepRun, chooseUpgrade, enterRoom, totalRooms } from './game/run.js';
+import { createRun, stepRun, chooseUpgrade, enterRoom, totalRooms, continueEndless } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
 import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
@@ -192,11 +192,16 @@ async function init() {
         .filter(([, l]) => l > 0)
         .map(([id, l]) => `${upgradesData.upgrades[id]?.name || id} ${l}`)
         .join(' · ');
+      const dangerByType = {};
+      for (const [ty, d] of Object.entries(diffData.danger)) dangerByType[ty] = d.points;
       preview.show(
         {
-          title: `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
+          title: run.endless
+            ? `Endlos-Raum ${run.roomIndex}`
+            : `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
           character: run.roomCharacter,
           upgradesLine: ups ? `Deine Upgrades: ${ups}` : null,
+          dangerByType,
         },
         run.state.tanks.slice(1).map((t) => t.type),
         tanksData,
@@ -215,6 +220,7 @@ async function init() {
       debugOverlay.render(run.state, fps);
     }
     hud.render(run, { paused: pause.isPaused(), toast });
+    endlessBtn.classList.toggle('hidden', run.phase !== 'victory');
 
     frameCount++;
     const now = performance.now();
@@ -253,8 +259,17 @@ async function init() {
     seedInput.select();
     preview.hide();
     upgradeScreen.hide();
+    endlessBtn.classList.add('hidden');
     run = null;
   }
+  const endlessBtn = document.getElementById('endlessBtn');
+  endlessBtn.addEventListener('click', () => {
+    if (run && run.phase === 'victory') {
+      continueEndless(run);
+      previewShown = false;
+      endlessBtn.classList.add('hidden');
+    }
+  });
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' || !run) return;
     if (run.phase === 'gameover' || run.phase === 'victory') backToStart();

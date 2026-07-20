@@ -36,7 +36,8 @@ function totalRooms(diff) {
 
 function startRoom(run) {
   const diff = run.difficulty;
-  const isFinal = run.roomIndex > diff.roomsBeforeFinal;
+  // Finalraum genau einmal (Raum 16); im Endlos-Modus danach nie wieder.
+  const isFinal = !run.endless && run.roomIndex === diff.roomsBeforeFinal + 1;
   let enemyTypes;
   let fixedRoom = null;
   let weights = null;
@@ -178,7 +179,7 @@ export function stepRun(run, cmd, dt) {
     if (run.roomsCleared % run.difficulty.extraLifeEveryClearedRooms === 0) {
       run.lives++;
     }
-    if (run.roomIndex >= totalRooms(run.difficulty)) {
+    if (!run.endless && run.roomIndex >= totalRooms(run.difficulty)) {
       finishRun(run, true);
       return;
     }
@@ -232,6 +233,16 @@ export function chooseUpgrade(run, index) {
   }
   run.upgradeChoices++;
   run.pendingOffers = null;
+  run.roomIndex++;
+  startRoom(run);
+}
+
+// Nach dem Sieg weiterspielen (Endlos-Modus): Raeume laufen mit weiter
+// wachsendem Budget durch, bis der Spieler stirbt. Der Sieg bleibt in
+// der Statistik gezaehlt.
+export function continueEndless(run) {
+  if (run.phase !== 'victory') return;
+  run.endless = true;
   run.roomIndex++;
   startRoom(run);
 }

@@ -74,6 +74,17 @@
         "open": 0.5,
         "pillars": 1
       }
+    },
+    {
+      "name": "verwinkelt",
+      "weights": {
+        "corner": 4,
+        "pocket": 3,
+        "cross": 1.5,
+        "corridor": 1,
+        "open": 0.5,
+        "pillars": 1
+      }
     }
   ]
 }

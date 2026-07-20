@@ -14,7 +14,7 @@ export function createPreview() {
   return {
     // opts: { title, character (Raumtyp-Text), upgradesLine (eigene Ausruestung) }
     show(opts, enemyTypes, tanksData, onGo) {
-      const { title, character, upgradesLine } = opts;
+      const { title, character, upgradesLine, dangerByType } = opts;
       // Typen gruppieren: ["t_brown","t_brown","t_grey"] -> Brauner x2 ...
       const counts = new Map();
       for (const t of enemyTypes) counts.set(t, (counts.get(t) || 0) + 1);
@@ -25,9 +25,13 @@ export function createPreview() {
       el.appendChild(h);
       const sub = document.createElement('p');
       sub.className = 'pv-sub';
+      // Gesamt-Gefahr des Raums (Summe der Gefahrenpunkte).
+      let threat = 0;
+      if (dangerByType) for (const ty of enemyTypes) threat += dangerByType[ty] || 0;
+      const threatTxt = dangerByType ? ` · Gefahr ${threat}` : '';
       sub.textContent = character
-        ? `Raumtyp: ${character} — diese Gegner erwarten dich:`
-        : 'Diese Gegner erwarten dich:';
+        ? `Raumtyp: ${character}${threatTxt} — diese Gegner erwarten dich:`
+        : `Diese Gegner erwarten dich${threatTxt}:`;
       el.appendChild(sub);
 
       const row = document.createElement('div');
@@ -43,8 +47,10 @@ export function createPreview() {
         chip.innerHTML =
           `<span class="pv-dot" style="background:${TANK_COLORS[type] || '#fff'}"></span>` +
           `${def.label || type}${n > 1 ? ' ×' + n : ''}`;
+        const pts = dangerByType && dangerByType[type];
         const showDesc = () => {
-          desc.textContent = `${def.label || type}: ${def.desc || ''}`;
+          desc.textContent =
+            `${def.label || type}${pts ? ` (Gefahr ${pts})` : ''}: ${def.desc || ''}`;
         };
         chip.addEventListener('mouseenter', showDesc);
         chip.addEventListener('click', showDesc);
