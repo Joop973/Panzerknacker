@@ -53,9 +53,12 @@ function startRoom(run) {
     // Raumcharakter: Kachelgewichte alternieren (Spec Abschnitt 7B).
     const chars = diff.roomCharacters;
     if (chars && chars.length) {
-      weights = chars[Math.floor(run.genRng() * chars.length)].weights;
+      const ch = chars[Math.floor(run.genRng() * chars.length)];
+      weights = ch.weights;
+      run.roomCharacter = ch.name;
     }
   }
+  if (isFinal) run.roomCharacter = 'Finale';
   run.state = createState(run.data, run.tiles, {
     genRng: run.genRng,
     enemyTypes,
@@ -159,6 +162,7 @@ export function stepRun(run, cmd, dt) {
     run.seenRoomDeaths = st.playerDeaths;
     run.deaths += d;
     run.lives -= d;
+    run.lastDeathCause = st.lastDeathCause;
     if (run.lives <= 0) {
       finishRun(run, false);
       return;

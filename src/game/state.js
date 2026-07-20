@@ -118,13 +118,14 @@ export function createState(data, tiles, opts) {
       grid[wall.row][wall.col] = '.';
       state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 6, 90);
     },
-    killTank(tank) {
+    killTank(tank, cause) {
       tank.alive = false;
       state.sounds.push('death');
       state.addShake(4);
       state.spawnParticles(tank.x, tank.y, DEBRIS_COLORS[tank.type] || '#fff', 10, 120);
       if (tank === state.player) {
         state.playerDeaths++;
+        state.lastDeathCause = cause || 'Unbekannt';
         state.damageFlash = 0.5;
         state.respawnTimer = RESPAWN_DELAY;
       } else {
@@ -257,7 +258,13 @@ export function stepState(state, cmd, dt) {
         if (t !== state.player && b.ricochetsLeft < b.ricochetsStart) {
           state.texts.push({ x: t.x, y: t.y - 18, text: 'Abpraller!', age: 0, life: 0.9, color: '#8ecae6' });
         }
-        state.killTank(t);
+        // Todesursache fuer den Game-Over-Screen.
+        const WEAPON_LABEL = { bullet: 'Kugel', rocket: 'Rakete', bounce_rocket: 'Bounce-Rakete' };
+        const cause =
+          b.owner === state.player
+            ? 'die eigene Kugel'
+            : `${state.data.types[b.owner?.type]?.label || '?'} (${WEAPON_LABEL[b.kind] || b.kind})`;
+        state.killTank(t, cause);
         break;
       }
     }

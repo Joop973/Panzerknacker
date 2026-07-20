@@ -91,6 +91,18 @@ export function setPref(name, value) {
   }
 }
 
+export function resetStats() {
+  memory = null;
+  const ls = store();
+  if (ls) {
+    try {
+      ls.removeItem(KEY);
+    } catch {
+      /* egal */
+    }
+  }
+}
+
 // Traegt einen beendeten Run ein und gibt die neuen Bestwerte zurueck.
 export function recordRun({ won, rooms, kills, timeS }) {
   const s = loadStats();

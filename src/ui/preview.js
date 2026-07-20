@@ -12,7 +12,9 @@ export function createPreview() {
   document.body.appendChild(el);
 
   return {
-    show(title, enemyTypes, tanksData, onGo) {
+    // opts: { title, character (Raumtyp-Text), upgradesLine (eigene Ausruestung) }
+    show(opts, enemyTypes, tanksData, onGo) {
+      const { title, character, upgradesLine } = opts;
       // Typen gruppieren: ["t_brown","t_brown","t_grey"] -> Brauner x2 ...
       const counts = new Map();
       for (const t of enemyTypes) counts.set(t, (counts.get(t) || 0) + 1);
@@ -23,7 +25,9 @@ export function createPreview() {
       el.appendChild(h);
       const sub = document.createElement('p');
       sub.className = 'pv-sub';
-      sub.textContent = 'Diese Gegner erwarten dich:';
+      sub.textContent = character
+        ? `Raumtyp: ${character} — diese Gegner erwarten dich:`
+        : 'Diese Gegner erwarten dich:';
       el.appendChild(sub);
 
       const row = document.createElement('div');
@@ -48,6 +52,13 @@ export function createPreview() {
       }
       el.appendChild(row);
       el.appendChild(desc);
+
+      if (upgradesLine) {
+        const own = document.createElement('p');
+        own.className = 'pv-own';
+        own.textContent = upgradesLine;
+        el.appendChild(own);
+      }
 
       const go = document.createElement('button');
       go.id = 'previewGo';

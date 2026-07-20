@@ -103,6 +103,13 @@ export function createHud(ctx) {
           '#e8e4d8',
         ],
         [byType || ' ', '13px monospace', '#9aa0a8'],
+        [
+          title === 'GAME OVER' && run.lastDeathCause
+            ? `Erledigt durch ${run.lastDeathCause}`
+            : ' ',
+          '13px monospace',
+          '#d47ba6',
+        ],
         [run.newRecord ? '★ Neuer Rekord! ★' : ' ', 'bold 15px monospace', '#ffd23c'],
         [`Seed: ${run.seed}`, 'bold 16px monospace', '#8ecae6'],
         [

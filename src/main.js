@@ -14,7 +14,7 @@ import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
 import { createTutorial } from './ui/hud.js';
-import { getFlag, setFlag, loadStats, getPref, setPref } from './core/storage.js';
+import { getFlag, setFlag, loadStats, getPref, setPref, resetStats } from './core/storage.js';
 import { createRenderer } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
@@ -177,8 +177,16 @@ async function init() {
     // Raumvorschau: Gegnerliste + "Weiter"-Button.
     if (run.phase === 'preview' && !previewShown) {
       previewShown = true;
+      const ups = Object.entries(run.upgrades)
+        .filter(([, l]) => l > 0)
+        .map(([id, l]) => `${upgradesData.upgrades[id]?.name || id} ${l}`)
+        .join(' · ');
       preview.show(
-        `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
+        {
+          title: `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
+          character: run.roomCharacter,
+          upgradesLine: ups ? `Deine Upgrades: ${ups}` : null,
+        },
         run.state.tanks.slice(1).map((t) => t.type),
         tanksData,
         () => {
@@ -209,6 +217,12 @@ async function init() {
   const loop = createLoop({ update, render, step: STEP });
 
   startBtn.addEventListener('click', startRun);
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (window.confirm('Bestwerte wirklich löschen?')) {
+      resetStats();
+      refreshBestStats();
+    }
+  });
   // Tages-Seed: fuer alle Spieler am selben Tag derselbe Run.
   document.getElementById('dailyBtn').addEventListener('click', () => {
     const d = new Date();

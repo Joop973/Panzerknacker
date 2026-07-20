@@ -193,6 +193,30 @@ html, body {
   color: #9aa0a8;
 }
 
+.overlay button.linklike {
+  background: none;
+  border: none;
+  color: #55555f;
+  font-family: monospace;
+  font-size: 11px;
+  text-decoration: underline;
+  padding: 0;
+  cursor: pointer;
+}
+
+.overlay button.linklike:hover {
+  color: #9aa0a8;
+  background: none;
+}
+
+.pv-own {
+  font-family: monospace;
+  font-size: 12px;
+  color: #8ecae6;
+  max-width: 70vw;
+  text-align: center;
+}
+
 /* Vollbild-Touch: floating Sticks als DOM-Elemente (auch neben dem Canvas) */
 .stick-base {
   position: fixed;

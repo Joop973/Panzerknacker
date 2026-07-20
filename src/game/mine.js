@@ -46,7 +46,7 @@ export function explodeAt(state, x, y, R) {
   for (const t of state.tanks) {
     if (!t.alive) continue;
     if (circlesOverlap(x, y, R, t.x, t.y, t.cfg.radius)) {
-      state.killTank(t);
+      state.killTank(t, 'eine Explosion');
     }
   }
 
