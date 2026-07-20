@@ -69,6 +69,28 @@ html, body {
   color: #9aa0a8;
 }
 
+.modes {
+  display: flex;
+  gap: 0;
+}
+
+.modes button {
+  background: #1b1b22;
+  border: 2px solid #4a4a5a;
+  color: #9aa0a8;
+  font-family: monospace;
+  font-size: 15px;
+  padding: 8px 22px;
+  cursor: pointer;
+}
+
+.modes button.active {
+  background: #c8b24a;
+  border-color: #c8b24a;
+  color: #1a1408;
+  font-weight: bold;
+}
+
 .overlay input {
   background: #1b1b22;
   border: 2px solid #4a4a5a;
@@ -93,6 +115,19 @@ html, body {
 
 .overlay button:hover {
   background: #e0ca5e;
+}
+
+.overlay button.secondary {
+  background: transparent;
+  border: 2px solid #4a4a5a;
+  color: #9aa0a8;
+  font-size: 14px;
+  padding: 8px 24px;
+}
+
+.overlay button.secondary:hover {
+  border-color: #c8b24a;
+  color: #c8b24a;
 }
 
 /* Upgrade-Karten */
@@ -129,11 +164,10 @@ html, body {
 }
 
 /* Pause-Button oben mittig, ausserhalb der Daumenzonen */
-#pauseBtn {
+#pauseBtn,
+#muteBtn {
   position: fixed;
   top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
   z-index: 5;
   background: rgba(27, 27, 34, 0.8);
   border: 1px solid #4a4a5a;
@@ -141,6 +175,39 @@ html, body {
   font-size: 14px;
   padding: 4px 14px;
   cursor: pointer;
+}
+
+#pauseBtn {
+  left: 8px;
+}
+
+#muteBtn {
+  left: 62px;
+}
+
+#muteBtn.muted {
+  color: #55555f;
+  text-decoration: line-through;
+}
+
+#endlessBtn {
+  position: fixed;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  z-index: 8;
+  background: #7ade6a;
+  border: none;
+  color: #12200c;
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 16px;
+  padding: 10px 28px;
+  cursor: pointer;
+}
+
+#endlessBtn.hidden {
+  display: none;
 }
 
 /* Portrait-Overlay: nur im Hochformat sichtbar (Spec Abschnitt 9) */
@@ -166,4 +233,146 @@ html, body {
   font-family: monospace;
   font-size: 13px;
   color: #9aa0a8;
+}
+
+.opts {
+  display: flex;
+  gap: 18px;
+  font-family: monospace;
+  font-size: 13px;
+  color: #9aa0a8;
+}
+
+.opts label {
+  cursor: pointer;
+}
+
+.overlay button.linklike {
+  background: none;
+  border: none;
+  color: #55555f;
+  font-family: monospace;
+  font-size: 11px;
+  text-decoration: underline;
+  padding: 0;
+  cursor: pointer;
+}
+
+.overlay button.linklike:hover {
+  color: #9aa0a8;
+  background: none;
+}
+
+.pv-own {
+  font-family: monospace;
+  font-size: 12px;
+  color: #8ecae6;
+  max-width: 70vw;
+  text-align: center;
+}
+
+/* Vollbild-Touch: floating Sticks als DOM-Elemente (auch neben dem Canvas) */
+.stick-base {
+  position: fixed;
+  width: 96px;
+  height: 96px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.stick-base.hidden {
+  display: none;
+}
+
+.stick-knob {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: 50%;
+}
+
+/* Minen-Button unten rechts (eigene Exklusionszone) */
+#mineBtn {
+  display: none;
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(200, 178, 74, 0.55);
+  color: #14120a;
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 13px;
+  z-index: 6;
+  touch-action: none;
+}
+
+body.touch-on #mineBtn {
+  display: block;
+}
+
+/* Raumvorschau */
+.pv-sub {
+  font-family: monospace;
+  font-size: 14px;
+  color: #9aa0a8;
+}
+
+.pv-chips {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 80vw;
+}
+
+.pv-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #1b1b22;
+  border: 2px solid #4a4a5a;
+  color: #e8e4d8;
+  font-family: monospace;
+  font-size: 14px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.pv-chip:hover {
+  border-color: #c8b24a;
+}
+
+.pv-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #1a1408;
+  display: inline-block;
+}
+
+.pv-desc {
+  font-family: monospace;
+  font-size: 13px;
+  color: #c8b24a;
+  max-width: 70vw;
+  text-align: center;
+  min-height: 2.6em;
+}
+
+#previewGo {
+  background: #c8b24a;
+  border: none;
+  color: #1a1408;
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 18px;
+  padding: 12px 60px;
+  cursor: pointer;
 }

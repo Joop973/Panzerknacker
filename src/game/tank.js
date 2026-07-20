@@ -27,6 +27,10 @@ export function createTank(type, cfg, x, y) {
     vx: 0, // tatsaechliche Geschwindigkeit (px/s, nach Kollisionen)
     vy: 0, // -- gebraucht vom Vorhaltezielen (t_black)
     cooldown: 0,
+    protect: 0, // > 0: Spawn-Schutz (unverwundbar, blinkt)
+    stunTimer: 0, // > 0: Krallenfalle -- kann nicht fahren
+    shots: 0, // Schusszaehler (Sprengschuss-Upgrade)
+    trapDist: 0, // gefahrene Strecke seit letzter Falle
     alive: true,
     ai: {}, // Zustandsspeicher der KI-Verhalten (leer beim Spieler)
   };
@@ -58,8 +62,9 @@ export function moveTank(tank, axis, state, dt) {
   tank.prevX = tank.x;
   tank.prevY = tank.y;
 
-  let dx = axis.x;
-  let dy = axis.y;
+  // Krallenfalle: gefangene Panzer koennen nicht fahren (Turm geht).
+  let dx = tank.stunTimer > 0 ? 0 : axis.x;
+  let dy = tank.stunTimer > 0 ? 0 : axis.y;
   const len = Math.hypot(dx, dy);
   if (len > 0) {
     // Normalisieren, damit Diagonale nicht schneller ist.
@@ -90,27 +95,50 @@ function liveBulletsOf(state, owner) {
 }
 
 // Schussversuch: respektiert Cooldown und Magazin-Limit.
-// Gibt true zurueck, wenn tatsaechlich gefeuert wurde.
+// Doppelrohr-Upgrade: zwei Kugeln im Spreizwinkel (jede zaehlt gegen
+// das Magazin). Sprengschuss-Upgrade: jeder N-te Abzug traegt eine
+// Sprengladung. Gibt true zurueck, wenn tatsaechlich gefeuert wurde.
 export function fireBullet(tank, state) {
   // Epsilon: der Cooldown ist als Summe von 1/60-Schritten nicht exakt
   // darstellbar; ohne Toleranz feuert man einen Tick zu spaet.
   if (tank.cooldown > 1e-9) return false;
   if (liveBulletsOf(state, tank) >= tank.cfg.magazine) return false;
+
+  tank.shots++;
+  const explosive =
+    tank.cfg.explosionEveryShots > 0 && tank.shots % tank.cfg.explosionEveryShots === 0;
+  const angles = tank.cfg.twinShot
+    ? [tank.turret - tank.cfg.twinSpreadRad, tank.turret + tank.cfg.twinSpreadRad]
+    : [tank.turret];
+
   const muzzle = tank.cfg.radius + 8; // Spitze des Rohrs
-  const mx = tank.x + Math.cos(tank.turret) * muzzle;
-  const my = tank.y + Math.sin(tank.turret) * muzzle;
-  state.bullets.push(
-    createBullet(mx, my, tank.turret, {
-      speed: tank.cfg.bulletSpeed,
-      radius: tank.cfg.bulletRadius,
-      ricochets: tank.cfg.ricochets,
-      owner: tank,
-      kind: tank.cfg.weapon,
-      tungsten: tank.cfg.tungsten || false,
-    }),
-  );
-  // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.
-  state.flashes.push({ x: mx, y: my, age: 0 });
+  let fired = false;
+  for (let i = 0; i < angles.length; i++) {
+    if (liveBulletsOf(state, tank) >= tank.cfg.magazine) break;
+    const a = angles[i];
+    const mx = tank.x + Math.cos(a) * muzzle;
+    const my = tank.y + Math.sin(a) * muzzle;
+    state.bullets.push(
+      createBullet(mx, my, a, {
+        speed: tank.cfg.bulletSpeed,
+        radius: tank.cfg.bulletRadius,
+        ricochets: tank.cfg.ricochets,
+        owner: tank,
+        kind: tank.cfg.weapon,
+        tungsten: tank.cfg.tungsten || false,
+        explosive: explosive && i === 0, // nur die erste Kugel des Abzugs
+        explosionRadius: tank.cfg.shotExplosionRadius,
+      }),
+    );
+    // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.
+    state.flashes.push({ x: mx, y: my, age: 0 });
+    fired = true;
+  }
+  if (!fired) {
+    tank.shots--;
+    return false;
+  }
+  if (tank === state.player) state.playerShots++;
   state.sounds.push('shoot');
   tank.cooldown = tank.cfg.fireCooldown;
   return true;

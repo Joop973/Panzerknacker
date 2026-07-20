@@ -8,10 +8,11 @@
 // Damit erzeugt derselbe Seed exakt denselben Run.
 
 import { mulberry32 } from '../core/rng.js';
-import { recordRun } from '../core/storage.js';
+import { recordRun, loadStats } from '../core/storage.js';
 import { createState, stepState } from './state.js';
 
 const TRANSITION_S = 1.5;
+const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
 
 // Kauft Gegner vom Gefahrenbudget (nur freigeschaltete Typen, max. 8).
 function buyEnemies(diff, genRng, roomIndex, budget) {
@@ -36,7 +37,8 @@ function totalRooms(diff) {
 
 function startRoom(run) {
   const diff = run.difficulty;
-  const isFinal = run.roomIndex > diff.roomsBeforeFinal;
+  // Finalraum genau einmal (Raum 16); im Endlos-Modus danach nie wieder.
+  const isFinal = !run.endless && run.roomIndex === diff.roomsBeforeFinal + 1;
   let enemyTypes;
   let fixedRoom = null;
   let weights = null;
@@ -48,14 +50,18 @@ function startRoom(run) {
       ...buyEnemies(diff, run.genRng, run.roomIndex, diff.finalRoom.supportBudget),
     ].slice(0, run.tiles.finalRoom.enemySpawns.length);
   } else {
-    const budget = diff.budget.base + run.roomIndex * diff.budget.perRoom;
+    const budget =
+      (diff.budget.base + run.roomIndex * diff.budget.perRoom) * run.budgetMult;
     enemyTypes = buyEnemies(diff, run.genRng, run.roomIndex, budget);
     // Raumcharakter: Kachelgewichte alternieren (Spec Abschnitt 7B).
     const chars = diff.roomCharacters;
     if (chars && chars.length) {
-      weights = chars[Math.floor(run.genRng() * chars.length)].weights;
+      const ch = chars[Math.floor(run.genRng() * chars.length)];
+      weights = ch.weights;
+      run.roomCharacter = ch.name;
     }
   }
+  if (isFinal) run.roomCharacter = 'Finale';
   run.state = createState(run.data, run.tiles, {
     genRng: run.genRng,
     enemyTypes,
@@ -63,26 +69,52 @@ function startRoom(run) {
     fixedRoom,
     weights,
     playerUpgrades: run.upgrades,
+    upgradesData: run.upgradesData,
   });
-  run.phase = 'transition';
+  // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
+  // erst der Klick startet den 1,5-s-Uebergang.
+  run.phase = 'preview';
   run.transitionTimer = TRANSITION_S;
   run.seenRoomKills = 0;
   run.seenRoomDeaths = 0;
+  run.seenKillLog = 0;
+  run.seenRoomShots = 0;
+  run.combo = 0; // Combo gilt nur innerhalb eines Raums
+  run.comboTimer = 0;
 }
 
-export function createRun(data, tiles, difficulty, upgradesData, seed) {
+// Vom "Weiter"-Button der Raumvorschau aufgerufen.
+export function enterRoom(run) {
+  if (run.phase !== 'preview') return;
+  run.phase = 'transition';
+  run.transitionTimer = TRANSITION_S;
+}
+
+export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey = 'normal') {
+  const mode = (difficulty.modes && difficulty.modes[modeKey]) || {
+    label: 'Normal',
+    budgetMult: 1,
+    lives: difficulty.lives,
+  };
   const run = {
     data,
     tiles,
     difficulty,
     upgradesData,
+    mode: mode.label,
+    budgetMult: mode.budgetMult,
     upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}
     upgradeChoices: 0,
     pendingOffers: null,
+    killsByType: {}, // Statistik fuer die Endscreens
+    shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)
+    combo: 0, // laufende Kill-Combo
+    comboTimer: 0, // s bis die Combo verfaellt
+    bestCombo: 0, // hoechste Combo im Run
     seed: seed >>> 0,
     genRng: mulberry32(seed >>> 0),
     roomIndex: 1,
-    lives: difficulty.lives,
+    lives: mode.lives,
     kills: 0, // ueber den ganzen Run
     deaths: 0,
     roomsCleared: 0,
@@ -98,12 +130,19 @@ export function createRun(data, tiles, difficulty, upgradesData, seed) {
 
 function finishRun(run, won) {
   run.phase = won ? 'victory' : 'gameover';
+  // Rekord-Erkennung VOR dem Eintragen (alte Bestwerte vergleichen).
+  const prev = loadStats();
+  run.newRecord =
+    (won && run.playTime < (prev.fastestWinS ?? Infinity)) ||
+    run.roomsCleared > (prev.mostRooms || 0);
   run.finalStats = recordRun({
     won,
     rooms: run.roomsCleared,
     kills: run.kills,
     timeS: run.playTime,
+    bestCombo: run.bestCombo,
   });
+  if (won) run.state.sounds.push('fanfare');
 }
 
 export function stepRun(run, cmd, dt) {
@@ -118,10 +157,38 @@ export function stepRun(run, cmd, dt) {
   stepState(st, cmd, dt);
   run.playTime += dt;
 
+  // Combo: schnell aufeinanderfolgende Kills. Faellt nach COMBO_WINDOW.
+  if (run.comboTimer > 0) {
+    run.comboTimer -= dt;
+    if (run.comboTimer <= 0) run.combo = 0;
+  }
+
   // Kumulative Raumzaehler abgleichen (robust, egal wo Kills passieren).
   if (st.enemyKills > run.seenRoomKills) {
     run.kills += st.enemyKills - run.seenRoomKills;
     run.seenRoomKills = st.enemyKills;
+  }
+  while (run.seenKillLog < st.killLog.length) {
+    const ty = st.killLog[run.seenKillLog++];
+    run.killsByType[ty] = (run.killsByType[ty] || 0) + 1;
+    run.combo++;
+    run.comboTimer = COMBO_WINDOW;
+    run.bestCombo = Math.max(run.bestCombo, run.combo);
+    if (run.combo >= 3) {
+      st.texts.push({
+        x: st.player.x,
+        y: st.player.y - 26,
+        text: `COMBO ×${run.combo}`,
+        age: 0,
+        life: 1,
+        color: '#ffd23c',
+      });
+      st.sounds.push('combo');
+    }
+  }
+  if (st.playerShots > run.seenRoomShots) {
+    run.shotsFired += st.playerShots - run.seenRoomShots;
+    run.seenRoomShots = st.playerShots;
   }
 
   // Spielertod: Leben abziehen; bei 0 ist der Run vorbei (der Raum-
@@ -131,6 +198,9 @@ export function stepRun(run, cmd, dt) {
     run.seenRoomDeaths = st.playerDeaths;
     run.deaths += d;
     run.lives -= d;
+    run.combo = 0; // Tod bricht die Combo
+    run.comboTimer = 0;
+    run.lastDeathCause = st.lastDeathCause;
     if (run.lives <= 0) {
       finishRun(run, false);
       return;
@@ -141,11 +211,12 @@ export function stepRun(run, cmd, dt) {
   const enemiesLeft = st.tanks.filter((t) => t !== st.player && t.alive).length;
   if (enemiesLeft === 0 && st.player.alive) {
     run.roomsCleared++;
+    st.sounds.push('clear');
     // Extraleben alle 5 geschaffte Raeume.
     if (run.roomsCleared % run.difficulty.extraLifeEveryClearedRooms === 0) {
       run.lives++;
     }
-    if (run.roomIndex >= totalRooms(run.difficulty)) {
+    if (!run.endless && run.roomIndex >= totalRooms(run.difficulty)) {
       finishRun(run, true);
       return;
     }
@@ -199,6 +270,16 @@ export function chooseUpgrade(run, index) {
   }
   run.upgradeChoices++;
   run.pendingOffers = null;
+  run.roomIndex++;
+  startRoom(run);
+}
+
+// Nach dem Sieg weiterspielen (Endlos-Modus): Raeume laufen mit weiter
+// wachsendem Budget durch, bis der Spieler stirbt. Der Sieg bleibt in
+// der Statistik gezaehlt.
+export function continueEndless(run) {
+  if (run.phase !== 'victory') return;
+  run.endless = true;
   run.roomIndex++;
   startRoom(run);
 }

@@ -8,13 +8,14 @@ import { STEP } from './config.js';
 import { createLoop } from './core/loop.js';
 import { createInput } from './core/input.js';
 import { createAudio } from './core/audio.js';
-import { createRun, stepRun, chooseUpgrade } from './game/run.js';
+import { createRun, stepRun, chooseUpgrade, enterRoom, totalRooms, continueEndless } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
+import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
 import { createTutorial } from './ui/hud.js';
-import { getFlag, setFlag, loadStats } from './core/storage.js';
-import { createRenderer } from './render/renderer.js';
+import { getFlag, setFlag, loadStats, getPref, setPref, resetStats } from './core/storage.js';
+import { createRenderer, renderOpts } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
 import { createHud } from './ui/hud.js';
@@ -44,28 +45,66 @@ async function init() {
     const win = s.fastestWinS
       ? ` · schnellster Sieg ${Math.floor(s.fastestWinS / 60)}:${String(Math.floor(s.fastestWinS % 60)).padStart(2, '0')}`
       : '';
-    el.textContent = `${s.runs} Runs · beste Räume ${s.mostRooms} · ${s.totalKills} Kills${win}`;
+    const combo = s.bestCombo ? ` · Combo ×${s.bestCombo}` : '';
+    el.textContent = `${s.runs} Runs · beste Räume ${s.mostRooms} · ${s.totalKills} Kills${combo}${win}`;
   }
   refreshBestStats();
 
   const input = createInput(window, canvas);
   const audio = createAudio();
-  window.addEventListener('pointerdown', audio.unlock);
-  window.addEventListener('keydown', audio.unlock);
+  audio.setMuted(getPref('muted', false));
+  const unlockAll = () => {
+    audio.unlock();
+    audio.startMusic();
+  };
+  window.addEventListener('pointerdown', unlockAll);
+  window.addEventListener('keydown', unlockAll);
 
   const tracks = createTracks();
   const renderer = createRenderer(ctx);
   const debugOverlay = createDebugOverlay(ctx);
   const hud = createHud(ctx);
   const upgradeScreen = createUpgradeScreen();
-  const touch = createTouchControls(canvas);
+  const preview = createPreview();
+  const touch = createTouchControls();
   const pause = createPause();
   const tutorial = createTutorial(getFlag('tutorial_seen'));
 
   let run = null;
   let lastRoomState = null;
   let upgradeShown = false;
+  let previewShown = false;
   let toast = null;
+  let lastSeed = 0;
+  let mode = getPref('mode', 'normal');
+
+  // Darstellungs-Optionen (gespeichert).
+  renderOpts.threatLines = getPref('threatLines', true);
+  renderOpts.reduceMotion = getPref('reduceMotion', false);
+  const optThreat = document.getElementById('optThreat');
+  const optMotion = document.getElementById('optMotion');
+  optThreat.checked = renderOpts.threatLines;
+  optMotion.checked = renderOpts.reduceMotion;
+  optThreat.addEventListener('change', () => {
+    renderOpts.threatLines = optThreat.checked;
+    setPref('threatLines', optThreat.checked);
+  });
+  optMotion.addEventListener('change', () => {
+    renderOpts.reduceMotion = optMotion.checked;
+    setPref('reduceMotion', optMotion.checked);
+  });
+
+  // Schwierigkeits-Auswahl (Segment-Buttons).
+  const modeSelect = document.getElementById('modeSelect');
+  modeSelect.querySelectorAll('button').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+    btn.addEventListener('click', () => {
+      mode = btn.dataset.mode;
+      setPref('mode', mode);
+      modeSelect.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
 
   let fps = 0;
   let frameCount = 0;
@@ -75,10 +114,13 @@ async function init() {
     const raw = seedInput.value.trim();
     const seed = raw === '' ? Date.now() >>> 0 : Number(raw) >>> 0;
     seedInput.value = String(seed);
-    run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
+    run = createRun(tanksData, tilesData, diffData, upgradesData, seed, mode);
+    lastSeed = seed;
     startOverlay.classList.add('hidden');
     upgradeScreen.hide();
+    preview.hide();
     upgradeShown = false;
+    previewShown = false;
     // Touch-Geraete: Vollbild + Landscape-Lock versuchen (Android;
     // iOS ignoriert es -- dort greift das Portrait-Overlay).
     if (navigator.maxTouchPoints > 0) {
@@ -87,17 +129,28 @@ async function init() {
         () => {},
       );
     }
+    requestWakeLock();
+  }
+
+  // Display-Wachsperre: beim Gamepad-Spielen fasst man den Touchscreen
+  // nicht an -- ohne Wake Lock dimmt das Handy mitten im Gefecht.
+  async function requestWakeLock() {
+    try {
+      await navigator.wakeLock?.request('screen');
+    } catch {
+      /* nicht unterstuetzt oder verweigert -> egal */
+    }
   }
 
   function update(dt) {
     if (!run) return;
-    if (input.consumePause()) pause.toggle();
+    const gp = input.pollGamepad();
+    if (input.consumePause() || (gp && gp.pausePressed)) pause.toggle();
     if (pause.isPaused()) return;
 
     // Tastatur/Maus, Gamepad und Touch zusammenfuehren: die gerade
     // aktive Quelle gewinnt (Fahren: Tastatur > Gamepad > Touch;
     // Zielen: Gamepad-Stick > Touch-Stick > Maus).
-    const gp = input.pollGamepad();
     const kbMove = input.getMoveAxis();
     const gpMove = gp && (gp.move.x || gp.move.y) ? gp.move : null;
     const tMove = touch.getMove();
@@ -135,7 +188,25 @@ async function init() {
       tracks.stamp(run.state.tanks);
       tracks.fade(dt);
     }
-    for (const name of run.state.sounds.splice(0)) audio.play(name);
+    for (const name of run.state.sounds.splice(0)) {
+      audio.play(name);
+      // Haptik: Touch-Vibration (Android) und Gamepad-Rumble.
+      if (touch.isActive() && navigator.vibrate) {
+        if (name === 'boom') navigator.vibrate(60);
+        else if (name === 'death') navigator.vibrate(40);
+      }
+      if (gp && (name === 'boom' || name === 'death')) {
+        for (const pad of navigator.getGamepads?.() || []) {
+          pad?.vibrationActuator
+            ?.playEffect?.('dual-rumble', {
+              duration: name === 'boom' ? 180 : 100,
+              strongMagnitude: 0.7,
+              weakMagnitude: 0.4,
+            })
+            .catch?.(() => {});
+        }
+      }
+    }
 
     // Upgrade-Screen genau einmal pro Angebot einblenden.
     if (run.phase === 'upgrade' && !upgradeShown) {
@@ -144,6 +215,33 @@ async function init() {
         chooseUpgrade(run, idx);
         upgradeShown = false;
       });
+    }
+
+    // Raumvorschau: Gegnerliste + "Weiter"-Button.
+    if (run.phase === 'preview' && !previewShown) {
+      previewShown = true;
+      const ups = Object.entries(run.upgrades)
+        .filter(([, l]) => l > 0)
+        .map(([id, l]) => `${upgradesData.upgrades[id]?.name || id} ${l}`)
+        .join(' · ');
+      const dangerByType = {};
+      for (const [ty, d] of Object.entries(diffData.danger)) dangerByType[ty] = d.points;
+      preview.show(
+        {
+          title: run.endless
+            ? `Endlos-Raum ${run.roomIndex}`
+            : `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
+          character: run.roomCharacter,
+          upgradesLine: ups ? `Deine Upgrades: ${ups}` : null,
+          dangerByType,
+        },
+        run.state.tanks.slice(1).map((t) => t.type),
+        tanksData,
+        () => {
+          enterRoom(run);
+          previewShown = false;
+        },
+      );
     }
   }
 
@@ -154,7 +252,7 @@ async function init() {
       debugOverlay.render(run.state, fps);
     }
     hud.render(run, { paused: pause.isPaused(), toast });
-    touch.render(ctx);
+    endlessBtn.classList.toggle('hidden', run.phase !== 'victory');
 
     frameCount++;
     const now = performance.now();
@@ -168,22 +266,73 @@ async function init() {
   const loop = createLoop({ update, render, step: STEP });
 
   startBtn.addEventListener('click', startRun);
+  document.getElementById('resetBtn').addEventListener('click', () => {
+    if (window.confirm('Bestwerte wirklich löschen?')) {
+      resetStats();
+      refreshBestStats();
+    }
+  });
+  // Tages-Seed: fuer alle Spieler am selben Tag derselbe Run.
+  document.getElementById('dailyBtn').addEventListener('click', () => {
+    const d = new Date();
+    seedInput.value = String(
+      d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(),
+    );
+    startRun();
+  });
   seedInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') startRun();
   });
-  // Enter auf Endscreens: zurueck zum Start-Screen (Seed vorbefuellt).
-  window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || !run) return;
-    if (run.phase === 'gameover' || run.phase === 'victory') {
-      refreshBestStats();
-      startOverlay.classList.remove('hidden');
-      seedInput.select();
-      run = null;
+  // Endscreens: Enter ODER Tipp/Klick auf das Spielfeld fuehrt zurueck
+  // zum Start-Screen (Seed vorbefuellt) -> neuer Run.
+  function backToStart() {
+    refreshBestStats();
+    startOverlay.classList.remove('hidden');
+    seedInput.select();
+    preview.hide();
+    upgradeScreen.hide();
+    endlessBtn.classList.add('hidden');
+    run = null;
+  }
+  const endlessBtn = document.getElementById('endlessBtn');
+  endlessBtn.addEventListener('click', () => {
+    if (run && run.phase === 'victory') {
+      continueEndless(run);
+      previewShown = false;
+      endlessBtn.classList.add('hidden');
     }
   });
+  window.addEventListener('keydown', (e) => {
+    if (!run) return;
+    if (e.key === 'Enter' && (run.phase === 'gameover' || run.phase === 'victory')) {
+      backToStart();
+    }
+    // Pause-Menue: R = Run mit gleichem Seed neu starten, M = Hauptmenue.
+    if (pause.isPaused() && run.phase === 'playing') {
+      if (e.code === 'KeyR') {
+        run = createRun(tanksData, tilesData, diffData, upgradesData, lastSeed, mode);
+        previewShown = false;
+        upgradeShown = false;
+        pause.set(false);
+      } else if (e.code === 'KeyM') {
+        pause.set(false);
+        backToStart();
+      }
+    }
+  });
+  canvas.addEventListener('pointerup', () => {
+    if (run && (run.phase === 'gameover' || run.phase === 'victory')) backToStart();
+  });
 
-  // Pause-Button oben mittig.
+  // Pause-Button oben mittig, Mute daneben.
   document.getElementById('pauseBtn').addEventListener('click', () => pause.toggle());
+  const muteBtn = document.getElementById('muteBtn');
+  muteBtn.classList.toggle('muted', audio.isMuted());
+  muteBtn.addEventListener('click', () => {
+    const m = audio.toggleMute();
+    muteBtn.classList.toggle('muted', m);
+    setPref('muted', m);
+  });
 
   // Auto-Pause bei Tab-Wechsel (Spec Abschnitt 9) -- Pflicht, sonst
   // stirbt man bei einem eingehenden Anruf. Beim Zurueckkommen bleibt
@@ -194,6 +343,7 @@ async function init() {
       loop.stop();
     } else {
       loop.start();
+      requestWakeLock(); // Wake Lock erlischt bei Tab-Wechsel
     }
   });
 
@@ -206,6 +356,12 @@ async function init() {
   onPortrait();
 
   loop.start();
+}
+
+// Offline-Faehigkeit: Service Worker cached alle Dateien beim ersten
+// Besuch (braucht HTTPS oder localhost).
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 init();

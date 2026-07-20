@@ -9,17 +9,19 @@ import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
 import { mulberry32 } from '../core/rng.js';
 import { createTank, moveTank, fireBullet, layMine } from './tank.js';
 import { updateBullet } from './bullet.js';
-import { updateMines } from './mine.js';
+import { updateMines, explodeAt } from './mine.js';
+import { updateTraps } from './trap.js';
 import { updateEnemy } from './ai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
+import { resolveCfg, applyUpgrades } from './cfg.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
 const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole' };
 
 // Truemmerfarben fuer Partikel (Politur, Phase 10).
 const DEBRIS_COLORS = {
-  player: '#c8b24a',
+  player: '#3d8ef0',
   t_brown: '#8a5a33',
   t_grey: '#9aa0a8',
   t_teal: '#3aa8a0',
@@ -44,50 +46,16 @@ function buildWalls(grid) {
   return walls;
 }
 
-// Loest einen Typnamen aus tanks.json in ein flaches cfg-Objekt auf.
-function resolveCfg(data, type) {
-  const t = data.types[type];
-  return {
-    radius: data.physics.tankRadius,
-    bulletRadius: data.physics.bulletRadius,
-    fireCooldown: data.physics.fireCooldownS,
-    speed: data.speeds[t.speed],
-    magazine: t.magazine,
-    ricochets: t.ricochets,
-    mines: t.mines,
-    weapon: t.weapon,
-    bulletSpeed: data.bulletSpeeds[t.weapon],
-    turret: t.turret,
-    drive: t.drive,
-    avoidMines: t.avoidMines || false,
-    miner: t.miner,
-    trackStampPx: t.trackStampPx || 3,
-  };
-}
-
-// Upgrade-Level auf das Spieler-cfg anwenden (Spec Abschnitt 8).
-function applyUpgrades(cfg, ups) {
-  if (!ups) return cfg;
-  const l = (k) => ups[k] || 0;
-  cfg.magazine += 2 * l('magazin');
-  cfg.ricochets += l('abpraller'); // Basis 1, max +1 => harte Grenze 2
-  cfg.bulletSpeed *= Math.pow(1.2, l('ladung'));
-  cfg.mines += l('kettenglied');
-  cfg.mineRadiusMult = Math.pow(1.3, l('sprengkraft'));
-  cfg.speed *= Math.pow(1.12, l('kettenantrieb'));
-  cfg.tungsten = l('wolframkern') > 0;
-  return cfg;
-}
-
 // Baut den Zustand fuer EINEN Raum.
 // opts: { genRng      -- Seed-RNG-Strom fuer den Raumbau (Pflicht)
 //         enemyTypes  -- Typliste der Gegner dieses Raums
 //         aiSeed      -- Seed fuer den KI-RNG-Strom
 //         fixedRoom   -- optionales festes Layout (Finalraum)
 //         weights     -- optionale Kachelgewichte (Raumcharakter)
-//         playerUpgrades -- Upgrade-Level {id: stufe} }
+//         playerUpgrades -- Upgrade-Level {id: stufe}
+//         upgradesData -- Inhalt von upgrades.json (Stellwerte) }
 export function createState(data, tiles, opts) {
-  const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades } = opts;
+  const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData } = opts;
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
     : generateRoom(tiles, genRng, enemyTypes.length, weights);
@@ -96,7 +64,7 @@ export function createState(data, tiles, opts) {
 
   const player = createTank(
     'player',
-    applyUpgrades(resolveCfg(data, 'player'), playerUpgrades),
+    applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData),
     room.playerSpawn.x,
     room.playerSpawn.y,
   );
@@ -113,20 +81,26 @@ export function createState(data, tiles, opts) {
     data,
     tiles,
     playerUpgrades,
+    upgradesData,
     rng: mulberry32((aiSeed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
     playerSpawn: room.playerSpawn,
     emergencyRoom: room.emergency,
     enemyKills: 0, // in diesem Raum getoetete Gegner
     playerDeaths: 0, // Tode des Spielers in diesem Raum
+    playerShots: 0, // Spieler-Abzuege in diesem Raum (Trefferquote)
     walls,
     tanks,
     player,
     bullets: [],
     mines: [],
+    traps: [],
     explosions: [],
     flashes: [],
     sounds: [],
     particles: [],
+    texts: [], // schwebende Kurztexte { x, y, text, age, life, color }
+    killLog: [], // Typen der in diesem Raum getoeteten Gegner (Statistik)
+    damageFlash: 0, // roter Bildschirm-Flash nach eigenem Tod (Rendering)
     shake: 0, // Screenshake-Staerke (nur Rendering)
     time: 0,
     respawnTimer: 0,
@@ -144,16 +118,19 @@ export function createState(data, tiles, opts) {
       grid[wall.row][wall.col] = '.';
       state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 6, 90);
     },
-    killTank(tank) {
+    killTank(tank, cause) {
       tank.alive = false;
       state.sounds.push('death');
       state.addShake(4);
       state.spawnParticles(tank.x, tank.y, DEBRIS_COLORS[tank.type] || '#fff', 10, 120);
       if (tank === state.player) {
         state.playerDeaths++;
+        state.lastDeathCause = cause || 'Unbekannt';
+        state.damageFlash = 0.5;
         state.respawnTimer = RESPAWN_DELAY;
       } else {
         state.enemyKills++;
+        state.killLog.push(tank.type);
       }
     },
     addShake(amount) {
@@ -187,10 +164,11 @@ export function createState(data, tiles, opts) {
 function respawnPlayer(state) {
   const fresh = createTank(
     'player',
-    applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades),
+    applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades, state.upgradesData),
     state.playerSpawn.x,
     state.playerSpawn.y,
   );
+  fresh.protect = state.data.physics.respawnProtectS; // kurzer Spawn-Schutz
   state.tanks[0] = fresh;
   state.player = fresh;
   for (const t of state.tanks) {
@@ -208,6 +186,7 @@ function respawnPlayer(state) {
   }
   state.bullets = [];
   state.mines = [];
+  state.traps = [];
   state.explosions = [];
   state.flashes = [];
   state.respawnTimer = 0;
@@ -220,7 +199,10 @@ export function stepState(state, cmd, dt) {
   state.time += dt;
 
   for (const t of state.tanks) {
-    if (t.alive) t.cooldown = Math.max(0, t.cooldown - dt);
+    if (!t.alive) continue;
+    t.cooldown = Math.max(0, t.cooldown - dt);
+    t.stunTimer = Math.max(0, t.stunTimer - dt);
+    if (t.protect > 0) t.protect = Math.max(0, t.protect - dt);
   }
 
   if (!p.alive) {
@@ -245,7 +227,10 @@ export function stepState(state, cmd, dt) {
 
   for (const b of state.bullets) updateBullet(b, state, dt);
 
-  // Geschosse zerstoeren sich gegenseitig bei Kollision.
+  // Geschosse zerstoeren sich gegenseitig bei Kollision. Ausnahme:
+  // Doppelrohr-Zwillinge -- Kugeln derselben Salve (gleicher Schuetze,
+  // gleiches Alter) starten ueberlappend und ignorieren sich, bis die
+  // Spreizung sie getrennt hat.
   const bullets = state.bullets;
   for (let i = 0; i < bullets.length; i++) {
     if (bullets[i].dead) continue;
@@ -253,6 +238,7 @@ export function stepState(state, cmd, dt) {
       if (bullets[j].dead) continue;
       const a = bullets[i];
       const b = bullets[j];
+      if (a.owner === b.owner && a.age < 0.3 && Math.abs(a.age - b.age) < 1e-6) continue;
       if (circlesOverlap(a.x, a.y, a.radius, b.x, b.y, b.radius)) {
         a.dead = true;
         b.dead = true;
@@ -268,15 +254,36 @@ export function stepState(state, cmd, dt) {
     for (const t of state.tanks) {
       if (!t.alive) continue;
       if (b.owner === t && b.age < grace) continue;
+      if (t.protect > 0) continue; // Spawn-Schutz
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
         b.dead = true;
-        state.killTank(t);
+        // Banden-Kill-Feedback: Gegner mit abgeprallter Kugel erwischt.
+        if (t !== state.player && b.ricochetsLeft < b.ricochetsStart) {
+          state.texts.push({ x: t.x, y: t.y - 18, text: 'Abpraller!', age: 0, life: 0.9, color: '#8ecae6' });
+        }
+        // Todesursache fuer den Game-Over-Screen.
+        const WEAPON_LABEL = { bullet: 'Kugel', rocket: 'Rakete', bounce_rocket: 'Bounce-Rakete' };
+        const cause =
+          b.owner === state.player
+            ? 'die eigene Kugel'
+            : `${state.data.types[b.owner?.type]?.label || '?'} (${WEAPON_LABEL[b.kind] || b.kind})`;
+        state.killTank(t, cause);
         break;
       }
     }
   }
 
   updateMines(state, dt);
+  updateTraps(state, dt);
+
+  // Sprengschuss-Upgrade: markierte Geschosse explodieren beim Tod
+  // (Wandkontakt, Panzertreffer, Geschoss-gegen-Geschoss, Minenzuendung).
+  for (const b of state.bullets) {
+    if (b.dead && b.explosive && !b.detonated) {
+      b.detonated = true;
+      explodeAt(state, b.x, b.y, b.explosionRadius);
+    }
+  }
 
   // Kurzlebige Render-Effekte altern lassen.
   for (const e of state.explosions) e.age += dt;
@@ -291,6 +298,9 @@ export function stepState(state, cmd, dt) {
     pt.vy *= 0.94;
   }
   state.particles = state.particles.filter((pt) => pt.age < pt.life);
+  for (const tx of state.texts) tx.age += dt;
+  state.texts = state.texts.filter((tx) => tx.age < tx.life);
+  state.damageFlash = Math.max(0, state.damageFlash - dt);
   state.shake = Math.max(0, state.shake - state.shake * 4 * dt - 0.5 * dt);
 
   state.bullets = state.bullets.filter((b) => !b.dead);

@@ -74,8 +74,9 @@ export function createInput(target, canvas) {
   target.addEventListener('mousemove', onMouseMove);
   target.addEventListener('mousedown', onMouseDown);
 
-  // ---- Gamepad (gepollt, Edge-Erkennung fuer die Minen-Taste) ----
+  // ---- Gamepad (gepollt, Edge-Erkennung fuer Minen-/Start-Taste) ----
   let gpMineWasDown = false;
+  let gpStartWasDown = false;
 
   function pollGamepad() {
     if (typeof navigator === 'undefined' || !navigator.getGamepads) return null;
@@ -100,7 +101,10 @@ export function createInput(target, canvas) {
     const mineDown = !!gp.buttons[0]?.pressed; // A (Xbox) / X (PlayStation)
     const minePressed = mineDown && !gpMineWasDown;
     gpMineWasDown = mineDown;
-    return { move, aimDir, autoFire: aimDir !== null, fireHeld, minePressed };
+    const startDown = !!gp.buttons[9]?.pressed; // Start/Options -> Pause
+    const pausePressed = startDown && !gpStartWasDown;
+    gpStartWasDown = startDown;
+    return { move, aimDir, autoFire: aimDir !== null, fireHeld, minePressed, pausePressed };
   }
 
   return {

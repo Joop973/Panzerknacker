@@ -5,6 +5,20 @@
 // Physikschritten interpoliert (alpha).
 
 import { WIDTH, HEIGHT, CELL } from '../config.js';
+import {
+  drawMines,
+  drawTraps,
+  drawRadar,
+  drawFlashes,
+  drawParticles,
+  drawExplosions,
+  drawTexts,
+  drawThreatLines,
+} from './effects.js';
+
+// Optionen (von main.js gesetzt): reduzierte Bewegung schaltet
+// Screenshake ab; Bedrohungslinien sind optional.
+export const renderOpts = { reduceMotion: false, threatLines: true };
 
 const COLORS = {
   floor: '#1b1b22',
@@ -22,9 +36,10 @@ const COLORS = {
   explosion: '#ffb347',
 };
 
-// Rumpffarben je Panzertyp (eigene Pixel-Art kommt in Phase 10).
-const TANK_COLORS = {
-  player: '#c8b24a',
+// Rumpffarben je Panzertyp (auch von der Raumvorschau genutzt).
+export const TANK_COLORS = {
+  player: '#3d8ef0', // einzige blaue Wanne -- unverwechselbar
+
   t_brown: '#8a5a33',
   t_grey: '#9aa0a8',
   t_teal: '#3aa8a0',
@@ -122,44 +137,6 @@ export function createRenderer(ctx) {
     }
   }
 
-  function drawMines(state) {
-    const mcfg = state.data.mine;
-    for (const m of state.mines) {
-      ctx.fillStyle = COLORS.mineBody;
-      ctx.beginPath();
-      ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Blinklicht: aus im Fluchtfenster, langsam wenn scharf,
-      // schnell + rot kurz vor der Selbstzuendung.
-      const armed = m.age >= mcfg.armDelayS;
-      if (!armed) continue;
-      const remaining = mcfg.selfDetonateS - m.age;
-      const hot = remaining < 2;
-      const freq = hot ? 8 : 3;
-      if (Math.sin(m.age * freq * Math.PI * 2) > 0) {
-        ctx.fillStyle = hot ? COLORS.mineLightHot : COLORS.mineLight;
-        ctx.beginPath();
-        ctx.arc(m.x, m.y, 2.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-
-  function drawExplosions(state) {
-    const R = state.data.mine.explosionRadiusPx;
-    for (const e of state.explosions) {
-      const t = Math.min(e.age / 0.35, 1);
-      ctx.strokeStyle = COLORS.explosion;
-      ctx.globalAlpha = 1 - t;
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(e.x, e.y, R * t, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    }
-  }
-
   function drawTank(state, t, alpha) {
     if (!t.alive) return;
 
@@ -175,9 +152,29 @@ export function createRenderer(ctx) {
     const y = lerp(t.prevY, t.y, alpha);
     const r = t.cfg.radius;
 
+    // Spawn-Schutz: schnelles Blinken (jede zweite Blinkphase unsichtbar).
+    if (t.protect > 0 && Math.sin(t.protect * 30) < 0) return;
+
     ctx.globalAlpha = bodyAlpha;
     const body = TANK_COLORS[t.type] || '#ffffff';
-    const edge = t.type === 't_black' ? '#8a8a99' : COLORS.outline;
+    const isPlayer = t.type === 'player';
+    const edge = t.type === 't_black' ? '#8a8a99' : isPlayer ? '#eaf2ff' : COLORS.outline;
+
+    // Spieler: sanfter Glow + pulsierender Ring, damit er in jedem
+    // Getuemmel sofort ins Auge springt.
+    if (isPlayer) {
+      ctx.fillStyle = 'rgba(80,160,255,0.14)';
+      ctx.beginPath();
+      ctx.arc(x, y, r + 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(140,200,255,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.4 + 0.25 * Math.sin(state.time * 4);
+      ctx.beginPath();
+      ctx.arc(x, y, r + 6, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = bodyAlpha;
+    }
 
     // Wanne mit Ketten, rotiert in Fahrtrichtung (Politur, Phase 10).
     ctx.save();
@@ -192,6 +189,47 @@ export function createRenderer(ctx) {
     ctx.fillRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
     ctx.strokeRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
     ctx.restore();
+
+    // Ziellinie des Spielers mit EINEM Abpraller-Vorgriff: Ray-March
+    // wie ein Geschoss (achsweise Reflexion) -- man sieht die erste
+    // Bande. Wichtig fuer Touch/Gamepad ohne Cursor.
+    if (t.type === 'player') {
+      let dx = Math.cos(t.turret);
+      let dy = Math.sin(t.turret);
+      let lx = x + dx * (r + 10);
+      let ly = y + dy * (r + 10);
+      const pts = [[lx, ly]];
+      let bounced = false;
+      for (let d = 0; d < 320; d += 6) {
+        const nx = lx + dx * 6;
+        const ny = ly + dy * 6;
+        if (state.isSolid(nx, ny)) {
+          if (bounced) break;
+          const sx = state.isSolid(nx, ly);
+          const sy = state.isSolid(lx, ny);
+          if (sx) dx = -dx;
+          if (sy) dy = -dy;
+          if (!sx && !sy) {
+            dx = -dx;
+            dy = -dy;
+          }
+          bounced = true;
+          pts.push([lx, ly]);
+          continue;
+        }
+        lx = nx;
+        ly = ny;
+      }
+      pts.push([lx, ly]);
+      ctx.strokeStyle = 'rgba(140,200,255,0.4)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
 
     // Turm + Rohr, unabhaengig vom Rumpf rotiert.
     ctx.save();
@@ -208,15 +246,17 @@ export function createRenderer(ctx) {
     ctx.stroke();
     ctx.restore();
 
-    ctx.globalAlpha = 1;
-  }
-
-  function drawParticles(state) {
-    for (const pt of state.particles) {
-      ctx.globalAlpha = 1 - pt.age / pt.life;
-      ctx.fillStyle = pt.color;
-      ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);
+    // Krallenfalle: gefangener Panzer bekommt einen pulsierenden Ring.
+    if (t.stunTimer > 0) {
+      ctx.strokeStyle = '#c25a4a';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.arc(x, y, r + 5 + Math.sin(t.stunTimer * 8) * 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
     }
+
     ctx.globalAlpha = 1;
   }
 
@@ -224,7 +264,10 @@ export function createRenderer(ctx) {
     for (const b of bullets) {
       const x = lerp(b.prevX, b.x, alpha);
       const y = lerp(b.prevY, b.y, alpha);
-      const c = BULLET_COLORS[b.kind] || BULLET_COLORS.bullet;
+      // Wolframkern-Kugeln kalt-blau eingefaerbt (durchschlagen breakable).
+      const c = b.tungsten
+        ? { fill: '#d9e2ff', edge: '#6a7adf' }
+        : BULLET_COLORS[b.kind] || BULLET_COLORS.bullet;
 
       // Raketen bekommen einen kurzen Schweif entgegen der Flugrichtung.
       if (b.kind !== 'bullet') {
@@ -237,6 +280,17 @@ export function createRenderer(ctx) {
         ctx.stroke();
       }
 
+      // Sprengschuss: oranger Glimmer um die Kugel.
+      if (b.explosive) {
+        ctx.strokeStyle = '#ff9a4a';
+        ctx.globalAlpha = 0.8;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, b.radius + 3, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+
       ctx.fillStyle = c.fill;
       ctx.strokeStyle = c.edge;
       ctx.lineWidth = 1;
@@ -247,36 +301,36 @@ export function createRenderer(ctx) {
     }
   }
 
-  function drawFlashes(state) {
-    for (const f of state.flashes) {
-      const t = 1 - f.age / 0.08;
-      ctx.fillStyle = '#fff2b0';
-      ctx.globalAlpha = t;
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, 3 + 4 * (1 - t), 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-  }
-
   return {
     render(state, alpha, tracks) {
       // Screenshake: deterministisches Wackeln aus der Spielzeit.
-      const sh = state.shake || 0;
+      const sh = renderOpts.reduceMotion ? 0 : state.shake || 0;
       ctx.save();
       if (sh > 0.1) {
         ctx.translate(Math.sin(state.time * 47) * sh, Math.cos(state.time * 53) * sh * 0.7);
       }
       drawFloor();
       tracks.draw(ctx);
-      drawMines(state);
+      drawMines(ctx, state);
+      drawTraps(ctx, state);
+      if (renderOpts.threatLines) drawThreatLines(ctx, state);
       drawWalls(state.walls);
       for (const t of state.tanks) drawTank(state, t, alpha);
+      drawRadar(ctx, state);
       drawBullets(state.bullets, alpha);
-      drawFlashes(state);
-      drawParticles(state);
-      drawExplosions(state);
+      drawFlashes(ctx, state);
+      drawParticles(ctx, state);
+      drawExplosions(ctx, state);
+
+      drawTexts(ctx, state);
       ctx.restore();
+
+      // Roter Flash nach eigenem Tod (ungeschuettelt, ueber allem).
+      if (state.damageFlash > 0) {
+        const a = state.damageFlash * (renderOpts.reduceMotion ? 0.18 : 0.35);
+        ctx.fillStyle = `rgba(255,60,40,${a})`;
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      }
     },
   };
 }

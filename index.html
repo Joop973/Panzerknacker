@@ -16,6 +16,8 @@
 <body>
   <main id="game">
     <button id="pauseBtn" title="Pause">&#10073;&#10073;</button>
+    <button id="muteBtn" title="Ton an/aus">&#9835;</button>
+    <button id="endlessBtn" class="hidden">Endlos weiterspielen &#8594;</button>
     <canvas id="canvas" width="768" height="512"></canvas>
     <div id="rotate" class="overlay rotate-overlay">
       <h1>&#8635;</h1>
@@ -24,10 +26,21 @@
     <p class="hint">WASD: fahren &middot; Maus: zielen &middot; Klick: schie&szlig;en &middot; Leertaste: Mine &middot; F1: Debug</p>
     <div id="start" class="overlay">
       <h1>PANZERKNACKER</h1>
+      <div id="modeSelect" class="modes">
+        <button data-mode="leicht">Leicht</button>
+        <button data-mode="normal" class="active">Normal</button>
+        <button data-mode="schwer">Schwer</button>
+      </div>
       <label for="seedInput">Seed (leer = zufällig)</label>
       <input id="seedInput" inputmode="numeric" autocomplete="off" placeholder="z.B. 4711" />
       <button id="startBtn">Start</button>
+      <button id="dailyBtn" class="secondary">Tages-Seed spielen</button>
+      <div class="opts">
+        <label><input type="checkbox" id="optThreat" checked /> Bedrohungslinien</label>
+        <label><input type="checkbox" id="optMotion" /> Reduzierte Bewegung</label>
+      </div>
       <p id="beststats" class="beststats"></p>
+      <button id="resetBtn" class="linklike">Bestwerte zur&uuml;cksetzen</button>
     </div>
   </main>
   <script type="module" src="src/main.js"></script>

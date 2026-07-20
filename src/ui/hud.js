@@ -16,18 +16,56 @@ function fmtTime(s) {
 export function createHud(ctx) {
   function drawBar(run) {
     const { alive, total } = enemyCount(run);
+    const st = run.state;
+    const p = st.player;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, WIDTH, 22);
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#e8e4d8';
-    ctx.fillText(`Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`, 8, 16);
+    ctx.fillText(
+      run.endless ? `Endlos ${run.roomIndex}` : `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
+      8,
+      16,
+    );
+    // Munition: verbleibende Kugeln (Magazin) und Minen.
+    const liveBullets = st.bullets.filter((b) => b.owner === p && !b.dead).length;
+    const liveMines = st.mines.filter((m) => m.owner === p && !m.dead).length;
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#9aa0a8';
+    ctx.fillText(
+      `Kugeln ${p.cfg.magazine - liveBullets}/${p.cfg.magazine}  Minen ${p.cfg.mines - liveMines}/${p.cfg.mines}`,
+      118,
+      15,
+    );
+    ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
+    // Letzter Gegner: Zaehler pulsiert (wichtig, wenn er unsichtbar ist).
+    ctx.fillStyle = alive === 1
+      ? `rgba(255,210,90,${0.55 + 0.45 * Math.sin(run.playTime * 6)})`
+      : '#e8e4d8';
     ctx.fillText(`Gegner ${alive}/${total}`, WIDTH / 2, 16);
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#ff6a5e';
+    // Run-Timer (Speedrun-Motivation, Bestzeit wird gespeichert).
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#9aa0a8';
+    ctx.fillText(fmtTime(run.playTime), WIDTH - 62, 15);
+    ctx.font = 'bold 13px monospace';
+    // Letztes Leben: Herz pulsiert als Warnung.
+    ctx.fillStyle = run.lives === 1
+      ? `rgba(255,80,60,${0.55 + 0.45 * Math.sin(run.playTime * 7)})`
+      : '#ff6a5e';
     ctx.fillText(`♥ ${run.lives}`, WIDTH - 8, 16);
     ctx.textAlign = 'left';
+
+    // Aktive Combo gross unter der Leiste.
+    if (run.combo >= 3 && run.comboTimer > 0) {
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px monospace';
+      ctx.fillStyle = `rgba(255,210,60,${Math.min(1, run.comboTimer)})`;
+      ctx.fillText(`COMBO ×${run.combo}`, WIDTH / 2, 44);
+      ctx.textAlign = 'left';
+    }
   }
 
   function dim(alpha) {
@@ -60,19 +98,41 @@ export function createHud(ctx) {
   function drawEnd(run, title, color) {
     dim(0.8);
     const s = run.finalStats || {};
+    // Kills pro Typ (Top 4), Labels aus tanks.json.
+    const byType = Object.entries(run.killsByType || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([ty, n]) => `${run.data.types[ty]?.label || ty} ×${n}`)
+      .join(' · ');
     center(
       [
         [title, 'bold 40px monospace', color],
         [`Zeit ${fmtTime(run.playTime)}   Kills ${run.kills}   Tode ${run.deaths}`, '16px monospace', '#e8e4d8'],
-        [`Raeume: ${run.roomsCleared}   Upgrades: ${run.upgradeChoices}`, '16px monospace', '#e8e4d8'],
-        [`Seed: ${run.seed}`, 'bold 16px monospace', '#8ecae6'],
+        [
+          `Raeume: ${run.roomsCleared}   Upgrades: ${run.upgradeChoices}   Quote: ${
+            run.shotsFired ? Math.round((100 * run.kills) / run.shotsFired) : 0
+          } %`,
+          '16px monospace',
+          '#e8e4d8',
+        ],
+        [byType || ' ', '13px monospace', '#9aa0a8'],
+        [`Beste Combo: ×${run.bestCombo}`, '13px monospace', '#ffd23c'],
+        [
+          title === 'GAME OVER' && run.lastDeathCause
+            ? `Erledigt durch ${run.lastDeathCause}`
+            : ' ',
+          '13px monospace',
+          '#d47ba6',
+        ],
+        [run.newRecord ? '★ Neuer Rekord! ★' : ' ', 'bold 15px monospace', '#ffd23c'],
+        [`Seed: ${run.seed}   Modus: ${run.mode}`, 'bold 16px monospace', '#8ecae6'],
         [
           `Best: ${s.mostRooms ?? 0} Raeume | ${s.totalKills ?? 0} Kills gesamt` +
             (s.fastestWinS ? ` | Sieg ${fmtTime(s.fastestWinS)}` : ''),
           '13px monospace',
           '#9aa0a8',
         ],
-        ['Enter: neuer Run', '15px monospace', '#c8b24a'],
+        ['Tippen oder Enter: neuer Run', '15px monospace', '#c8b24a'],
       ],
       HEIGHT / 2 - 70,
       32,
@@ -91,15 +151,23 @@ export function createHud(ctx) {
     ctx.textAlign = 'left';
   }
 
-  function drawPause() {
+  function drawPause(run) {
     dim(0.6);
+    // Aktive Upgrades auflisten (Namen aus upgrades.json).
+    const defs = run.upgradesData?.upgrades || {};
+    const active = Object.entries(run.upgrades || {})
+      .filter(([, lvl]) => lvl > 0)
+      .map(([id, lvl]) => `${defs[id]?.name || id} ${lvl}`)
+      .join(' · ');
     center(
       [
         ['PAUSE', 'bold 36px monospace', '#e8e4d8'],
-        ['Esc/P oder Pause-Button: weiter', '14px monospace', '#9aa0a8'],
+        [active ? `Upgrades: ${active}` : 'Noch keine Upgrades', '13px monospace', '#c8b24a'],
+        [`Seed: ${run.seed}   Modus: ${run.mode}`, '13px monospace', '#8ecae6'],
+        ['Esc/P: weiter   R: Neustart   M: Hauptmenü', '13px monospace', '#9aa0a8'],
       ],
-      HEIGHT / 2,
-      32,
+      HEIGHT / 2 - 16,
+      30,
     );
   }
 
@@ -110,7 +178,7 @@ export function createHud(ctx) {
       if (run.phase === 'transition') drawTransition(run);
       else if (run.phase === 'gameover') drawEnd(run, 'GAME OVER', '#ff6a5e');
       else if (run.phase === 'victory') drawEnd(run, 'SIEG!', '#7ade6a');
-      if (opts.paused && run.phase === 'playing') drawPause();
+      if (opts.paused && run.phase === 'playing') drawPause(run);
     },
   };
 }
