@@ -95,8 +95,15 @@ export function createHud(ctx) {
       [
         [title, 'bold 40px monospace', color],
         [`Zeit ${fmtTime(run.playTime)}   Kills ${run.kills}   Tode ${run.deaths}`, '16px monospace', '#e8e4d8'],
-        [`Raeume: ${run.roomsCleared}   Upgrades: ${run.upgradeChoices}`, '16px monospace', '#e8e4d8'],
+        [
+          `Raeume: ${run.roomsCleared}   Upgrades: ${run.upgradeChoices}   Quote: ${
+            run.shotsFired ? Math.round((100 * run.kills) / run.shotsFired) : 0
+          } %`,
+          '16px monospace',
+          '#e8e4d8',
+        ],
         [byType || ' ', '13px monospace', '#9aa0a8'],
+        [run.newRecord ? '★ Neuer Rekord! ★' : ' ', 'bold 15px monospace', '#ffd23c'],
         [`Seed: ${run.seed}`, 'bold 16px monospace', '#8ecae6'],
         [
           `Best: ${s.mostRooms ?? 0} Raeume | ${s.totalKills ?? 0} Kills gesamt` +

@@ -111,6 +111,12 @@ export function createAudio() {
       } else if (name === 'death') beep(500, 0.28, 0.12, 'sawtooth', 60);
       else if (name === 'mine') beep(700, 0.06, 0.08, 'square');
       else if (name === 'trap') beep(160, 0.25, 0.12, 'sawtooth');
+      else if (name === 'clear' && ctx) {
+        // Raum geschafft: kurzes aufsteigendes Jingle.
+        [392, 523, 659].forEach((f, i) => beepAt(f, ctx.currentTime + i * 0.09, 0.12, 0.1, 'triangle'));
+      } else if (name === 'fanfare' && ctx) {
+        [523, 659, 784, 1047].forEach((f, i) => beepAt(f, ctx.currentTime + i * 0.13, 0.22, 0.12, 'square'));
+      }
     },
   };
 }

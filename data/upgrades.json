@@ -57,7 +57,8 @@
       ],
       "stunS": 4.0,
       "radiusPx": 9,
-      "armDelayS": 0.8
+      "armDelayS": 0.8,
+      "maxActive": 3
     },
     "doppelrohr": {
       "name": "Doppelrohr",

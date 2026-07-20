@@ -30,6 +30,9 @@ export function updateTraps(state, dt) {
         dead: false,
       });
       state.sounds.push('mine');
+      // Obergrenze: aelteste Falle verfaellt (kein Fallen-Teppich).
+      const live = state.traps.filter((t) => !t.dead);
+      if (live.length > (cfg.trapMaxActive || 3)) live[0].dead = true;
     }
   }
 

@@ -8,7 +8,7 @@
 // Damit erzeugt derselbe Seed exakt denselben Run.
 
 import { mulberry32 } from '../core/rng.js';
-import { recordRun } from '../core/storage.js';
+import { recordRun, loadStats } from '../core/storage.js';
 import { createState, stepState } from './state.js';
 
 const TRANSITION_S = 1.5;
@@ -72,6 +72,7 @@ function startRoom(run) {
   run.seenRoomKills = 0;
   run.seenRoomDeaths = 0;
   run.seenKillLog = 0;
+  run.seenRoomShots = 0;
 }
 
 // Vom "Weiter"-Button der Raumvorschau aufgerufen.
@@ -91,6 +92,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed) {
     upgradeChoices: 0,
     pendingOffers: null,
     killsByType: {}, // Statistik fuer die Endscreens
+    shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)
     seed: seed >>> 0,
     genRng: mulberry32(seed >>> 0),
     roomIndex: 1,
@@ -110,12 +112,18 @@ export function createRun(data, tiles, difficulty, upgradesData, seed) {
 
 function finishRun(run, won) {
   run.phase = won ? 'victory' : 'gameover';
+  // Rekord-Erkennung VOR dem Eintragen (alte Bestwerte vergleichen).
+  const prev = loadStats();
+  run.newRecord =
+    (won && run.playTime < (prev.fastestWinS ?? Infinity)) ||
+    run.roomsCleared > (prev.mostRooms || 0);
   run.finalStats = recordRun({
     won,
     rooms: run.roomsCleared,
     kills: run.kills,
     timeS: run.playTime,
   });
+  if (won) run.state.sounds.push('fanfare');
 }
 
 export function stepRun(run, cmd, dt) {
@@ -139,6 +147,10 @@ export function stepRun(run, cmd, dt) {
     const ty = st.killLog[run.seenKillLog++];
     run.killsByType[ty] = (run.killsByType[ty] || 0) + 1;
   }
+  if (st.playerShots > run.seenRoomShots) {
+    run.shotsFired += st.playerShots - run.seenRoomShots;
+    run.seenRoomShots = st.playerShots;
+  }
 
   // Spielertod: Leben abziehen; bei 0 ist der Run vorbei (der Raum-
   // Neustart passiert sonst automatisch ueber state.respawnTimer).
@@ -157,6 +169,7 @@ export function stepRun(run, cmd, dt) {
   const enemiesLeft = st.tanks.filter((t) => t !== st.player && t.alive).length;
   if (enemiesLeft === 0 && st.player.alive) {
     run.roomsCleared++;
+    st.sounds.push('clear');
     // Extraleben alle 5 geschaffte Raeume.
     if (run.roomsCleared % run.difficulty.extraLifeEveryClearedRooms === 0) {
       run.lives++;

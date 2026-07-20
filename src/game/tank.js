@@ -137,6 +137,7 @@ export function fireBullet(tank, state) {
     tank.shots--;
     return false;
   }
+  if (tank === state.player) state.playerShots++;
   state.sounds.push('shoot');
   tank.cooldown = tank.cfg.fireCooldown;
   return true;
