@@ -49,7 +49,8 @@ function startRoom(run) {
       ...buyEnemies(diff, run.genRng, run.roomIndex, diff.finalRoom.supportBudget),
     ].slice(0, run.tiles.finalRoom.enemySpawns.length);
   } else {
-    const budget = diff.budget.base + run.roomIndex * diff.budget.perRoom;
+    const budget =
+      (diff.budget.base + run.roomIndex * diff.budget.perRoom) * run.budgetMult;
     enemyTypes = buyEnemies(diff, run.genRng, run.roomIndex, budget);
     // Raumcharakter: Kachelgewichte alternieren (Spec Abschnitt 7B).
     const chars = diff.roomCharacters;
@@ -86,12 +87,19 @@ export function enterRoom(run) {
   run.transitionTimer = TRANSITION_S;
 }
 
-export function createRun(data, tiles, difficulty, upgradesData, seed) {
+export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey = 'normal') {
+  const mode = (difficulty.modes && difficulty.modes[modeKey]) || {
+    label: 'Normal',
+    budgetMult: 1,
+    lives: difficulty.lives,
+  };
   const run = {
     data,
     tiles,
     difficulty,
     upgradesData,
+    mode: mode.label,
+    budgetMult: mode.budgetMult,
     upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}
     upgradeChoices: 0,
     pendingOffers: null,
@@ -100,7 +108,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed) {
     seed: seed >>> 0,
     genRng: mulberry32(seed >>> 0),
     roomIndex: 1,
-    lives: difficulty.lives,
+    lives: mode.lives,
     kills: 0, // ueber den ganzen Run
     deaths: 0,
     roomsCleared: 0,

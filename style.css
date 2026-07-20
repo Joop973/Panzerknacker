@@ -69,6 +69,28 @@ html, body {
   color: #9aa0a8;
 }
 
+.modes {
+  display: flex;
+  gap: 0;
+}
+
+.modes button {
+  background: #1b1b22;
+  border: 2px solid #4a4a5a;
+  color: #9aa0a8;
+  font-family: monospace;
+  font-size: 15px;
+  padding: 8px 22px;
+  cursor: pointer;
+}
+
+.modes button.active {
+  background: #c8b24a;
+  border-color: #c8b24a;
+  color: #1a1408;
+  font-weight: bold;
+}
+
 .overlay input {
   background: #1b1b22;
   border: 2px solid #4a4a5a;

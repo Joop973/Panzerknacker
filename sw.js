@@ -2,7 +2,7 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v8';
+const CACHE = 'panzerknacker-v9';
 
 const ASSETS = [
   './',

@@ -115,7 +115,7 @@ export function createHud(ctx) {
           '#d47ba6',
         ],
         [run.newRecord ? '★ Neuer Rekord! ★' : ' ', 'bold 15px monospace', '#ffd23c'],
-        [`Seed: ${run.seed}`, 'bold 16px monospace', '#8ecae6'],
+        [`Seed: ${run.seed}   Modus: ${run.mode}`, 'bold 16px monospace', '#8ecae6'],
         [
           `Best: ${s.mostRooms ?? 0} Raeume | ${s.totalKills ?? 0} Kills gesamt` +
             (s.fastestWinS ? ` | Sieg ${fmtTime(s.fastestWinS)}` : ''),
@@ -153,8 +153,8 @@ export function createHud(ctx) {
       [
         ['PAUSE', 'bold 36px monospace', '#e8e4d8'],
         [active ? `Upgrades: ${active}` : 'Noch keine Upgrades', '13px monospace', '#c8b24a'],
-        [`Seed: ${run.seed}`, '13px monospace', '#8ecae6'],
-        ['Esc/P oder Pause-Button: weiter', '14px monospace', '#9aa0a8'],
+        [`Seed: ${run.seed}   Modus: ${run.mode}`, '13px monospace', '#8ecae6'],
+        ['Esc/P: weiter   R: Neustart   M: Hauptmenü', '13px monospace', '#9aa0a8'],
       ],
       HEIGHT / 2 - 16,
       30,

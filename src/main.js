@@ -74,6 +74,20 @@ async function init() {
   let upgradeShown = false;
   let previewShown = false;
   let toast = null;
+  let lastSeed = 0;
+  let mode = getPref('mode', 'normal');
+
+  // Schwierigkeits-Auswahl (Segment-Buttons).
+  const modeSelect = document.getElementById('modeSelect');
+  modeSelect.querySelectorAll('button').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+    btn.addEventListener('click', () => {
+      mode = btn.dataset.mode;
+      setPref('mode', mode);
+      modeSelect.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
 
   let fps = 0;
   let frameCount = 0;
@@ -83,7 +97,8 @@ async function init() {
     const raw = seedInput.value.trim();
     const seed = raw === '' ? Date.now() >>> 0 : Number(raw) >>> 0;
     seedInput.value = String(seed);
-    run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
+    run = createRun(tanksData, tilesData, diffData, upgradesData, seed, mode);
+    lastSeed = seed;
     startOverlay.classList.add('hidden');
     upgradeScreen.hide();
     preview.hide();
@@ -271,8 +286,22 @@ async function init() {
     }
   });
   window.addEventListener('keydown', (e) => {
-    if (e.key !== 'Enter' || !run) return;
-    if (run.phase === 'gameover' || run.phase === 'victory') backToStart();
+    if (!run) return;
+    if (e.key === 'Enter' && (run.phase === 'gameover' || run.phase === 'victory')) {
+      backToStart();
+    }
+    // Pause-Menue: R = Run mit gleichem Seed neu starten, M = Hauptmenue.
+    if (pause.isPaused() && run.phase === 'playing') {
+      if (e.code === 'KeyR') {
+        run = createRun(tanksData, tilesData, diffData, upgradesData, lastSeed, mode);
+        previewShown = false;
+        upgradeShown = false;
+        pause.set(false);
+      } else if (e.code === 'KeyM') {
+        pause.set(false);
+        backToStart();
+      }
+    }
   });
   canvas.addEventListener('pointerup', () => {
     if (run && (run.phase === 'gameover' || run.phase === 'victory')) backToStart();
