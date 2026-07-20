@@ -110,6 +110,39 @@ export function drawExplosions(ctx, state) {
   }
 }
 
+// Bedrohungslinien: jeder Gegner mit freier Sicht auf den Spieler zeigt
+// eine schwache rote Linie -- telegraphiert Gefahr (auch der unsichtbare
+// Weisse verraet sich so, sobald er zielen kann).
+export function drawThreatLines(ctx, state) {
+  const p = state.player;
+  if (!p.alive) return;
+  const step = state.data.ai.raycastStepPx;
+  ctx.lineWidth = 1;
+  for (const t of state.tanks) {
+    if (t === p || !t.alive) continue;
+    const dist = Math.hypot(p.x - t.x, p.y - t.y);
+    const dx = ((p.x - t.x) / dist) * step;
+    const dy = ((p.y - t.y) / dist) * step;
+    let x = t.x;
+    let y = t.y;
+    let blocked = false;
+    for (let d = step; d < dist - t.cfg.radius; d += step) {
+      x += dx;
+      y += dy;
+      if (state.isSolid(x, y)) {
+        blocked = true;
+        break;
+      }
+    }
+    if (blocked) continue;
+    ctx.strokeStyle = 'rgba(255,70,60,0.22)';
+    ctx.beginPath();
+    ctx.moveTo(t.x, t.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+}
+
 // Schwebende Kurztexte ("Abpraller!").
 export function drawTexts(ctx, state) {
   ctx.font = 'bold 12px monospace';

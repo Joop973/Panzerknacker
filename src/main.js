@@ -15,7 +15,7 @@ import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
 import { createTutorial } from './ui/hud.js';
 import { getFlag, setFlag, loadStats, getPref, setPref, resetStats } from './core/storage.js';
-import { createRenderer } from './render/renderer.js';
+import { createRenderer, renderOpts } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
 import { createHud } from './ui/hud.js';
@@ -77,6 +77,22 @@ async function init() {
   let toast = null;
   let lastSeed = 0;
   let mode = getPref('mode', 'normal');
+
+  // Darstellungs-Optionen (gespeichert).
+  renderOpts.threatLines = getPref('threatLines', true);
+  renderOpts.reduceMotion = getPref('reduceMotion', false);
+  const optThreat = document.getElementById('optThreat');
+  const optMotion = document.getElementById('optMotion');
+  optThreat.checked = renderOpts.threatLines;
+  optMotion.checked = renderOpts.reduceMotion;
+  optThreat.addEventListener('change', () => {
+    renderOpts.threatLines = optThreat.checked;
+    setPref('threatLines', optThreat.checked);
+  });
+  optMotion.addEventListener('change', () => {
+    renderOpts.reduceMotion = optMotion.checked;
+    setPref('reduceMotion', optMotion.checked);
+  });
 
   // Schwierigkeits-Auswahl (Segment-Buttons).
   const modeSelect = document.getElementById('modeSelect');

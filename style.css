@@ -235,6 +235,18 @@ html, body {
   color: #9aa0a8;
 }
 
+.opts {
+  display: flex;
+  gap: 18px;
+  font-family: monospace;
+  font-size: 13px;
+  color: #9aa0a8;
+}
+
+.opts label {
+  cursor: pointer;
+}
+
 .overlay button.linklike {
   background: none;
   border: none;

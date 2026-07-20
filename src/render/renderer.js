@@ -13,7 +13,12 @@ import {
   drawParticles,
   drawExplosions,
   drawTexts,
+  drawThreatLines,
 } from './effects.js';
+
+// Optionen (von main.js gesetzt): reduzierte Bewegung schaltet
+// Screenshake ab; Bedrohungslinien sind optional.
+export const renderOpts = { reduceMotion: false, threatLines: true };
 
 const COLORS = {
   floor: '#1b1b22',
@@ -296,7 +301,7 @@ export function createRenderer(ctx) {
   return {
     render(state, alpha, tracks) {
       // Screenshake: deterministisches Wackeln aus der Spielzeit.
-      const sh = state.shake || 0;
+      const sh = renderOpts.reduceMotion ? 0 : state.shake || 0;
       ctx.save();
       if (sh > 0.1) {
         ctx.translate(Math.sin(state.time * 47) * sh, Math.cos(state.time * 53) * sh * 0.7);
@@ -305,6 +310,7 @@ export function createRenderer(ctx) {
       tracks.draw(ctx);
       drawMines(ctx, state);
       drawTraps(ctx, state);
+      if (renderOpts.threatLines) drawThreatLines(ctx, state);
       drawWalls(state.walls);
       for (const t of state.tanks) drawTank(state, t, alpha);
       drawRadar(ctx, state);
@@ -318,7 +324,8 @@ export function createRenderer(ctx) {
 
       // Roter Flash nach eigenem Tod (ungeschuettelt, ueber allem).
       if (state.damageFlash > 0) {
-        ctx.fillStyle = `rgba(255,60,40,${state.damageFlash * 0.35})`;
+        const a = state.damageFlash * (renderOpts.reduceMotion ? 0.18 : 0.35);
+        ctx.fillStyle = `rgba(255,60,40,${a})`;
         ctx.fillRect(0, 0, WIDTH, HEIGHT);
       }
     },
