@@ -38,9 +38,8 @@ export function applyUpgrades(cfg, ups, upsData) {
   cfg.tungsten = l('wolframkern') > 0;
   const U = upsData ? upsData.upgrades : {};
   if (l('sprengschuss')) {
-    cfg.explosionEveryShots = U.sprengschuss.everyShots; // jeder 12. Schuss
+    cfg.explosionEveryShots = U.sprengschuss.everyShots; // jeder 4. Schuss
     cfg.shotExplosionRadius = U.sprengschuss.radiusPx;
-    cfg.burstCount = U.sprengschuss.burst; // Salve aus 3 abprallenden Sprengkugeln
   }
   // Sprengmunition: jede Kugel explodiert, keine Minen, Magazin auf 1 --
   // skaliert aber mit Magazin-Upgrades weiter (kein harter Deckel).
@@ -116,6 +115,32 @@ export function applyUpgrades(cfg, ups, upsData) {
   if (l('blutrausch')) {
     cfg.bloodlust = U.blutrausch.durationS;
     cfg.bloodlustSpeed = U.blutrausch.speedMult;
+  }
+
+  // --- 5 innovative Upgrades ---
+  if (l('kampfdrohne')) {
+    cfg.drone = {
+      intervalS: U.kampfdrohne.intervalS,
+      orbitPx: U.kampfdrohne.orbitPx,
+      bulletSpeed: U.kampfdrohne.bulletSpeed,
+    };
+  }
+  if (l('schrapnell')) {
+    cfg.schrapnell = U.schrapnell.count;
+    cfg.schrapnellSpeed = U.schrapnell.bulletSpeed;
+  }
+  if (l('raketenantrieb')) cfg.recoilPx = U.raketenantrieb.recoilPx;
+  if (l('konterschild')) {
+    cfg.counterShield = true;
+    cfg.counterShieldCount = U.konterschild.count;
+  }
+  // Ueberladung: verstaerkt alle eigenen Explosionsradien.
+  if (l('ueberladung')) {
+    const m = U.ueberladung.mult;
+    if (cfg.shotExplosionRadius) cfg.shotExplosionRadius *= m;
+    if (cfg.kamikazeRadius) cfg.kamikazeRadius *= m;
+    if (cfg.chainLightning) cfg.chainLightning *= m;
+    cfg.mineRadiusMult = (cfg.mineRadiusMult || 1) * m;
   }
   return cfg;
 }

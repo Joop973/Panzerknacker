@@ -327,6 +327,16 @@ export function createRenderer(ctx) {
       if (renderOpts.threatLines) drawThreatLines(ctx, state);
       drawWalls(state.walls);
       for (const t of state.tanks) drawTank(state, t, alpha);
+      // Kampfdrohne.
+      if (state.player.cfg.drone && state.player.alive && state.player.droneX !== undefined) {
+        ctx.fillStyle = '#8ecaf0';
+        ctx.strokeStyle = '#1a3050';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(state.player.droneX, state.player.droneY, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
       drawRadar(ctx, state);
       drawBullets(state.bullets, alpha);
       drawFlashes(ctx, state);

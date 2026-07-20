@@ -8,7 +8,7 @@
 import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
 import { mulberry32 } from '../core/rng.js';
 import { createTank, moveTank, fireBullet, layMine, dashTank } from './tank.js';
-import { updateBullet } from './bullet.js';
+import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
 import { updateEnemy } from './ai.js';
@@ -125,6 +125,10 @@ export function createState(data, tiles, opts) {
         tank.protect = Math.max(tank.protect, 0.6);
         state.sounds.push('shield');
         state.spawnParticles(tank.x, tank.y, '#8ecaf0', 12, 130);
+        // Konterschild: feuert beim Bruch einen Kugelkranz.
+        if (tank.cfg.counterShield) {
+          spawnRadialBullets(state, tank, tank.x, tank.y, tank.cfg.counterShieldCount, 150);
+        }
         return;
       }
       tank.alive = false;
@@ -182,6 +186,65 @@ export function createState(data, tiles, opts) {
     },
   };
   return state;
+}
+
+// Feuert count Kugeln gleichmaessig im Kreis (Schrapnell/Konterschild).
+function spawnRadialBullets(state, owner, x, y, count, speed) {
+  const sp = speed || owner.cfg.schrapnellSpeed || 150;
+  for (let i = 0; i < count; i++) {
+    const a = (i / count) * Math.PI * 2;
+    state.bullets.push(
+      createBullet(x + Math.cos(a) * 10, y + Math.sin(a) * 10, a, {
+        speed: sp,
+        radius: state.data.physics.bulletRadius,
+        ricochets: 0,
+        owner,
+        kind: 'bullet',
+      }),
+    );
+  }
+}
+
+// Kampfdrohne: umkreist den Spieler und feuert selbst auf den naechsten
+// Gegner (deterministisch: fester Drehwinkel, naechstes Ziel nach Distanz).
+function updateDrone(state, dt) {
+  const p = state.player;
+  const d = p.cfg.drone;
+  if (!d || !p.alive) return;
+  if (p.droneAngle === undefined) {
+    p.droneAngle = 0;
+    p.droneCd = d.intervalS;
+  }
+  p.droneAngle += 1.5 * dt;
+  const dx = p.x + Math.cos(p.droneAngle) * d.orbitPx;
+  const dy = p.y + Math.sin(p.droneAngle) * d.orbitPx;
+  p.droneX = dx;
+  p.droneY = dy;
+  p.droneCd -= dt;
+  if (p.droneCd > 0) return;
+  let best = null;
+  let bestDist = Infinity;
+  for (const t of state.tanks) {
+    if (t === p || !t.alive) continue;
+    const dd = (t.x - dx) ** 2 + (t.y - dy) ** 2;
+    if (dd < bestDist) {
+      bestDist = dd;
+      best = t;
+    }
+  }
+  if (!best) return;
+  p.droneCd = d.intervalS;
+  const a = Math.atan2(best.y - dy, best.x - dx);
+  state.bullets.push(
+    createBullet(dx, dy, a, {
+      speed: d.bulletSpeed,
+      radius: state.data.physics.bulletRadius,
+      ricochets: 0,
+      owner: p,
+      kind: 'bullet',
+    }),
+  );
+  state.flashes.push({ x: dx, y: dy, age: 0 });
 }
 
 // Raum-Neustart nach Spielertod (Spec Abschnitt 8): identisches Layout,
@@ -304,6 +367,7 @@ export function stepState(state, cmd, dt) {
     }
   }
 
+  updateDrone(state, dt);
   updateMines(state, dt);
   updateTraps(state, dt);
 
@@ -313,6 +377,9 @@ export function stepState(state, cmd, dt) {
     if (b.dead && b.explosive && !b.detonated) {
       b.detonated = true;
       explodeAt(state, b.x, b.y, b.explosionRadius);
+      // Schrapnell: Splitterkugeln in alle Richtungen.
+      const n = b.owner?.cfg?.schrapnell;
+      if (n && b.owner.alive) spawnRadialBullets(state, b.owner, b.x, b.y, n);
     }
   }
 

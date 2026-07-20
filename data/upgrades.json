@@ -39,19 +39,17 @@
     },
     "sprengschuss": {
       "name": "Sprengschuss",
-      "desc": "Jeder 12. Schuss feuert 3 abprallende Sprengkugeln",
+      "desc": "Jeder 4. Schuss ist eine abprallende Sprengkugel",
       "max": 1,
-      "everyShots": 12,
-      "radiusPx": 60,
-      "burst": 3
+      "everyShots": 4,
+      "radiusPx": 60
     },
     "krallenfalle": {
       "name": "Krallenfalle",
       "desc": "Alle 600 gefahrene Pixel bleibt eine Falle liegen: wer hineinfährt (auch du!), steht 4 s still",
-      "max": 2,
+      "max": 1,
       "everyPx": [
-        600,
-        400
+        600
       ],
       "stunS": 4.0,
       "radiusPx": 9,
@@ -179,6 +177,39 @@
       "max": 1,
       "durationS": 1.4,
       "speedMult": 1.3
+    },
+    "kampfdrohne": {
+      "name": "Kampfdrohne",
+      "desc": "Eine Drohne umkreist dich und feuert selbst auf Gegner",
+      "max": 1,
+      "intervalS": 1.3,
+      "orbitPx": 28,
+      "bulletSpeed": 160
+    },
+    "schrapnell": {
+      "name": "Schrapnell",
+      "desc": "Deine Explosionen schleudern 6 Splitterkugeln in alle Richtungen",
+      "max": 1,
+      "count": 6,
+      "bulletSpeed": 150
+    },
+    "raketenantrieb": {
+      "name": "Raketenantrieb",
+      "desc": "Jeder Schuss stößt dich zurück — nutze den Rückstoß zum Ausweichen",
+      "max": 1,
+      "recoilPx": 15
+    },
+    "konterschild": {
+      "name": "Konterschild",
+      "desc": "Fängt einen Treffer ab (1× pro Leben) und feuert dabei einen Kugelkranz",
+      "max": 1,
+      "count": 10
+    },
+    "ueberladung": {
+      "name": "Überladung",
+      "desc": "Alle deine Explosionen (Schüsse, Minen, Kettenblitz) +50 % Radius",
+      "max": 1,
+      "mult": 1.5
     }
   },
   "fallback": {

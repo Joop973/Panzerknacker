@@ -36,7 +36,7 @@ export function createTank(type, cfg, x, y) {
     dashCd: 0, // Dash-Cooldown
     berserkerFire: 1, // dynamischer Feuerraten-Multiplikator (Berserker)
     berserkerSpeed: 1, // dynamischer Tempo-Multiplikator (Berserker)
-    shieldReady: (cfg && cfg.shield) || false, // Schild aufgeladen?
+    shieldReady: (cfg && (cfg.shield || cfg.counterShield)) || false, // Schild geladen?
     alive: true,
     ai: {}, // Zustandsspeicher der KI-Verhalten (leer beim Spieler)
   };
@@ -115,20 +115,15 @@ export function fireBullet(tank, state) {
   if (liveBulletsOf(state, tank) >= tank.cfg.magazine) return false;
 
   tank.shots++;
-  // Sprengschuss-Salve: jeder N-te Schuss ist eine Salve aus mehreren
-  // ABPRALLENDEN Sprengkugeln (statt der normalen Schussform).
-  const burstProc =
+  // Sprengschuss: jeder N-te Schuss ist eine ABPRALLENDE Sprengkugel.
+  const explosiveShot =
     !tank.cfg.allExplosive &&
     tank.cfg.explosionEveryShots > 0 &&
     tank.shots % tank.cfg.explosionEveryShots === 0;
 
-  // Schusswinkel: Sprengsalve > Streuschuss-Faecher > Doppelrohr > Einzel.
+  // Schusswinkel: Streuschuss-Faecher > Doppelrohr > Einzelschuss.
   let angles;
-  if (burstProc) {
-    angles = [];
-    const n = tank.cfg.burstCount || 3;
-    for (let i = 0; i < n; i++) angles.push(tank.turret + (i - (n - 1) / 2) * 0.16);
-  } else if (tank.cfg.spreadCount > 1) {
+  if (tank.cfg.spreadCount > 1) {
     angles = [];
     const n = tank.cfg.spreadCount;
     for (let i = 0; i < n; i++) {
@@ -147,19 +142,19 @@ export function fireBullet(tank, state) {
     const a = angles[i];
     const mx = tank.x + Math.cos(a) * muzzle;
     const my = tank.y + Math.sin(a) * muzzle;
-    // Sprengsalve prallt ab (mind. 1 Abpraller); Sprengmunition/
+    // Sprengschuss prallt ab (mind. 1 Abpraller); Sprengmunition/
     // Glaskanone zuenden hart an der Wand (detonateOnWall).
-    const isExplosive = burstProc || tank.cfg.allExplosive;
+    const isExplosive = explosiveShot || tank.cfg.allExplosive;
     state.bullets.push(
       createBullet(mx, my, a, {
         speed: tank.cfg.bulletSpeed,
         radius: tank.cfg.bulletRadius,
-        ricochets: burstProc ? Math.max(1, tank.cfg.ricochets) : tank.cfg.ricochets,
+        ricochets: explosiveShot ? Math.max(1, tank.cfg.ricochets) : tank.cfg.ricochets,
         owner: tank,
         kind: tank.cfg.weapon,
         tungsten: tank.cfg.tungsten || false,
         explosive: isExplosive,
-        detonateOnWall: isExplosive && !burstProc,
+        detonateOnWall: isExplosive && !explosiveShot,
         explosionRadius: tank.cfg.shotExplosionRadius,
         phaseWalls: tank.cfg.phaseWalls || false,
         homing: tank.cfg.homing || 0,
@@ -175,6 +170,12 @@ export function fireBullet(tank, state) {
   }
   if (tank === state.player) state.playerShots++;
   if (tank.cfg.afterburnerMult) tank.boostTimer = tank.cfg.afterburnerS; // Nachbrenner
+  // Raketenantrieb: Rueckstoss entgegen der Schussrichtung.
+  if (tank.cfg.recoilPx) {
+    tank.x -= Math.cos(tank.turret) * tank.cfg.recoilPx;
+    tank.y -= Math.sin(tank.turret) * tank.cfg.recoilPx;
+    resolveCircleWalls(tank, tank.cfg.radius, state.walls);
+  }
   state.sounds.push('shoot');
   tank.cooldown = tank.cfg.fireCooldown * (tank.berserkerFire || 1);
   return true;
