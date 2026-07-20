@@ -44,7 +44,7 @@ export function explodeAt(state, x, y, R) {
   state.spawnParticles?.(x, y, '#ffb347', 14, 160);
 
   for (const t of state.tanks) {
-    if (!t.alive) continue;
+    if (!t.alive || t.protect > 0) continue;
     if (circlesOverlap(x, y, R, t.x, t.y, t.cfg.radius)) {
       state.killTank(t, 'eine Explosion');
     }

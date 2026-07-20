@@ -168,6 +168,7 @@ function respawnPlayer(state) {
     state.playerSpawn.x,
     state.playerSpawn.y,
   );
+  fresh.protect = state.data.physics.respawnProtectS; // kurzer Spawn-Schutz
   state.tanks[0] = fresh;
   state.player = fresh;
   for (const t of state.tanks) {
@@ -201,6 +202,7 @@ export function stepState(state, cmd, dt) {
     if (!t.alive) continue;
     t.cooldown = Math.max(0, t.cooldown - dt);
     t.stunTimer = Math.max(0, t.stunTimer - dt);
+    if (t.protect > 0) t.protect = Math.max(0, t.protect - dt);
   }
 
   if (!p.alive) {
@@ -252,6 +254,7 @@ export function stepState(state, cmd, dt) {
     for (const t of state.tanks) {
       if (!t.alive) continue;
       if (b.owner === t && b.age < grace) continue;
+      if (t.protect > 0) continue; // Spawn-Schutz
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
         b.dead = true;
         // Banden-Kill-Feedback: Gegner mit abgeprallter Kugel erwischt.

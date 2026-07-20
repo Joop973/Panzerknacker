@@ -152,6 +152,9 @@ export function createRenderer(ctx) {
     const y = lerp(t.prevY, t.y, alpha);
     const r = t.cfg.radius;
 
+    // Spawn-Schutz: schnelles Blinken (jede zweite Blinkphase unsichtbar).
+    if (t.protect > 0 && Math.sin(t.protect * 30) < 0) return;
+
     ctx.globalAlpha = bodyAlpha;
     const body = TANK_COLORS[t.type] || '#ffffff';
     const isPlayer = t.type === 'player';

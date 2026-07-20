@@ -3,7 +3,8 @@
     "tankRadius": 12,
     "bulletRadius": 4,
     "fireCooldownS": 0.25,
-    "shooterGraceS": 0.08
+    "shooterGraceS": 0.08,
+    "respawnProtectS": 1.5
   },
   "mine": {
     "radiusPx": 7,

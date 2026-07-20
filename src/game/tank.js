@@ -27,6 +27,7 @@ export function createTank(type, cfg, x, y) {
     vx: 0, // tatsaechliche Geschwindigkeit (px/s, nach Kollisionen)
     vy: 0, // -- gebraucht vom Vorhaltezielen (t_black)
     cooldown: 0,
+    protect: 0, // > 0: Spawn-Schutz (unverwundbar, blinkt)
     stunTimer: 0, // > 0: Krallenfalle -- kann nicht fahren
     shots: 0, // Schusszaehler (Sprengschuss-Upgrade)
     trapDist: 0, // gefahrene Strecke seit letzter Falle
