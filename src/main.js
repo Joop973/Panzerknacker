@@ -194,7 +194,10 @@ async function init() {
       // Rechter Trigger = manuelles Schiessen (ueberschreibt Auto-Fire).
       fire: input.consumeFire() || autoFire || !!(gp && gp.fireHeld),
       mine: input.consumeMine() || touch.consumeMine() || !!(gp && gp.minePressed),
+      dash: input.consumeDash() || !!(gp && gp.dashPressed),
     };
+    // Dash-Button nur zeigen, wenn das Upgrade aktiv ist.
+    dashBtn.classList.toggle('hidden', !(p.cfg.dash && touch.isActive()));
     stepRun(run, cmd, dt);
     toast = tutorial.update(run, cmd, touch.isActive(), dt);
     if (tutorial.isDone() && !getFlag('tutorial_seen')) setFlag('tutorial_seen');
@@ -313,6 +316,16 @@ async function init() {
     endlessBtn.classList.add('hidden');
     run = null;
   }
+  const dashBtn = document.getElementById('dashBtn');
+  dashBtn.addEventListener(
+    'touchstart',
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      input.queueDash();
+    },
+    { passive: false },
+  );
   const endlessBtn = document.getElementById('endlessBtn');
   endlessBtn.addEventListener('click', () => {
     if (run && run.phase === 'victory') {

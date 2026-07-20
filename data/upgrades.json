@@ -78,6 +78,85 @@
       "name": "Durchschlag",
       "desc": "Deine Kugeln fliegen durch Wände — dafür prallen sie nicht mehr ab",
       "max": 1
+    },
+    "glaskanone": {
+      "name": "Glaskanone",
+      "desc": "Kugeln doppelt so schnell und explosiv — aber du behältst nur 1 Leben",
+      "max": 1,
+      "speedMult": 2.0,
+      "radiusPx": 40
+    },
+    "streuschuss": {
+      "name": "Streuschuss",
+      "desc": "Feuert 3 Kugeln im Fächer (ohne Abpraller), dafür +6 Magazin",
+      "max": 1,
+      "count": 3,
+      "spreadRad": 0.2,
+      "magazineBonus": 6
+    },
+    "zielsucher": {
+      "name": "Zielsucher",
+      "desc": "Kugeln lenken zum nächsten Gegner — dafür 30 % langsamer",
+      "max": 1,
+      "speedMult": 0.7,
+      "turnRateRad": 3.2
+    },
+    "nachbrenner": {
+      "name": "Nachbrenner",
+      "desc": "Nach jedem Schuss kurzer Tempo-Schub",
+      "max": 2,
+      "boostMult": 1.6,
+      "boostS": 0.6
+    },
+    "aasgeier": {
+      "name": "Aasgeier",
+      "desc": "Jeder Abschuss lädt deine Waffe sofort nach",
+      "max": 1
+    },
+    "kamikaze": {
+      "name": "Kamikaze",
+      "desc": "Bei deinem Tod explodierst du und reißt nahe Gegner mit",
+      "max": 1,
+      "radiusPx": 72
+    },
+    "schild": {
+      "name": "Schild",
+      "desc": "Fängt einen Treffer ab — lädt sich einmal pro Leben wieder auf",
+      "max": 1
+    },
+    "dash": {
+      "name": "Ausweich-Dash",
+      "desc": "Kurzer Sprung mit Unverwundbarkeit (Umschalt / B-Taste / Dash-Button)",
+      "max": 1,
+      "distancePx": 64,
+      "iframeS": 0.3,
+      "cooldownS": 2.2
+    },
+    "berserker": {
+      "name": "Berserker",
+      "desc": "Je weniger Leben, desto schneller feuerst und fährst du",
+      "max": 1,
+      "firePerLife": 0.82,
+      "speedPerLife": 1.12,
+      "maxStacks": 3
+    },
+    "fernzuender": {
+      "name": "Fernzünder",
+      "desc": "Minen zünden nicht von selbst — Minen-Taste erneut drücken sprengt alle",
+      "max": 1
+    },
+    "streumine": {
+      "name": "Streumine",
+      "desc": "Deine Minen schleudern beim Explodieren 3 kleine Splitterminen",
+      "max": 1,
+      "sub": 3
+    },
+    "schockwelle": {
+      "name": "Schockwelle",
+      "desc": "Beim Minenlegen werden nahe Gegner weggestoßen",
+      "max": 1,
+      "radiusPx": 72,
+      "pushPx": 44
     }
   },
   "fallback": {

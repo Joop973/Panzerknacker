@@ -317,6 +317,27 @@ body.touch-on #mineBtn {
   display: block;
 }
 
+#dashBtn {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(80, 160, 255, 0.5);
+  color: #06121f;
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 13px;
+  z-index: 6;
+  touch-action: none;
+}
+
+#dashBtn.hidden {
+  display: none;
+}
+
 /* Raumvorschau */
 .pv-sub {
   font-family: monospace;
