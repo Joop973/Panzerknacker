@@ -211,15 +211,33 @@ export function layMine(tank, state) {
     return true;
   }
   if (own.length >= tank.cfg.mines) return false;
-  state.mines.push(createMine(tank.x, tank.y, tank, state.data.mine.radiusPx));
+
+  // Der Spieler WIRFT die Mine in Zielrichtung (bis zu throwPx weit) --
+  // so wird sie zum offensiven Zonen-Werkzeug statt nur Fussabwurf.
+  // An einer Wand faellt sie davor zu Boden.
+  let lx = tank.x;
+  let ly = tank.y;
+  const throwPx = tank.type === 'player' ? state.data.mine.throwPx || 0 : 0;
+  if (throwPx > 0) {
+    const cos = Math.cos(tank.turret);
+    const sin = Math.sin(tank.turret);
+    for (let d = 6; d <= throwPx; d += 6) {
+      const nx = tank.x + cos * d;
+      const ny = tank.y + sin * d;
+      if (state.isSolid(nx, ny)) break;
+      lx = nx;
+      ly = ny;
+    }
+  }
+  state.mines.push(createMine(lx, ly, tank, state.data.mine.radiusPx));
   state.sounds.push('mine');
-  // Schockwelle: nahe Gegner wegstossen.
+  // Schockwelle: nahe Gegner um die gelegte Mine wegstossen.
   if (tank.cfg.shockwaveRadius) {
     const R = tank.cfg.shockwaveRadius;
     for (const t of state.tanks) {
       if (t === tank || !t.alive) continue;
-      const dx = t.x - tank.x;
-      const dy = t.y - tank.y;
+      const dx = t.x - lx;
+      const dy = t.y - ly;
       const d = Math.hypot(dx, dy);
       if (d > 0 && d < R) {
         const push = tank.cfg.shockwavePush * (1 - d / R);

@@ -142,6 +142,10 @@ export function applyUpgrades(cfg, ups, upsData) {
     if (cfg.chainLightning) cfg.chainLightning *= m;
     cfg.mineRadiusMult = (cfg.mineRadiusMult || 1) * m;
   }
+
+  // Zielsucher: hartes Magazin-Limit 3 (ueberschreibt alle anderen
+  // Magazin-Effekte -- ganz am Ende angewandt).
+  if (l('zielsucher')) cfg.magazine = Math.min(cfg.magazine, 3);
   return cfg;
 }
 
