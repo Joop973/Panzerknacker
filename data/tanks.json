@@ -172,7 +172,8 @@
       "turret": "strong_aim",
       "drive": "evade",
       "label": "Türkiser",
-      "desc": "Hält Abstand, weicht Kugeln aus. Schießt schnelle Raketen ohne Abpraller."
+      "desc": "Hält Abstand, weicht Kugeln aus. Feuert Raketen mit 1 s Pause dazwischen.",
+      "fireCooldownS": 1.0
     },
     "t_yellow": {
       "speed": "fast",

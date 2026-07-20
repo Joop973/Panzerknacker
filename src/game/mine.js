@@ -30,13 +30,15 @@ export function createMine(x, y, owner, radius) {
 }
 
 export function isArmed(mine, mcfg) {
-  return mine.age >= mcfg.armDelayS;
+  // Annaeherungsmine: Leger-eigene, kuerzere Scharfschalt-Zeit.
+  const arm = mine.owner?.cfg?.mineArmS ?? mcfg.armDelayS;
+  return mine.age >= arm;
 }
 
 // Allgemeine Explosion an einer Position (Minen, Sprengschuss-Upgrade):
 // toetet Panzer im Radius, zerstoert breakable-Waende, zuendet scharfe
 // Minen als Kettenreaktion.
-export function explodeAt(state, x, y, R) {
+export function explodeAt(state, x, y, R, spare) {
   const mcfg = state.data.mine;
   state.explosions.push({ x, y, age: 0 });
   state.sounds.push('boom');
@@ -44,7 +46,7 @@ export function explodeAt(state, x, y, R) {
   state.spawnParticles?.(x, y, '#ffb347', 14, 160);
 
   for (const t of state.tanks) {
-    if (!t.alive || t.protect > 0) continue;
+    if (!t.alive || t.protect > 0 || t === spare) continue;
     if (circlesOverlap(x, y, R, t.x, t.y, t.cfg.radius)) {
       state.killTank(t, 'eine Explosion');
     }
@@ -75,6 +77,7 @@ function explode(mine, state) {
   // weiter splittern -> keine Endloskette).
   const sub = mine.owner?.cfg?.clusterMine;
   if (sub && !mine.isSub) {
+    const arm = mine.owner?.cfg?.mineArmS ?? state.data.mine.armDelayS;
     for (let i = 0; i < sub; i++) {
       const a = (i / sub) * Math.PI * 2;
       const m = createMine(
@@ -84,6 +87,7 @@ function explode(mine, state) {
         mine.radius,
       );
       m.isSub = true;
+      m.age = arm; // Splitterminen sind sofort scharf
       state.mines.push(m);
     }
   }
@@ -130,10 +134,12 @@ export function updateMines(state, dt) {
     }
     if (triggered) continue;
 
-    // Kontakt mit einem beliebigen Panzer (auch dem Leger).
+    // Kontakt mit einem beliebigen Panzer (auch dem Leger). Die
+    // Annaeherungsmine loest schon aus groesserer Entfernung aus.
+    const trig = m.owner?.cfg?.mineTriggerRadius ?? m.radius;
     for (const t of state.tanks) {
       if (!t.alive) continue;
-      if (circlesOverlap(m.x, m.y, m.radius, t.x, t.y, t.cfg.radius)) {
+      if (circlesOverlap(m.x, m.y, trig, t.x, t.y, t.cfg.radius)) {
         explode(m, state);
         break;
       }

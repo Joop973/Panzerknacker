@@ -32,6 +32,7 @@ export function createTank(type, cfg, x, y) {
     shots: 0, // Schusszaehler (Sprengschuss-Upgrade)
     trapDist: 0, // gefahrene Strecke seit letzter Falle
     boostTimer: 0, // Nachbrenner-Restzeit
+    bloodTimer: 0, // Blutrausch-Restzeit (Tempo + Unverwundbarkeit)
     dashCd: 0, // Dash-Cooldown
     berserkerFire: 1, // dynamischer Feuerraten-Multiplikator (Berserker)
     berserkerSpeed: 1, // dynamischer Tempo-Multiplikator (Berserker)
@@ -75,9 +76,10 @@ export function moveTank(tank, axis, state, dt) {
     // Normalisieren, damit Diagonale nicht schneller ist.
     dx /= len;
     dy /= len;
-    // Effektives Tempo: Basis * Berserker * Nachbrenner-Schub.
+    // Effektives Tempo: Basis * Berserker * Nachbrenner * Blutrausch.
     const boost = tank.boostTimer > 0 ? tank.cfg.afterburnerMult || 1 : 1;
-    const spd = tank.cfg.speed * (tank.berserkerSpeed || 1) * boost;
+    const blood = tank.bloodTimer > 0 ? tank.cfg.bloodlustSpeed || 1 : 1;
+    const spd = tank.cfg.speed * (tank.berserkerSpeed || 1) * boost * blood;
     tank.x += dx * spd * dt;
     tank.y += dy * spd * dt;
     tank.heading = Math.atan2(dy, dx);
@@ -113,12 +115,20 @@ export function fireBullet(tank, state) {
   if (liveBulletsOf(state, tank) >= tank.cfg.magazine) return false;
 
   tank.shots++;
-  const explosive =
-    tank.cfg.allExplosive ||
-    (tank.cfg.explosionEveryShots > 0 && tank.shots % tank.cfg.explosionEveryShots === 0);
-  // Schusswinkel: Streuschuss-Faecher > Doppelrohr > Einzelschuss.
+  // Sprengschuss-Salve: jeder N-te Schuss ist eine Salve aus mehreren
+  // ABPRALLENDEN Sprengkugeln (statt der normalen Schussform).
+  const burstProc =
+    !tank.cfg.allExplosive &&
+    tank.cfg.explosionEveryShots > 0 &&
+    tank.shots % tank.cfg.explosionEveryShots === 0;
+
+  // Schusswinkel: Sprengsalve > Streuschuss-Faecher > Doppelrohr > Einzel.
   let angles;
-  if (tank.cfg.spreadCount > 1) {
+  if (burstProc) {
+    angles = [];
+    const n = tank.cfg.burstCount || 3;
+    for (let i = 0; i < n; i++) angles.push(tank.turret + (i - (n - 1) / 2) * 0.16);
+  } else if (tank.cfg.spreadCount > 1) {
     angles = [];
     const n = tank.cfg.spreadCount;
     for (let i = 0; i < n; i++) {
@@ -137,15 +147,19 @@ export function fireBullet(tank, state) {
     const a = angles[i];
     const mx = tank.x + Math.cos(a) * muzzle;
     const my = tank.y + Math.sin(a) * muzzle;
+    // Sprengsalve prallt ab (mind. 1 Abpraller); Sprengmunition/
+    // Glaskanone zuenden hart an der Wand (detonateOnWall).
+    const isExplosive = burstProc || tank.cfg.allExplosive;
     state.bullets.push(
       createBullet(mx, my, a, {
         speed: tank.cfg.bulletSpeed,
         radius: tank.cfg.bulletRadius,
-        ricochets: tank.cfg.ricochets,
+        ricochets: burstProc ? Math.max(1, tank.cfg.ricochets) : tank.cfg.ricochets,
         owner: tank,
         kind: tank.cfg.weapon,
         tungsten: tank.cfg.tungsten || false,
-        explosive: explosive && (i === 0 || tank.cfg.allExplosive),
+        explosive: isExplosive,
+        detonateOnWall: isExplosive && !burstProc,
         explosionRadius: tank.cfg.shotExplosionRadius,
         phaseWalls: tank.cfg.phaseWalls || false,
         homing: tank.cfg.homing || 0,
@@ -211,6 +225,7 @@ export function layMine(tank, state) {
         t.x += (dx / d) * push;
         t.y += (dy / d) * push;
         resolveCircleWalls(t, t.cfg.radius, state.walls);
+        if (tank.cfg.shockwaveStun) t.stunTimer = Math.max(t.stunTimer, tank.cfg.shockwaveStun);
       }
     }
   }

@@ -20,12 +20,12 @@
     "kettenglied": {
       "name": "Kettenglied",
       "desc": "+1 gleichzeitige Mine",
-      "max": 2
+      "max": 3
     },
     "sprengkraft": {
       "name": "Sprengkraft",
-      "desc": "Minen-Explosionsradius +30 %",
-      "max": 2
+      "desc": "Minen-Explosionsradius +40 % pro Stufe",
+      "max": 3
     },
     "kettenantrieb": {
       "name": "Kettenantrieb",
@@ -39,10 +39,11 @@
     },
     "sprengschuss": {
       "name": "Sprengschuss",
-      "desc": "Jeder 12. Schuss trägt eine Sprengladung — tötet auch durch Wände",
+      "desc": "Jeder 12. Schuss feuert 3 abprallende Sprengkugeln",
       "max": 1,
       "everyShots": 12,
-      "radiusPx": 60
+      "radiusPx": 60,
+      "burst": 3
     },
     "krallenfalle": {
       "name": "Krallenfalle",
@@ -147,16 +148,37 @@
     },
     "streumine": {
       "name": "Streumine",
-      "desc": "Deine Minen schleudern beim Explodieren 3 kleine Splitterminen",
+      "desc": "Deine Minen schleudern beim Explodieren 4 sofort scharfe Splitterminen",
       "max": 1,
-      "sub": 3
+      "sub": 4
     },
     "schockwelle": {
       "name": "Schockwelle",
-      "desc": "Beim Minenlegen werden nahe Gegner weggestoßen",
+      "desc": "Beim Minenlegen werden nahe Gegner weggestoßen — betäubt sie kurz",
       "max": 1,
-      "radiusPx": 72,
-      "pushPx": 44
+      "radiusPx": 80,
+      "pushPx": 52,
+      "stunS": 0.6
+    },
+    "annaeherungsmine": {
+      "name": "Annäherungsmine",
+      "desc": "Deine Minen sind blitzschnell scharf und lösen schon aus der Ferne aus",
+      "max": 1,
+      "armS": 0.35,
+      "triggerRadiusPx": 22
+    },
+    "kettenblitz": {
+      "name": "Kettenblitz",
+      "desc": "Jeder Abschuss löst eine kleine Explosion aus — Kettenkills!",
+      "max": 1,
+      "radiusPx": 34
+    },
+    "blutrausch": {
+      "name": "Blutrausch",
+      "desc": "Nach jedem Abschuss kurz unverwundbar und schneller",
+      "max": 1,
+      "durationS": 1.4,
+      "speedMult": 1.3
     }
   },
   "fallback": {

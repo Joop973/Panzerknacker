@@ -33,13 +33,14 @@ export function applyUpgrades(cfg, ups, upsData) {
   cfg.ricochets += l('abpraller'); // Basis 1, max +1 => harte Grenze 2
   cfg.bulletSpeed *= Math.pow(1.2, l('ladung'));
   cfg.mines += l('kettenglied');
-  cfg.mineRadiusMult = Math.pow(1.3, l('sprengkraft'));
+  cfg.mineRadiusMult = Math.pow(1.4, l('sprengkraft'));
   cfg.speed *= Math.pow(1.12, l('kettenantrieb'));
   cfg.tungsten = l('wolframkern') > 0;
   const U = upsData ? upsData.upgrades : {};
   if (l('sprengschuss')) {
     cfg.explosionEveryShots = U.sprengschuss.everyShots; // jeder 12. Schuss
     cfg.shotExplosionRadius = U.sprengschuss.radiusPx;
+    cfg.burstCount = U.sprengschuss.burst; // Salve aus 3 abprallenden Sprengkugeln
   }
   // Sprengmunition: jede Kugel explodiert, keine Minen, Magazin auf 1 --
   // skaliert aber mit Magazin-Upgrades weiter (kein harter Deckel).
@@ -105,6 +106,16 @@ export function applyUpgrades(cfg, ups, upsData) {
   if (l('schockwelle')) {
     cfg.shockwaveRadius = U.schockwelle.radiusPx;
     cfg.shockwavePush = U.schockwelle.pushPx;
+    cfg.shockwaveStun = U.schockwelle.stunS;
+  }
+  if (l('annaeherungsmine')) {
+    cfg.mineArmS = U.annaeherungsmine.armS;
+    cfg.mineTriggerRadius = U.annaeherungsmine.triggerRadiusPx;
+  }
+  if (l('kettenblitz')) cfg.chainLightning = U.kettenblitz.radiusPx;
+  if (l('blutrausch')) {
+    cfg.bloodlust = U.blutrausch.durationS;
+    cfg.bloodlustSpeed = U.blutrausch.speedMult;
   }
   return cfg;
 }

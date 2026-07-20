@@ -143,8 +143,21 @@ export function createState(data, tiles, opts) {
       } else {
         state.enemyKills++;
         state.killLog.push(tank.type);
-        // Aasgeier: jeder Abschuss laedt die Spielerwaffe sofort nach.
-        if (state.player.alive && state.player.cfg.scavenger) state.player.cooldown = 0;
+        const pc = state.player.cfg;
+        if (state.player.alive) {
+          // Aasgeier: Abschuss laedt die Spielerwaffe sofort nach.
+          if (pc.scavenger) state.player.cooldown = 0;
+          // Blutrausch: kurz unverwundbar und schneller.
+          if (pc.bloodlust) {
+            state.player.protect = Math.max(state.player.protect, pc.bloodlust);
+            state.player.bloodTimer = pc.bloodlust;
+          }
+        }
+        // Kettenblitz: kleine Explosion am Ort des Kills (verschont den
+        // Spieler) -> kann weitere Gegner mitreissen (Kettenkills).
+        if (pc.chainLightning) {
+          explodeAt(state, tank.x, tank.y, pc.chainLightning, state.player);
+        }
       }
     },
     addShake(amount) {
@@ -218,6 +231,7 @@ export function stepState(state, cmd, dt) {
     t.stunTimer = Math.max(0, t.stunTimer - dt);
     if (t.protect > 0) t.protect = Math.max(0, t.protect - dt);
     if (t.boostTimer > 0) t.boostTimer = Math.max(0, t.boostTimer - dt);
+    if (t.bloodTimer > 0) t.bloodTimer = Math.max(0, t.bloodTimer - dt);
     if (t.dashCd > 0) t.dashCd = Math.max(0, t.dashCd - dt);
   }
 
