@@ -8,10 +8,11 @@
   },
   "mine": {
     "radiusPx": 7,
-    "armDelayS": 1.0,
+    "armDelayS": 0.7,
     "selfDetonateS": 10.0,
-    "explosionRadiusPx": 48,
-    "chainDelayS": 0.1
+    "explosionRadiusPx": 58,
+    "chainDelayS": 0.1,
+    "throwPx": 96
   },
   "speeds": {
     "fix": 0,
@@ -172,8 +173,8 @@
       "turret": "strong_aim",
       "drive": "evade",
       "label": "Türkiser",
-      "desc": "Hält Abstand, weicht Kugeln aus. Feuert Raketen mit 1 s Pause dazwischen.",
-      "fireCooldownS": 1.0
+      "desc": "Hält Abstand, weicht Kugeln aus. Feuert Raketen mit 1,6 s Pause dazwischen.",
+      "fireCooldownS": 1.6
     },
     "t_yellow": {
       "speed": "fast",

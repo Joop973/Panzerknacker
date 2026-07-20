@@ -95,7 +95,7 @@
     },
     "zielsucher": {
       "name": "Zielsucher",
-      "desc": "Kugeln lenken zum nächsten Gegner — dafür 30 % langsamer",
+      "desc": "Kugeln lenken zum Gegner, 30 % langsamer — Magazin fest auf 3 begrenzt",
       "max": 1,
       "speedMult": 0.7,
       "turnRateRad": 3.2
