@@ -71,6 +71,7 @@ function startRoom(run) {
   run.transitionTimer = TRANSITION_S;
   run.seenRoomKills = 0;
   run.seenRoomDeaths = 0;
+  run.seenKillLog = 0;
 }
 
 // Vom "Weiter"-Button der Raumvorschau aufgerufen.
@@ -89,6 +90,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed) {
     upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}
     upgradeChoices: 0,
     pendingOffers: null,
+    killsByType: {}, // Statistik fuer die Endscreens
     seed: seed >>> 0,
     genRng: mulberry32(seed >>> 0),
     roomIndex: 1,
@@ -132,6 +134,10 @@ export function stepRun(run, cmd, dt) {
   if (st.enemyKills > run.seenRoomKills) {
     run.kills += st.enemyKills - run.seenRoomKills;
     run.seenRoomKills = st.enemyKills;
+  }
+  while (run.seenKillLog < st.killLog.length) {
+    const ty = st.killLog[run.seenKillLog++];
+    run.killsByType[ty] = (run.killsByType[ty] || 0) + 1;
   }
 
   // Spielertod: Leben abziehen; bei 0 ist der Run vorbei (der Raum-

@@ -64,6 +64,33 @@ export function setFlag(name) {
   }
 }
 
+// Kleine benannte Einstellungen (z. B. Mute), als JSON-Werte.
+const PREF_PREFIX = 'panzerknacker_pref_';
+const memPrefs = {};
+
+export function getPref(name, fallback = null) {
+  const ls = store();
+  if (!ls) return name in memPrefs ? memPrefs[name] : fallback;
+  try {
+    const raw = ls.getItem(PREF_PREFIX + name);
+    return raw === null ? fallback : JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+}
+
+export function setPref(name, value) {
+  memPrefs[name] = value;
+  const ls = store();
+  if (ls) {
+    try {
+      ls.setItem(PREF_PREFIX + name, JSON.stringify(value));
+    } catch {
+      /* egal */
+    }
+  }
+}
+
 // Traegt einen beendeten Run ein und gibt die neuen Bestwerte zurueck.
 export function recordRun({ won, rooms, kills, timeS }) {
   const s = loadStats();

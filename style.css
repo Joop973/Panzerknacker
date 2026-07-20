@@ -95,6 +95,19 @@ html, body {
   background: #e0ca5e;
 }
 
+.overlay button.secondary {
+  background: transparent;
+  border: 2px solid #4a4a5a;
+  color: #9aa0a8;
+  font-size: 14px;
+  padding: 8px 24px;
+}
+
+.overlay button.secondary:hover {
+  border-color: #c8b24a;
+  color: #c8b24a;
+}
+
 /* Upgrade-Karten */
 .cards {
   display: flex;

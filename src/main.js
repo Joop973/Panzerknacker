@@ -14,7 +14,7 @@ import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
 import { createTutorial } from './ui/hud.js';
-import { getFlag, setFlag, loadStats } from './core/storage.js';
+import { getFlag, setFlag, loadStats, getPref, setPref } from './core/storage.js';
 import { createRenderer } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
@@ -51,8 +51,13 @@ async function init() {
 
   const input = createInput(window, canvas);
   const audio = createAudio();
-  window.addEventListener('pointerdown', audio.unlock);
-  window.addEventListener('keydown', audio.unlock);
+  audio.setMuted(getPref('muted', false));
+  const unlockAll = () => {
+    audio.unlock();
+    audio.startMusic();
+  };
+  window.addEventListener('pointerdown', unlockAll);
+  window.addEventListener('keydown', unlockAll);
 
   const tracks = createTracks();
   const renderer = createRenderer(ctx);
@@ -96,13 +101,13 @@ async function init() {
 
   function update(dt) {
     if (!run) return;
-    if (input.consumePause()) pause.toggle();
+    const gp = input.pollGamepad();
+    if (input.consumePause() || (gp && gp.pausePressed)) pause.toggle();
     if (pause.isPaused()) return;
 
     // Tastatur/Maus, Gamepad und Touch zusammenfuehren: die gerade
     // aktive Quelle gewinnt (Fahren: Tastatur > Gamepad > Touch;
     // Zielen: Gamepad-Stick > Touch-Stick > Maus).
-    const gp = input.pollGamepad();
     const kbMove = input.getMoveAxis();
     const gpMove = gp && (gp.move.x || gp.move.y) ? gp.move : null;
     const tMove = touch.getMove();
@@ -193,6 +198,14 @@ async function init() {
   const loop = createLoop({ update, render, step: STEP });
 
   startBtn.addEventListener('click', startRun);
+  // Tages-Seed: fuer alle Spieler am selben Tag derselbe Run.
+  document.getElementById('dailyBtn').addEventListener('click', () => {
+    const d = new Date();
+    seedInput.value = String(
+      d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(),
+    );
+    startRun();
+  });
   seedInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') startRun();
   });
@@ -217,8 +230,11 @@ async function init() {
   // Pause-Button oben mittig, Mute daneben.
   document.getElementById('pauseBtn').addEventListener('click', () => pause.toggle());
   const muteBtn = document.getElementById('muteBtn');
+  muteBtn.classList.toggle('muted', audio.isMuted());
   muteBtn.addEventListener('click', () => {
-    muteBtn.classList.toggle('muted', audio.toggleMute());
+    const m = audio.toggleMute();
+    muteBtn.classList.toggle('muted', m);
+    setPref('muted', m);
   });
 
   // Auto-Pause bei Tab-Wechsel (Spec Abschnitt 9) -- Pflicht, sonst

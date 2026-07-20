@@ -211,14 +211,43 @@ export function createRenderer(ctx) {
     ctx.strokeRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
     ctx.restore();
 
-    // Ziellinie des Spielers (wichtig fuer Touch/Gamepad ohne Cursor).
+    // Ziellinie des Spielers mit EINEM Abpraller-Vorgriff: Ray-March
+    // wie ein Geschoss (achsweise Reflexion) -- man sieht die erste
+    // Bande. Wichtig fuer Touch/Gamepad ohne Cursor.
     if (t.type === 'player') {
+      let dx = Math.cos(t.turret);
+      let dy = Math.sin(t.turret);
+      let lx = x + dx * (r + 10);
+      let ly = y + dy * (r + 10);
+      const pts = [[lx, ly]];
+      let bounced = false;
+      for (let d = 0; d < 320; d += 6) {
+        const nx = lx + dx * 6;
+        const ny = ly + dy * 6;
+        if (state.isSolid(nx, ny)) {
+          if (bounced) break;
+          const sx = state.isSolid(nx, ly);
+          const sy = state.isSolid(lx, ny);
+          if (sx) dx = -dx;
+          if (sy) dy = -dy;
+          if (!sx && !sy) {
+            dx = -dx;
+            dy = -dy;
+          }
+          bounced = true;
+          pts.push([lx, ly]);
+          continue;
+        }
+        lx = nx;
+        ly = ny;
+      }
+      pts.push([lx, ly]);
       ctx.strokeStyle = 'rgba(140,200,255,0.4)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 6]);
       ctx.beginPath();
-      ctx.moveTo(x + Math.cos(t.turret) * (r + 10), y + Math.sin(t.turret) * (r + 10));
-      ctx.lineTo(x + Math.cos(t.turret) * (r + 70), y + Math.sin(t.turret) * (r + 70));
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -372,7 +401,24 @@ export function createRenderer(ctx) {
       drawFlashes(state);
       drawParticles(state);
       drawExplosions(state);
+
+      // Schwebende Kurztexte ("Abpraller!").
+      ctx.font = 'bold 12px monospace';
+      ctx.textAlign = 'center';
+      for (const tx of state.texts) {
+        ctx.globalAlpha = 1 - tx.age / tx.life;
+        ctx.fillStyle = tx.color;
+        ctx.fillText(tx.text, tx.x, tx.y - tx.age * 22);
+      }
+      ctx.globalAlpha = 1;
+      ctx.textAlign = 'left';
       ctx.restore();
+
+      // Roter Flash nach eigenem Tod (ungeschuettelt, ueber allem).
+      if (state.damageFlash > 0) {
+        ctx.fillStyle = `rgba(255,60,40,${state.damageFlash * 0.35})`;
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      }
     },
   };
 }

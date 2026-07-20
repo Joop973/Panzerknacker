@@ -150,6 +150,9 @@ export function createState(data, tiles, opts) {
     flashes: [],
     sounds: [],
     particles: [],
+    texts: [], // schwebende Kurztexte { x, y, text, age, life, color }
+    killLog: [], // Typen der in diesem Raum getoeteten Gegner (Statistik)
+    damageFlash: 0, // roter Bildschirm-Flash nach eigenem Tod (Rendering)
     shake: 0, // Screenshake-Staerke (nur Rendering)
     time: 0,
     respawnTimer: 0,
@@ -174,9 +177,11 @@ export function createState(data, tiles, opts) {
       state.spawnParticles(tank.x, tank.y, DEBRIS_COLORS[tank.type] || '#fff', 10, 120);
       if (tank === state.player) {
         state.playerDeaths++;
+        state.damageFlash = 0.5;
         state.respawnTimer = RESPAWN_DELAY;
       } else {
         state.enemyKills++;
+        state.killLog.push(tank.type);
       }
     },
     addShake(amount) {
@@ -300,6 +305,10 @@ export function stepState(state, cmd, dt) {
       if (b.owner === t && b.age < grace) continue;
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
         b.dead = true;
+        // Banden-Kill-Feedback: Gegner mit abgeprallter Kugel erwischt.
+        if (t !== state.player && b.ricochetsLeft < b.ricochetsStart) {
+          state.texts.push({ x: t.x, y: t.y - 18, text: 'Abpraller!', age: 0, life: 0.9, color: '#8ecae6' });
+        }
         state.killTank(t);
         break;
       }
@@ -331,6 +340,9 @@ export function stepState(state, cmd, dt) {
     pt.vy *= 0.94;
   }
   state.particles = state.particles.filter((pt) => pt.age < pt.life);
+  for (const tx of state.texts) tx.age += dt;
+  state.texts = state.texts.filter((tx) => tx.age < tx.life);
+  state.damageFlash = Math.max(0, state.damageFlash - dt);
   state.shake = Math.max(0, state.shake - state.shake * 4 * dt - 0.5 * dt);
 
   state.bullets = state.bullets.filter((b) => !b.dead);

@@ -39,7 +39,15 @@ export function createHud(ctx) {
     ctx.fillStyle = '#e8e4d8';
     ctx.fillText(`Gegner ${alive}/${total}`, WIDTH / 2, 16);
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#ff6a5e';
+    // Run-Timer (Speedrun-Motivation, Bestzeit wird gespeichert).
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#9aa0a8';
+    ctx.fillText(fmtTime(run.playTime), WIDTH - 62, 15);
+    ctx.font = 'bold 13px monospace';
+    // Letztes Leben: Herz pulsiert als Warnung.
+    ctx.fillStyle = run.lives === 1
+      ? `rgba(255,80,60,${0.55 + 0.45 * Math.sin(run.playTime * 7)})`
+      : '#ff6a5e';
     ctx.fillText(`♥ ${run.lives}`, WIDTH - 8, 16);
     ctx.textAlign = 'left';
   }
@@ -74,11 +82,18 @@ export function createHud(ctx) {
   function drawEnd(run, title, color) {
     dim(0.8);
     const s = run.finalStats || {};
+    // Kills pro Typ (Top 4), Labels aus tanks.json.
+    const byType = Object.entries(run.killsByType || {})
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([ty, n]) => `${run.data.types[ty]?.label || ty} ×${n}`)
+      .join(' · ');
     center(
       [
         [title, 'bold 40px monospace', color],
         [`Zeit ${fmtTime(run.playTime)}   Kills ${run.kills}   Tode ${run.deaths}`, '16px monospace', '#e8e4d8'],
         [`Raeume: ${run.roomsCleared}   Upgrades: ${run.upgradeChoices}`, '16px monospace', '#e8e4d8'],
+        [byType || ' ', '13px monospace', '#9aa0a8'],
         [`Seed: ${run.seed}`, 'bold 16px monospace', '#8ecae6'],
         [
           `Best: ${s.mostRooms ?? 0} Raeume | ${s.totalKills ?? 0} Kills gesamt` +

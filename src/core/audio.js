@@ -7,6 +7,7 @@
 
 export function createAudio() {
   let ctx = null;
+  let master = null;
   let muted = false;
 
   function unlock() {
@@ -14,13 +15,15 @@ export function createAudio() {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
       ctx = new AC();
+      master = ctx.createGain();
+      master.gain.value = muted ? 0 : 1;
+      master.connect(ctx.destination);
     }
     if (ctx.state === 'suspended') ctx.resume();
   }
 
-  function beep(freq, dur = 0.12, vol = 0.12, type = 'square', slideTo = null) {
-    if (!ctx || ctx.state !== 'running') return;
-    const t0 = ctx.currentTime;
+  // Ton zu einem bestimmten Zeitpunkt (fuer den Musik-Scheduler).
+  function beepAt(freq, t0, dur, vol, type, slideTo = null) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = type;
@@ -29,9 +32,14 @@ export function createAudio() {
     gain.gain.setValueAtTime(vol, t0);
     gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
     osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
+    gain.connect(master);
+    osc.start(t0);
     osc.stop(t0 + dur);
+  }
+
+  function beep(freq, dur = 0.12, vol = 0.12, type = 'square', slideTo = null) {
+    if (!ctx || ctx.state !== 'running') return;
+    beepAt(freq, ctx.currentTime, dur, vol, type, slideTo);
   }
 
   // Rauschen fuer Explosionen.
@@ -47,15 +55,47 @@ export function createAudio() {
     gain.gain.setValueAtTime(vol, t0);
     gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
     src.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(master);
     src.start();
+  }
+
+  // --- Prozedurale Hintergrundmusik: karger 16-Step-Loop in a-Moll,
+  // Bass + sparsames Arpeggio. Laeuft ueber den Master (Mute wirkt).
+  const BASS = [55, 0, 55, 0, 65.4, 0, 82.4, 0, 55, 0, 55, 0, 98, 0, 82.4, 0];
+  const LEAD = [220, 0, 262, 0, 330, 0, 0, 392, 0, 330, 0, 262, 0, 0, 440, 0];
+  const STEP_S = 0.22;
+  let musicTimer = null;
+  let nextNote = 0;
+  let stepIdx = 0;
+
+  function startMusic() {
+    unlock();
+    if (!ctx || musicTimer) return;
+    nextNote = ctx.currentTime + 0.1;
+    musicTimer = setInterval(() => {
+      if (!ctx || ctx.state !== 'running') return;
+      while (nextNote < ctx.currentTime + 0.15) {
+        const b = BASS[stepIdx];
+        const l = LEAD[stepIdx];
+        if (b) beepAt(b, nextNote, 0.2, 0.05, 'sawtooth');
+        if (l) beepAt(l, nextNote, 0.12, 0.028, 'triangle');
+        stepIdx = (stepIdx + 1) % 16;
+        nextNote += STEP_S;
+      }
+    }, 60);
   }
 
   return {
     unlock,
+    startMusic,
     toggleMute() {
       muted = !muted;
+      if (master) master.gain.value = muted ? 0 : 1;
       return muted;
+    },
+    setMuted(v) {
+      muted = v;
+      if (master) master.gain.value = muted ? 0 : 1;
     },
     isMuted: () => muted,
     // Benannte Spiel-Ereignisse -> Toene (aus state.sounds).

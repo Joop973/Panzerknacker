@@ -33,6 +33,7 @@ export function createBullet(
     explosionRadius: explosionRadius || 0,
     detonated: false,
     ricochetsLeft: ricochets,
+    ricochetsStart: ricochets, // fuer "Abpraller-Kill"-Feedback
     owner, // Referenz auf den Schuetzen (fuer den 80-ms-Schutz)
     age: 0, // s seit Abschuss
     dead: false,
