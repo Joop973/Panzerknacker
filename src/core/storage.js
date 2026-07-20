@@ -104,11 +104,12 @@ export function resetStats() {
 }
 
 // Traegt einen beendeten Run ein und gibt die neuen Bestwerte zurueck.
-export function recordRun({ won, rooms, kills, timeS }) {
+export function recordRun({ won, rooms, kills, timeS, bestCombo }) {
   const s = loadStats();
   s.runs = (s.runs || 0) + 1;
   s.totalKills = (s.totalKills || 0) + kills;
   s.mostRooms = Math.max(s.mostRooms || 0, rooms);
+  s.bestCombo = Math.max(s.bestCombo || 0, bestCombo || 0);
   if (won) {
     s.wins = (s.wins || 0) + 1;
     s.fastestWinS = Math.min(s.fastestWinS ?? Infinity, timeS);

@@ -12,6 +12,7 @@ import { recordRun, loadStats } from '../core/storage.js';
 import { createState, stepState } from './state.js';
 
 const TRANSITION_S = 1.5;
+const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
 
 // Kauft Gegner vom Gefahrenbudget (nur freigeschaltete Typen, max. 8).
 function buyEnemies(diff, genRng, roomIndex, budget) {
@@ -78,6 +79,8 @@ function startRoom(run) {
   run.seenRoomDeaths = 0;
   run.seenKillLog = 0;
   run.seenRoomShots = 0;
+  run.combo = 0; // Combo gilt nur innerhalb eines Raums
+  run.comboTimer = 0;
 }
 
 // Vom "Weiter"-Button der Raumvorschau aufgerufen.
@@ -105,6 +108,9 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     pendingOffers: null,
     killsByType: {}, // Statistik fuer die Endscreens
     shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)
+    combo: 0, // laufende Kill-Combo
+    comboTimer: 0, // s bis die Combo verfaellt
+    bestCombo: 0, // hoechste Combo im Run
     seed: seed >>> 0,
     genRng: mulberry32(seed >>> 0),
     roomIndex: 1,
@@ -134,6 +140,7 @@ function finishRun(run, won) {
     rooms: run.roomsCleared,
     kills: run.kills,
     timeS: run.playTime,
+    bestCombo: run.bestCombo,
   });
   if (won) run.state.sounds.push('fanfare');
 }
@@ -150,6 +157,12 @@ export function stepRun(run, cmd, dt) {
   stepState(st, cmd, dt);
   run.playTime += dt;
 
+  // Combo: schnell aufeinanderfolgende Kills. Faellt nach COMBO_WINDOW.
+  if (run.comboTimer > 0) {
+    run.comboTimer -= dt;
+    if (run.comboTimer <= 0) run.combo = 0;
+  }
+
   // Kumulative Raumzaehler abgleichen (robust, egal wo Kills passieren).
   if (st.enemyKills > run.seenRoomKills) {
     run.kills += st.enemyKills - run.seenRoomKills;
@@ -158,6 +171,20 @@ export function stepRun(run, cmd, dt) {
   while (run.seenKillLog < st.killLog.length) {
     const ty = st.killLog[run.seenKillLog++];
     run.killsByType[ty] = (run.killsByType[ty] || 0) + 1;
+    run.combo++;
+    run.comboTimer = COMBO_WINDOW;
+    run.bestCombo = Math.max(run.bestCombo, run.combo);
+    if (run.combo >= 3) {
+      st.texts.push({
+        x: st.player.x,
+        y: st.player.y - 26,
+        text: `COMBO ×${run.combo}`,
+        age: 0,
+        life: 1,
+        color: '#ffd23c',
+      });
+      st.sounds.push('combo');
+    }
   }
   if (st.playerShots > run.seenRoomShots) {
     run.shotsFired += st.playerShots - run.seenRoomShots;
@@ -171,6 +198,8 @@ export function stepRun(run, cmd, dt) {
     run.seenRoomDeaths = st.playerDeaths;
     run.deaths += d;
     run.lives -= d;
+    run.combo = 0; // Tod bricht die Combo
+    run.comboTimer = 0;
     run.lastDeathCause = st.lastDeathCause;
     if (run.lives <= 0) {
       finishRun(run, false);

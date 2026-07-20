@@ -45,7 +45,8 @@ async function init() {
     const win = s.fastestWinS
       ? ` · schnellster Sieg ${Math.floor(s.fastestWinS / 60)}:${String(Math.floor(s.fastestWinS % 60)).padStart(2, '0')}`
       : '';
-    el.textContent = `${s.runs} Runs · beste Räume ${s.mostRooms} · ${s.totalKills} Kills${win}`;
+    const combo = s.bestCombo ? ` · Combo ×${s.bestCombo}` : '';
+    el.textContent = `${s.runs} Runs · beste Räume ${s.mostRooms} · ${s.totalKills} Kills${combo}${win}`;
   }
   refreshBestStats();
 

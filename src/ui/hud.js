@@ -57,6 +57,15 @@ export function createHud(ctx) {
       : '#ff6a5e';
     ctx.fillText(`♥ ${run.lives}`, WIDTH - 8, 16);
     ctx.textAlign = 'left';
+
+    // Aktive Combo gross unter der Leiste.
+    if (run.combo >= 3 && run.comboTimer > 0) {
+      ctx.textAlign = 'center';
+      ctx.font = 'bold 20px monospace';
+      ctx.fillStyle = `rgba(255,210,60,${Math.min(1, run.comboTimer)})`;
+      ctx.fillText(`COMBO ×${run.combo}`, WIDTH / 2, 44);
+      ctx.textAlign = 'left';
+    }
   }
 
   function dim(alpha) {
@@ -107,6 +116,7 @@ export function createHud(ctx) {
           '#e8e4d8',
         ],
         [byType || ' ', '13px monospace', '#9aa0a8'],
+        [`Beste Combo: ×${run.bestCombo}`, '13px monospace', '#ffd23c'],
         [
           title === 'GAME OVER' && run.lastDeathCause
             ? `Erledigt durch ${run.lastDeathCause}`
