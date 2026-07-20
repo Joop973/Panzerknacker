@@ -17,7 +17,19 @@ export function createBullet(
   x,
   y,
   angle,
-  { speed, radius, ricochets, owner, kind, tungsten, explosive, explosionRadius, phaseWalls, homing },
+  {
+    speed,
+    radius,
+    ricochets,
+    owner,
+    kind,
+    tungsten,
+    explosive,
+    detonateOnWall,
+    explosionRadius,
+    phaseWalls,
+    homing,
+  },
 ) {
   return {
     id: nextId++,
@@ -30,7 +42,8 @@ export function createBullet(
     radius,
     kind: kind || 'bullet', // 'bullet' | 'rocket' | 'bounce_rocket'
     tungsten: tungsten || false, // Wolframkern-Upgrade (Spec Abschnitt 8)
-    explosive: explosive || false, // Sprengschuss-Upgrade: explodiert beim Tod
+    explosive: explosive || false, // explodiert beim Tod
+    detonateOnWall: detonateOnWall || false, // an der Wand zuenden statt abprallen
     explosionRadius: explosionRadius || 0,
     phaseWalls: phaseWalls || false, // Durchschlag-Upgrade
     homing: homing || 0, // Zielsucher: rad/s Lenkrate (0 = aus)
@@ -61,9 +74,10 @@ function moveAxis(b, state, axis, dt) {
       b.dead = true;
       return true;
     }
-    // Sprenggeschoss: zuendet am Wandkontakt (statt abzuprallen) -- so
-    // toetet die Explosion einen Panzer hinter der Wand.
-    if (b.explosive) {
+    // Sprengmunition/Glaskanone: zuenden am Wandkontakt (statt
+    // abzuprallen) -- so toetet die Explosion durch die Wand. Die
+    // Sprengschuss-Salve hat detonateOnWall=false und prallt ab.
+    if (b.explosive && b.detonateOnWall) {
       b.dead = true;
       return true;
     }

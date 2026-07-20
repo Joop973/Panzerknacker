@@ -33,12 +33,12 @@ export function applyUpgrades(cfg, ups, upsData) {
   cfg.ricochets += l('abpraller'); // Basis 1, max +1 => harte Grenze 2
   cfg.bulletSpeed *= Math.pow(1.2, l('ladung'));
   cfg.mines += l('kettenglied');
-  cfg.mineRadiusMult = Math.pow(1.3, l('sprengkraft'));
+  cfg.mineRadiusMult = Math.pow(1.4, l('sprengkraft'));
   cfg.speed *= Math.pow(1.12, l('kettenantrieb'));
   cfg.tungsten = l('wolframkern') > 0;
   const U = upsData ? upsData.upgrades : {};
   if (l('sprengschuss')) {
-    cfg.explosionEveryShots = U.sprengschuss.everyShots; // jeder 12. Schuss
+    cfg.explosionEveryShots = U.sprengschuss.everyShots; // jeder 4. Schuss
     cfg.shotExplosionRadius = U.sprengschuss.radiusPx;
   }
   // Sprengmunition: jede Kugel explodiert, keine Minen, Magazin auf 1 --
@@ -105,6 +105,42 @@ export function applyUpgrades(cfg, ups, upsData) {
   if (l('schockwelle')) {
     cfg.shockwaveRadius = U.schockwelle.radiusPx;
     cfg.shockwavePush = U.schockwelle.pushPx;
+    cfg.shockwaveStun = U.schockwelle.stunS;
+  }
+  if (l('annaeherungsmine')) {
+    cfg.mineArmS = U.annaeherungsmine.armS;
+    cfg.mineTriggerRadius = U.annaeherungsmine.triggerRadiusPx;
+  }
+  if (l('kettenblitz')) cfg.chainLightning = U.kettenblitz.radiusPx;
+  if (l('blutrausch')) {
+    cfg.bloodlust = U.blutrausch.durationS;
+    cfg.bloodlustSpeed = U.blutrausch.speedMult;
+  }
+
+  // --- 5 innovative Upgrades ---
+  if (l('kampfdrohne')) {
+    cfg.drone = {
+      intervalS: U.kampfdrohne.intervalS,
+      orbitPx: U.kampfdrohne.orbitPx,
+      bulletSpeed: U.kampfdrohne.bulletSpeed,
+    };
+  }
+  if (l('schrapnell')) {
+    cfg.schrapnell = U.schrapnell.count;
+    cfg.schrapnellSpeed = U.schrapnell.bulletSpeed;
+  }
+  if (l('raketenantrieb')) cfg.recoilPx = U.raketenantrieb.recoilPx;
+  if (l('konterschild')) {
+    cfg.counterShield = true;
+    cfg.counterShieldCount = U.konterschild.count;
+  }
+  // Ueberladung: verstaerkt alle eigenen Explosionsradien.
+  if (l('ueberladung')) {
+    const m = U.ueberladung.mult;
+    if (cfg.shotExplosionRadius) cfg.shotExplosionRadius *= m;
+    if (cfg.kamikazeRadius) cfg.kamikazeRadius *= m;
+    if (cfg.chainLightning) cfg.chainLightning *= m;
+    cfg.mineRadiusMult = (cfg.mineRadiusMult || 1) * m;
   }
   return cfg;
 }
