@@ -38,8 +38,21 @@ export function applyUpgrades(cfg, ups, upsData) {
   cfg.tungsten = l('wolframkern') > 0;
   const U = upsData ? upsData.upgrades : {};
   if (l('sprengschuss')) {
-    cfg.explosionEveryShots = U.sprengschuss.everyShots[l('sprengschuss') - 1];
+    cfg.explosionEveryShots = U.sprengschuss.everyShots; // jeder 12. Schuss
     cfg.shotExplosionRadius = U.sprengschuss.radiusPx;
+  }
+  // Sprengmunition: jede Kugel explodiert, keine Minen, Magazin auf 1 --
+  // skaliert aber mit Magazin-Upgrades weiter (kein harter Deckel).
+  if (l('sprengmunition')) {
+    cfg.allExplosive = true;
+    cfg.shotExplosionRadius = U.sprengmunition.radiusPx;
+    cfg.mines = 0;
+    cfg.magazine = 1 + 2 * l('magazin');
+  }
+  // Durchschlag: Kugeln fliegen durch Waende, dafuer keine Abpraller.
+  if (l('durchschlag')) {
+    cfg.phaseWalls = true;
+    cfg.ricochets = 0;
   }
   if (l('krallenfalle')) {
     cfg.trapEveryPx = U.krallenfalle.everyPx[l('krallenfalle') - 1];

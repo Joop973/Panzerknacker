@@ -106,7 +106,8 @@ export function fireBullet(tank, state) {
 
   tank.shots++;
   const explosive =
-    tank.cfg.explosionEveryShots > 0 && tank.shots % tank.cfg.explosionEveryShots === 0;
+    tank.cfg.allExplosive ||
+    (tank.cfg.explosionEveryShots > 0 && tank.shots % tank.cfg.explosionEveryShots === 0);
   const angles = tank.cfg.twinShot
     ? [tank.turret - tank.cfg.twinSpreadRad, tank.turret + tank.cfg.twinSpreadRad]
     : [tank.turret];
@@ -126,8 +127,9 @@ export function fireBullet(tank, state) {
         owner: tank,
         kind: tank.cfg.weapon,
         tungsten: tank.cfg.tungsten || false,
-        explosive: explosive && i === 0, // nur die erste Kugel des Abzugs
+        explosive: explosive && (i === 0 || tank.cfg.allExplosive),
         explosionRadius: tank.cfg.shotExplosionRadius,
+        phaseWalls: tank.cfg.phaseWalls || false,
       }),
     );
     // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.

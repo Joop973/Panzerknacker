@@ -118,6 +118,13 @@
       "white_phase": {
         "modeSwitchMinS": 4.0,
         "modeSwitchMaxS": 8.0
+      },
+      "hunt": {
+        "turnSpeed": 3.4,
+        "bulletDangerPx": 120,
+        "blockedRetargetS": 0.25,
+        "escapeSpreadRad": 1.0,
+        "escapeHoldS": 0.7
       }
     },
     "white": {
@@ -190,20 +197,20 @@
       "mines": 0,
       "weapon": "bullet",
       "turret": "aim",
-      "drive": "pursue",
+      "drive": "hunt",
       "label": "Pinker",
-      "desc": "Verfolgt dich direkt. Bis zu 3 Geschosse gleichzeitig."
+      "desc": "Jagt dich und weicht dabei deinen Kugeln aus. Bis zu 3 Geschosse."
     },
     "t_green": {
       "speed": "fix",
       "magazine": 2,
-      "ricochets": 2,
+      "ricochets": 0,
       "mines": 0,
-      "weapon": "bounce_rocket",
-      "turret": "bounce_solver",
+      "weapon": "rocket",
+      "turret": "strong_aim",
       "drive": "none",
       "label": "Grüner",
-      "desc": "Steht fest. Berechnet Bandenschüsse — trifft dich um Ecken. Lädt 2 s pro Schuss nach.",
+      "desc": "Steht fest und zielt sehr präzise. Feuert schnelle Raketen — lädt 2 s pro Schuss nach.",
       "fireCooldownS": 2.0
     },
     "t_purple": {

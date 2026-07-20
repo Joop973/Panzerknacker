@@ -39,13 +39,10 @@
     },
     "sprengschuss": {
       "name": "Sprengschuss",
-      "desc": "Jeder 20. Schuss trägt eine Sprengladung — explodiert beim Aufprall",
-      "max": 2,
-      "everyShots": [
-        20,
-        12
-      ],
-      "radiusPx": 36
+      "desc": "Jeder 12. Schuss trägt eine Sprengladung — tötet auch durch Wände",
+      "max": 1,
+      "everyShots": 12,
+      "radiusPx": 60
     },
     "krallenfalle": {
       "name": "Krallenfalle",
@@ -69,6 +66,17 @@
     "radar": {
       "name": "Radar",
       "desc": "Markiert alle Gegner — auch unsichtbare und hinter Wänden",
+      "max": 1
+    },
+    "sprengmunition": {
+      "name": "Sprengmunition",
+      "desc": "Alle Kugeln explodieren (auch durch Wände), Magazin auf 1 — dafür keine Minen mehr",
+      "max": 1,
+      "radiusPx": 60
+    },
+    "durchschlag": {
+      "name": "Durchschlag",
+      "desc": "Deine Kugeln fliegen durch Wände — dafür prallen sie nicht mehr ab",
       "max": 1
     }
   },

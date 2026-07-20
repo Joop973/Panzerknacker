@@ -58,6 +58,27 @@ function pursue(tank, state, dt) {
   return steer(tank, state, dt, target, cfg);
 }
 
+// t_pink: jagt den Spieler, weicht dabei aber anfliegenden Kugeln
+// seitlich aus -- schwerer per Bandenschuss zu erwischen als reines
+// Verfolgen.
+function hunt(tank, state, dt) {
+  const cfg = state.data.ai.drive.hunt;
+  const p = state.player;
+  const threat = nearestThreat(tank, state, cfg.bulletDangerPx);
+  let target;
+  if (threat) {
+    // Quer zur Geschossbahn ausweichen (auf der wegzeigenden Seite).
+    const ba = Math.atan2(threat.vy, threat.vx);
+    const cross = threat.vx * (tank.y - threat.y) - threat.vy * (tank.x - threat.x);
+    target = ba + ((cross >= 0 ? 1 : -1) * Math.PI) / 2;
+  } else if (p.alive) {
+    target = Math.atan2(p.y - tank.y, p.x - tank.x);
+  } else {
+    target = tank.ai.driveAngle ?? 0;
+  }
+  return steer(tank, state, dt, target, cfg);
+}
+
 // t_teal: defensiv. Weicht anfliegenden Geschossen seitlich aus, haelt
 // sonst Abstand zum Spieler und umkreist ihn.
 function evade(tank, state, dt) {
@@ -177,6 +198,7 @@ export const DRIVES = {
   wander,
   pursue,
   evade,
+  hunt,
   purple_pack: purplePack,
   black_skirmish: blackSkirmish,
   white_phase: whitePhase,

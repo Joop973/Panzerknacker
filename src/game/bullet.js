@@ -7,6 +7,7 @@
 // trotzdem nur EIN Abpraller abgezogen.
 
 import { circleOverlapsAABB } from './collision.js';
+import { WIDTH, HEIGHT } from '../config.js';
 
 const TRAIL_MAX = 60; // Ticks Bahnhistorie fuers Debug-Overlay
 
@@ -16,7 +17,7 @@ export function createBullet(
   x,
   y,
   angle,
-  { speed, radius, ricochets, owner, kind, tungsten, explosive, explosionRadius },
+  { speed, radius, ricochets, owner, kind, tungsten, explosive, explosionRadius, phaseWalls },
 ) {
   return {
     id: nextId++,
@@ -31,6 +32,7 @@ export function createBullet(
     tungsten: tungsten || false, // Wolframkern-Upgrade (Spec Abschnitt 8)
     explosive: explosive || false, // Sprengschuss-Upgrade: explodiert beim Tod
     explosionRadius: explosionRadius || 0,
+    phaseWalls: phaseWalls || false, // Durchschlag-Upgrade
     detonated: false,
     ricochetsLeft: ricochets,
     ricochetsStart: ricochets, // fuer "Abpraller-Kill"-Feedback
@@ -48,12 +50,19 @@ export function createBullet(
 // Gibt true zurueck, wenn eine Wand getroffen wurde.
 function moveAxis(b, state, axis, dt) {
   b[axis] += (axis === 'x' ? b.vx : b.vy) * dt;
+  if (b.phaseWalls) return false; // Durchschlag: ignoriert alle Waende
   let hit = false;
   for (const wall of [...state.walls]) {
     if (wall.type === 'hole') continue; // Geschosse fliegen ueber Loecher
     if (!circleOverlapsAABB(b.x, b.y, b.radius, wall)) continue;
     if (b.tungsten && wall.type === 'breakable') {
       state.destroyWall(wall);
+      b.dead = true;
+      return true;
+    }
+    // Sprenggeschoss: zuendet am Wandkontakt (statt abzuprallen) -- so
+    // toetet die Explosion einen Panzer hinter der Wand.
+    if (b.explosive) {
       b.dead = true;
       return true;
     }
@@ -79,6 +88,13 @@ export function updateBullet(b, state, dt) {
   if (b.dead) return;
   const hitY = moveAxis(b, state, 'y', dt);
   if (b.dead) return;
+
+  // Durchschlag-Geschosse werden von keiner Wand gestoppt -> sonst
+  // fliegen sie ewig. Sterben, sobald sie die Arena verlassen.
+  if (b.phaseWalls && (b.x < 0 || b.x > WIDTH || b.y < 0 || b.y > HEIGHT)) {
+    b.dead = true;
+    return;
+  }
 
   if (hitX || hitY) {
     state.sounds?.push('bounce');
