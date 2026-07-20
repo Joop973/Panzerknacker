@@ -36,7 +36,10 @@ export function createHud(ctx) {
     );
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#e8e4d8';
+    // Letzter Gegner: Zaehler pulsiert (wichtig, wenn er unsichtbar ist).
+    ctx.fillStyle = alive === 1
+      ? `rgba(255,210,90,${0.55 + 0.45 * Math.sin(run.playTime * 6)})`
+      : '#e8e4d8';
     ctx.fillText(`Gegner ${alive}/${total}`, WIDTH / 2, 16);
     ctx.textAlign = 'right';
     // Run-Timer (Speedrun-Motivation, Bestzeit wird gespeichert).

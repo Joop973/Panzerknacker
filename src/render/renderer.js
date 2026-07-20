@@ -336,7 +336,10 @@ export function createRenderer(ctx) {
     for (const b of bullets) {
       const x = lerp(b.prevX, b.x, alpha);
       const y = lerp(b.prevY, b.y, alpha);
-      const c = BULLET_COLORS[b.kind] || BULLET_COLORS.bullet;
+      // Wolframkern-Kugeln kalt-blau eingefaerbt (durchschlagen breakable).
+      const c = b.tungsten
+        ? { fill: '#d9e2ff', edge: '#6a7adf' }
+        : BULLET_COLORS[b.kind] || BULLET_COLORS.bullet;
 
       // Raketen bekommen einen kurzen Schweif entgegen der Flugrichtung.
       if (b.kind !== 'bullet') {

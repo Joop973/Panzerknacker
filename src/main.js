@@ -97,6 +97,17 @@ async function init() {
         () => {},
       );
     }
+    requestWakeLock();
+  }
+
+  // Display-Wachsperre: beim Gamepad-Spielen fasst man den Touchscreen
+  // nicht an -- ohne Wake Lock dimmt das Handy mitten im Gefecht.
+  async function requestWakeLock() {
+    try {
+      await navigator.wakeLock?.request('screen');
+    } catch {
+      /* nicht unterstuetzt oder verweigert -> egal */
+    }
   }
 
   function update(dt) {
@@ -246,6 +257,7 @@ async function init() {
       loop.stop();
     } else {
       loop.start();
+      requestWakeLock(); // Wake Lock erlischt bei Tab-Wechsel
     }
   });
 
