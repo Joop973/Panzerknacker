@@ -69,7 +69,7 @@
     },
     "sprengmunition": {
       "name": "Sprengmunition",
-      "desc": "Alle Kugeln explodieren (auch durch Wände), Magazin auf 1 — dafür keine Minen mehr",
+      "desc": "Alle Kugeln explodieren (auch durch Wände), Magazin auf 3 — dafür keine Minen mehr",
       "max": 1,
       "radiusPx": 60
     },

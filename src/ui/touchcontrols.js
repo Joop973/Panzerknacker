@@ -57,18 +57,45 @@ export function createTouchControls() {
     return { angle: Math.atan2(mineStick.dy, mineStick.dx), dist: frac * MINE_MAX_THROW };
   }
 
-  mineBtn.addEventListener(
-    'touchstart',
-    (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const t = e.changedTouches[0];
-      const r = mineBtn.getBoundingClientRect();
-      mineStick = { id: t.identifier, cx: r.left + r.width / 2, cy: r.top + r.height / 2, dx: 0, dy: 0 };
-      mineKnob.style.transform = 'translate(-50%,-50%)';
-    },
-    { passive: false },
-  );
+  // Pointer-Events + setPointerCapture: der Zug bleibt am Button haengen,
+  // auch wenn der Finger ihn verlaesst (robuster als Touch-Bubbling).
+  mineBtn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    if (!active) {
+      active = true;
+      document.body.classList.add('touch-on');
+    }
+    const r = mineBtn.getBoundingClientRect();
+    mineStick = { id: e.pointerId, cx: r.left + r.width / 2, cy: r.top + r.height / 2, dx: 0, dy: 0 };
+    mineKnob.style.transform = 'translate(-50%,-50%)';
+    try {
+      mineBtn.setPointerCapture(e.pointerId);
+    } catch {
+      /* egal */
+    }
+  });
+  mineBtn.addEventListener('pointermove', (e) => {
+    if (!mineStick || e.pointerId !== mineStick.id) return;
+    e.preventDefault();
+    let dx = e.clientX - mineStick.cx;
+    let dy = e.clientY - mineStick.cy;
+    const len = Math.hypot(dx, dy);
+    if (len > MINE_STICK_R) {
+      dx = (dx / len) * MINE_STICK_R;
+      dy = (dy / len) * MINE_STICK_R;
+    }
+    mineStick.dx = dx;
+    mineStick.dy = dy;
+    mineKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  });
+  function endMineStick(e) {
+    if (!mineStick || e.pointerId !== mineStick.id) return;
+    pendingThrow = mineDrag(); // Bombe wird geworfen
+    mineStick = null;
+    mineKnob.style.transform = 'translate(-50%,-50%)';
+  }
+  mineBtn.addEventListener('pointerup', endMineStick);
+  mineBtn.addEventListener('pointercancel', endMineStick);
 
   function showStick(el, s) {
     el.base.classList.remove('hidden');
@@ -113,23 +140,11 @@ export function createTouchControls() {
   }
 
   function onMove(e) {
-    if (!left && !right && !mineStick) return;
+    if (!left && !right) return;
     e.preventDefault();
     for (const t of e.changedTouches) {
       if (left && t.identifier === left.id) updateStick(left, leftEl, t);
       if (right && t.identifier === right.id) updateStick(right, rightEl, t);
-      if (mineStick && t.identifier === mineStick.id) {
-        let dx = t.clientX - mineStick.cx;
-        let dy = t.clientY - mineStick.cy;
-        const len = Math.hypot(dx, dy);
-        if (len > MINE_STICK_R) {
-          dx = (dx / len) * MINE_STICK_R;
-          dy = (dy / len) * MINE_STICK_R;
-        }
-        mineStick.dx = dx;
-        mineStick.dy = dy;
-        mineKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-      }
     }
   }
 
@@ -142,11 +157,6 @@ export function createTouchControls() {
       if (right && t.identifier === right.id) {
         right = null;
         rightEl.base.classList.add('hidden');
-      }
-      if (mineStick && t.identifier === mineStick.id) {
-        pendingThrow = mineDrag(); // Bombe wird geworfen
-        mineStick = null;
-        mineKnob.style.transform = 'translate(-50%,-50%)';
       }
     }
   }
