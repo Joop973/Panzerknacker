@@ -14,6 +14,7 @@ import {
   drawExplosions,
   drawTexts,
   drawThreatLines,
+  drawMinePreview,
 } from './effects.js';
 
 // Optionen (von main.js gesetzt): reduzierte Bewegung schaltet
@@ -313,7 +314,7 @@ export function createRenderer(ctx) {
   }
 
   return {
-    render(state, alpha, tracks) {
+    render(state, alpha, tracks, minePreview) {
       // Screenshake: deterministisches Wackeln aus der Spielzeit.
       const sh = renderOpts.reduceMotion ? 0 : state.shake || 0;
       ctx.save();
@@ -325,6 +326,7 @@ export function createRenderer(ctx) {
       drawMines(ctx, state);
       drawTraps(ctx, state);
       if (renderOpts.threatLines) drawThreatLines(ctx, state);
+      if (minePreview) drawMinePreview(ctx, state, minePreview);
       drawWalls(state.walls);
       for (const t of state.tanks) drawTank(state, t, alpha);
       // Klingenkranz.

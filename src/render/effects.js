@@ -143,6 +143,46 @@ export function drawThreatLines(ctx, state) {
   }
 }
 
+// Wurf-Vorschau der Bombe: Wurflinie + Ablagepunkt mit Explosionsradius.
+// preview = { angle, dist } (Welt-px), vom Touch-Wurfstick.
+export function drawMinePreview(ctx, state, preview) {
+  const p = state.player;
+  if (!preview || !p.alive) return;
+  const cos = Math.cos(preview.angle);
+  const sin = Math.sin(preview.angle);
+  // Landepunkt bestimmen (an einer Wand davor stoppen).
+  let lx = p.x;
+  let ly = p.y;
+  for (let d = 6; d <= preview.dist; d += 6) {
+    const nx = p.x + cos * d;
+    const ny = p.y + sin * d;
+    if (state.isSolid(nx, ny)) break;
+    lx = nx;
+    ly = ny;
+  }
+  // Wurflinie.
+  ctx.strokeStyle = 'rgba(255,150,60,0.7)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 5]);
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(lx, ly);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Explosionsradius am Landepunkt.
+  const R = state.data.mine.explosionRadiusPx * (p.cfg.mineRadiusMult || 1);
+  ctx.strokeStyle = 'rgba(255,90,50,0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(lx, ly, R, 0, Math.PI * 2);
+  ctx.stroke();
+  // Ablagepunkt.
+  ctx.fillStyle = '#ff9a4a';
+  ctx.beginPath();
+  ctx.arc(lx, ly, 5, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 // Schwebende Kurztexte ("Abpraller!").
 export function drawTexts(ctx, state) {
   ctx.font = 'bold 12px monospace';
