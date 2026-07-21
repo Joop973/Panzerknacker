@@ -344,7 +344,7 @@ export function stepState(state, cmd, dt) {
     moveTank(p, cmd.move, state, dt);
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
     if (cmd.fire) fireBullet(p, state);
-    if (cmd.mine) layMine(p, state);
+    if (cmd.mine) layMine(p, state, cmd.mineThrow);
     applyMelee(state, dt); // Rammklinge + Klingenkranz
   }
 

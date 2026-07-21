@@ -188,12 +188,14 @@ async function init() {
     } else {
       aim = input.getAim();
     }
+    const mineThrow = touch.consumeMineThrow(); // Touch-Wurfstick losgelassen
     const cmd = {
       move,
       aim,
       // Rechter Trigger = manuelles Schiessen (ueberschreibt Auto-Fire).
       fire: input.consumeFire() || autoFire || !!(gp && gp.fireHeld),
-      mine: input.consumeMine() || touch.consumeMine() || !!(gp && gp.minePressed),
+      mine: input.consumeMine() || touch.consumeMine() || !!(gp && gp.minePressed) || !!mineThrow,
+      mineThrow: mineThrow || null,
       dash: input.consumeDash() || !!(gp && gp.dashPressed),
     };
     // Dash-Button nur zeigen, wenn das Upgrade aktiv ist.
@@ -269,7 +271,7 @@ async function init() {
 
   function render(alpha) {
     if (!run) return;
-    renderer.render(run.state, alpha, tracks);
+    renderer.render(run.state, alpha, tracks, run.phase === 'playing' ? touch.getMinePreview() : null);
     if (input.isDebug() && run.phase === 'playing') {
       debugOverlay.render(run.state, fps);
     }

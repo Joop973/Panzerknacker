@@ -317,6 +317,28 @@ body.touch-on #mineBtn {
   display: block;
 }
 
+#mineKnob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #14120a;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+#mineBtn span {
+  position: absolute;
+  top: 5px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  pointer-events: none;
+}
+
 #dashBtn {
   position: fixed;
   left: 14px;

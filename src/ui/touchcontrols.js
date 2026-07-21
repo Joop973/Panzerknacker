@@ -12,6 +12,8 @@
 const STICK_R = 48; // maximale Auslenkung in px (Bildschirm)
 const DEADZONE = 10;
 const DOUBLE_TAP_MS = 300;
+const MINE_STICK_R = 54; // Zugweg des Minen-Wurfsticks (Bildschirm-px)
+const MINE_MAX_THROW = 190; // maximale Wurfweite (Welt-px)
 
 function makeStickEl() {
   const base = document.createElement('div');
@@ -33,16 +35,37 @@ export function createTouchControls() {
   const leftEl = makeStickEl();
   const rightEl = makeStickEl();
 
+  // Minen-Button ist ein WURFSTICK: berueren + ziehen bestimmt Richtung
+  // und Weite, Loslassen wirft die Bombe.
+  let mineStick = null; // { id, cx, cy, dx, dy }
+  let pendingThrow = null; // { angle, dist } (Welt) -- beim Loslassen gesetzt
   const mineBtn = document.createElement('button');
   mineBtn.id = 'mineBtn';
-  mineBtn.textContent = 'MINE';
+  const mineKnob = document.createElement('div');
+  mineKnob.id = 'mineKnob';
+  const mineLabel = document.createElement('span');
+  mineLabel.textContent = 'BOMBE';
+  mineBtn.appendChild(mineLabel);
+  mineBtn.appendChild(mineKnob);
   document.body.appendChild(mineBtn);
+
+  function mineDrag() {
+    if (!mineStick) return null;
+    const len = Math.hypot(mineStick.dx, mineStick.dy);
+    if (len < 4) return { angle: 0, dist: 0 };
+    const frac = Math.min(1, len / MINE_STICK_R);
+    return { angle: Math.atan2(mineStick.dy, mineStick.dx), dist: frac * MINE_MAX_THROW };
+  }
+
   mineBtn.addEventListener(
     'touchstart',
     (e) => {
       e.preventDefault();
       e.stopPropagation();
-      mineQueued = true;
+      const t = e.changedTouches[0];
+      const r = mineBtn.getBoundingClientRect();
+      mineStick = { id: t.identifier, cx: r.left + r.width / 2, cy: r.top + r.height / 2, dx: 0, dy: 0 };
+      mineKnob.style.transform = 'translate(-50%,-50%)';
     },
     { passive: false },
   );
@@ -90,11 +113,23 @@ export function createTouchControls() {
   }
 
   function onMove(e) {
-    if (!left && !right) return;
+    if (!left && !right && !mineStick) return;
     e.preventDefault();
     for (const t of e.changedTouches) {
       if (left && t.identifier === left.id) updateStick(left, leftEl, t);
       if (right && t.identifier === right.id) updateStick(right, rightEl, t);
+      if (mineStick && t.identifier === mineStick.id) {
+        let dx = t.clientX - mineStick.cx;
+        let dy = t.clientY - mineStick.cy;
+        const len = Math.hypot(dx, dy);
+        if (len > MINE_STICK_R) {
+          dx = (dx / len) * MINE_STICK_R;
+          dy = (dy / len) * MINE_STICK_R;
+        }
+        mineStick.dx = dx;
+        mineStick.dy = dy;
+        mineKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+      }
     }
   }
 
@@ -107,6 +142,11 @@ export function createTouchControls() {
       if (right && t.identifier === right.id) {
         right = null;
         rightEl.base.classList.add('hidden');
+      }
+      if (mineStick && t.identifier === mineStick.id) {
+        pendingThrow = mineDrag(); // Bombe wird geworfen
+        mineStick = null;
+        mineKnob.style.transform = 'translate(-50%,-50%)';
       }
     }
   }
@@ -131,10 +171,21 @@ export function createTouchControls() {
     isAutoFire() {
       return this.getAimDir() !== null;
     },
+    // Doppeltipp-Mine (wirft in Blickrichtung, ohne Override).
     consumeMine() {
       const m = mineQueued;
       mineQueued = false;
       return m;
+    },
+    // Wurfstick losgelassen -> { angle, dist } (Welt-px) oder null.
+    consumeMineThrow() {
+      const t = pendingThrow;
+      pendingThrow = null;
+      return t;
+    },
+    // Waehrend des Ziehens: Live-Vorschau { angle, dist } oder null.
+    getMinePreview() {
+      return mineStick ? mineDrag() : null;
     },
   };
 }

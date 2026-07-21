@@ -210,7 +210,7 @@ export function dashTank(tank, state, moveAxis) {
 
 // Legt eine Mine am Ort des Panzers, begrenzt durch das Minen-Limit
 // (gleichzeitig liegende eigene Minen, aus tanks.json).
-export function layMine(tank, state) {
+export function layMine(tank, state, throwOverride) {
   const own = state.mines.filter((m) => !m.dead && m.owner === tank);
   // Fernzuender: sind alle Minen draussen, sprengt die Taste sie alle.
   if (tank.cfg.remoteDetonate && own.length >= tank.cfg.mines && own.length > 0) {
@@ -219,16 +219,23 @@ export function layMine(tank, state) {
   }
   if (own.length >= tank.cfg.mines) return false;
 
-  // Der Spieler WIRFT die Mine in Zielrichtung (bis zu throwPx weit) --
-  // so wird sie zum offensiven Zonen-Werkzeug statt nur Fussabwurf.
-  // An einer Wand faellt sie davor zu Boden.
+  // Wurf: Richtung + Weite. Touch-Wurfstick (throwOverride) hat Vorrang,
+  // sonst wirft der Spieler in Blickrichtung bis throwPx weit. An einer
+  // Wand faellt die Bombe davor zu Boden.
+  let angle = tank.turret;
+  let maxDist = 0;
+  if (throwOverride) {
+    angle = throwOverride.angle;
+    maxDist = throwOverride.dist;
+  } else if (tank.type === 'player') {
+    maxDist = state.data.mine.throwPx || 0;
+  }
   let lx = tank.x;
   let ly = tank.y;
-  const throwPx = tank.type === 'player' ? state.data.mine.throwPx || 0 : 0;
-  if (throwPx > 0) {
-    const cos = Math.cos(tank.turret);
-    const sin = Math.sin(tank.turret);
-    for (let d = 6; d <= throwPx; d += 6) {
+  if (maxDist > 0) {
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    for (let d = 6; d <= maxDist; d += 6) {
       const nx = tank.x + cos * d;
       const ny = tank.y + sin * d;
       if (state.isSolid(nx, ny)) break;
