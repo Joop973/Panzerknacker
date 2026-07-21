@@ -210,6 +210,46 @@
       "desc": "Alle deine Explosionen (Schüsse, Minen, Kettenblitz) +50 % Radius",
       "max": 1,
       "mult": 1.5
+    },
+    "rammklinge": {
+      "name": "Rammklinge",
+      "desc": "Fahre Gegner einfach um — Berührung in Fahrt tötet sie",
+      "max": 1,
+      "protectS": 0.3
+    },
+    "klingenkranz": {
+      "name": "Klingenkranz",
+      "desc": "Zwei rotierende Klingen umkreisen dich und zerfetzen Gegner bei Berührung",
+      "max": 1,
+      "count": 2,
+      "orbitPx": 26,
+      "spinRate": 4.0
+    },
+    "turbo": {
+      "name": "Turbo",
+      "desc": "+45 % Bewegungstempo",
+      "max": 1,
+      "speedMult": 1.45
+    },
+    "scharfschuetze": {
+      "name": "Scharfschütze",
+      "desc": "Nur 1 Kugel gleichzeitig — dafür 2,2× Tempo, halber Cooldown, +2 Abpraller",
+      "max": 1,
+      "speedMult": 2.2,
+      "cooldownMult": 0.5,
+      "ricochetsBonus": 2
+    },
+    "uebermacht": {
+      "name": "Übermacht",
+      "desc": "+2 Kugeln im Magazin für jeden noch lebenden Gegner",
+      "max": 1,
+      "perEnemy": 2
+    },
+    "klebemine": {
+      "name": "Klebemine",
+      "desc": "Deine Minen haften am ersten getroffenen Gegner und zünden nach 0,6 s — sicherer Treffer",
+      "max": 1,
+      "stickDelayS": 0.6
     }
   },
   "fallback": {

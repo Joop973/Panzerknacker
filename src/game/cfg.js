@@ -143,9 +143,28 @@ export function applyUpgrades(cfg, ups, upsData) {
     cfg.mineRadiusMult = (cfg.mineRadiusMult || 1) * m;
   }
 
+  // --- Neue Combo-Achsen ---
+  if (l('turbo')) cfg.speed *= U.turbo.speedMult; // extreme Geschwindigkeit
+  if (l('rammklinge')) cfg.ram = U.rammklinge.protectS; // Nahkampf: Rammen
+  if (l('klingenkranz')) {
+    cfg.blades = U.klingenkranz.count;
+    cfg.bladeOrbit = U.klingenkranz.orbitPx;
+    cfg.bladeSpin = U.klingenkranz.spinRate;
+  }
+  if (l('uebermacht')) cfg.magazinePerEnemy = U.uebermacht.perEnemy;
+  if (l('klebemine')) cfg.stickyMine = U.klebemine.stickDelayS;
+  if (l('scharfschuetze')) {
+    cfg.bulletSpeed *= U.scharfschuetze.speedMult;
+    cfg.fireCooldown *= U.scharfschuetze.cooldownMult;
+    cfg.ricochets += U.scharfschuetze.ricochetsBonus;
+    cfg.singleShot = true; // Magazin 1 (hart, unten angewandt)
+  }
+
   // Zielsucher: hartes Magazin-Limit 3 (ueberschreibt alle anderen
   // Magazin-Effekte -- ganz am Ende angewandt).
   if (l('zielsucher')) cfg.magazine = Math.min(cfg.magazine, 3);
+  // Scharfschuetze: hartes Magazin 1 (schlaegt alles).
+  if (cfg.singleShot) cfg.magazine = 1;
   return cfg;
 }
 

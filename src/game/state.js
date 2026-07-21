@@ -205,6 +205,38 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
   }
 }
 
+// Nahkampf: Rammklinge (Kontakt in Fahrt toetet) + Klingenkranz
+// (rotierende Klingen toeten bei Beruehrung).
+function applyMelee(state, dt) {
+  const p = state.player;
+  if (!p.alive) return;
+  // Rammklinge: nur bei nennenswerter Fahrt.
+  if (p.cfg.ram && Math.hypot(p.vx, p.vy) > p.cfg.speed * 0.4) {
+    for (const t of state.tanks) {
+      if (t === p || !t.alive) continue;
+      if (circlesOverlap(p.x, p.y, p.cfg.radius + 2, t.x, t.y, t.cfg.radius)) {
+        p.protect = Math.max(p.protect, p.cfg.ram); // kurz geschuetzt
+        state.killTank(t, 'die Rammklinge');
+      }
+    }
+  }
+  // Klingenkranz: n Klingen umkreisen den Spieler.
+  if (p.cfg.blades) {
+    p.bladeAngle = (p.bladeAngle || 0) + p.cfg.bladeSpin * dt;
+    for (let i = 0; i < p.cfg.blades; i++) {
+      const a = p.bladeAngle + (i / p.cfg.blades) * Math.PI * 2;
+      const bx = p.x + Math.cos(a) * p.cfg.bladeOrbit;
+      const by = p.y + Math.sin(a) * p.cfg.bladeOrbit;
+      for (const t of state.tanks) {
+        if (t === p || !t.alive) continue;
+        if (circlesOverlap(bx, by, 6, t.x, t.y, t.cfg.radius)) {
+          state.killTank(t, 'der Klingenkranz');
+        }
+      }
+    }
+  }
+}
+
 // Kampfdrohne: umkreist den Spieler und feuert selbst auf den naechsten
 // Gegner (deterministisch: fester Drehwinkel, naechstes Ziel nach Distanz).
 function updateDrone(state, dt) {
@@ -302,11 +334,18 @@ export function stepState(state, cmd, dt) {
     state.respawnTimer -= dt;
     if (state.respawnTimer <= 0) respawnPlayer(state);
   } else {
+    // Uebermacht: Magazin waechst mit lebenden Gegnern (dynamisch).
+    if (p.cfg.magazinePerEnemy && !p.cfg.singleShot) {
+      let live = 0;
+      for (const t of state.tanks) if (t !== p && t.alive) live++;
+      p.magazineBonus = p.cfg.magazinePerEnemy * live;
+    }
     if (cmd.dash) dashTank(p, state, cmd.move); // vor der Bewegung
     moveTank(p, cmd.move, state, dt);
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
     if (cmd.fire) fireBullet(p, state);
     if (cmd.mine) layMine(p, state);
+    applyMelee(state, dt); // Rammklinge + Klingenkranz
   }
 
   // Gegner: getrennte Turm-/Fahr-KI liefert Bewegung, Schuss- und

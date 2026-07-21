@@ -90,6 +90,9 @@ function mineRepulsion(tank, state) {
   let any = false;
   for (const m of state.mines) {
     if (m.dead) continue;
+    // Gegner meiden nur ihre EIGENEN Minen (t_yellow-Selbstsperre bleibt).
+    // Spieler-Minen werden NICHT gemieden -> sie treffen zuverlaessig.
+    if (m.owner !== tank) continue;
     const dx = tank.x - m.x;
     const dy = tank.y - m.y;
     const d = Math.hypot(dx, dy);

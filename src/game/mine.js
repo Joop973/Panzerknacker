@@ -25,6 +25,7 @@ export function createMine(x, y, owner, radius) {
     owner,
     age: 0, // s seit dem Legen
     fuse: null, // != null: Restzeit bis Ketten-Explosion
+    stuckTo: null, // Klebemine: Panzer, an dem die Mine haftet
     dead: false,
   };
 }
@@ -100,8 +101,17 @@ export function updateMines(state, dt) {
     if (m.dead) continue;
     m.age += dt;
 
-    // Laufende Ketten-Zuendschnur hat Vorrang.
+    // Laufende Ketten-/Klebe-Zuendschnur hat Vorrang.
     if (m.fuse !== null) {
+      // Klebemine: haftet am Ziel und folgt ihm bis zur Zuendung.
+      if (m.stuckTo) {
+        if (!m.stuckTo.alive) {
+          explode(m, state);
+          continue;
+        }
+        m.x = m.stuckTo.x;
+        m.y = m.stuckTo.y;
+      }
       m.fuse -= dt;
       if (m.fuse <= 0) explode(m, state);
       continue;
@@ -137,10 +147,19 @@ export function updateMines(state, dt) {
     // Kontakt mit einem beliebigen Panzer (auch dem Leger). Die
     // Annaeherungsmine loest schon aus groesserer Entfernung aus.
     const trig = m.owner?.cfg?.mineTriggerRadius ?? m.radius;
+    const sticky = m.owner?.cfg?.stickyMine;
     for (const t of state.tanks) {
       if (!t.alive) continue;
       if (circlesOverlap(m.x, m.y, trig, t.x, t.y, t.cfg.radius)) {
-        explode(m, state);
+        // Klebemine: haftet am Gegner statt sofort zu zuenden
+        // (verschont den Leger als Klebeziel).
+        if (sticky && t !== m.owner) {
+          m.stuckTo = t;
+          m.fuse = sticky;
+          state.sounds.push('mine');
+        } else {
+          explode(m, state);
+        }
         break;
       }
     }

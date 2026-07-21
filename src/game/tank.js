@@ -36,6 +36,7 @@ export function createTank(type, cfg, x, y) {
     dashCd: 0, // Dash-Cooldown
     berserkerFire: 1, // dynamischer Feuerraten-Multiplikator (Berserker)
     berserkerSpeed: 1, // dynamischer Tempo-Multiplikator (Berserker)
+    magazineBonus: 0, // dynamischer Magazin-Bonus (Uebermacht)
     shieldReady: (cfg && (cfg.shield || cfg.counterShield)) || false, // Schild geladen?
     alive: true,
     ai: {}, // Zustandsspeicher der KI-Verhalten (leer beim Spieler)
@@ -104,6 +105,11 @@ function liveBulletsOf(state, owner) {
   return n;
 }
 
+// Effektives Magazin: Basis + dynamischer Bonus (Uebermacht).
+function magazineOf(tank) {
+  return tank.cfg.magazine + (tank.magazineBonus || 0);
+}
+
 // Schussversuch: respektiert Cooldown und Magazin-Limit.
 // Doppelrohr-Upgrade: zwei Kugeln im Spreizwinkel (jede zaehlt gegen
 // das Magazin). Sprengschuss-Upgrade: jeder N-te Abzug traegt eine
@@ -112,7 +118,8 @@ export function fireBullet(tank, state) {
   // Epsilon: der Cooldown ist als Summe von 1/60-Schritten nicht exakt
   // darstellbar; ohne Toleranz feuert man einen Tick zu spaet.
   if (tank.cooldown > 1e-9) return false;
-  if (liveBulletsOf(state, tank) >= tank.cfg.magazine) return false;
+  const mag = magazineOf(tank);
+  if (liveBulletsOf(state, tank) >= mag) return false;
 
   tank.shots++;
   // Sprengschuss: jeder N-te Schuss ist eine ABPRALLENDE Sprengkugel.
@@ -138,7 +145,7 @@ export function fireBullet(tank, state) {
   const muzzle = tank.cfg.radius + 8; // Spitze des Rohrs
   let fired = false;
   for (let i = 0; i < angles.length; i++) {
-    if (liveBulletsOf(state, tank) >= tank.cfg.magazine) break;
+    if (liveBulletsOf(state, tank) >= mag) break;
     const a = angles[i];
     const mx = tank.x + Math.cos(a) * muzzle;
     const my = tank.y + Math.sin(a) * muzzle;
