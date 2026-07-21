@@ -29,6 +29,7 @@ export function createBullet(
     explosionRadius,
     phaseWalls,
     homing,
+    friendly,
   },
 ) {
   return {
@@ -47,6 +48,7 @@ export function createBullet(
     explosionRadius: explosionRadius || 0,
     phaseWalls: phaseWalls || false, // Durchschlag-Upgrade
     homing: homing || 0, // Zielsucher: rad/s Lenkrate (0 = aus)
+    friendly: friendly || false, // trifft den eigenen Besitzer NIE (Drohne/Splitter)
     detonated: false,
     ricochetsLeft: ricochets,
     ricochetsStart: ricochets, // fuer "Abpraller-Kill"-Feedback

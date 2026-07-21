@@ -47,7 +47,7 @@ export function applyUpgrades(cfg, ups, upsData) {
     cfg.allExplosive = true;
     cfg.shotExplosionRadius = U.sprengmunition.radiusPx;
     cfg.mines = 0;
-    cfg.magazine = 1 + 2 * l('magazin');
+    cfg.magazine = 3 + 2 * l('magazin');
   }
   // Durchschlag: Kugeln fliegen durch Waende, dafuer keine Abpraller.
   if (l('durchschlag')) {

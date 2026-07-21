@@ -200,6 +200,7 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
         ricochets: 0,
         owner,
         kind: 'bullet',
+        friendly: true, // Splitter/Kranz treffen den Leger nie
       }),
     );
   }
@@ -274,6 +275,7 @@ function updateDrone(state, dt) {
       ricochets: 0,
       owner: p,
       kind: 'bullet',
+      friendly: true, // Drohnenkugeln treffen den Spieler nie
     }),
   );
   state.flashes.push({ x: dx, y: dy, age: 0 });
@@ -386,7 +388,7 @@ export function stepState(state, cmd, dt) {
     if (b.dead) continue;
     for (const t of state.tanks) {
       if (!t.alive) continue;
-      if (b.owner === t && b.age < grace) continue;
+      if (b.owner === t && (b.age < grace || b.friendly)) continue;
       if (t.protect > 0) continue; // Spawn-Schutz
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
         b.dead = true;
