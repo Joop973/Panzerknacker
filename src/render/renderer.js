@@ -5,6 +5,7 @@
 // Physikschritten interpoliert (alpha).
 
 import { WIDTH, HEIGHT, CELL } from '../config.js';
+import { initSprites, sprite } from './sprites.js';
 import {
   drawMines,
   drawTraps,
@@ -16,6 +17,17 @@ import {
   drawThreatLines,
   drawMinePreview,
 } from './effects.js';
+
+initSprites(); // Grafiken sofort vorladen (async, Fallback bleibt aktiv)
+
+// Ordnet einer Geschoss-Instanz das passende Sprite zu.
+function bulletSpriteKey(b) {
+  if (b.tungsten) return 'tungsten';
+  if (b.explosive) return 'explosive';
+  if (b.kind === 'rocket') return 'rocket';
+  if (b.kind === 'bounce_rocket') return 'bounce';
+  return 'normal';
+}
 
 // Optionen (von main.js gesetzt): reduzierte Bewegung schaltet
 // Screenshake ab; Bedrohungslinien sind optional.
@@ -74,6 +86,21 @@ export function whiteAlpha(state) {
 }
 
 export function createRenderer(ctx) {
+  // Sprite zentriert an (cx,cy) rotiert zeichnen. `target` ist die
+  // Ziel-Pixelgröße: bei byHeight die Höhe (Türme/Geschosse -> Dom bzw.
+  // Kaliber normiert), sonst die längere Kante (Rümpfe).
+  function drawSpriteRot(img, cx, cy, angle, target, byHeight) {
+    const base = byHeight ? img.naturalHeight : Math.max(img.naturalWidth, img.naturalHeight);
+    const s = target / base;
+    const w = img.naturalWidth * s;
+    const h = img.naturalHeight * s;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(angle);
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+
   // Boden einmalig in ein Offscreen-Canvas backen (Politur: dezentes
   // Schachbrett statt reiner Rasterlinien, ohne Frame-Kosten).
   const floorCanvas = document.createElement('canvas');
@@ -103,12 +130,40 @@ export function createRenderer(ctx) {
     f.stroke();
   }
 
+  // Sobald das Boden-Sprite geladen ist, wird der Offscreen-Boden EINMAL
+  // mit der gekachelten Grafik neu gebacken (danach frame-kostenlos).
+  let floorBaked = false;
+  function bakeFloorSprite() {
+    const img = sprite('tile', 'floor');
+    if (!img || floorBaked) return;
+    const f = floorCanvas.getContext('2d');
+    f.imageSmoothingEnabled = false;
+    for (let r = 0; r < HEIGHT / CELL; r++) {
+      for (let c = 0; c < WIDTH / CELL; c++) {
+        f.drawImage(img, c * CELL, r * CELL, CELL, CELL);
+      }
+    }
+    floorBaked = true;
+  }
+
   function drawFloor() {
+    bakeFloorSprite();
     ctx.drawImage(floorCanvas, 0, 0);
   }
 
   function drawWalls(walls) {
     for (const wall of walls) {
+      // Kachel-Sprite (falls geladen) über die ganze Wandfläche legen.
+      const key = wall.type === 'hole' ? 'hole' : wall.type === 'breakable' ? 'breakable' : 'wall';
+      const img = sprite('tile', key);
+      if (img) {
+        for (let y = wall.y; y < wall.y + wall.h; y += CELL) {
+          for (let x = wall.x; x < wall.x + wall.w; x += CELL) {
+            ctx.drawImage(img, x, y, CELL, CELL);
+          }
+        }
+        continue;
+      }
       if (wall.type === 'hole') {
         // Loch: dunkle Grube, Panzer blockiert, Geschosse fliegen drueber.
         ctx.fillStyle = '#0c0c10';
@@ -188,19 +243,25 @@ export function createRenderer(ctx) {
       ctx.globalAlpha = bodyAlpha;
     }
 
-    // Wanne mit Ketten, rotiert in Fahrtrichtung (Politur, Phase 10).
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(t.heading);
-    ctx.fillStyle = edge;
-    ctx.fillRect(-r + 1, -r + 1, 2 * r - 2, 5); // Kette oben
-    ctx.fillRect(-r + 1, r - 6, 2 * r - 2, 5); // Kette unten
-    ctx.fillStyle = body;
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = 2;
-    ctx.fillRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
-    ctx.strokeRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
-    ctx.restore();
+    // Wanne, rotiert in Fahrtrichtung. Sprite (Front zeigt nach oben ->
+    // +PI/2) falls geladen, sonst prozedurale Ketten-Wanne (Fallback).
+    const bodyImg = sprite('body', t.type);
+    if (bodyImg) {
+      drawSpriteRot(bodyImg, x, y, t.heading + Math.PI / 2, 2.9 * r, false);
+    } else {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(t.heading);
+      ctx.fillStyle = edge;
+      ctx.fillRect(-r + 1, -r + 1, 2 * r - 2, 5); // Kette oben
+      ctx.fillRect(-r + 1, r - 6, 2 * r - 2, 5); // Kette unten
+      ctx.fillStyle = body;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = 2;
+      ctx.fillRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
+      ctx.strokeRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
+      ctx.restore();
+    }
 
     // Ziellinie des Spielers mit EINEM Abpraller-Vorgriff: Ray-March
     // wie ein Geschoss (achsweise Reflexion) -- man sieht die erste
@@ -243,20 +304,26 @@ export function createRenderer(ctx) {
       ctx.setLineDash([]);
     }
 
-    // Turm + Rohr, unabhaengig vom Rumpf rotiert.
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(t.turret);
-    ctx.fillStyle = edge;
-    ctx.fillRect(4, -2.5, r + 4, 5); // Rohr
-    ctx.fillStyle = body;
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, 7, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
+    // Turm + Rohr, unabhaengig vom Rumpf rotiert. Sprite: Rohr zeigt nach
+    // rechts (= Winkel 0), Dom-Pivot ist zentriert -> direkt t.turret.
+    const turImg = sprite('turret', t.type);
+    if (turImg) {
+      drawSpriteRot(turImg, x, y, t.turret, 2.1 * r, true);
+    } else {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(t.turret);
+      ctx.fillStyle = edge;
+      ctx.fillRect(4, -2.5, r + 4, 5); // Rohr
+      ctx.fillStyle = body;
+      ctx.strokeStyle = edge;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // Krallenfalle: gefangener Panzer bekommt einen pulsierenden Ring.
     if (t.stunTimer > 0) {
@@ -276,6 +343,24 @@ export function createRenderer(ctx) {
     for (const b of bullets) {
       const x = lerp(b.prevX, b.x, alpha);
       const y = lerp(b.prevY, b.y, alpha);
+
+      // Sprite (Spitze zeigt nach rechts = Flugrichtung) falls geladen.
+      const img = sprite('bullet', bulletSpriteKey(b));
+      if (img) {
+        const ang = Math.atan2(b.vy, b.vx);
+        drawSpriteRot(img, x, y, ang, 3.6 * b.radius, true);
+        if (b.explosive) {
+          ctx.strokeStyle = '#ff9a4a';
+          ctx.globalAlpha = 0.7;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, b.radius + 3, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        continue;
+      }
+
       // Wolframkern-Kugeln kalt-blau eingefaerbt (durchschlagen breakable).
       const c = b.tungsten
         ? { fill: '#d9e2ff', edge: '#6a7adf' }
@@ -315,6 +400,7 @@ export function createRenderer(ctx) {
 
   return {
     render(state, alpha, tracks, minePreview) {
+      ctx.imageSmoothingEnabled = true; // weiche Sprite-Skalierung
       // Screenshake: deterministisches Wackeln aus der Spielzeit.
       const sh = renderOpts.reduceMotion ? 0 : state.shake || 0;
       ctx.save();
