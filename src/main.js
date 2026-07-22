@@ -140,6 +140,7 @@ async function init() {
     preview.hide();
     upgradeShown = false;
     previewShown = false;
+    pause.set(false); // frischer Run startet NIE pausiert (Portrait-Altlast)
     // Touch-Geraete: Vollbild + Landscape-Lock versuchen (Android;
     // iOS ignoriert es -- dort greift das Portrait-Overlay).
     if (navigator.maxTouchPoints > 0) {
@@ -382,12 +383,17 @@ async function init() {
   });
 
   // Portrait: Overlay kommt per CSS; zusaetzlich pausieren (Touch-Geraete).
+  // Zurueck ins Querformat -> automatisch fortsetzen, sonst bleibt das
+  // Spiel faelschlich pausiert und man muss erst "Pause" druecken.
   const portrait = window.matchMedia('(orientation: portrait) and (pointer: coarse)');
   const onPortrait = () => {
     if (portrait.matches) pause.set(true);
+    else if (run && run.phase === 'playing') pause.set(false);
   };
   portrait.addEventListener?.('change', onPortrait);
-  onPortrait();
+  // Bei Init nur pausieren wenn tatsaechlich Portrait -- nie beim Start
+  // haengen lassen.
+  if (portrait.matches) pause.set(true);
 
   loop.start();
 }
