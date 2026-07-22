@@ -30,7 +30,9 @@ html, body {
 #canvas {
   /* Arena ist exakt 768x512 px (24x16 Zellen a 32 px). */
   background: #1b1b22;
-  image-rendering: pixelated;
+  /* auto statt pixelated: die detaillierten Panzer-Sprites bleiben beim
+     Hochskalieren (Handy-Vollbild) weich statt blockig. */
+  image-rendering: auto;
   max-width: 100%;
   max-height: 90vh;
   /* Seitenverhaeltnis halten, wenn skaliert */

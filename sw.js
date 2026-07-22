@@ -2,7 +2,7 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v23';
+const CACHE = 'panzerknacker-v24';
 
 const ASSETS = [
   './',
@@ -37,7 +37,38 @@ const ASSETS = [
   'src/render/debug.js',
   'src/render/effects.js',
   'src/render/renderer.js',
+  'src/render/sprites.js',
   'src/render/tracks.js',
+  // Sprite-Grafiken (Rümpfe + Türme je Panzertyp, Kacheln, Geschosse)
+  'assets/sprites/body_player.png',
+  'assets/sprites/body_t_brown.png',
+  'assets/sprites/body_t_grey.png',
+  'assets/sprites/body_t_teal.png',
+  'assets/sprites/body_t_yellow.png',
+  'assets/sprites/body_t_pink.png',
+  'assets/sprites/body_t_green.png',
+  'assets/sprites/body_t_purple.png',
+  'assets/sprites/body_t_white.png',
+  'assets/sprites/body_t_black.png',
+  'assets/sprites/turret_player.png',
+  'assets/sprites/turret_t_brown.png',
+  'assets/sprites/turret_t_grey.png',
+  'assets/sprites/turret_t_teal.png',
+  'assets/sprites/turret_t_yellow.png',
+  'assets/sprites/turret_t_pink.png',
+  'assets/sprites/turret_t_green.png',
+  'assets/sprites/turret_t_purple.png',
+  'assets/sprites/turret_t_white.png',
+  'assets/sprites/turret_t_black.png',
+  'assets/sprites/tile_floor.png',
+  'assets/sprites/tile_wall.png',
+  'assets/sprites/tile_breakable.png',
+  'assets/sprites/tile_hole.png',
+  'assets/sprites/bullet_normal.png',
+  'assets/sprites/bullet_rocket.png',
+  'assets/sprites/bullet_bounce.png',
+  'assets/sprites/bullet_tungsten.png',
+  'assets/sprites/bullet_explosive.png',
   'src/ui/hud.js',
   'src/ui/pause.js',
   'src/ui/preview.js',
