@@ -141,15 +141,21 @@ async function init() {
     upgradeShown = false;
     previewShown = false;
     pause.set(false); // frischer Run startet NIE pausiert (Portrait-Altlast)
-    // Touch-Geraete: Vollbild + Landscape-Lock versuchen (Android;
-    // iOS ignoriert es -- dort greift das Portrait-Overlay).
-    if (navigator.maxTouchPoints > 0) {
-      document.documentElement.requestFullscreen?.().then(
-        () => screen.orientation?.lock?.('landscape').catch(() => {}),
-        () => {},
-      );
-    }
+    goFullscreen();
     requestWakeLock();
+  }
+
+  // Touch-Geraete: echtes Vollbild (Adressleiste weg) + Landscape-Lock
+  // versuchen (Android; iOS unterstuetzt Element-Vollbild nicht -- dort
+  // haelt viewport-fit=cover + 100dvh die Leiste klein, sonst hilft nur
+  // "Zum Startbildschirm hinzufuegen"). Nur anfordern, wenn wir nicht
+  // ohnehin schon im Vollbild sind, damit kein Fehler geworfen wird.
+  function goFullscreen() {
+    if (navigator.maxTouchPoints === 0 || document.fullscreenElement) return;
+    document.documentElement.requestFullscreen?.().then(
+      () => screen.orientation?.lock?.('landscape').catch(() => {}),
+      () => {},
+    );
   }
 
   // Display-Wachsperre: beim Gamepad-Spielen fasst man den Touchscreen
@@ -394,6 +400,16 @@ async function init() {
   // Bei Init nur pausieren wenn tatsaechlich Portrait -- nie beim Start
   // haengen lassen.
   if (portrait.matches) pause.set(true);
+
+  // Faellt das Vollbild raus (Zurueck-Geste, System-Overlay), holt der
+  // naechste Fingertipp es zurueck -- so bleibt die Adressleiste weg.
+  window.addEventListener(
+    'pointerdown',
+    () => {
+      if (run && run.phase === 'playing') goFullscreen();
+    },
+    { passive: true },
+  );
 
   loop.start();
 }

@@ -6,8 +6,11 @@
 
 html, body {
   width: 100%;
-  height: 100%;
-  background: #111;
+  height: 100vh;
+  /* dvh: dynamische Viewport-Hoehe -- rechnet die (eingeklappte)
+     Adressleiste heraus, sodass kein Rand entsteht. */
+  height: 100dvh;
+  background: #000;
   color: #ccc;
   font-family: system-ui, sans-serif;
   overflow: hidden;
@@ -15,7 +18,8 @@ html, body {
 
 #game {
   width: 100%;
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -32,6 +36,22 @@ html, body {
   /* Seitenverhaeltnis halten, wenn skaliert */
   aspect-ratio: 768 / 512;
   touch-action: none;
+}
+
+/* Touch im Querformat: echtes Vollbild. Der Canvas fuellt die ganze
+   Hoehe, das 3:2-Seitenverhaeltnis laesst schwarze Flaechen links und
+   rechts frei -- genau dort liegen Sticks, Minen- und Dash-Button. */
+@media (orientation: landscape) and (pointer: coarse) {
+  #game {
+    gap: 0;
+  }
+  #canvas {
+    max-height: 100vh;
+    max-height: 100dvh;
+  }
+  .hint {
+    display: none;
+  }
 }
 
 .hint {
@@ -167,7 +187,7 @@ html, body {
 #pauseBtn,
 #muteBtn {
   position: fixed;
-  top: 6px;
+  top: calc(6px + env(safe-area-inset-top));
   z-index: 5;
   background: rgba(27, 27, 34, 0.8);
   border: 1px solid #4a4a5a;
@@ -178,11 +198,11 @@ html, body {
 }
 
 #pauseBtn {
-  left: 8px;
+  left: calc(8px + env(safe-area-inset-left));
 }
 
 #muteBtn {
-  left: 62px;
+  left: calc(62px + env(safe-area-inset-left));
 }
 
 #muteBtn.muted {
@@ -298,8 +318,8 @@ html, body {
 #mineBtn {
   display: none;
   position: fixed;
-  right: 14px;
-  bottom: 14px;
+  right: calc(14px + env(safe-area-inset-right));
+  bottom: calc(14px + env(safe-area-inset-bottom));
   width: 68px;
   height: 68px;
   border-radius: 50%;
@@ -341,8 +361,8 @@ body.touch-on #mineBtn {
 
 #dashBtn {
   position: fixed;
-  left: 14px;
-  bottom: 14px;
+  left: calc(14px + env(safe-area-inset-left));
+  bottom: calc(14px + env(safe-area-inset-bottom));
   width: 64px;
   height: 64px;
   border-radius: 50%;
