@@ -1,0 +1,49 @@
+{
+  "events": [
+    {
+      "id": "feldwerkstatt",
+      "title": "Feldwerkstatt",
+      "text": "Eine verlassene Werkstatt. Werkzeug liegt herum, doch die Zeit drängt.",
+      "options": [
+        { "label": "Panzerung verstärken (+1 Schildladung)", "effects": { "shield": 1 } },
+        { "label": "Ersatzteile verkaufen (+3 Schrott)", "effects": { "scrap": 3 } }
+      ]
+    },
+    {
+      "id": "wrackfeld",
+      "title": "Wrackteile-Feld",
+      "text": "Ausgebrannte Wracks, so weit das Auge reicht. Manches ist noch zu gebrauchen.",
+      "options": [
+        { "label": "Alles verwerten (+5 Schrott)", "effects": { "scrap": 5 } },
+        { "label": "Ersatzpanzer bergen (+1 Leben)", "effects": { "life": 1 } }
+      ]
+    },
+    {
+      "id": "minenguertel",
+      "title": "Minengürtel",
+      "text": "Ein dichtes Minenfeld versperrt den Weg. Drumherum kostet Zeit, mittendurch kostet Nerven.",
+      "options": [
+        { "label": "Vorsichtig umfahren (+2 Schrott)", "effects": { "scrap": 2 } },
+        { "label": "Durchpflügen (+5 Schrott, −1 Schildladung)", "effects": { "scrap": 5, "shield": -1 } }
+      ]
+    },
+    {
+      "id": "konvoi",
+      "title": "Verlassener Konvoi",
+      "text": "Ein stehen gelassener Nachschubkonvoi. Treibstoff oder Kriegskasse — für beides fehlt die Zeit.",
+      "options": [
+        { "label": "Treibstoff zapfen (+1 Leben)", "effects": { "life": 1 } },
+        { "label": "Kriegskasse knacken (+4 Schrott)", "effects": { "scrap": 4 } }
+      ]
+    },
+    {
+      "id": "schrotthaendler",
+      "title": "Wandernder Schrotthändler",
+      "text": "Ein zwielichtiger Händler bietet dir ein Notschild an — zum Freundschaftspreis.",
+      "options": [
+        { "label": "Notschild kaufen (−3 Schrott, +1 Schildladung)", "effects": { "scrap": -3, "shield": 1 } },
+        { "label": "Höflich ablehnen (+2 Schrott)", "effects": { "scrap": 2 } }
+      ]
+    }
+  ]
+}

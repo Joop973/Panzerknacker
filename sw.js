@@ -2,7 +2,7 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v30';
+const CACHE = 'panzerknacker-v31';
 
 const ASSETS = [
   './',
@@ -16,6 +16,7 @@ const ASSETS = [
   'data/tiles.json',
   'data/upgrades.json',
   'data/balance.json',
+  'data/events.json',
   'src/config.js',
   'src/main.js',
   'src/core/audio.js',
@@ -77,6 +78,7 @@ const ASSETS = [
   'src/ui/preview.js',
   'src/ui/touchcontrols.js',
   'src/ui/upgradescreen.js',
+  'src/ui/roomscreens.js',
 ];
 
 // WICHTIG: KEIN skipWaiting() und KEIN clients.claim().

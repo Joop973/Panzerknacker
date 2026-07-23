@@ -56,28 +56,38 @@ function fallbackOffer(upgradesData) {
 }
 
 // Alle aktuell gueltigen Upgrade-Definitionen (ohne Tag-/Slot-Regel).
+// Zusatz-Optionen (Phase 4, Elite-/Treasure-Belohnung):
+//   includeTag     -- nur dieser Tag (umgeht die EXCLUDED_TAGS, z. B. 'elite')
+//   onlyRarity     -- nur diese Seltenheit (z. B. 'legendary' fuer Treasure)
+//   bypassRoomGate -- minRoom + legendary.minRoom ignorieren
 function buildCandidates(upgradesData, opts) {
-  const { chosen = {}, roomIndex = 1, balance, banned } = opts;
+  const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate } = opts;
   const legMinRoom = balance.legendary?.minRoom ?? 0;
   const bannedSet = banned || new Set();
   const defs = upgradesData.upgrades;
   const candidates = [];
   for (const id in defs) {
     const def = defs[id];
-    if (EXCLUDED_TAGS.has(def.tag)) continue;
+    if (includeTag) {
+      if (def.tag !== includeTag) continue; // nur dieser Tag (bypass EXCLUDED)
+    } else if (EXCLUDED_TAGS.has(def.tag)) continue;
+    if (onlyRarity && def.rarity !== onlyRarity) continue;
     if (bannedSet.has(id)) continue;
     if ((chosen[id] || 0) >= def.maxStacks) continue;
-    if (roomIndex < (def.minRoom || 1)) continue;
-    if (def.rarity === 'legendary' && roomIndex < legMinRoom) continue;
+    if (!bypassRoomGate) {
+      if (roomIndex < (def.minRoom || 1)) continue;
+      if (def.rarity === 'legendary' && roomIndex < legMinRoom) continue;
+    }
     if (def.requires && def.requires.some((req) => (chosen[req] || 0) <= 0)) continue;
     candidates.push(def);
   }
   return candidates;
 }
 
-// opts: { chosen {id:level}, roomIndex, rng, balance, count, banned:Set }
+// opts: { chosen {id:level}, roomIndex, rng, balance, count, banned:Set,
+//         includeTag?, onlyRarity?, bypassRoomGate?, ignoreTagRule? }
 export function rollOffers(upgradesData, opts) {
-  const { chosen = {}, rng, balance, count } = opts;
+  const { chosen = {}, rng, balance, count, ignoreTagRule } = opts;
   const weights = balance.rarity;
   const n = count || upgradesData.offersPerScreen || 3;
 
@@ -85,7 +95,9 @@ export function rollOffers(upgradesData, opts) {
   const usedTags = new Set();
   let pool = buildCandidates(upgradesData, opts).slice();
   while (offers.length < n && pool.length) {
-    const eligible = pool.filter((d) => !usedTags.has(d.tag));
+    // Elite-/Treasure-Belohnungen ignorieren die Tag-Regel (alle Karten
+    // haben denselben Tag bzw. dieselbe Seltenheit).
+    const eligible = ignoreTagRule ? pool : pool.filter((d) => !usedTags.has(d.tag));
     if (!eligible.length) break; // kein neuer Tag mehr moeglich
     const pick = weightedPick(eligible, rng, weights);
     offers.push(makeOffer(pick, chosen));

@@ -104,6 +104,37 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
 - **Endlosmodus-Fix**: nur ein NEU auf dem Endscreen begonnener Tipp führt
   ins Menü (der spielbeendende Tipp löste sonst sofort `backToStart`).
 
+### Phase 4 (Türwahl + Raumtypen) — gemergt
+- **Türwahl** nach jedem geräumten Raum (ab Raum 4): zwei Türen mit Typ +
+  Symbol (`src/ui/roomscreens.js` `createDoorScreen`), ersetzt den
+  automatischen Übergang. Verteilung aus `difficulty.json` (`doors.weights`,
+  `doors.firstDoorRoom`). Regeln in `run.js` `rollDoors`: nie zwei gleiche
+  Typen; Raum 1–3 + Finalraum immer `combat`; `treasure` gesperrt bei ≤1
+  Leben; `event`/`workshop` nicht zweimal hintereinander. `combat`+`elite`
+  nie gesperrt → keine Sackgasse (40 Seeds getestet).
+- **Raumtypen** (`run.js` `startRoom(type)`): `combat` (Standard); `elite`
+  (Budget ×`elite.budgetMult`, 1 Affix auf alle Gegner, doppelter Schrott
+  `scrap.eliteMult`, Belohnung aus Tag `elite`); `treasure` (kein Kampf,
+  −1 Leben, 1 garantiertes Legendär); `workshop` (kein Kampf, Schrott
+  ausgeben + Upgrade ablegen `dropUpgrade`); `event` (kein Kampf, Text-
+  entscheidung aus `data/events.json`). Nicht-Kampf-Räume bauen keine neue
+  Arena (der geräumte Vorraum bleibt Kulisse hinter dem Overlay).
+- **Fluss**: `afterRoomDone` entscheidet Tür vs. erzwungener Kampf;
+  `pickDoor`/`chooseEventOption`/`leaveWorkshop` treiben weiter.
+  `chooseUpgrade` endet jetzt in `afterRoomDone` (statt direkt nächster Raum).
+- **Elite-Affixe** (`difficulty.elite.affixes`): `gepanzert` (Gegnerschild,
+  fängt 1 Treffer — neue Enemy-Schild-Logik in `killTank`), `rasend`
+  (Tempo ×1.35), `brandstifter` (+2 Minen). Gegner tragen `tank.affix`
+  (Marker für Phase 5 „Gegner ohne Elite-Affix").
+- **Elite-Karten** (Tag `elite`, nur aus Eliteräumen): `beutepanzer`
+  (Kampfdrohne), `trophaee` (+1 Schildladung dauerhaft, `maxStacks 3`),
+  `kriegsmaschine` (+2 Magazin, schnellere Nachladung). Pool-Filter in
+  `upgradepool.js` (`includeTag`/`onlyRarity`/`bypassRoomGate`/`ignoreTagRule`).
+- **Telemetrie**: Türtyp gewählt+abgelehnt pro Raum, Event-Entscheidungen;
+  Debug-Tabelle zeigt Türen + Events.
+- `balance.json`: `scrap.eliteMult 2`, `scrap.dropRefund 2` (ersetzt
+  `eliteBonus`).
+
 ### Balance-Anpassungen (Nutzer-Feedback) — gemergt
 - **Wurfweite −25 %**: `mine.throwPx` 96→72 (Tastatur/Gamepad),
   `MINE_MAX_THROW` 190→142 (Touch-Wurfstick, `touchcontrols.js`).
@@ -137,8 +168,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   (`genRng` = Raumbau, `aiRng` = KI). Gleicher Seed → gleicher Verlauf.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
-  `balance.json`). `balance.json` enthält auch Rarity-Gewichte,
-  `legendary.minRoom` + die `scrap`-Werte (Phase 3).
+  `balance.json`, `events.json`). `balance.json` enthält auch Rarity-Gewichte,
+  `legendary.minRoom` + die `scrap`-Werte; `difficulty.json` die `doors`/
+  `elite`/`treasure`-Konfiguration (Phase 4).
+  `data/events.json` wird in `main.js` an `tanksData.events` gehängt.
   `src/game/cfg.js` löst Typen auf und wendet Upgrades an.
   `data/balance.json` wird in `main.js` an `tanksData.balance` gehängt und
   ist so über `state.data.balance` überall verfügbar.
@@ -152,7 +185,9 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/game/tank.js` — Feuern, Minen legen/werfen.
 - `src/game/cfg.js` — Panzer-cfg + alle ~39 Upgrade-Effekte.
 - `src/game/upgradepool.js` — Auswahl-Pool (Tag-Regel, Rarity, maxStacks,
-  requires, minRoom); von `run.js` genutzt.
+  requires, minRoom; Phase 4: includeTag/onlyRarity/bypassRoomGate/
+  ignoreTagRule für Elite-/Treasure-Belohnungen); von `run.js` genutzt.
+- `src/ui/roomscreens.js` — Tür-, Event-, Werkstatt-Overlays (Phase 4).
 - `src/render/renderer.js` — zeichnet alles (interpoliert). Nutzt Sprites,
   fällt auf prozedurale Formen zurück, falls Grafik fehlt/lädt.
 - `src/render/sprites.js` — lädt die PNG-Sprites (async, mit Fallback).
@@ -161,8 +196,9 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/core/telemetry.js` — Run-Telemetrie in `localStorage.runs` +
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-Cache, cache-first). Cache-Version bumpen!
-  (Aktuell `v29`; `data/balance.json`, `src/core/telemetry.js` +
-  `src/game/upgradepool.js` im Cache.) **Bewusst KEIN `skipWaiting()`/
+  (Aktuell `v31`; `data/balance.json`, `data/events.json`,
+  `src/core/telemetry.js`, `src/game/upgradepool.js` +
+  `src/ui/roomscreens.js` im Cache.) **Bewusst KEIN `skipWaiting()`/
   `clients.claim()`** — sonst kann eine laufende Seite mitten im Start alten
   Code mit neuen `data/*.json` mischen (Upgrade-Screen zeigt dann nur
   „+1 Leben"). Update greift erst nach vollständigem Neustart (Tab/App zu).

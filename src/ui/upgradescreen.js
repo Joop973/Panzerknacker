@@ -21,16 +21,25 @@ export function createUpgradeScreen() {
     const offers = ctx.getOffers();
     const scrap = ctx.getScrap();
     const costs = ctx.costs;
+    // Elite-/Treasure-Belohnungen zeigen keine Schrott-Aktionen.
+    const showActions = ctx.showActions !== false;
     el.innerHTML = '';
 
     const h = document.createElement('h1');
-    h.textContent = 'Upgrade wählen';
+    h.textContent = ctx.title || 'Upgrade wählen';
     el.appendChild(h);
 
-    const scrapLine = document.createElement('p');
-    scrapLine.className = 'scrapline';
-    scrapLine.innerHTML = `Schrott: <strong>${scrap}</strong>`;
-    el.appendChild(scrapLine);
+    if (ctx.subtitle) {
+      const sub = document.createElement('p');
+      sub.className = 'scrapline';
+      sub.textContent = ctx.subtitle;
+      el.appendChild(sub);
+    } else if (showActions) {
+      const scrapLine = document.createElement('p');
+      scrapLine.className = 'scrapline';
+      scrapLine.innerHTML = `Schrott: <strong>${scrap}</strong>`;
+      el.appendChild(scrapLine);
+    }
 
     const row = document.createElement('div');
     row.className = 'cards';
@@ -48,8 +57,8 @@ export function createUpgradeScreen() {
         el.classList.add('hidden');
         ctx.onPick(i);
       });
-      // Verbannen-Knopf (nicht bei Fallback-Karten).
-      if (!o.fallback) {
+      // Verbannen-Knopf (nicht bei Fallback-Karten, nur mit Schrott-Aktionen).
+      if (!o.fallback && showActions) {
         const ban = document.createElement('button');
         ban.className = 'banbtn';
         ban.innerHTML = `✕&nbsp;${costs.ban}`;
@@ -64,6 +73,11 @@ export function createUpgradeScreen() {
       row.appendChild(card);
     });
     el.appendChild(row);
+
+    if (!showActions) {
+      el.classList.remove('hidden');
+      return;
+    }
 
     const actions = document.createElement('div');
     actions.className = 'scrapactions';

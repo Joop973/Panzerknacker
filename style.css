@@ -273,6 +273,117 @@ html, body {
   cursor: not-allowed;
 }
 
+/* --- Phase 4: Tür-/Event-/Werkstatt-Overlays --- */
+.doors {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.doors .doorcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 210px;
+  min-height: 150px;
+  padding: 18px;
+  background: #1b1b22;
+  border: 2px solid #4a5a7a;
+  border-radius: 8px;
+  color: #e8e4d8;
+  font-family: monospace;
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+}
+.doors .doorcard:hover {
+  background: #2a2a33;
+  border-color: #6a8ac0;
+}
+.doors .doorcard .doorsym {
+  font-size: 40px;
+  line-height: 1;
+}
+.doors .doorcard strong {
+  color: #c8b24a;
+  font-size: 17px;
+  letter-spacing: 1px;
+}
+.doors .doorcard[data-type='elite'] {
+  border-color: #d8a83a;
+}
+.doors .doorcard[data-type='treasure'] {
+  border-color: #d84a9e;
+}
+
+.eventtext {
+  max-width: 520px;
+  text-align: center;
+  color: #c9c4b6;
+  font-family: monospace;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.eventopts {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 8px;
+}
+.eventbtn,
+.leavebtn {
+  background: #23303f;
+  color: #e8e4d8;
+  border: 1px solid #3a5068;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 14px;
+  padding: 12px 20px;
+  cursor: pointer;
+  max-width: 300px;
+}
+.eventbtn:hover,
+.leavebtn:hover {
+  background: #2f4258;
+}
+
+.workshophint {
+  font-family: monospace;
+  font-size: 13px;
+  color: #9aa0a8;
+  margin-top: 6px;
+}
+.droplist {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 640px;
+}
+.droplist .dropbtn {
+  background: #2a2320;
+  color: #e8e4d8;
+  border: 1px solid #5a4838;
+  border-radius: 5px;
+  font-family: monospace;
+  font-size: 13px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+.droplist .dropbtn:hover {
+  background: #3a2f28;
+}
+.leavebtn {
+  margin-top: 8px;
+  border-color: #6a8ac0;
+}
+.dropbtn .price,
+.eventbtn .price {
+  color: #e0c860;
+}
+
 /* Pause-Button oben mittig, ausserhalb der Daumenzonen */
 #pauseBtn,
 #muteBtn {

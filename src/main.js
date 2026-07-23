@@ -19,8 +19,14 @@ import {
   banOffer,
   buyFourthCard,
   buyShieldCharge,
+  pickDoor,
+  dropUpgrade,
+  leaveWorkshop,
+  chooseEventOption,
+  ROOM_TYPE_INFO,
 } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
+import { createDoorScreen, createEventScreen, createWorkshopScreen } from './ui/roomscreens.js';
 import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
@@ -33,7 +39,7 @@ import { createHud } from './ui/hud.js';
 import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
-  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance'];
+  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events'];
   const out = [];
   for (const n of names) {
     let res;
@@ -57,11 +63,12 @@ async function loadData() {
 }
 
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData, balanceData] = await loadData();
+  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData] = await loadData();
   // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
   // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
   // sind (Geschoss-Lifetime/Cap/Immunitaet, Minen-Radius/Fuse/Kette).
   tanksData.balance = balanceData;
+  tanksData.events = eventsData; // Phase 4: Event-Raeume (run.data.events)
   // Debug-Ansicht der Telemetrie nur bei ?debug=1 aufbauen.
   telemetry.mountDebugView();
 
@@ -102,6 +109,9 @@ async function init() {
   const debugOverlay = createDebugOverlay(ctx);
   const hud = createHud(ctx);
   const upgradeScreen = createUpgradeScreen();
+  const doorScreen = createDoorScreen();
+  const eventScreen = createEventScreen();
+  const workshopScreen = createWorkshopScreen();
   const preview = createPreview();
   const touch = createTouchControls();
   const pause = createPause();
@@ -110,6 +120,9 @@ async function init() {
   let run = null;
   let lastRoomState = null;
   let upgradeShown = false;
+  let doorShown = false;
+  let eventShown = false;
+  let workshopShown = false;
   let previewShown = false;
   let toast = null;
   let lastSeed = 0;
@@ -195,6 +208,20 @@ async function init() {
   let frameCount = 0;
   let fpsWindowStart = performance.now();
 
+  // Alle Raum-Overlays verstecken + Anzeige-Flags zuruecksetzen.
+  function hideRoomScreens() {
+    upgradeScreen.hide();
+    preview.hide();
+    doorScreen.hide();
+    eventScreen.hide();
+    workshopScreen.hide();
+    upgradeShown = false;
+    previewShown = false;
+    doorShown = false;
+    eventShown = false;
+    workshopShown = false;
+  }
+
   function startRun() {
     const raw = seedInput.value.trim();
     const seed = raw === '' ? Date.now() >>> 0 : Number(raw) >>> 0;
@@ -203,10 +230,7 @@ async function init() {
     lastSeed = seed;
     beginTelemetry();
     startOverlay.classList.add('hidden');
-    upgradeScreen.hide();
-    preview.hide();
-    upgradeShown = false;
-    previewShown = false;
+    hideRoomScreens();
     pause.set(false); // frischer Run startet NIE pausiert (Portrait-Altlast)
     goFullscreen();
     requestWakeLock();
@@ -307,13 +331,23 @@ async function init() {
       }
     }
 
-    // Upgrade-Screen genau einmal pro Angebot einblenden.
+    // Upgrade-Screen genau einmal pro Angebot einblenden. Elite-/Treasure-
+    // Belohnungen ohne Schrott-Aktionen, mit eigenem Titel.
     if (run.phase === 'upgrade' && !upgradeShown) {
       upgradeShown = true;
       const costs = run.data.balance.scrap.cost;
+      const kind = run.rewardKind;
       const cardOf = (o) => ({ id: o.fallback ? null : o.id, name: o.name, tag: o.tag, rarity: o.rarity });
       upgradeScreen.show({
         costs,
+        showActions: kind === 'normal' || kind == null,
+        title: kind === 'elite' ? 'Elite-Beute' : kind === 'treasure' ? 'Schatzkammer' : 'Upgrade wählen',
+        subtitle:
+          kind === 'elite'
+            ? 'Wähle eine Elite-Karte.'
+            : kind === 'treasure'
+              ? 'Ein garantiertes Legendär (Betreten kostete 1 Leben).'
+              : null,
         getOffers: () => run.pendingOffers,
         getScrap: () => run.scrap,
         canFourth: () => run.pendingOffers.length < 4,
@@ -354,6 +388,67 @@ async function init() {
       });
     }
 
+    // Türwahl nach einem erledigten Raum (Phase 4).
+    if (run.phase === 'door' && !doorShown) {
+      doorShown = true;
+      const offers = run.doorOffers;
+      const targetRoom = run.roomIndex + 1;
+      doorScreen.show({
+        offers,
+        onPick: (idx) => {
+          telemetry.recordDoor({
+            room: targetRoom,
+            chosen: offers[idx].type,
+            rejected: offers.filter((_, i) => i !== idx).map((o) => o.type),
+          });
+          pickDoor(run, idx);
+          doorShown = false;
+        },
+      });
+    }
+
+    // Ereignis-Raum (Phase 4).
+    if (run.phase === 'event' && !eventShown) {
+      eventShown = true;
+      eventScreen.show({
+        event: run.currentEvent,
+        onChoose: (idx) => {
+          const room = run.roomIndex;
+          const res = chooseEventOption(run, idx);
+          if (res) telemetry.recordEvent({ room, event: res.event, option: res.option });
+          eventShown = false;
+        },
+      });
+    }
+
+    // Werkstatt-Raum (Phase 4).
+    if (run.phase === 'workshop' && !workshopShown) {
+      workshopShown = true;
+      const costs = run.data.balance.scrap.cost;
+      const refund = run.data.balance.scrap.dropRefund;
+      workshopScreen.show({
+        upgradesData,
+        shieldCost: costs.shieldCharge,
+        dropRefund: refund,
+        getScrap: () => run.scrap,
+        getUpgrades: () => run.upgrades,
+        onBuyShield: () => {
+          const ok = buyShieldCharge(run);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shieldCharge', amount: costs.shieldCharge });
+          return ok;
+        },
+        onDrop: (id) => {
+          const ok = dropUpgrade(run, id);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'drop', amount: -refund });
+          return ok;
+        },
+        onLeave: () => {
+          leaveWorkshop(run);
+          workshopShown = false;
+        },
+      });
+    }
+
     // Raumvorschau: Gegnerliste + "Weiter"-Button.
     if (run.phase === 'preview' && !previewShown) {
       previewShown = true;
@@ -363,12 +458,16 @@ async function init() {
         .join(' · ');
       const dangerByType = {};
       for (const [ty, d] of Object.entries(diffData.danger)) dangerByType[ty] = d.points;
+      const baseTitle = run.endless
+        ? `Endlos-Raum ${run.roomIndex}`
+        : `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`;
       preview.show(
         {
-          title: run.endless
-            ? `Endlos-Raum ${run.roomIndex}`
-            : `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
-          character: run.roomCharacter,
+          title: run.roomType === 'elite' ? `${baseTitle} ★ ELITE` : baseTitle,
+          character:
+            run.roomType === 'elite' && run.roomAffix
+              ? `${run.roomCharacter} · Affix: ${run.roomAffix}`
+              : run.roomCharacter,
           upgradesLine: ups ? `Deine Upgrades: ${ups}` : null,
           dangerByType,
         },
@@ -426,8 +525,7 @@ async function init() {
     refreshBestStats();
     startOverlay.classList.remove('hidden');
     seedInput.select();
-    preview.hide();
-    upgradeScreen.hide();
+    hideRoomScreens();
     endlessBtn.classList.add('hidden');
     run = null;
   }
@@ -459,8 +557,7 @@ async function init() {
       if (e.code === 'KeyR') {
         run = createRun(tanksData, tilesData, diffData, upgradesData, lastSeed, mode);
         beginTelemetry();
-        previewShown = false;
-        upgradeShown = false;
+        hideRoomScreens();
         pause.set(false);
       } else if (e.code === 'KeyM') {
         pause.set(false);

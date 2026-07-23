@@ -158,6 +158,21 @@ export function applyUpgrades(cfg, ups, upsData) {
   }
   if (l('uebermacht')) cfg.magazinePerEnemy = U.uebermacht.perEnemy;
   if (l('klebemine')) cfg.stickyMine = U.klebemine.stickDelayS;
+
+  // --- Elite-Karten (Phase 4, nur aus Eliteräumen) ---
+  // Beutepanzer: Kampfdrohne (nur wenn nicht schon vorhanden).
+  if (l('beutepanzer') && !cfg.drone) {
+    cfg.drone = {
+      intervalS: U.beutepanzer.intervalS,
+      orbitPx: U.beutepanzer.orbitPx,
+      bulletSpeed: U.beutepanzer.bulletSpeed,
+    };
+  }
+  // Kriegsmaschine: mehr Magazin + schnellere Nachladung.
+  if (l('kriegsmaschine')) {
+    cfg.magazine += U.kriegsmaschine.magazineBonus;
+    cfg.fireCooldown *= U.kriegsmaschine.cooldownMult;
+  }
   if (l('scharfschuetze')) {
     cfg.bulletSpeed *= U.scharfschuetze.speedMult;
     cfg.fireCooldown *= U.scharfschuetze.cooldownMult;

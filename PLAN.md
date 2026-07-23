@@ -69,7 +69,7 @@ im selben Run nie wieder, im nächsten Run wieder.
 
 ---
 
-## Phase 4 — Türwahl (Prompt 5)
+## Phase 4 — Türwahl (Prompt 5) ✅ gemergt
 
 Riskant: ändert den Raumfluss. **Generator selbst nicht anfassen**, nur was
 nach dem Räumen passiert.

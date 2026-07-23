@@ -52,6 +52,27 @@
     ],
     "supportBudget": 12
   },
+  "doors": {
+    "firstDoorRoom": 4,
+    "weights": {
+      "combat": 42,
+      "elite": 16,
+      "treasure": 12,
+      "workshop": 14,
+      "event": 16
+    }
+  },
+  "elite": {
+    "budgetMult": 1.6,
+    "affixes": [
+      { "id": "gepanzert", "name": "Gepanzert", "shield": true },
+      { "id": "rasend", "name": "Rasend", "speedMult": 1.35 },
+      { "id": "brandstifter", "name": "Brandstifter", "extraMines": 2 }
+    ]
+  },
+  "treasure": {
+    "lifeCost": 1
+  },
   "roomCharacters": [
     {
       "name": "offen",
