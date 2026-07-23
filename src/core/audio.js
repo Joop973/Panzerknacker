@@ -105,6 +105,7 @@ export function createAudio() {
       else if (name === 'tone_low') beep(220, 0.16);
       else if (name === 'shoot') beep(480, 0.07, 0.06, 'square', 220);
       else if (name === 'bounce') beep(300, 0.05, 0.05, 'triangle');
+      else if (name === 'tick') beep(1200, 0.03, 0.05, 'square'); // erster Abpraller
       else if (name === 'boom') {
         noise(0.35, 0.22);
         beep(90, 0.3, 0.15, 'sawtooth', 40);

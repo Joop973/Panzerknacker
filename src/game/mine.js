@@ -6,10 +6,10 @@
 //    und reagiert auf nichts -- das Fluchtfenster.
 // 3. Scharf: explodiert bei Kontakt mit einem beliebigen Panzer (auch
 //    dem Leger), bei Treffer durch ein Geschoss oder durch die
-//    Explosion einer anderen Mine (Kettenreaktion, chainDelayS pro
-//    Glied). NEU (Nutzer-Entscheidung): nach selfDetonateS (10 s)
-//    zuendet die Mine von selbst.
-// 4. Explosion (explosionRadiusPx): toetet jeden Panzer im Radius
+//    Explosion einer anderen Mine (Kettenreaktion, balance.mine.chainDelay
+//    pro Glied). Nach balance.mine.fuse Sekunden zuendet die Mine von
+//    selbst.
+// 4. Explosion (balance.mine.radius): toetet jeden Panzer im Radius
 //    inklusive Leger und zerstoert zerstoerbare Waende im Radius.
 
 import { circlesOverlap, circleOverlapsAABB } from './collision.js';
@@ -39,7 +39,7 @@ export function isArmed(mine, mcfg) {
 // Allgemeine Explosion an einer Position (Minen, Sprengschuss-Upgrade):
 // toetet Panzer im Radius, zerstoert breakable-Waende, zuendet scharfe
 // Minen als Kettenreaktion.
-export function explodeAt(state, x, y, R, spare) {
+export function explodeAt(state, x, y, R, spare, meta) {
   const mcfg = state.data.mine;
   state.explosions.push({ x, y, age: 0 });
   state.sounds.push('boom');
@@ -49,7 +49,7 @@ export function explodeAt(state, x, y, R, spare) {
   for (const t of state.tanks) {
     if (!t.alive || t.protect > 0 || t === spare) continue;
     if (circlesOverlap(x, y, R, t.x, t.y, t.cfg.radius)) {
-      state.killTank(t, 'eine Explosion');
+      state.killTank(t, 'eine Explosion', meta);
     }
   }
 
@@ -59,11 +59,13 @@ export function explodeAt(state, x, y, R, spare) {
     }
   }
 
+  // Kettenreaktion: getroffene scharfe Minen zuenden mit chainDelay
+  // Verzoegerung pro Glied (nicht im selben Frame).
   for (const other of state.mines) {
     if (other.dead || other.fuse !== null) continue;
     if (!isArmed(other, mcfg)) continue;
     if (circlesOverlap(x, y, R, other.x, other.y, other.radius)) {
-      other.fuse = mcfg.chainDelayS;
+      other.fuse = state.data.balance.mine.chainDelay;
     }
   }
 }
@@ -72,8 +74,11 @@ function explode(mine, state) {
   if (mine.dead) return;
   mine.dead = true;
   // Sprengkraft-Upgrade: Radius-Multiplikator des Legers.
-  const R = state.data.mine.explosionRadiusPx * (mine.owner?.cfg?.mineRadiusMult || 1);
-  explodeAt(state, mine.x, mine.y, R);
+  const R = state.data.balance.mine.radius * (mine.owner?.cfg?.mineRadiusMult || 1);
+  // Todesursache fuer die Telemetrie: eigene vs. gegnerische Mine.
+  const own = mine.owner === state.player;
+  const meta = { code: own ? 'own_mine' : 'enemy_mine', enemyType: own ? null : mine.owner?.type || null };
+  explodeAt(state, mine.x, mine.y, R, null, meta);
   // Streumine-Upgrade: schleudert kleine Splitterminen (die nicht
   // weiter splittern -> keine Endloskette).
   const sub = mine.owner?.cfg?.clusterMine;
@@ -125,8 +130,8 @@ export function updateMines(state, dt) {
     const remote = m.owner?.cfg?.remoteDetonate && !m.isSub;
     if (remote) continue;
 
-    // Selbstzuendung nach Ablauf der Lebenszeit.
-    if (m.age >= mcfg.selfDetonateS) {
+    // Selbstzuendung nach Ablauf der Lebenszeit (balance.mine.fuse).
+    if (m.age >= state.data.balance.mine.fuse) {
       explode(m, state);
       continue;
     }

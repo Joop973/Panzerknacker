@@ -1,0 +1,14 @@
+{
+  "bullet": {
+    "lifetime": 3.5,
+    "maxActive": 5,
+    "maxActiveCap": 8,
+    "selfImmunity": 0.35
+  },
+  "mine": {
+    "fuse": 3.0,
+    "radius": 64,
+    "chainDelay": 0.15,
+    "warningTime": 0.5
+  }
+}

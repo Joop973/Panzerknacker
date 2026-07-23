@@ -3,6 +3,7 @@
 
 export function drawMines(ctx, state) {
   const mcfg = state.data.mine;
+  const bmine = state.data.balance.mine;
   for (const m of state.mines) {
     ctx.fillStyle = '#3c4038';
     ctx.beginPath();
@@ -12,17 +13,29 @@ export function drawMines(ctx, state) {
     // schnell + rot kurz vor der Selbstzuendung.
     const armed = m.age >= mcfg.armDelayS;
     if (!armed) continue;
+    const remaining = bmine.fuse - m.age; // s bis Selbstzuendung
     // Eigene Minen: duenner Ring zeigt die Restzeit bis zur
     // Selbstzuendung (laeuft im Uhrzeigersinn ab).
     if (m.owner === state.player) {
-      const frac = 1 - m.age / mcfg.selfDetonateS;
+      const frac = Math.max(0, remaining / bmine.fuse);
       ctx.strokeStyle = 'rgba(140,200,255,0.7)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(m.x, m.y, m.radius + 3, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
       ctx.stroke();
+      // Warnring: in den letzten warningTime Sekunden pulsiert ein Ring
+      // im vollen Explosionsradius -- so ist die Detonation lesbar.
+      if (remaining <= bmine.warningTime) {
+        const R = bmine.radius * (m.owner?.cfg?.mineRadiusMult || 1);
+        const pulse = 0.5 + 0.5 * Math.sin(m.age * 18);
+        ctx.strokeStyle = `rgba(255,80,48,${(0.3 + 0.45 * pulse).toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, R, 0, Math.PI * 2);
+        ctx.stroke();
+      }
     }
-    const hot = mcfg.selfDetonateS - m.age < 2;
+    const hot = remaining < bmine.warningTime * 2;
     const freq = hot ? 8 : 3;
     if (Math.sin(m.age * freq * Math.PI * 2) > 0) {
       ctx.fillStyle = hot ? '#ff5030' : '#ffd23c';
@@ -97,7 +110,7 @@ export function drawParticles(ctx, state) {
 }
 
 export function drawExplosions(ctx, state) {
-  const R = state.data.mine.explosionRadiusPx;
+  const R = state.data.balance.mine.radius;
   for (const e of state.explosions) {
     const t = Math.min(e.age / 0.35, 1);
     ctx.strokeStyle = '#ffb347';
@@ -170,7 +183,7 @@ export function drawMinePreview(ctx, state, preview) {
   ctx.stroke();
   ctx.setLineDash([]);
   // Explosionsradius am Landepunkt.
-  const R = state.data.mine.explosionRadiusPx * (p.cfg.mineRadiusMult || 1);
+  const R = state.data.balance.mine.radius * (p.cfg.mineRadiusMult || 1);
   ctx.strokeStyle = 'rgba(255,90,50,0.55)';
   ctx.lineWidth = 1.5;
   ctx.beginPath();

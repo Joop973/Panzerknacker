@@ -19,9 +19,10 @@ import { createRenderer, renderOpts } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
 import { createHud } from './ui/hud.js';
+import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
-  const names = ['tanks', 'tiles', 'difficulty', 'upgrades'];
+  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance'];
   const out = [];
   for (const n of names) {
     let res;
@@ -45,7 +46,13 @@ async function loadData() {
 }
 
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData] = await loadData();
+  const [tanksData, tilesData, diffData, upgradesData, balanceData] = await loadData();
+  // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
+  // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
+  // sind (Geschoss-Lifetime/Cap/Immunitaet, Minen-Radius/Fuse/Kette).
+  tanksData.balance = balanceData;
+  // Debug-Ansicht der Telemetrie nur bei ?debug=1 aufbauen.
+  telemetry.mountDebugView();
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
@@ -97,6 +104,50 @@ async function init() {
   let lastSeed = 0;
   let mode = getPref('mode', 'normal');
 
+  // ---- Telemetrie-Tracking (nur beobachtend, keine Spiellogik) ----
+  let teleRoom = 0; // aktuell getimter Raum-Index
+  let teleRoomStart = 0; // run.playTime beim Betreten dieses Raums
+  let teleEnded = true; // schon abgeschlossen? (verhindert Doppel-Eintrag)
+  // Setzt das Tracking fuer einen frisch erstellten Run auf und startet
+  // den Telemetrie-Sammelpuffer.
+  function beginTelemetry() {
+    teleRoom = run.roomIndex;
+    teleRoomStart = run.playTime;
+    teleEnded = false;
+    telemetry.beginRun({ seed: run.seed, mode: run.mode });
+  }
+  // Wird jeden Tick nach stepRun aufgerufen: Raumwechsel + Run-Ende.
+  function updateTelemetry() {
+    if (!run || teleEnded) return;
+    // Raum abgeschlossen -> Dauer + verbleibende Leben festhalten.
+    if (run.roomIndex !== teleRoom) {
+      telemetry.recordRoom({
+        room: teleRoom,
+        durationS: run.playTime - teleRoomStart,
+        lives: run.lives,
+      });
+      teleRoom = run.roomIndex;
+      teleRoomStart = run.playTime;
+    }
+    if (run.phase === 'gameover' || run.phase === 'victory') {
+      // Letzten (evtl. unvollstaendigen) Raum noch mitschreiben.
+      telemetry.recordRoom({
+        room: teleRoom,
+        durationS: run.playTime - teleRoomStart,
+        lives: run.lives,
+      });
+      const st = run.state;
+      telemetry.endRun({
+        won: run.phase === 'victory',
+        roomReached: run.roomIndex,
+        deathCause: st.lastDeathCauseCode || null,
+        deathCauseLabel: st.lastDeathCause || null,
+        enemyType: st.lastDeathEnemyType || null,
+      });
+      teleEnded = true;
+    }
+  }
+
   // Darstellungs-Optionen (gespeichert).
   renderOpts.threatLines = getPref('threatLines', true);
   renderOpts.reduceMotion = getPref('reduceMotion', false);
@@ -135,6 +186,7 @@ async function init() {
     seedInput.value = String(seed);
     run = createRun(tanksData, tilesData, diffData, upgradesData, seed, mode);
     lastSeed = seed;
+    beginTelemetry();
     startOverlay.classList.add('hidden');
     upgradeScreen.hide();
     preview.hide();
@@ -208,6 +260,7 @@ async function init() {
     // Dash-Button nur zeigen, wenn das Upgrade aktiv ist.
     dashBtn.classList.toggle('hidden', !(p.cfg.dash && touch.isActive()));
     stepRun(run, cmd, dt);
+    updateTelemetry();
     toast = tutorial.update(run, cmd, touch.isActive(), dt);
     if (tutorial.isDone() && !getFlag('tutorial_seen')) setFlag('tutorial_seen');
     // Raumwechsel erkennen -> Reifenspuren-Buffer leeren.
@@ -242,7 +295,15 @@ async function init() {
     // Upgrade-Screen genau einmal pro Angebot einblenden.
     if (run.phase === 'upgrade' && !upgradeShown) {
       upgradeShown = true;
-      upgradeScreen.show(run.pendingOffers, (idx) => {
+      const offers = run.pendingOffers;
+      upgradeScreen.show(offers, (idx) => {
+        // Telemetrie: gewaehltes Upgrade + abgelehnte Alternativen.
+        const idOf = (o) => (o.fallback ? o.name : o.id);
+        telemetry.recordUpgrade({
+          chosen: idOf(offers[idx]),
+          name: offers[idx].name,
+          rejected: offers.filter((_, i) => i !== idx).map(idOf),
+        });
         chooseUpgrade(run, idx);
         upgradeShown = false;
       });
@@ -352,6 +413,7 @@ async function init() {
     if (pause.isPaused() && run.phase === 'playing') {
       if (e.code === 'KeyR') {
         run = createRun(tanksData, tilesData, diffData, upgradesData, lastSeed, mode);
+        beginTelemetry();
         previewShown = false;
         upgradeShown = false;
         pause.set(false);

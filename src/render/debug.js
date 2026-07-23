@@ -58,10 +58,11 @@ export function createDebugOverlay(ctx) {
     ctx.strokeStyle = COLORS.trail;
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
+    const R = state.data.balance.mine.radius;
     for (const m of state.mines) {
       if (m.age < mcfg.armDelayS) continue;
       ctx.beginPath();
-      ctx.arc(m.x, m.y, mcfg.explosionRadiusPx, 0, Math.PI * 2);
+      ctx.arc(m.x, m.y, R, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.setLineDash([]);

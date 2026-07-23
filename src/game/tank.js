@@ -105,9 +105,12 @@ function liveBulletsOf(state, owner) {
   return n;
 }
 
-// Effektives Magazin: Basis + dynamischer Bonus (Uebermacht).
+// Effektives Magazin: Basis + dynamischer Bonus (Uebermacht), gedeckelt
+// durch den harten Aktiv-Kugel-Cap (balance.bullet.maxActiveCap, nur
+// Spieler -- Gegner haben cfg.magazineCap = Infinity).
 function magazineOf(tank) {
-  return tank.cfg.magazine + (tank.magazineBonus || 0);
+  const base = tank.cfg.magazine + (tank.magazineBonus || 0);
+  return Math.min(base, tank.cfg.magazineCap ?? Infinity);
 }
 
 // Schussversuch: respektiert Cooldown und Magazin-Limit.
