@@ -60,7 +60,30 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
   `main.js`; die Spiellogik liest nie Telemetriedaten. **Debug-Tabelle +
   JSON-Export nur bei `?debug=1`** in der URL, sonst unsichtbar/inaktiv.
 
+### Phase 2 (Upgrade-Schema) — gemergt
+- **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
+  `tag`, `rarity` (`common`/`rare`/`legendary`), `maxStacks`, `requires`,
+  `minRoom`, `description`. Alle 39 Altupgrades migriert. (`desc`/`max`
+  ersetzt durch `description`/`maxStacks`; Berserker-Effektfeld heißt jetzt
+  `maxStacksEffect`, um mit dem Schema-`maxStacks` nicht zu kollidieren.)
+- **Auswahllogik** `src/game/upgradepool.js`: 3 Karten, **nie zwei gleiche
+  Tags**; Rarity-Gewichte + `legendary.minRoom` aus `balance.json`;
+  `maxStacks`/`requires`/`minRoom` gefiltert; Tags `weapon`+`elite` vom
+  Pool ausgeschlossen; zu wenige Karten → mit `stat`-Fallback aufgefüllt
+  (kein Crash). `run.js` delegiert `rollOffers` daran (deterministisch über
+  `genRng`).
+- **`emergency_shield`** (Tag `defense`, `rare`, `maxStacks 3`): je Stufe
+  +3 Schildladungen, raumübergreifend (`run.shieldCharges` → `state.shieldCharges`),
+  keine Regen. Jede Ladung absorbiert genau einen Treffer (in `killTank` vor
+  der alten Schild-Logik). Anzeige als konzentrische Ringe um den Panzer.
+- **Telemetrie** protokolliert gewählte/abgelehnte Karten jetzt als Objekte
+  mit `id` + `tag` (+ name/rarity).
+- Upgrade-Karten zeigen Tag + Seltenheit (Rahmenfarbe nach Rarity in `style.css`).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **Vor Phase 6**: 15–20 Runs spielen und `localStorage.runs` (Export
+      über `?debug=1`) auswerten (meistabgelehnte Upgrades + Endraum), sonst
+      wird Welle 1 blind gebaut. Siehe `PLAN.md`.
 - [ ] Sprite-Look für **feste Wand** (`tile_wall`) und **Loch** (`tile_hole`)
       im Spiel noch mit eigenem Auge prüfen — Code-Pfad identisch zu
       breakable (das rendert korrekt), aber nicht separat verifiziert.
@@ -82,7 +105,8 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   (`genRng` = Raumbau, `aiRng` = KI). Gleicher Seed → gleicher Verlauf.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
-  `balance.json`). `src/game/cfg.js` löst Typen auf und wendet Upgrades an.
+  `balance.json`). `balance.json` enthält auch Rarity-Gewichte + `legendary.minRoom`.
+  `src/game/cfg.js` löst Typen auf und wendet Upgrades an.
   `data/balance.json` wird in `main.js` an `tanksData.balance` gehängt und
   ist so über `state.data.balance` überall verfügbar.
 - **Kollision**: Kreis-vs-AABB mit Gleiten; Panzer blockt Panzer; Abpraller-
@@ -94,6 +118,8 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/game/state.js` — `stepState`, Treffer, Minen, Drohne, Melee, `killTank`.
 - `src/game/tank.js` — Feuern, Minen legen/werfen.
 - `src/game/cfg.js` — Panzer-cfg + alle ~39 Upgrade-Effekte.
+- `src/game/upgradepool.js` — Auswahl-Pool (Tag-Regel, Rarity, maxStacks,
+  requires, minRoom); von `run.js` genutzt.
 - `src/render/renderer.js` — zeichnet alles (interpoliert). Nutzt Sprites,
   fällt auf prozedurale Formen zurück, falls Grafik fehlt/lädt.
 - `src/render/sprites.js` — lädt die PNG-Sprites (async, mit Fallback).
@@ -102,7 +128,8 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/core/telemetry.js` — Run-Telemetrie in `localStorage.runs` +
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-Cache, cache-first). Cache-Version bumpen!
-  (Aktuell `v25`; `data/balance.json` + `src/core/telemetry.js` im Cache.)
+  (Aktuell `v26`; `data/balance.json`, `src/core/telemetry.js` +
+  `src/game/upgradepool.js` im Cache.)
 
 ## Grafik / Sprites
 - Panzer je Typ: `assets/sprites/body_<typ>.png` (Front zeigt nach oben →

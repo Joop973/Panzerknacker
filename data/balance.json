@@ -10,5 +10,13 @@
     "radius": 64,
     "chainDelay": 0.15,
     "warningTime": 0.5
+  },
+  "rarity": {
+    "common": 60,
+    "rare": 30,
+    "legendary": 10
+  },
+  "legendary": {
+    "minRoom": 5
   }
 }

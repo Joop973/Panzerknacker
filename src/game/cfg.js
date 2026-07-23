@@ -101,7 +101,7 @@ export function applyUpgrades(cfg, ups, upsData) {
     cfg.berserker = {
       fire: U.berserker.firePerLife,
       speed: U.berserker.speedPerLife,
-      max: U.berserker.maxStacks,
+      max: U.berserker.maxStacksEffect,
     };
   }
   cfg.remoteDetonate = l('fernzuender') > 0;

@@ -297,12 +297,12 @@ async function init() {
       upgradeShown = true;
       const offers = run.pendingOffers;
       upgradeScreen.show(offers, (idx) => {
-        // Telemetrie: gewaehltes Upgrade + abgelehnte Alternativen.
-        const idOf = (o) => (o.fallback ? o.name : o.id);
+        // Telemetrie: gewaehlte Karte + abgelehnte Alternativen, jeweils
+        // mit id und tag.
+        const cardOf = (o) => ({ id: o.fallback ? null : o.id, name: o.name, tag: o.tag, rarity: o.rarity });
         telemetry.recordUpgrade({
-          chosen: idOf(offers[idx]),
-          name: offers[idx].name,
-          rejected: offers.filter((_, i) => i !== idx).map(idOf),
+          chosen: cardOf(offers[idx]),
+          rejected: offers.filter((_, i) => i !== idx).map(cardOf),
         });
         chooseUpgrade(run, idx);
         upgradeShown = false;
