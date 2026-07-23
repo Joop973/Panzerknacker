@@ -73,9 +73,10 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
   (kein Crash). `run.js` delegiert `rollOffers` daran (deterministisch über
   `genRng`).
 - **`emergency_shield`** (Tag `defense`, `rare`, `maxStacks 3`): je Stufe
-  +3 Schildladungen, raumübergreifend (`run.shieldCharges` → `state.shieldCharges`),
-  keine Regen. Jede Ladung absorbiert genau einen Treffer (in `killTank` vor
-  der alten Schild-Logik). Anzeige als konzentrische Ringe um den Panzer.
+  +1 Schildladung (`chargesPerStack`, max. 3 gesamt), raumübergreifend
+  (`run.shieldCharges` → `state.shieldCharges`), keine Regen. Jede Ladung
+  absorbiert genau einen Treffer (in `killTank` vor der alten Schild-Logik).
+  Anzeige als konzentrische Ringe um den Panzer.
 - **Telemetrie** protokolliert gewählte/abgelehnte Karten jetzt als Objekte
   mit `id` + `tag` (+ name/rarity).
 - Upgrade-Karten zeigen Tag + Seltenheit (Rahmenfarbe nach Rarity in `style.css`).
@@ -102,6 +103,14 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
   getöteten Gegner".
 - **Endlosmodus-Fix**: nur ein NEU auf dem Endscreen begonnener Tipp führt
   ins Menü (der spielbeendende Tipp löste sonst sofort `backToStart`).
+
+### Balance-Anpassungen (Nutzer-Feedback) — gemergt
+- **Wurfweite −25 %**: `mine.throwPx` 96→72 (Tastatur/Gamepad),
+  `MINE_MAX_THROW` 190→142 (Touch-Wurfstick, `touchcontrols.js`).
+- **Notschild schwächer**: `chargesPerStack` 3→1 (max. 3 statt 9 Ladungen).
+- **Radius-Prozente gesenkt**: Sprengkraft +40 %→+25 % pro Stufe (neues
+  Datenfeld `sprengkraft.radiusMult`, statt hartkodierter 1.4 in `cfg.js`);
+  Überladung +50 %→+30 % (`ueberladung.mult` 1.5→1.3).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Vor Phase 6**: 15–20 Runs spielen und `localStorage.runs` (Export

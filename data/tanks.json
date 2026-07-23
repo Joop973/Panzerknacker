@@ -9,7 +9,7 @@
   "mine": {
     "radiusPx": 7,
     "armDelayS": 0.7,
-    "throwPx": 96
+    "throwPx": 72
   },
   "speeds": {
     "fix": 0,
