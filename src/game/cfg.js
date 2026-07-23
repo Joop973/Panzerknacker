@@ -117,8 +117,9 @@ export function applyUpgrades(cfg, ups, upsData) {
   }
   if (l('kettenblitz')) cfg.chainLightning = U.kettenblitz.radiusPx;
   if (l('blutrausch')) {
-    cfg.bloodlust = U.blutrausch.durationS;
+    cfg.bloodlust = U.blutrausch.durationS; // Dauer des Tempo-Schubs
     cfg.bloodlustSpeed = U.blutrausch.speedMult;
+    cfg.bloodlustIframe = U.blutrausch.iframeS; // kurzes Unverwundbarkeits-Fenster
   }
 
   // --- 5 innovative Upgrades ---

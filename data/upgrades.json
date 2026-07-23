@@ -320,14 +320,15 @@
     "blutrausch": {
       "id": "blutrausch",
       "name": "Blutrausch",
-      "description": "Nach jedem Abschuss kurz unverwundbar und schneller",
+      "description": "Nach jedem Abschuss ein Tempo-Schub — und ein kurzer Unverwundbarkeits-Moment",
       "tag": "reactive",
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
       "durationS": 1.4,
-      "speedMult": 1.3
+      "speedMult": 1.3,
+      "iframeS": 0.35
     },
     "kampfdrohne": {
       "id": "kampfdrohne",

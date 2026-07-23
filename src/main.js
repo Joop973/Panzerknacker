@@ -423,8 +423,19 @@ async function init() {
       }
     }
   });
+  // Endscreens: nur ein NEU auf dem Endscreen begonnener Tipp fuehrt zum
+  // Start-Screen zurueck. Der Tipp, der das Spiel gewinnt/verliert, darf das
+  // nicht ausloesen -- sonst wird beim Sieg der Endlos-Button uebersprungen
+  // (dessen Finger-Hoch faellt sonst schon in die Victory-Phase und schickt
+  // direkt ins Menue).
+  let endScreenTapArmed = false;
+  const onEndScreen = () => run && (run.phase === 'gameover' || run.phase === 'victory');
+  canvas.addEventListener('pointerdown', () => {
+    endScreenTapArmed = onEndScreen();
+  });
   canvas.addEventListener('pointerup', () => {
-    if (run && (run.phase === 'gameover' || run.phase === 'victory')) backToStart();
+    if (endScreenTapArmed && onEndScreen()) backToStart();
+    endScreenTapArmed = false;
   });
 
   // Pause-Button oben mittig, Mute daneben.
