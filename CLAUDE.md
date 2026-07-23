@@ -195,13 +195,17 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   **Wurfstick** (Pointer Events + `setPointerCapture`).
 - `src/core/telemetry.js` — Run-Telemetrie in `localStorage.runs` +
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
-- `sw.js` — Service Worker (Offline-Cache, cache-first). Cache-Version bumpen!
-  (Aktuell `v31`; `data/balance.json`, `data/events.json`,
-  `src/core/telemetry.js`, `src/game/upgradepool.js` +
-  `src/ui/roomscreens.js` im Cache.) **Bewusst KEIN `skipWaiting()`/
-  `clients.claim()`** — sonst kann eine laufende Seite mitten im Start alten
-  Code mit neuen `data/*.json` mischen (Upgrade-Screen zeigt dann nur
-  „+1 Leben"). Update greift erst nach vollständigem Neustart (Tab/App zu).
+- `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
+  Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v32`.) So
+  erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
+  Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
+  → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`
+  JA (aktiviert beim Neuladen), `clients.claim()` NEIN (übernimmt die
+  laufende Seite nicht mitten im Start → kein Skew). Alte Caches bleiben eine
+  Version erhalten (`PREV_CACHE`). **Wechsel des SW selbst greift erst nach
+  einmaligem vollständigem App-Neustart** (der bisher aktive `no-skip`-SW
+  gibt erst dann ab); danach reichen normale Reloads.
 
 ## Grafik / Sprites
 - Panzer je Typ: `assets/sprites/body_<typ>.png` (Front zeigt nach oben →

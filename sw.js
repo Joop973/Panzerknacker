@@ -2,7 +2,8 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v31';
+const CACHE = 'panzerknacker-v32';
+const PREV_CACHE = 'panzerknacker-v31'; // bleibt fuer eine evtl. offene Alt-Seite intakt
 
 const ASSETS = [
   './',
@@ -81,42 +82,67 @@ const ASSETS = [
   'src/ui/roomscreens.js',
 ];
 
-// WICHTIG: KEIN skipWaiting() und KEIN clients.claim().
-// Beides zusammen (oder einzeln mit Alt-Cache-Loeschung) kann eine bereits
-// mit alter Version geladene Seite dazu bringen, mitten im Start neue
-// Dateien nachzuladen -> alter Code + neue data/*.json = kaputte Auswahl
-// (z. B. Upgrade-Screen zeigt nur "+1 Leben"). Ohne die beiden behaelt jede
-// laufende Seite bis zum vollstaendigen Schliessen ihre konsistente Version;
-// die neue Version greift beim naechsten frischen Start (Tab/App schliessen
-// und neu oeffnen).
+// Strategie (ueberarbeitet): NETWORK-FIRST fuer Code + Daten (HTML/JS/JSON),
+// CACHE-FIRST fuer Bilder/Fonts. So erscheinen Updates sofort beim Neuladen
+// (online holt eine Seite ALLE Code-/Datendateien frisch -> immer konsistent,
+// nie alter Code + neue data/*.json), waehrend das Spiel offline aus dem
+// Cache laeuft.
+//
+// skipWaiting() JA, clients.claim() NEIN: Der neue SW aktiviert sich beim
+// naechsten Neuladen (kein Warten aufs vollstaendige App-Schliessen), uebernimmt
+// aber NICHT die schon laufende Seite mitten im Start (das war die Skew-Quelle
+// der "+1 Leben"-Panne). Alte Caches werden hier bewusst NICHT geloescht: eine
+// evtl. noch mit alter Version laufende Seite braucht ihren Cache bis zum
+// naechsten Neuladen; ein spaeteres Update raeumt sie auf.
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
-  // Alte Caches erst hier loeschen -- der activate-Handler laeuft (ohne
-  // skipWaiting) erst, wenn keine Seite mehr die alte Version nutzt.
+  // Nur Caches loeschen, die zwei oder mehr Versionen zurueckliegen -- die
+  // unmittelbar vorige bleibt fuer eine evtl. noch offene Alt-Seite intakt.
   e.waitUntil(
-    caches
-      .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))),
+    caches.keys().then((keys) => {
+      const keep = new Set([CACHE, PREV_CACHE]);
+      return Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)));
+    }),
   );
 });
 
+const isAsset = (url) => /\.(png|jpe?g|gif|webp|svg|ico|woff2?)$/i.test(url.pathname);
+
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
+  const url = new URL(e.request.url);
+
+  if (isAsset(url)) {
+    // Bilder/Fonts: cache-first (gross, stabil, schnell + offline).
+    e.respondWith(
+      caches.match(e.request, { ignoreSearch: true }).then(
+        (hit) =>
+          hit ||
+          fetch(e.request).then((res) => {
+            if (res.ok) {
+              const copy = res.clone();
+              caches.open(CACHE).then((c) => c.put(e.request, copy));
+            }
+            return res;
+          }),
+      ),
+    );
+    return;
+  }
+
+  // HTML/JS/JSON: network-first, Cache als Offline-Fallback.
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then(
-      (hit) =>
-        hit ||
-        fetch(e.request).then((res) => {
-          // Erfolgreiche Antworten nachcachen (z. B. nach Updates).
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, copy));
-          }
-          return res;
-        }),
-    ),
+    fetch(e.request)
+      .then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(e.request, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(e.request, { ignoreSearch: true })),
   );
 });
