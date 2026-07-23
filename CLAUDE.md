@@ -80,6 +80,29 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
   mit `id` + `tag` (+ name/rarity).
 - Upgrade-Karten zeigen Tag + Seltenheit (Rahmenfarbe nach Rarity in `style.css`).
 
+### Phase 3 (Schrott-Währung) — gemergt
+- **Schrott** als Run-State (`run.scrap`), Werte in `data/balance.json`
+  (`scrap.perRoom [1,3]`, `eliteBonus 3` (erst Phase 4), `cost.reroll 2`,
+  `cost.ban 1`, `cost.fourthCard 3`, `cost.shieldCharge 4`). Pro geräumtem
+  Raum 1–3 Schrott (deterministisch über `genRng`) + Floating-Text
+  „+N Schrott". Permanent im HUD (`⚙ N`).
+- **Vier Upgrade-Screen-Aktionen** (`src/game/run.js`: `rerollOffers`,
+  `banOffer`, `buyFourthCard`, `buyShieldCharge`; UI in `upgradescreen.js`,
+  verdrahtet in `main.js`): Neu würfeln, Verbannen (pro Karte, ✕-Knopf),
+  Vierte Karte (Deckel 4), Schildladung (+1, auch ohne Schild-Upgrade). Preis
+  sichtbar, ausgegraut bei zu wenig Schrott; Screen rendert nach jeder Aktion
+  neu. Schrott nie negativ (jede Aktion prüft Kosten).
+- **Verbannte ids** in `run.bannedUpgrades` (Set, nicht `localStorage`); der
+  Pool filtert sie. Bei Run-Ende weg (frischer `createRun`). Ban ersetzt die
+  Karte durch eine neue mit anderem Tag (`upgradepool.drawOne`).
+- **Telemetrie**: `scrapEarned` pro Raum, `scrapSpends` (Typ+Raum),
+  `bans` (id+Raum) im Run-Objekt; Debug-Tabelle zeigt Schrott/Verbannt.
+- **Blutrausch** abgeschwächt: Unverwundbarkeit pro Kill nur noch
+  `iframeS 0.35` (statt 1,4 s), Tempo-Schub bleibt. Text „nach jedem
+  getöteten Gegner".
+- **Endlosmodus-Fix**: nur ein NEU auf dem Endscreen begonnener Tipp führt
+  ins Menü (der spielbeendende Tipp löste sonst sofort `backToStart`).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Vor Phase 6**: 15–20 Runs spielen und `localStorage.runs` (Export
       über `?debug=1`) auswerten (meistabgelehnte Upgrades + Endraum), sonst
@@ -105,7 +128,8 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   (`genRng` = Raumbau, `aiRng` = KI). Gleicher Seed → gleicher Verlauf.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
-  `balance.json`). `balance.json` enthält auch Rarity-Gewichte + `legendary.minRoom`.
+  `balance.json`). `balance.json` enthält auch Rarity-Gewichte,
+  `legendary.minRoom` + die `scrap`-Werte (Phase 3).
   `src/game/cfg.js` löst Typen auf und wendet Upgrades an.
   `data/balance.json` wird in `main.js` an `tanksData.balance` gehängt und
   ist so über `state.data.balance` überall verfügbar.
@@ -128,7 +152,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/core/telemetry.js` — Run-Telemetrie in `localStorage.runs` +
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-Cache, cache-first). Cache-Version bumpen!
-  (Aktuell `v28`; `data/balance.json`, `src/core/telemetry.js` +
+  (Aktuell `v29`; `data/balance.json`, `src/core/telemetry.js` +
   `src/game/upgradepool.js` im Cache.) **Bewusst KEIN `skipWaiting()`/
   `clients.claim()`** — sonst kann eine laufende Seite mitten im Start alten
   Code mit neuen `data/*.json` mischen (Upgrade-Screen zeigt dann nur

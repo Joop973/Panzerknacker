@@ -16,7 +16,7 @@ in `localStorage.runs`, Debug-Ansicht nur bei `?debug=1`.
 
 ---
 
-## Phase 2 — Upgrade-Schema (Prompt 3)
+## Phase 2 — Upgrade-Schema (Prompt 3) ✅ gemergt
 
 Keine neuen Upgrade-Effekte — nur Struktur.
 
@@ -47,7 +47,7 @@ Treffer, gestapelt 6 bzw. 9.
 
 ---
 
-## Phase 3 — Schrott (Prompt 4)
+## Phase 3 — Schrott (Prompt 4) ✅ gemergt
 
 **Währung** `scrap` (Run-State). `balance.json`: `scrap.perRoom [1,3]`,
 `scrap.eliteBonus 3`, `scrap.cost.reroll 2`, `scrap.cost.ban 1`,

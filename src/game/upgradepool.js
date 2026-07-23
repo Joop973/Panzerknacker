@@ -1,14 +1,14 @@
-// Upgrade-Auswahlpool (Phase 2).
+// Upgrade-Auswahlpool (Phase 2, erweitert in Phase 3).
 //
 // Zieht die Angebote fuer den Upgrade-Screen aus data/upgrades.json unter
-// Beachtung des neuen Schemas (tag/rarity/maxStacks/requires/minRoom).
+// Beachtung des Schemas (tag/rarity/maxStacks/requires/minRoom).
 // Regeln:
 //  - N Karten (Standard 3), NIE zwei mit demselben Tag.
 //  - Seltenheitsgewichte aus balance.json (rarity.common/rare/legendary).
 //  - Legendaries erst ab balance.legendary.minRoom (global).
 //  - Erreichte maxStacks / unerfuellte requires / zu frueher Raum -> raus.
 //  - Tags `weapon` und `elite` sind hier ausgeschlossen (spaetere Phasen).
-//  - Verbannte ids (Phase 3) werden uebersprungen.
+//  - Verbannte ids (Phase 3, Schrott-Aktion) werden uebersprungen.
 //  - Reichen die gueltigen Karten nicht fuer N, wird mit stat-Fallback
 //    ("+1 Leben") aufgefuellt, statt zu crashen.
 //
@@ -55,14 +55,11 @@ function fallbackOffer(upgradesData) {
   };
 }
 
-// opts: { chosen {id:level}, roomIndex, rng, balance, count, banned:Set }
-export function rollOffers(upgradesData, opts) {
-  const { chosen = {}, roomIndex = 1, rng, balance, count, banned } = opts;
-  const weights = balance.rarity;
+// Alle aktuell gueltigen Upgrade-Definitionen (ohne Tag-/Slot-Regel).
+function buildCandidates(upgradesData, opts) {
+  const { chosen = {}, roomIndex = 1, balance, banned } = opts;
   const legMinRoom = balance.legendary?.minRoom ?? 0;
   const bannedSet = banned || new Set();
-  const n = count || upgradesData.offersPerScreen || 3;
-
   const defs = upgradesData.upgrades;
   const candidates = [];
   for (const id in defs) {
@@ -75,10 +72,18 @@ export function rollOffers(upgradesData, opts) {
     if (def.requires && def.requires.some((req) => (chosen[req] || 0) <= 0)) continue;
     candidates.push(def);
   }
+  return candidates;
+}
+
+// opts: { chosen {id:level}, roomIndex, rng, balance, count, banned:Set }
+export function rollOffers(upgradesData, opts) {
+  const { chosen = {}, rng, balance, count } = opts;
+  const weights = balance.rarity;
+  const n = count || upgradesData.offersPerScreen || 3;
 
   const offers = [];
   const usedTags = new Set();
-  let pool = candidates.slice();
+  let pool = buildCandidates(upgradesData, opts).slice();
   while (offers.length < n && pool.length) {
     const eligible = pool.filter((d) => !usedTags.has(d.tag));
     if (!eligible.length) break; // kein neuer Tag mehr moeglich
@@ -92,4 +97,19 @@ export function rollOffers(upgradesData, opts) {
   // Ausnahme von der Tag-Regel -- nur wenn echte Karten fehlen.
   while (offers.length < n) offers.push(fallbackOffer(upgradesData));
   return offers;
+}
+
+// Zieht EINE zusaetzliche/ersetzende Karte, deren Tag noch nicht in
+// avoidTags vorkommt und deren id nicht in avoidIds ist (Phase-3-Aktionen
+// "Verbannen" und "Vierte Karte"). Kein Kandidat -> stat-Fallback.
+export function drawOne(upgradesData, opts, avoidTags, avoidIds) {
+  const { chosen = {}, rng, balance } = opts;
+  const weights = balance.rarity;
+  const at = avoidTags || new Set();
+  const ai = avoidIds || new Set();
+  const eligible = buildCandidates(upgradesData, opts).filter(
+    (d) => !at.has(d.tag) && !ai.has(d.id),
+  );
+  if (!eligible.length) return fallbackOffer(upgradesData);
+  return makeOffer(weightedPick(eligible, rng, weights), chosen);
 }

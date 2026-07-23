@@ -18,5 +18,15 @@
   },
   "legendary": {
     "minRoom": 5
+  },
+  "scrap": {
+    "perRoom": [1, 3],
+    "eliteBonus": 3,
+    "cost": {
+      "reroll": 2,
+      "ban": 1,
+      "fourthCard": 3,
+      "shieldCharge": 4
+    }
   }
 }

@@ -206,6 +206,73 @@ html, body {
   box-shadow: 0 0 10px rgba(216, 168, 58, 0.35);
 }
 
+/* Karte ist jetzt ein div (enthaelt den Verbannen-Button) */
+.cards .card {
+  position: relative;
+}
+
+/* Verbannen-Knopf oben rechts auf der Karte */
+.cards .card .banbtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: #3a2020;
+  color: #e0a0a0;
+  border: 1px solid #6a3838;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.cards .card .banbtn:hover {
+  background: #5a2a2a;
+}
+
+/* Schrottstand über den Karten */
+.scrapline {
+  font-family: monospace;
+  font-size: 15px;
+  color: #e0c860;
+  margin: -4px 0 4px;
+}
+.scrapline strong {
+  color: #ffe98a;
+}
+
+/* Aktionsleiste unter den Karten */
+.scrapactions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 18px;
+}
+.scrapactions .scrapbtn {
+  background: #23303f;
+  color: #e8e4d8;
+  border: 1px solid #3a5068;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 14px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.scrapactions .scrapbtn:hover:not(:disabled) {
+  background: #2f4258;
+}
+.scrapactions .scrapbtn .price {
+  color: #e0c860;
+  font-weight: bold;
+}
+
+/* Ausgegraut, wenn zu wenig Schrott */
+.scrapactions .scrapbtn:disabled,
+.cards .card .banbtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Pause-Button oben mittig, ausserhalb der Daumenzonen */
 #pauseBtn,
 #muteBtn {

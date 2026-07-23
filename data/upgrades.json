@@ -320,7 +320,7 @@
     "blutrausch": {
       "id": "blutrausch",
       "name": "Blutrausch",
-      "description": "Nach jedem Abschuss ein Tempo-Schub — und ein kurzer Unverwundbarkeits-Moment",
+      "description": "Nach jedem getöteten Gegner ein Tempo-Schub und ein kurzer Unverwundbarkeits-Moment",
       "tag": "reactive",
       "rarity": "rare",
       "maxStacks": 1,

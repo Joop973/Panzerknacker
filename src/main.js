@@ -8,7 +8,18 @@ import { STEP } from './config.js';
 import { createLoop } from './core/loop.js';
 import { createInput } from './core/input.js';
 import { createAudio } from './core/audio.js';
-import { createRun, stepRun, chooseUpgrade, enterRoom, totalRooms, continueEndless } from './game/run.js';
+import {
+  createRun,
+  stepRun,
+  chooseUpgrade,
+  enterRoom,
+  totalRooms,
+  continueEndless,
+  rerollOffers,
+  banOffer,
+  buyFourthCard,
+  buyShieldCharge,
+} from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
 import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
@@ -119,13 +130,15 @@ async function init() {
   // Wird jeden Tick nach stepRun aufgerufen: Raumwechsel + Run-Ende.
   function updateTelemetry() {
     if (!run || teleEnded) return;
-    // Raum abgeschlossen -> Dauer + verbleibende Leben festhalten.
+    // Raum abgeschlossen -> Dauer + Leben + verdienter Schrott festhalten.
     if (run.roomIndex !== teleRoom) {
       telemetry.recordRoom({
         room: teleRoom,
         durationS: run.playTime - teleRoomStart,
         lives: run.lives,
+        scrapEarned: run.scrapThisRoom,
       });
+      run.scrapThisRoom = 0;
       teleRoom = run.roomIndex;
       teleRoomStart = run.playTime;
     }
@@ -135,7 +148,9 @@ async function init() {
         room: teleRoom,
         durationS: run.playTime - teleRoomStart,
         lives: run.lives,
+        scrapEarned: run.scrapThisRoom,
       });
+      run.scrapThisRoom = 0;
       const st = run.state;
       telemetry.endRun({
         won: run.phase === 'victory',
@@ -295,17 +310,47 @@ async function init() {
     // Upgrade-Screen genau einmal pro Angebot einblenden.
     if (run.phase === 'upgrade' && !upgradeShown) {
       upgradeShown = true;
-      const offers = run.pendingOffers;
-      upgradeScreen.show(offers, (idx) => {
-        // Telemetrie: gewaehlte Karte + abgelehnte Alternativen, jeweils
-        // mit id und tag.
-        const cardOf = (o) => ({ id: o.fallback ? null : o.id, name: o.name, tag: o.tag, rarity: o.rarity });
-        telemetry.recordUpgrade({
-          chosen: cardOf(offers[idx]),
-          rejected: offers.filter((_, i) => i !== idx).map(cardOf),
-        });
-        chooseUpgrade(run, idx);
-        upgradeShown = false;
+      const costs = run.data.balance.scrap.cost;
+      const cardOf = (o) => ({ id: o.fallback ? null : o.id, name: o.name, tag: o.tag, rarity: o.rarity });
+      upgradeScreen.show({
+        costs,
+        getOffers: () => run.pendingOffers,
+        getScrap: () => run.scrap,
+        canFourth: () => run.pendingOffers.length < 4,
+        onPick: (idx) => {
+          // Telemetrie: gewaehlte Karte + abgelehnte Alternativen (id + tag).
+          const offers = run.pendingOffers;
+          telemetry.recordUpgrade({
+            chosen: cardOf(offers[idx]),
+            rejected: offers.filter((_, i) => i !== idx).map(cardOf),
+          });
+          chooseUpgrade(run, idx);
+          upgradeShown = false;
+        },
+        onReroll: () => {
+          const ok = rerollOffers(run);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'reroll', amount: costs.reroll });
+          return ok;
+        },
+        onBan: (idx) => {
+          const offer = run.pendingOffers[idx];
+          const ok = banOffer(run, idx);
+          if (ok) {
+            telemetry.recordScrapSpend({ room: run.roomIndex, type: 'ban', amount: costs.ban });
+            telemetry.recordBan({ room: run.roomIndex, id: offer.id });
+          }
+          return ok;
+        },
+        onFourth: () => {
+          const ok = buyFourthCard(run);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'fourthCard', amount: costs.fourthCard });
+          return ok;
+        },
+        onShield: () => {
+          const ok = buyShieldCharge(run);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shieldCharge', amount: costs.shieldCharge });
+          return ok;
+        },
       });
     }
 
