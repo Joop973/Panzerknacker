@@ -52,19 +52,34 @@ export function beginRun({ seed, mode }) {
     seed: seed >>> 0,
     mode: mode || null,
     startedAt: Date.now(),
-    rooms: [], // { room, durationS, lives }
-    upgrades: [], // { chosen, name, rejected: [] }
+    rooms: [], // { room, durationS, lives, scrapEarned }
+    upgrades: [], // { chosen, rejected: [] }
+    scrapSpends: [], // { room, type, amount }
+    bans: [], // { room, id }
   };
 }
 
 // Einen abgeschlossenen (oder letzten, gescheiterten) Raum festhalten.
-export function recordRoom({ room, durationS, lives }) {
+export function recordRoom({ room, durationS, lives, scrapEarned }) {
   if (!current) return;
   current.rooms.push({
     room,
     durationS: Math.round((durationS || 0) * 100) / 100,
     lives,
+    scrapEarned: scrapEarned || 0,
   });
+}
+
+// Eine Schrott-Ausgabe im Upgrade-Screen (Typ + Raumnummer).
+export function recordScrapSpend({ room, type, amount }) {
+  if (!current) return;
+  current.scrapSpends.push({ room, type, amount });
+}
+
+// Eine im Run verbannte Upgrade-id (mit Raumnummer).
+export function recordBan({ room, id }) {
+  if (!current) return;
+  current.bans.push({ room, id });
 }
 
 // Eine Upgrade-Wahl festhalten (gewaehlt + abgelehnte Alternativen).
@@ -95,6 +110,8 @@ export function endRun({ won, roomReached, deathCause, deathCauseLabel, enemyTyp
     enemyType: won ? null : enemyType || null,
     rooms: current.rooms,
     upgrades: current.upgrades,
+    scrapSpends: current.scrapSpends,
+    bans: current.bans,
   };
   const runs = loadRuns();
   runs.push(entry);
@@ -118,7 +135,23 @@ export function isDebugEnabled() {
 let debugBody = null; // <tbody> der Debug-Tabelle (null = nicht montiert)
 
 function fmtRooms(rooms) {
-  return rooms.map((r) => `R${r.room}: ${r.durationS}s / ${r.lives}❤`).join('  ·  ');
+  return rooms
+    .map((r) => `R${r.room}: ${r.durationS}s / ${r.lives}❤ / +${r.scrapEarned || 0}⚙`)
+    .join('  ·  ');
+}
+
+function fmtScrap(r) {
+  const earned = (r.rooms || []).reduce((s, x) => s + (x.scrapEarned || 0), 0);
+  const spends = r.scrapSpends || [];
+  const spent = spends.reduce((s, x) => s + (x.amount || 0), 0);
+  const byType = {};
+  for (const s of spends) byType[s.type] = (byType[s.type] || 0) + 1;
+  const detail = Object.entries(byType).map(([t, n]) => `${t}×${n}`).join(', ');
+  return `+${earned} / -${spent}${detail ? ` (${detail})` : ''}`;
+}
+
+function fmtBans(r) {
+  return (r.bans || []).map((b) => b.id).join(', ') || '–';
 }
 
 function fmtCard(c) {
@@ -152,6 +185,8 @@ function refreshDebugView() {
       r.won ? '–' : r.deathCause || '–',
       r.won ? '–' : r.enemyType || '–',
       fmtUpgrades(r.upgrades),
+      fmtScrap(r),
+      fmtBans(r),
       fmtRooms(r.rooms),
     ];
     for (const c of cells) {
@@ -227,7 +262,9 @@ export function mountDebugView() {
     'Todesursache',
     'Gegnertyp',
     'Upgrades (gewählt / abgelehnt)',
-    'Räume (Dauer / Leben)',
+    'Schrott (verd. / ausg.)',
+    'Verbannt',
+    'Räume (Dauer / Leben / Schrott)',
   ];
   for (const c of cols) {
     const th = document.createElement('th');

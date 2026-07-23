@@ -38,6 +38,9 @@ export function createHud(ctx) {
       118,
       15,
     );
+    // Schrottstand permanent (Phase 3) -- Gold, zwischen Munition und Mitte.
+    ctx.fillStyle = '#e0c860';
+    ctx.fillText(`⚙ ${run.scrap || 0}`, 296, 15);
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'center';
     // Letzter Gegner: Zaehler pulsiert (wichtig, wenn er unsichtbar ist).

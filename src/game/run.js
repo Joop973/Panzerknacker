@@ -10,7 +10,7 @@
 import { mulberry32 } from '../core/rng.js';
 import { recordRun, loadStats } from '../core/storage.js';
 import { createState, stepState } from './state.js';
-import { rollOffers as rollFromPool } from './upgradepool.js';
+import { rollOffers as rollFromPool, drawOne } from './upgradepool.js';
 
 const TRANSITION_S = 1.5;
 const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
@@ -108,6 +108,9 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}
     upgradeChoices: 0,
     shieldCharges: 0, // Notschild-Ladungen (raumuebergreifend, keine Regen)
+    scrap: 0, // Schrott-Waehrung (Run-State, Phase 3)
+    scrapThisRoom: 0, // im aktuellen Raum verdienter Schrott (Telemetrie)
+    bannedUpgrades: new Set(), // im Run verbannte Upgrade-ids (nicht persistent)
     pendingOffers: null,
     killsByType: {}, // Statistik fuer die Endscreens
     shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)
@@ -226,6 +229,19 @@ export function stepRun(run, cmd, dt) {
   if (enemiesLeft === 0 && st.player.alive) {
     run.roomsCleared++;
     st.sounds.push('clear');
+    // Schrott fuer den geraeumten Raum (deterministisch ueber genRng).
+    const sc = run.data.balance.scrap;
+    const earned = sc.perRoom[0] + Math.floor(run.genRng() * (sc.perRoom[1] - sc.perRoom[0] + 1));
+    run.scrap += earned;
+    run.scrapThisRoom += earned;
+    st.texts.push({
+      x: st.player.x,
+      y: st.player.y - 30,
+      text: `+${earned} Schrott`,
+      age: 0,
+      life: 1.2,
+      color: '#e0c860',
+    });
     // Extraleben alle 5 geschaffte Raeume.
     if (run.roomsCleared % run.difficulty.extraLifeEveryClearedRooms === 0) {
       run.lives++;
@@ -246,18 +262,78 @@ export function stepRun(run, cmd, dt) {
   }
 }
 
-// 3 Angebote aus dem neuen Auswahlpool (Seed-RNG -> deterministisch).
-// Tag-Eindeutigkeit, Rarity-Gewichte, maxStacks/requires/minRoom siehe
-// upgradepool.js. Fehlende Slots fuellt der Pool mit "+1 Leben" auf.
-function rollOffers(run) {
-  return rollFromPool(run.upgradesData, {
+// Gemeinsame Pool-Parameter aus dem Run.
+function poolOpts(run) {
+  return {
     chosen: run.upgrades,
     roomIndex: run.roomIndex,
     rng: run.genRng,
     balance: run.data.balance,
     count: run.upgradesData.offersPerScreen,
-    banned: run.bannedUpgrades, // Phase 3 (jetzt noch undefined)
-  });
+    banned: run.bannedUpgrades,
+  };
+}
+
+// 3 Angebote aus dem neuen Auswahlpool (Seed-RNG -> deterministisch).
+// Tag-Eindeutigkeit, Rarity-Gewichte, maxStacks/requires/minRoom siehe
+// upgradepool.js. Fehlende Slots fuellt der Pool mit "+1 Leben" auf.
+function rollOffers(run) {
+  return rollFromPool(run.upgradesData, poolOpts(run));
+}
+
+// --- Phase-3-Schrott-Aktionen im Upgrade-Screen ---
+// Alle geben true zurueck, wenn tatsaechlich (genug Schrott) ausgefuehrt.
+
+// Neu wuerfeln: frische 3 Karten (Tag-Regel + Verbannungen gelten weiter).
+export function rerollOffers(run) {
+  if (run.phase !== 'upgrade' || !run.pendingOffers) return false;
+  const cost = run.data.balance.scrap.cost.reroll;
+  if (run.scrap < cost) return false;
+  run.scrap -= cost;
+  run.pendingOffers = rollOffers(run);
+  return true;
+}
+
+// Verbannen: Karte fuer den Rest des Runs aus dem Pool nehmen und durch
+// eine neue ersetzen (deren Tag sich von den anderen Karten unterscheidet).
+export function banOffer(run, index) {
+  if (run.phase !== 'upgrade' || !run.pendingOffers) return false;
+  const offer = run.pendingOffers[index];
+  if (!offer || offer.fallback) return false; // Fallback ist nicht verbannbar
+  const cost = run.data.balance.scrap.cost.ban;
+  if (run.scrap < cost) return false;
+  run.scrap -= cost;
+  run.bannedUpgrades.add(offer.id);
+  const kept = run.pendingOffers.filter((_, i) => i !== index);
+  const avoidTags = new Set(kept.filter((o) => !o.fallback).map((o) => o.tag));
+  const avoidIds = new Set(kept.filter((o) => !o.fallback).map((o) => o.id));
+  run.pendingOffers[index] = drawOne(run.upgradesData, poolOpts(run), avoidTags, avoidIds);
+  return true;
+}
+
+// Vierte Karte: eine zusaetzliche Karte aufdecken (Tag-Regel gilt weiter).
+// Nur von 3 auf 4 -- nicht beliebig stapelbar.
+export function buyFourthCard(run) {
+  if (run.phase !== 'upgrade' || !run.pendingOffers) return false;
+  if (run.pendingOffers.length >= 4) return false;
+  const cost = run.data.balance.scrap.cost.fourthCard;
+  if (run.scrap < cost) return false;
+  const avoidTags = new Set(run.pendingOffers.filter((o) => !o.fallback).map((o) => o.tag));
+  const avoidIds = new Set(run.pendingOffers.filter((o) => !o.fallback).map((o) => o.id));
+  const extra = drawOne(run.upgradesData, poolOpts(run), avoidTags, avoidIds);
+  if (extra.fallback) return false; // nichts Sinnvolles mehr -> kein Kauf
+  run.scrap -= cost;
+  run.pendingOffers.push(extra);
+  return true;
+}
+
+// Schildladung kaufen: +1 Notschild-Ladung, auch ohne das Schild-Upgrade.
+export function buyShieldCharge(run) {
+  const cost = run.data.balance.scrap.cost.shieldCharge;
+  if (run.scrap < cost) return false;
+  run.scrap -= cost;
+  run.shieldCharges = (run.shieldCharges || 0) + 1;
+  return true;
 }
 
 // Auswahl anwenden und den Run fortsetzen.
