@@ -16,6 +16,17 @@ Bei Service-Worker-relevanten Änderungen den Cache-Namen in `sw.js` erhöhen
 - Vor dem Push testen (Node-Syntaxcheck + kurzer Playwright-Smoke, s. u.).
 - Commit-/PR-Texte auf Deutsch. Kein Modell-Identifier in Commits/PRs.
 
+## ⚠️ Diese Datei aktuell halten (Pflicht)
+Am Ende **jeder** abgeschlossenen Aufgabe **diese `CLAUDE.md` mit
+aktualisieren** und im selben PR mitmergen. So kann der Nutzer jederzeit den
+Chat wechseln und der neue Chat kennt den echten Stand. Konkret:
+- Abschnitt **„Aktueller Stand"** anpassen (neue gemergte PRs eintragen).
+- **To-dos** abhaken/entfernen bzw. neu entdeckte Punkte ergänzen.
+- Bei Architektur-/Datei-/Ablauf-Änderungen die betroffenen Abschnitte oben
+  nachziehen (z. B. neue Datei, neues Upgrade-Feld, geänderter Testbefehl).
+Kurz halten, keine Doppelungen. Änderungen an dieser Datei brauchen **keinen**
+Service-Worker-Bump (kein Spiel-Asset).
+
 ## Antwortsprache
 Der Nutzer schreibt Deutsch → **immer auf Deutsch antworten.**
 
