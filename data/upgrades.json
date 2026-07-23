@@ -45,12 +45,13 @@
     "sprengkraft": {
       "id": "sprengkraft",
       "name": "Sprengkraft",
-      "description": "Minen-Explosionsradius +40 % pro Stufe",
+      "description": "Minen-Explosionsradius +25 % pro Stufe",
       "tag": "mine",
       "rarity": "common",
       "maxStacks": 3,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "radiusMult": 1.25
     },
     "kettenantrieb": {
       "id": "kettenantrieb",
@@ -226,13 +227,13 @@
     "emergency_shield": {
       "id": "emergency_shield",
       "name": "Notschild",
-      "description": "+3 Schildladungen — jede fängt einen Treffer ab, raumübergreifend, keine Regeneration",
+      "description": "+1 Schildladung — fängt einen Treffer ab, raumübergreifend, keine Regeneration (max. 3)",
       "tag": "defense",
       "rarity": "rare",
       "maxStacks": 3,
       "requires": [],
       "minRoom": 1,
-      "chargesPerStack": 3
+      "chargesPerStack": 1
     },
     "dash": {
       "id": "dash",
@@ -380,13 +381,13 @@
     "ueberladung": {
       "id": "ueberladung",
       "name": "Überladung",
-      "description": "Alle deine Explosionen (Schüsse, Minen, Kettenblitz) +50 % Radius",
+      "description": "Alle deine Explosionen (Schüsse, Minen, Kettenblitz) +30 % Radius",
       "tag": "synergy",
       "rarity": "legendary",
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "mult": 1.5
+      "mult": 1.3
     },
     "rammklinge": {
       "id": "rammklinge",

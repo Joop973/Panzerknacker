@@ -13,7 +13,7 @@ const STICK_R = 48; // maximale Auslenkung in px (Bildschirm)
 const DEADZONE = 10;
 const DOUBLE_TAP_MS = 300;
 const MINE_STICK_R = 54; // Zugweg des Minen-Wurfsticks (Bildschirm-px)
-const MINE_MAX_THROW = 190; // maximale Wurfweite (Welt-px)
+const MINE_MAX_THROW = 142; // maximale Wurfweite (Welt-px, -25 %)
 
 function makeStickEl() {
   const base = document.createElement('div');

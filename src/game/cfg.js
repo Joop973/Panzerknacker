@@ -37,7 +37,7 @@ export function applyUpgrades(cfg, ups, upsData) {
   cfg.ricochets += l('abpraller'); // Basis 1, max +1 => harte Grenze 2
   cfg.bulletSpeed *= Math.pow(1.2, l('ladung'));
   cfg.mines += l('kettenglied');
-  cfg.mineRadiusMult = Math.pow(1.4, l('sprengkraft'));
+  cfg.mineRadiusMult = Math.pow(upsData?.upgrades?.sprengkraft?.radiusMult ?? 1.25, l('sprengkraft'));
   cfg.speed *= Math.pow(1.12, l('kettenantrieb'));
   cfg.tungsten = l('wolframkern') > 0;
   const U = upsData ? upsData.upgrades : {};
