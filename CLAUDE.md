@@ -19,6 +19,28 @@ Bei Service-Worker-relevanten Änderungen den Cache-Namen in `sw.js` erhöhen
 ## Antwortsprache
 Der Nutzer schreibt Deutsch → **immer auf Deutsch antworten.**
 
+## Aktueller Stand (Stand: 2026-07)
+Alle 10 Phasen umgesetzt; deterministisch; PWA/Offline; Touch + Gamepad;
+viele Upgrades. Zuletzt gemergt (PRs #9–#12):
+- Startet nicht mehr fälschlich pausiert (Portrait-Auto-Pause fixt sich im Querformat).
+- Echtes Handy-Vollbild im Querformat (`100dvh` + `viewport-fit=cover`).
+- **Grafik-Sprites** für Panzer (Rumpf+Turm), Böden/Wände, Geschosse + neues App-Icon.
+- Diese `CLAUDE.md`.
+
+### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] Sprite-Look für **feste Wand** (`tile_wall`) und **Loch** (`tile_hole`)
+      im Spiel noch mit eigenem Auge prüfen — Code-Pfad identisch zu
+      breakable (das rendert korrekt), aber nicht separat verifiziert.
+- [ ] Geschoss-Sprites wirken recht hell/groß (weißer Glow-Blob). Ggf. Größe
+      (`3.6 * b.radius` in `renderer.js`) oder Glow-Matte reduzieren.
+- [ ] Noch **prozedural** (keine Sprites vorhanden): Minen, Kampfdrohne,
+      Klingenkranz, Fallen, Explosionen/Partikel. Bei Bedarf Grafiken liefern.
+- [ ] Determinismus-Regression (5 Seeds → Sieg) nach den Render-Änderungen
+      nicht erneut gelaufen (nur Rendering geändert → Logik unberührt),
+      bei nächster Gelegenheit einmal bestätigen.
+
+Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
+
 ## Tech / Architektur
 - **ES-Module**, kein Bundler. Einstieg `src/main.js`, verdrahtet alles.
 - **Fixed-Timestep-Loop** 60 Hz mit Akkumulator + Render-Interpolation (`alpha`).
