@@ -166,9 +166,11 @@ export function createState(data, tiles, opts) {
         if (state.player.alive) {
           // Aasgeier: Abschuss laedt die Spielerwaffe sofort nach.
           if (pc.scavenger) state.player.cooldown = 0;
-          // Blutrausch: kurz unverwundbar und schneller.
+          // Blutrausch: kurzer Tempo-Schub (bloodlust) + nur ein kurzer
+          // Unverwundbarkeits-Moment (bloodlustIframe), damit sich Kills
+          // nicht zu dauerhafter Unverwundbarkeit stapeln.
           if (pc.bloodlust) {
-            state.player.protect = Math.max(state.player.protect, pc.bloodlust);
+            state.player.protect = Math.max(state.player.protect, pc.bloodlustIframe);
             state.player.bloodTimer = pc.bloodlust;
           }
         }
