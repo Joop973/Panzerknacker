@@ -128,8 +128,11 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/core/telemetry.js` — Run-Telemetrie in `localStorage.runs` +
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-Cache, cache-first). Cache-Version bumpen!
-  (Aktuell `v26`; `data/balance.json`, `src/core/telemetry.js` +
-  `src/game/upgradepool.js` im Cache.)
+  (Aktuell `v27`; `data/balance.json`, `src/core/telemetry.js` +
+  `src/game/upgradepool.js` im Cache.) **Bewusst KEIN `skipWaiting()`/
+  `clients.claim()`** — sonst kann eine laufende Seite mitten im Start alten
+  Code mit neuen `data/*.json` mischen (Upgrade-Screen zeigt dann nur
+  „+1 Leben"). Update greift erst nach vollständigem Neustart (Tab/App zu).
 
 ## Grafik / Sprites
 - Panzer je Typ: `assets/sprites/body_<typ>.png` (Front zeigt nach oben →
