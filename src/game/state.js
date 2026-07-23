@@ -130,6 +130,14 @@ export function createState(data, tiles, opts) {
         state.spawnParticles(tank.x, tank.y, '#8ecaf0', 12, 130);
         return;
       }
+      // Elite-Affix "gepanzert": Gegnerschild faengt genau einen Treffer ab.
+      if (tank !== state.player && tank.shieldReady) {
+        tank.shieldReady = false;
+        tank.protect = Math.max(tank.protect, 0.3);
+        state.sounds.push('shield');
+        state.spawnParticles(tank.x, tank.y, '#8ecaf0', 8, 100);
+        return;
+      }
       // Schild faengt genau einen toedlichen Treffer ab (laedt pro Leben).
       if (tank === state.player && tank.shieldReady) {
         tank.shieldReady = false;

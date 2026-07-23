@@ -458,6 +458,42 @@
       "requires": [],
       "minRoom": 1,
       "stickDelayS": 0.6
+    },
+    "beutepanzer": {
+      "id": "beutepanzer",
+      "name": "Beutepanzer",
+      "description": "Elite-Beute: eine Kampfdrohne umkreist dich und feuert selbst auf Gegner",
+      "tag": "elite",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "intervalS": 1.2,
+      "orbitPx": 30,
+      "bulletSpeed": 170
+    },
+    "trophaee": {
+      "id": "trophaee",
+      "name": "Trophäe",
+      "description": "Elite-Beute: +1 Schildladung, dauerhaft",
+      "tag": "elite",
+      "rarity": "rare",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "shieldCharges": 1
+    },
+    "kriegsmaschine": {
+      "id": "kriegsmaschine",
+      "name": "Kriegsmaschine",
+      "description": "Elite-Beute: +2 Kugeln im Magazin und schnellere Nachladung",
+      "tag": "elite",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "magazineBonus": 2,
+      "cooldownMult": 0.85
     }
   },
   "fallback": {

@@ -21,7 +21,8 @@
   },
   "scrap": {
     "perRoom": [1, 3],
-    "eliteBonus": 3,
+    "eliteMult": 2,
+    "dropRefund": 2,
     "cost": {
       "reroll": 2,
       "ban": 1,

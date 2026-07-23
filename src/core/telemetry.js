@@ -56,6 +56,8 @@ export function beginRun({ seed, mode }) {
     upgrades: [], // { chosen, rejected: [] }
     scrapSpends: [], // { room, type, amount }
     bans: [], // { room, id }
+    doors: [], // { room, chosen, rejected: [] }  (Phase 4)
+    eventChoices: [], // { room, event, option }   (Phase 4)
   };
 }
 
@@ -80,6 +82,18 @@ export function recordScrapSpend({ room, type, amount }) {
 export function recordBan({ room, id }) {
   if (!current) return;
   current.bans.push({ room, id });
+}
+
+// Eine Tuerwahl (Phase 4): gewaehlter + abgelehnter Typ pro Raum.
+export function recordDoor({ room, chosen, rejected }) {
+  if (!current) return;
+  current.doors.push({ room, chosen, rejected: rejected || [] });
+}
+
+// Eine Event-Entscheidung (Phase 4).
+export function recordEvent({ room, event, option }) {
+  if (!current) return;
+  current.eventChoices.push({ room, event, option });
 }
 
 // Eine Upgrade-Wahl festhalten (gewaehlt + abgelehnte Alternativen).
@@ -112,6 +126,8 @@ export function endRun({ won, roomReached, deathCause, deathCauseLabel, enemyTyp
     upgrades: current.upgrades,
     scrapSpends: current.scrapSpends,
     bans: current.bans,
+    doors: current.doors,
+    eventChoices: current.eventChoices,
   };
   const runs = loadRuns();
   runs.push(entry);
@@ -154,6 +170,16 @@ function fmtBans(r) {
   return (r.bans || []).map((b) => b.id).join(', ') || '–';
 }
 
+function fmtDoors(r) {
+  return (r.doors || [])
+    .map((d) => `R${d.room}:${d.chosen}${d.rejected && d.rejected.length ? `(↯${d.rejected.join('/')})` : ''}`)
+    .join('  ·  ') || '–';
+}
+
+function fmtEvents(r) {
+  return (r.eventChoices || []).map((e) => `${e.event}#${e.option}`).join(', ') || '–';
+}
+
 function fmtCard(c) {
   if (!c) return '?';
   if (c.id) return `${c.id}[${c.tag}]`;
@@ -187,6 +213,8 @@ function refreshDebugView() {
       fmtUpgrades(r.upgrades),
       fmtScrap(r),
       fmtBans(r),
+      fmtDoors(r),
+      fmtEvents(r),
       fmtRooms(r.rooms),
     ];
     for (const c of cells) {
@@ -264,6 +292,8 @@ export function mountDebugView() {
     'Upgrades (gewählt / abgelehnt)',
     'Schrott (verd. / ausg.)',
     'Verbannt',
+    'Türen (gewählt ↯abgelehnt)',
+    'Events',
     'Räume (Dauer / Leben / Schrott)',
   ];
   for (const c of cols) {
