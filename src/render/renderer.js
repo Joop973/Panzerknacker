@@ -222,6 +222,19 @@ export function createRenderer(ctx) {
       ctx.stroke();
     }
 
+    // Notschild-Ladungen: ein konzentrischer Ring je verbleibender Ladung.
+    if (t === state.player && state.shieldCharges > 0) {
+      ctx.strokeStyle = 'rgba(150,225,255,0.85)';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.85;
+      for (let i = 0; i < state.shieldCharges; i++) {
+        ctx.beginPath();
+        ctx.arc(x, y, t.cfg.radius + 8 + i * 3, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
     ctx.globalAlpha = bodyAlpha;
     const body = TANK_COLORS[t.type] || '#ffffff';
     const isPlayer = t.type === 'player';

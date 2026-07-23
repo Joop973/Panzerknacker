@@ -10,6 +10,7 @@
 import { mulberry32 } from '../core/rng.js';
 import { recordRun, loadStats } from '../core/storage.js';
 import { createState, stepState } from './state.js';
+import { rollOffers as rollFromPool } from './upgradepool.js';
 
 const TRANSITION_S = 1.5;
 const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
@@ -70,6 +71,7 @@ function startRoom(run) {
     weights,
     playerUpgrades: run.upgrades,
     upgradesData: run.upgradesData,
+    shieldCharges: run.shieldCharges, // raumuebergreifende Notschild-Ladungen
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.
@@ -105,6 +107,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     budgetMult: mode.budgetMult,
     upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}
     upgradeChoices: 0,
+    shieldCharges: 0, // Notschild-Ladungen (raumuebergreifend, keine Regen)
     pendingOffers: null,
     killsByType: {}, // Statistik fuer die Endscreens
     shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)
@@ -164,6 +167,9 @@ export function stepRun(run, cmd, dt) {
   }
   stepState(st, cmd, dt);
   run.playTime += dt;
+  // Notschild-Ladungen aus dem Raumzustand zuruecksynchronisieren, damit
+  // verbrauchte Ladungen in den naechsten Raum uebernommen werden.
+  run.shieldCharges = st.shieldCharges;
 
   // Combo: schnell aufeinanderfolgende Kills. Faellt nach COMBO_WINDOW.
   if (run.comboTimer > 0) {
@@ -240,30 +246,18 @@ export function stepRun(run, cmd, dt) {
   }
 }
 
-// 3 zufaellige Angebote aus dem Pool (Seed-RNG -> deterministisch).
-// Ausgemaxte Upgrades fliegen raus; fehlende Slots fuellt "+1 Leben".
+// 3 Angebote aus dem neuen Auswahlpool (Seed-RNG -> deterministisch).
+// Tag-Eindeutigkeit, Rarity-Gewichte, maxStacks/requires/minRoom siehe
+// upgradepool.js. Fehlende Slots fuellt der Pool mit "+1 Leben" auf.
 function rollOffers(run) {
-  const u = run.upgradesData;
-  const avail = Object.entries(u.upgrades)
-    .filter(([id, def]) => (run.upgrades[id] || 0) < def.max)
-    .map(([id, def]) => ({
-      id,
-      name: def.name,
-      desc: def.desc,
-      level: (run.upgrades[id] || 0) + 1,
-      max: def.max,
-      fallback: false,
-    }));
-  // Fisher-Yates ueber den genRng-Strom.
-  for (let i = avail.length - 1; i > 0; i--) {
-    const j = Math.floor(run.genRng() * (i + 1));
-    [avail[i], avail[j]] = [avail[j], avail[i]];
-  }
-  const offers = avail.slice(0, u.offersPerScreen);
-  while (offers.length < u.offersPerScreen) {
-    offers.push({ id: null, name: u.fallback.name, desc: u.fallback.desc, fallback: true });
-  }
-  return offers;
+  return rollFromPool(run.upgradesData, {
+    chosen: run.upgrades,
+    roomIndex: run.roomIndex,
+    rng: run.genRng,
+    balance: run.data.balance,
+    count: run.upgradesData.offersPerScreen,
+    banned: run.bannedUpgrades, // Phase 3 (jetzt noch undefined)
+  });
 }
 
 // Auswahl anwenden und den Run fortsetzen.
@@ -277,6 +271,11 @@ export function chooseUpgrade(run, index) {
     run.upgrades[offer.id] = (run.upgrades[offer.id] || 0) + 1;
     // Glaskanone: reduziert die Leben dauerhaft auf 1 (starker Trade-off).
     if (offer.id === 'glaskanone') run.lives = 1;
+    // Notschild: jede Stufe gibt chargesPerStack Ladungen (raumuebergreifend).
+    if (offer.id === 'emergency_shield') {
+      const cps = run.upgradesData.upgrades.emergency_shield.chargesPerStack || 3;
+      run.shieldCharges = (run.shieldCharges || 0) + cps;
+    }
   }
   run.upgradeChoices++;
   run.pendingOffers = null;

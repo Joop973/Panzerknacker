@@ -68,11 +68,12 @@ export function recordRoom({ room, durationS, lives }) {
 }
 
 // Eine Upgrade-Wahl festhalten (gewaehlt + abgelehnte Alternativen).
-export function recordUpgrade({ chosen, name, rejected }) {
+// chosen und jedes Element von rejected sind Karten-Objekte
+// { id, name, tag, rarity } (Phase 2: mit id + tag).
+export function recordUpgrade({ chosen, rejected }) {
   if (!current) return;
   current.upgrades.push({
     chosen: chosen || null,
-    name: name || null,
     rejected: rejected || [],
   });
 }
@@ -120,11 +121,18 @@ function fmtRooms(rooms) {
   return rooms.map((r) => `R${r.room}: ${r.durationS}s / ${r.lives}❤`).join('  ·  ');
 }
 
+function fmtCard(c) {
+  if (!c) return '?';
+  if (c.id) return `${c.id}[${c.tag}]`;
+  return c.name || '+1 Leben';
+}
+
 function fmtUpgrades(ups) {
   return ups
     .map((u) => {
-      const rej = u.rejected && u.rejected.length ? ` (statt ${u.rejected.join(', ')})` : '';
-      return `${u.chosen}${rej}`;
+      const chosen = fmtCard(u.chosen);
+      const rej = (u.rejected || []).map(fmtCard).join(', ');
+      return rej ? `${chosen} (statt ${rej})` : chosen;
     })
     .join('  →  ');
 }

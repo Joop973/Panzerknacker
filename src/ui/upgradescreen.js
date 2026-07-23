@@ -17,11 +17,17 @@ export function createUpgradeScreen() {
       el.appendChild(h);
       const row = document.createElement('div');
       row.className = 'cards';
+      const RARITY = { common: 'Gewöhnlich', rare: 'Selten', legendary: 'Legendär' };
       offers.forEach((o, i) => {
         const btn = document.createElement('button');
         btn.className = 'card';
-        const lvl = o.fallback ? '' : ` (Stufe ${o.level}/${o.max})`;
-        btn.innerHTML = `<strong>${o.name}${lvl}</strong><span>${o.desc}</span>`;
+        btn.dataset.rarity = o.rarity || 'common';
+        btn.dataset.tag = o.tag || '';
+        const lvl = o.fallback ? '' : ` (Stufe ${o.level}/${o.maxStacks})`;
+        const meta = o.fallback
+          ? ''
+          : `<span class="cardmeta">${o.tag} · ${RARITY[o.rarity] || o.rarity}</span>`;
+        btn.innerHTML = `<strong>${o.name}${lvl}</strong><span>${o.description}</span>${meta}`;
         btn.addEventListener('click', () => {
           el.classList.add('hidden');
           onPick(i);

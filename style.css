@@ -185,6 +185,27 @@ html, body {
   background: #2a2a33;
 }
 
+/* Tag + Seltenheit unten auf der Karte */
+.cards .card .cardmeta {
+  margin-top: auto;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+/* Rahmenfarbe nach Seltenheit */
+.cards .card[data-rarity='common'] {
+  border-color: #7a8a9a;
+}
+.cards .card[data-rarity='rare'] {
+  border-color: #4a9ed8;
+}
+.cards .card[data-rarity='legendary'] {
+  border-color: #d8a83a;
+  box-shadow: 0 0 10px rgba(216, 168, 58, 0.35);
+}
+
 /* Pause-Button oben mittig, ausserhalb der Daumenzonen */
 #pauseBtn,
 #muteBtn {

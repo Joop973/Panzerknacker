@@ -55,7 +55,7 @@ function buildWalls(grid) {
 //         playerUpgrades -- Upgrade-Level {id: stufe}
 //         upgradesData -- Inhalt von upgrades.json (Stellwerte) }
 export function createState(data, tiles, opts) {
-  const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData } = opts;
+  const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges } = opts;
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
     : generateRoom(tiles, genRng, enemyTypes.length, weights);
@@ -88,6 +88,7 @@ export function createState(data, tiles, opts) {
     enemyKills: 0, // in diesem Raum getoetete Gegner
     playerDeaths: 0, // Tode des Spielers in diesem Raum
     playerShots: 0, // Spieler-Abzuege in diesem Raum (Trefferquote)
+    shieldCharges: shieldCharges || 0, // Notschild: absorbiert je 1 Treffer
     walls,
     tanks,
     player,
@@ -119,6 +120,16 @@ export function createState(data, tiles, opts) {
       state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 6, 90);
     },
     killTank(tank, cause, meta) {
+      // Notschild-Ladung faengt genau einen Treffer ab (raumuebergreifend,
+      // keine Regeneration). Kurzer Schutz verhindert Mehrfachverbrauch im
+      // selben Explosions-Frame.
+      if (tank === state.player && state.shieldCharges > 0) {
+        state.shieldCharges--;
+        tank.protect = Math.max(tank.protect, 0.6);
+        state.sounds.push('shield');
+        state.spawnParticles(tank.x, tank.y, '#8ecaf0', 12, 130);
+        return;
+      }
       // Schild faengt genau einen toedlichen Treffer ab (laedt pro Leben).
       if (tank === state.player && tank.shieldReady) {
         tank.shieldReady = false;
