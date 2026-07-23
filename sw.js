@@ -2,7 +2,7 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v26';
+const CACHE = 'panzerknacker-v27';
 
 const ASSETS = [
   './',
@@ -79,21 +79,25 @@ const ASSETS = [
   'src/ui/upgradescreen.js',
 ];
 
+// WICHTIG: KEIN skipWaiting() und KEIN clients.claim().
+// Beides zusammen (oder einzeln mit Alt-Cache-Loeschung) kann eine bereits
+// mit alter Version geladene Seite dazu bringen, mitten im Start neue
+// Dateien nachzuladen -> alter Code + neue data/*.json = kaputte Auswahl
+// (z. B. Upgrade-Screen zeigt nur "+1 Leben"). Ohne die beiden behaelt jede
+// laufende Seite bis zum vollstaendigen Schliessen ihre konsistente Version;
+// die neue Version greift beim naechsten frischen Start (Tab/App schliessen
+// und neu oeffnen).
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches
-      .open(CACHE)
-      .then((c) => c.addAll(ASSETS))
-      .then(() => self.skipWaiting()),
-  );
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
 });
 
 self.addEventListener('activate', (e) => {
+  // Alte Caches erst hier loeschen -- der activate-Handler laeuft (ohne
+  // skipWaiting) erst, wenn keine Seite mehr die alte Version nutzt.
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim()),
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))),
   );
 });
 
