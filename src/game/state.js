@@ -118,7 +118,7 @@ export function createState(data, tiles, opts) {
       grid[wall.row][wall.col] = '.';
       state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 6, 90);
     },
-    killTank(tank, cause) {
+    killTank(tank, cause, meta) {
       // Schild faengt genau einen toedlichen Treffer ab (laedt pro Leben).
       if (tank === state.player && tank.shieldReady) {
         tank.shieldReady = false;
@@ -142,6 +142,10 @@ export function createState(data, tiles, opts) {
         }
         state.playerDeaths++;
         state.lastDeathCause = cause || 'Unbekannt';
+        // Strukturierte Todesursache fuer die Telemetrie (nur Instrument;
+        // die Spiellogik liest diese Felder nie zurueck).
+        state.lastDeathCauseCode = meta?.code || null;
+        state.lastDeathEnemyType = meta?.enemyType || null;
         state.damageFlash = 0.5;
         state.respawnTimer = RESPAWN_DELAY;
       } else {
@@ -382,27 +386,33 @@ export function stepState(state, cmd, dt) {
   }
 
   // Geschoss gegen Panzer: toedlich fuer JEDEN, auch den Schuetzen --
-  // ausser innerhalb dessen Schutzzeit direkt nach dem Abschuss.
-  const grace = state.data.physics.shooterGraceS;
+  // ausser (a) innerhalb der Selbst-Immunitaet direkt nach dem Abschuss
+  // oder (b) solange die eigene Kugel noch nicht abgeprallt ist. Erst
+  // nach dem ersten Abpraller gilt sie als gefaehrlich fuer den Leger.
+  const grace = state.data.balance.bullet.selfImmunity;
   for (const b of state.bullets) {
     if (b.dead) continue;
     for (const t of state.tanks) {
       if (!t.alive) continue;
-      if (b.owner === t && (b.age < grace || b.friendly)) continue;
+      const bounced = b.ricochetsLeft < b.ricochetsStart;
+      if (b.owner === t && (b.age < grace || !bounced || b.friendly)) continue;
       if (t.protect > 0) continue; // Spawn-Schutz
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
         b.dead = true;
         // Banden-Kill-Feedback: Gegner mit abgeprallter Kugel erwischt.
-        if (t !== state.player && b.ricochetsLeft < b.ricochetsStart) {
+        if (t !== state.player && bounced) {
           state.texts.push({ x: t.x, y: t.y - 18, text: 'Abpraller!', age: 0, life: 0.9, color: '#8ecae6' });
         }
-        // Todesursache fuer den Game-Over-Screen.
+        // Todesursache fuer den Game-Over-Screen + Telemetrie.
         const WEAPON_LABEL = { bullet: 'Kugel', rocket: 'Rakete', bounce_rocket: 'Bounce-Rakete' };
-        const cause =
-          b.owner === state.player
-            ? 'die eigene Kugel'
-            : `${state.data.types[b.owner?.type]?.label || '?'} (${WEAPON_LABEL[b.kind] || b.kind})`;
-        state.killTank(t, cause);
+        const own = b.owner === state.player;
+        const cause = own
+          ? 'die eigene Kugel'
+          : `${state.data.types[b.owner?.type]?.label || '?'} (${WEAPON_LABEL[b.kind] || b.kind})`;
+        state.killTank(t, cause, {
+          code: own ? 'own_bullet' : 'enemy_bullet',
+          enemyType: own ? null : b.owner?.type || null,
+        });
         break;
       }
     }
@@ -417,7 +427,11 @@ export function stepState(state, cmd, dt) {
   for (const b of state.bullets) {
     if (b.dead && b.explosive && !b.detonated) {
       b.detonated = true;
-      explodeAt(state, b.x, b.y, b.explosionRadius);
+      const own = b.owner === state.player;
+      explodeAt(state, b.x, b.y, b.explosionRadius, undefined, {
+        code: own ? 'own_bullet' : 'enemy_bullet',
+        enemyType: own ? null : b.owner?.type || null,
+      });
       // Schrapnell: Splitterkugeln in alle Richtungen.
       const n = b.owner?.cfg?.schrapnell;
       if (n && b.owner.alive) spawnRadialBullets(state, b.owner, b.x, b.y, n);

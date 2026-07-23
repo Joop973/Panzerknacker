@@ -9,9 +9,6 @@
   "mine": {
     "radiusPx": 7,
     "armDelayS": 0.7,
-    "selfDetonateS": 10.0,
-    "explosionRadiusPx": 58,
-    "chainDelayS": 0.1,
     "throwPx": 96
   },
   "speeds": {

@@ -125,6 +125,15 @@ export function updateBullet(b, state, dt) {
   b.prevY = b.y;
   b.age += dt;
 
+  // Hartes Despawn nach balance.bullet.lifetime -- unabhaengig von noch
+  // verbleibenden Abprallern. Haelt das Spielfeld lesbar. Epsilon: die
+  // als Summe von 1/60-Schritten aufaddierte Zeit trifft die Grenze
+  // sonst erst einen Tick zu spaet.
+  if (b.age >= state.data.balance.bullet.lifetime - 1e-9) {
+    b.dead = true;
+    return;
+  }
+
   if (b.homing > 0) applyHoming(b, state, dt);
 
   const hitX = moveAxis(b, state, 'x', dt);
@@ -140,14 +149,18 @@ export function updateBullet(b, state, dt) {
   }
 
   if (hitX || hitY) {
-    state.sounds?.push('bounce');
     // Ein Wandkontakt pro Schritt kostet genau einen Abpraller --
     // auch im Eckenfall (hitX && hitY). Bei 0 verbleibenden
     // Abprallern verschwindet das Geschoss.
     if (b.ricochetsLeft <= 0) {
+      state.sounds?.push('bounce');
       b.dead = true;
       return;
     }
+    // Der erste Abpraller macht die Kugel gefaehrlich (auch fuer den
+    // Schuetzen) -> eigener kurzer Tick-Sound zum Telegraphieren.
+    const firstBounce = b.ricochetsLeft === b.ricochetsStart;
+    state.sounds?.push(firstBounce ? 'tick' : 'bounce');
     b.ricochetsLeft--;
   }
 

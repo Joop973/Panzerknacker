@@ -4,13 +4,17 @@
 // Loest einen Typnamen aus tanks.json in ein flaches cfg-Objekt auf.
 export function resolveCfg(data, type) {
   const t = data.types[type];
+  const bbullet = data.balance?.bullet;
   return {
     radius: data.physics.tankRadius,
     bulletRadius: data.physics.bulletRadius,
     // Typ-eigene Feuerrate (t_green: 2 s) vor globalem Standard.
     fireCooldown: t.fireCooldownS ?? data.physics.fireCooldownS,
     speed: data.speeds[t.speed],
-    magazine: t.magazine,
+    // Spieler-Basismagazin (gleichzeitig aktive Kugeln) aus balance.json;
+    // harter Deckel selbst mit Magazin-Upgrades (Lesbarkeit).
+    magazine: type === 'player' && bbullet ? bbullet.maxActive : t.magazine,
+    magazineCap: type === 'player' && bbullet ? bbullet.maxActiveCap : Infinity,
     ricochets: t.ricochets,
     mines: t.mines,
     weapon: t.weapon,

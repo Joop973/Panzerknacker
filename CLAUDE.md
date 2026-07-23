@@ -11,7 +11,7 @@ mergen** (squash). Nur so läuft GitHub Pages mit der neuesten Version.
 Bei Service-Worker-relevanten Änderungen den Cache-Namen in `sw.js` erhöhen
 (`panzerknacker-vNN`), sonst sehen Nutzer die alte Version offline.
 
-- Entwicklungs-Branch: `claude/phase-1-timestep-player-tank-dxpt2p`
+- Entwicklungs-Branch: `claude/phase-1-telemetry-balance-7qpy1a`
 - Repo: `Joop973/Panzerknacker`, Default-Branch `main`
 - Vor dem Push testen (Node-Syntaxcheck + kurzer Playwright-Smoke, s. u.).
 - Commit-/PR-Texte auf Deutsch. Kein Modell-Identifier in Commits/PRs.
@@ -38,6 +38,28 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
 - **Grafik-Sprites** für Panzer (Rumpf+Turm), Böden/Wände, Geschosse + neues App-Icon.
 - Diese `CLAUDE.md`.
 
+### Phase 1 (Balance & Lesbarkeit + Telemetrie) — Branch `claude/phase-1-telemetry-balance-7qpy1a`
+- Neue Balance-Datei **`data/balance.json`** (aus Code referenziert, keine
+  hartkodierten Zahlen): `bullet.lifetime` 3.5, `bullet.maxActive` 5,
+  `bullet.maxActiveCap` 8, `bullet.selfImmunity` 0.35; `mine.fuse` 3.0,
+  `mine.radius` 64, `mine.chainDelay` 0.15, `mine.warningTime` 0.5.
+  (Die alten Minen-Felder `selfDetonateS/explosionRadiusPx/chainDelayS`
+  aus `tanks.json` sind entfernt — jetzt in `balance.json`.)
+- **Geschosse lesbarer**: hartes Despawn nach 3,5 s (unabhängig von
+  Restabprallern); Kugel wird erst nach dem **ersten Abpraller** gefährlich
+  für den Spieler (+ heller Glow + kurzer Tick-Sound); Selbst-Immunität
+  0,35 s nach Abschuss; harter Aktiv-Kugel-Cap (8) für den Spieler.
+- **Minen lesbarer**: pulsierender Warnring im Explosionsradius in den
+  letzten 0,5 s vor der Selbstzündung; Kettenreaktion mit 0,15 s
+  Verzögerung pro Glied.
+- **Telemetrie** (`src/core/telemetry.js`): schreibt pro beendetem Run ein
+  Objekt in `localStorage.runs` (Array, max. 100). Erfasst Seed, Zeit,
+  erreichter Raum, Todesursache (`enemy_bullet/own_bullet/own_mine/
+  enemy_mine`) + Gegnertyp, pro Raum Dauer+Leben, gewählte Upgrades in
+  Reihenfolge + abgelehnte Alternativen. Verdrahtet rein beobachtend in
+  `main.js`; die Spiellogik liest nie Telemetriedaten. **Debug-Tabelle +
+  JSON-Export nur bei `?debug=1`** in der URL, sonst unsichtbar/inaktiv.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] Sprite-Look für **feste Wand** (`tile_wall`) und **Loch** (`tile_hole`)
       im Spiel noch mit eigenem Auge prüfen — Code-Pfad identisch zu
@@ -59,8 +81,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - **Deterministisch**: gesäter RNG (Mulberry32, `src/core/rng.js`), zwei Ströme
   (`genRng` = Raumbau, `aiRng` = KI). Gleicher Seed → gleicher Verlauf.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
-  (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`).
-  `src/game/cfg.js` löst Typen auf und wendet Upgrades an.
+  (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
+  `balance.json`). `src/game/cfg.js` löst Typen auf und wendet Upgrades an.
+  `data/balance.json` wird in `main.js` an `tanksData.balance` gehängt und
+  ist so über `state.data.balance` überall verfügbar.
 - **Kollision**: Kreis-vs-AABB mit Gleiten; Panzer blockt Panzer; Abpraller-
   Physik mit Eckenfall (`src/game/bullet.js`, `collision.js`).
 - **Dateien möglichst < ~300 Zeilen** halten (bei Bedarf aufsplitten, wie
@@ -75,7 +99,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/render/sprites.js` — lädt die PNG-Sprites (async, mit Fallback).
 - `src/ui/touchcontrols.js` — Touch: schwebende Twin-Sticks (DOM) + Minen-
   **Wurfstick** (Pointer Events + `setPointerCapture`).
+- `src/core/telemetry.js` — Run-Telemetrie in `localStorage.runs` +
+  Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-Cache, cache-first). Cache-Version bumpen!
+  (Aktuell `v25`; `data/balance.json` + `src/core/telemetry.js` im Cache.)
 
 ## Grafik / Sprites
 - Panzer je Typ: `assets/sprites/body_<typ>.png` (Front zeigt nach oben →

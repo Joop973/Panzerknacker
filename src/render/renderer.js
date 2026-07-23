@@ -344,6 +344,18 @@ export function createRenderer(ctx) {
       const x = lerp(b.prevX, b.x, alpha);
       const y = lerp(b.prevY, b.y, alpha);
 
+      // Nach dem ersten Abpraller wird die Kugel gefaehrlich (auch fuer
+      // den Spieler) -> heller Glow als Warnung.
+      if (b.ricochetsLeft < b.ricochetsStart) {
+        ctx.save();
+        ctx.globalAlpha = 0.45;
+        ctx.fillStyle = '#fff2c0';
+        ctx.beginPath();
+        ctx.arc(x, y, b.radius + 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
       // Sprite (Spitze zeigt nach rechts = Flugrichtung) falls geladen.
       const img = sprite('bullet', bulletSpriteKey(b));
       if (img) {
