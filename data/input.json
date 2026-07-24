@@ -1,0 +1,10 @@
+{
+  "stick": {
+    "deadzone": 0.15,
+    "twoZone": false,
+    "fireThreshold": 0.6
+  },
+  "player": {
+    "fireRate": 1.2
+  }
+}

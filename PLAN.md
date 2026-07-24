@@ -10,6 +10,44 @@ Testen vor dem Push, alle Zahlen datengetrieben).
 
 ---
 
+## Phase 0 — Fundament (nachgezogen, zwei getrennte Sessions)
+
+Bewusst in zwei Sessions geteilt: Eingabe (0a) und RNG/Generator (0b) sind
+getrennte Fehlerquellen — zusammen wäre bei einem Fehler nicht klar, welche.
+
+### 0a — Eingabe und Ziellinie ✅ gemergt
+- **Eingabe-Abstraktion** `src/core/input.js`: einheitlicher Zustand
+  `{move, aim, firing, secondary}` (+ Projektkanäle `secondaryThrow`, `dash`).
+  Die Spiellogik liest **nur** diese Schicht und kennt das Gerät nicht.
+  Alle drei Quellen: Touch (zwei virtuelle Sticks, reines Autofire ab
+  `stick.deadzone`), Desktop (WASD / Maus / Linksklick gehalten / Leertaste),
+  Controller (Sticks, rechter Trigger = `firing`, linker Trigger = `secondary`).
+  Quellenerkennung automatisch zur Laufzeit; Sticks nur bei Touch sichtbar.
+- **`data/input.json`**: `stick.deadzone 0.15`, `stick.twoZone false`,
+  `stick.fireThreshold 0.6`, `player.fireRate 1.2`.
+- **`stick.twoZone` implementiert, aber aus**: bei `true` feuert Touch erst ab
+  `fireThreshold` und zeigt einen Ring als Zonengrenze — reine JSON-Umschaltung.
+- **Feuersperre statt Verdrängung** (`bullet.maxActive 5`): bei vollem Limit
+  pausiert das Feuern, es wird **nie** eine eigene Kugel gelöscht.
+- **Dauerhafte Ziellinie** (Grundspiel, `data/options.json` `aimLine`):
+  nutzt über `traceTrajectory` die **echte** `updateBullet`-Physik (kein
+  zweiter Rechenweg) inkl. Vorschau des ersten Abprallers.
+
+### 0b — RNG und Arena-Weiche (nächste Session)
+- RNG ohne fortlaufenden Run-Zustand: pro Raum ein Generator aus
+  `hash(seed, roomIndex)`; eigene Ströme für Upgrades/Schrott/Spawns
+  (`hash(seed, roomIndex, "upgrades")` …), damit Änderungen an einem System
+  die anderen nicht verschieben.
+- **Arena-Weiche** in `generator.js`: `fixedLayout: "<name>"` lädt ein Layout
+  aus `data/arenas.json` (ASCII, 24×16) statt zu generieren; genau eine
+  Testarena. Renderer unverändert. Validierung einmalig beim Laden mit klarer
+  Fehlermeldung statt Flood-Fill zur Laufzeit.
+- **Fertig, wenn:** zwei Runs mit demselben Seed identische Räume erzeugen;
+  Änderungen an der Upgrade-Logik die Layouts nicht verschieben; die Testarena
+  über `fixedLayout` lädt und spielbar ist.
+
+---
+
 ## Phase 1 — Telemetrie + Lesbarkeit ✅ (gemergt, PR #15)
 Balance-Datei `data/balance.json`, lesbarere Geschosse/Minen, Run-Telemetrie
 in `localStorage.runs`, Debug-Ansicht nur bei `?debug=1`.

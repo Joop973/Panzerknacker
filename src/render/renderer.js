@@ -16,7 +16,9 @@ import {
   drawTexts,
   drawThreatLines,
   drawMinePreview,
+  drawAimLine,
 } from './effects.js';
+import { traceTrajectory } from '../game/bullet.js';
 
 initSprites(); // Grafiken sofort vorladen (async, Fallback bleibt aktiv)
 
@@ -31,7 +33,8 @@ function bulletSpriteKey(b) {
 
 // Optionen (von main.js gesetzt): reduzierte Bewegung schaltet
 // Screenshake ab; Bedrohungslinien sind optional.
-export const renderOpts = { reduceMotion: false, threatLines: true };
+// aimLine kommt aus data/options.json (Phase 0a).
+export const renderOpts = { reduceMotion: false, threatLines: true, aimLine: true };
 
 const COLORS = {
   floor: '#1b1b22',
@@ -437,6 +440,7 @@ export function createRenderer(ctx) {
       drawMines(ctx, state);
       drawTraps(ctx, state);
       if (renderOpts.threatLines) drawThreatLines(ctx, state);
+      if (renderOpts.aimLine) drawAimLine(ctx, state, traceTrajectory);
       if (minePreview) drawMinePreview(ctx, state, minePreview);
       drawWalls(state.walls);
       for (const t of state.tanks) drawTank(state, t, alpha);

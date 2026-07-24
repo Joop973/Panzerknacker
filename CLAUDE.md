@@ -38,6 +38,29 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
 - **Grafik-Sprites** für Panzer (Rumpf+Turm), Böden/Wände, Geschosse + neues App-Icon.
 - Diese `CLAUDE.md`.
 
+### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
+- **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
+  Die Spiellogik ruft nur `input.getState(player)` und bekommt
+  `{move, aim, firing, secondary}` (+ `secondaryThrow`, `dash`, `source`).
+  `src/game/*` enthält keinerlei Event-/Gamepad-Zugriff mehr (verifiziert).
+- **Drei Quellen**, Erkennung automatisch zur Laufzeit (`source`): Touch
+  (zwei Sticks, Autofire ab Deadzone), Desktop (WASD, Maus, **Linksklick
+  gehalten** = Dauerfeuer, Leertaste), Gamepad (Sticks, rechter Trigger =
+  `firing`, linker Trigger/A = `secondary`). `ui/touchcontrols.js` ist nur
+  noch Treiber und wird ausschließlich von `input.js` gelesen.
+- **`data/input.json`**: `stick.deadzone`, `stick.twoZone`,
+  `stick.fireThreshold`, `player.fireRate`. **`twoZone` ist implementiert,
+  aber aus** — bei `true` feuert Touch erst ab `fireThreshold` und zeigt
+  einen Ring (`.stick-firering`); reine JSON-Umschaltung, kein Code.
+- **Feuersperre statt Verdrängung**: bei `bullet.maxActive` aktiven Kugeln
+  pausiert `fireBullet` (gibt `false`) — es wird **nie** eine eigene Kugel
+  gelöscht (sonst verschwinden die eigenen Abprallschüsse).
+- **Ziellinie** (`effects.js drawAimLine` + `bullet.js traceTrajectory`):
+  nutzt dieselbe `updateBullet`-Physik wie das Spiel (getestet: 0,0000 px
+  Abweichung), zeigt Linie bis zur ersten Wand + gestrichelte Vorschau des
+  ersten Abprallers. Abschaltbar über `data/options.json` (`aimLine`) bzw.
+  den Schalter „Ziellinie" im Startmenü.
+
 ### Phase 1 (Balance & Lesbarkeit + Telemetrie) — Branch `claude/phase-1-telemetry-balance-7qpy1a`
 - Neue Balance-Datei **`data/balance.json`** (aus Code referenziert, keine
   hartkodierten Zahlen): `bullet.lifetime` 3.5, `bullet.maxActive` 5,
@@ -168,7 +191,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   (`genRng` = Raumbau, `aiRng` = KI). Gleicher Seed → gleicher Verlauf.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
-  `balance.json`, `events.json`). `balance.json` enthält auch Rarity-Gewichte,
+  `balance.json`, `events.json`, `input.json`, `options.json`). `balance.json` enthält auch Rarity-Gewichte,
   `legendary.minRoom` + die `scrap`-Werte; `difficulty.json` die `doors`/
   `elite`/`treasure`-Konfiguration (Phase 4).
   `data/events.json` wird in `main.js` an `tanksData.events` gehängt.
@@ -197,7 +220,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v32`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v33`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`
