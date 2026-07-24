@@ -3,11 +3,13 @@
 // (getoetete Gegner bleiben tot), Raumuebergangs-Einblendung,
 // Victory/Game-Over mit Statistik und Seed.
 //
-// Der genRng-Strom (Seed) wird NUR fuer Raumbau und Gegner-Einkauf
-// verbraucht -- in fester Reihenfolge, unabhaengig vom Spielverlauf.
-// Damit erzeugt derselbe Seed exakt denselben Run.
+// RNG (Phase 0b): Der Run haelt KEINEN fortlaufenden Zufallszustand mehr.
+// Pro Raum werden benannte Stroeme aus hash(seed, roomIndex, label)
+// abgeleitet (siehe makeRoomStreams). Damit ist ein Run allein aus
+// Seed + Raumnummer reproduzierbar (Fortsetzen, geteilte Seeds, Replays),
+// und eine Aenderung an einem System verschiebt die anderen nicht.
 
-import { mulberry32 } from '../core/rng.js';
+import { rngFor, hashSeed } from '../core/rng.js';
 import { recordRun, loadStats } from '../core/storage.js';
 import { createState, stepState } from './state.js';
 import { rollOffers as rollFromPool, drawOne } from './upgradepool.js';
@@ -45,6 +47,22 @@ function totalRooms(diff) {
   return diff.roomsBeforeFinal + 1; // 15 + Finalraum
 }
 
+// Benannte RNG-Stroeme fuer den aktuellen Raum neu ableiten. Getrennte
+// Labels sorgen dafuer, dass z. B. eine geaenderte Upgrade-Logik die
+// Raumlayouts nicht verschiebt.
+function makeRoomStreams(run) {
+  const s = run.seed;
+  const i = run.roomIndex;
+  run.rng = {
+    rooms: rngFor(s, i, 'rooms'), // Layout, Kachelwahl, Spawns
+    enemies: rngFor(s, i, 'enemies'), // Gegner-Einkauf + Elite-Affix
+    upgrades: rngFor(s, i, 'upgrades'), // Upgrade-Angebote (inkl. Rerolls)
+    scrap: rngFor(s, i, 'scrap'), // Schrottmenge
+    doors: rngFor(s, i, 'doors'), // Tuertypen
+    events: rngFor(s, i, 'events'), // Ereignis-Auswahl
+  };
+}
+
 function resetRoomCounters(run) {
   run.seenRoomKills = 0;
   run.seenRoomDeaths = 0;
@@ -65,6 +83,7 @@ function startRoom(run, type = 'combat') {
   if (isFinal || run.roomIndex < diff.doors.firstDoorRoom) type = 'combat';
   run.roomType = type;
   run.roomAffix = null;
+  makeRoomStreams(run); // frische, aus dem Seed abgeleitete Stroeme
   resetRoomCounters(run);
   if (type === 'combat' || type === 'elite') {
     buildCombatRoom(run, type, isFinal);
@@ -83,31 +102,35 @@ function buildCombatRoom(run, type, isFinal) {
     fixedRoom = run.tiles.finalRoom;
     enemyTypes = [
       ...diff.finalRoom.fixed,
-      ...buyEnemies(diff, run.genRng, run.roomIndex, diff.finalRoom.supportBudget),
+      ...buyEnemies(diff, run.rng.enemies, run.roomIndex, diff.finalRoom.supportBudget),
     ].slice(0, run.tiles.finalRoom.enemySpawns.length);
     run.roomCharacter = 'Finale';
   } else {
     const eliteMult = type === 'elite' ? diff.elite.budgetMult : 1;
     const budget =
       (diff.budget.base + run.roomIndex * diff.budget.perRoom) * run.budgetMult * eliteMult;
-    enemyTypes = buyEnemies(diff, run.genRng, run.roomIndex, budget);
+    enemyTypes = buyEnemies(diff, run.rng.enemies, run.roomIndex, budget);
     // Raumcharakter: Kachelgewichte alternieren (Spec Abschnitt 7B).
     const chars = diff.roomCharacters;
     if (chars && chars.length) {
-      const ch = chars[Math.floor(run.genRng() * chars.length)];
+      const ch = chars[Math.floor(run.rng.rooms() * chars.length)];
       weights = ch.weights;
       run.roomCharacter = ch.name;
     }
   }
   run.state = createState(run.data, run.tiles, {
-    genRng: run.genRng,
+    genRng: run.rng.rooms,
     enemyTypes,
-    aiSeed: (run.seed + run.roomIndex * 7919) >>> 0,
+    aiSeed: hashSeed(run.seed, run.roomIndex, 'ai'),
     fixedRoom,
     weights,
     playerUpgrades: run.upgrades,
     upgradesData: run.upgradesData,
     shieldCharges: run.shieldCharges, // raumuebergreifende Notschild-Ladungen
+    // Weiche (Phase 0b): setzt das Raumspec `fixedLayout`, kommt das Layout
+    // aus data/arenas.json statt aus dem Kachelgenerator.
+    roomSpec: run.roomSpec,
+    arenas: run.data.arenas,
   });
   // Elite: genau 1 Affix auf alle Gegner (fuer Phase 5 einzeln markiert).
   if (type === 'elite') applyEliteAffix(run);
@@ -119,7 +142,7 @@ function buildCombatRoom(run, type, isFinal) {
 
 function applyEliteAffix(run) {
   const affixes = run.difficulty.elite.affixes;
-  const affix = affixes[Math.floor(run.genRng() * affixes.length)];
+  const affix = affixes[Math.floor(run.rng.enemies() * affixes.length)];
   run.roomAffix = affix.name;
   for (const t of run.state.tanks) {
     if (t === run.state.player || !t.alive) continue;
@@ -142,7 +165,7 @@ function startNonCombatRoom(run, type) {
     run.phase = 'workshop';
   } else if (type === 'event') {
     const evs = run.data.events.events;
-    run.currentEvent = evs[Math.floor(run.genRng() * evs.length)];
+    run.currentEvent = evs[Math.floor(run.rng.events() * evs.length)];
     run.phase = 'event';
   }
 }
@@ -188,8 +211,8 @@ function rollDoors(run) {
     if (t === 'workshop' && cur === 'workshop') return false;
     return true;
   });
-  const first = weightedType(types, w, run.genRng);
-  const second = weightedType(types.filter((t) => t !== first), w, run.genRng);
+  const first = weightedType(types, w, run.rng.doors);
+  const second = weightedType(types.filter((t) => t !== first), w, run.rng.doors);
   return [{ type: first }, { type: second }];
 }
 
@@ -245,7 +268,9 @@ export function enterRoom(run) {
   run.transitionTimer = TRANSITION_S;
 }
 
-export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey = 'normal') {
+// opts.roomSpec: optionales Raumspec, z. B. { fixedLayout: 'test_arena' }
+// -> alle Kampfraeume nutzen dann das feste Layout (Testweg fuer die Weiche).
+export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey = 'normal', opts = {}) {
   const mode = (difficulty.modes && difficulty.modes[modeKey]) || {
     label: 'Normal',
     budgetMult: 1,
@@ -266,6 +291,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     bannedUpgrades: new Set(), // im Run verbannte Upgrade-ids (nicht persistent)
     pendingOffers: null,
     // --- Phase 4: Raumtypen + Tuerwahl ---
+    roomSpec: opts.roomSpec || null, // { fixedLayout } -> Arena-Weiche
     roomType: 'combat', // Typ des aktuellen Raums
     prevRoomType: null, // Typ des Vorraums (Regel: event/workshop nicht 2x)
     doorOffers: null, // [{type},{type}] waehrend phase 'door'
@@ -278,7 +304,6 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     comboTimer: 0, // s bis die Combo verfaellt
     bestCombo: 0, // hoechste Combo im Run
     seed: seed >>> 0,
-    genRng: mulberry32(seed >>> 0),
     roomIndex: 1,
     lives: mode.lives,
     maxLives: mode.lives, // Bezug fuer Berserker (fehlende Leben)
@@ -394,7 +419,7 @@ export function stepRun(run, cmd, dt) {
     // Schrott fuer den geraeumten Raum (deterministisch ueber genRng);
     // Eliteraeume geben das eliteMult-Fache.
     const sc = run.data.balance.scrap;
-    let earned = sc.perRoom[0] + Math.floor(run.genRng() * (sc.perRoom[1] - sc.perRoom[0] + 1));
+    let earned = sc.perRoom[0] + Math.floor(run.rng.scrap() * (sc.perRoom[1] - sc.perRoom[0] + 1));
     if (run.roomType === 'elite') earned *= sc.eliteMult;
     run.scrap += earned;
     run.scrapThisRoom += earned;
@@ -426,7 +451,7 @@ function poolOpts(run) {
   return {
     chosen: run.upgrades,
     roomIndex: run.roomIndex,
-    rng: run.genRng,
+    rng: run.rng.upgrades,
     balance: run.data.balance,
     count: run.upgradesData.offersPerScreen,
     banned: run.bannedUpgrades,

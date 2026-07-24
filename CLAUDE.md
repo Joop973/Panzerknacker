@@ -61,6 +61,27 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
   ersten Abprallers. Abschaltbar über `data/options.json` (`aimLine`) bzw.
   den Schalter „Ziellinie" im Startmenü.
 
+### Phase 0b (RNG-Ströme + Arena-Weiche) — gemergt
+- **Kein fortlaufender RNG-Zustand mehr im Run.** `run.genRng` ist weg;
+  `makeRoomStreams(run)` leitet pro Raum benannte Ströme aus
+  `hash(seed, roomIndex, label)` ab (`core/rng.js`: `hashSeed`, `rngFor`).
+  Ströme: **rooms** (Layout/Kachelwahl/Spawns), **enemies** (Gegner-Einkauf
+  + Elite-Affix), **upgrades** (Angebote inkl. Rerolls), **scrap**, **doors**,
+  **events**; dazu `hashSeed(seed, roomIndex, 'ai')` für den KI-Strom.
+  Dadurch: Run allein aus Seed+Raumnummer reproduzierbar (Fortsetzen,
+  geteilte Seeds, Replays), und eine Änderung an einem System verschiebt die
+  anderen nicht mehr (getestet).
+- **Arena-Weiche** in `generator.js`: Raumspec mit `fixedLayout: "<name>"`
+  lädt das Layout aus `data/arenas.json` statt zu generieren; sonst
+  unverändert der Kachelgenerator. Gleiches `grid`-Format → **Renderer
+  unverändert**. Legende: `wall/breakable/hole/floor/spawn/enemy` +
+  `mirror`/`generator` (blockieren vorerst wie Wand, werden als
+  `room.markers` gemeldet — Boss-Elemente erst Phase 14).
+- **`validateArenas()`** prüft alle Layouts **einmalig beim Laden**
+  (`main.js`): 24×16, bekannte Zeichen, Spieler-/Gegner-Spawns, Flood-Fill.
+  Fehler werfen mit klarer Meldung (Arena-Name + Position) statt zur Laufzeit.
+  Testweg: **`?arena=test_arena`** in der URL.
+
 ### Phase 1 (Balance & Lesbarkeit + Telemetrie) — Branch `claude/phase-1-telemetry-balance-7qpy1a`
 - Neue Balance-Datei **`data/balance.json`** (aus Code referenziert, keine
   hartkodierten Zahlen): `bullet.lifetime` 3.5, `bullet.maxActive` 5,
@@ -191,7 +212,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   (`genRng` = Raumbau, `aiRng` = KI). Gleicher Seed → gleicher Verlauf.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
-  `balance.json`, `events.json`, `input.json`, `options.json`). `balance.json` enthält auch Rarity-Gewichte,
+  `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`). `balance.json` enthält auch Rarity-Gewichte,
   `legendary.minRoom` + die `scrap`-Werte; `difficulty.json` die `doors`/
   `elite`/`treasure`-Konfiguration (Phase 4).
   `data/events.json` wird in `main.js` an `tanksData.events` gehängt.
@@ -220,7 +241,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v33`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v34`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`

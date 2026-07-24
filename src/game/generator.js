@@ -178,8 +178,119 @@ export function buildFixedRoom(roomDef, enemyCount) {
   };
 }
 
-// Hauptfunktion: generiert einen validierten Raum.
-export function generateRoom(tilesData, rng, enemyCount, weights) {
+// --- Feste Layouts aus data/arenas.json (Phase 0b) ----------------------
+//
+// Enthaelt ein Raumspec das Feld `fixedLayout: "<name>"`, wird das Layout
+// geladen statt generiert. Der Renderer aendert sich dadurch NICHT: feste
+// Layouts erzeugen exakt dieselbe Kachelstruktur (dasselbe grid-Format) wie
+// generierte Raeume.
+//
+// Legende -> Rasterzeichen der Engine. Unbekannte Sonderfelder (mirror,
+// generator) blockieren vorerst wie eine solide Wand und werden zusaetzlich
+// als Marker gemeldet -- die eigentlichen Boss-Elemente kommen in Phase 14.
+const LEGEND_TO_CELL = {
+  wall: '#',
+  breakable: 'b',
+  hole: 'o',
+  floor: '.',
+  spawn: '.',
+  enemy: '.',
+  mirror: '#',
+  generator: '#',
+};
+
+function arenaCells(def, name) {
+  const grid = [];
+  const markers = []; // { type, col, row } fuer mirror/generator (Phase 14)
+  let player = null;
+  const enemies = [];
+  for (let r = 0; r < def.grid.length; r++) {
+    const line = def.grid[r];
+    const row = [];
+    for (let c = 0; c < line.length; c++) {
+      const ch = line[c];
+      const kind = def.legend[ch];
+      if (!kind) {
+        throw new Error(
+          `Arena "${name}": unbekanntes Zeichen "${ch}" in Zeile ${r + 1}, Spalte ${c + 1} ` +
+            '(fehlt in der legend).',
+        );
+      }
+      const cell = LEGEND_TO_CELL[kind];
+      if (cell === undefined) {
+        throw new Error(`Arena "${name}": Legenden-Typ "${kind}" ist der Engine unbekannt.`);
+      }
+      row.push(cell);
+      if (kind === 'spawn') player = [c, r];
+      else if (kind === 'enemy') enemies.push([c, r]);
+      else if (kind === 'mirror' || kind === 'generator') markers.push({ type: kind, col: c, row: r });
+    }
+    grid.push(row);
+  }
+  return { grid, markers, player, enemies };
+}
+
+// Einmalige Validierung beim Laden. Wirft mit klarer Meldung, wenn ein
+// Layout unbrauchbar ist -- zur Laufzeit wird dann nicht mehr geprueft.
+export function validateArenas(arenasData) {
+  const arenas = (arenasData && arenasData.arenas) || arenasData || {};
+  for (const name of Object.keys(arenas)) {
+    const def = arenas[name];
+    if (!def || !Array.isArray(def.grid) || !def.legend) {
+      throw new Error(`Arena "${name}": braucht die Felder "grid" (Array) und "legend".`);
+    }
+    if (def.grid.length !== ROWS) {
+      throw new Error(`Arena "${name}": ${def.grid.length} Zeilen, erwartet ${ROWS}.`);
+    }
+    def.grid.forEach((line, i) => {
+      if (typeof line !== 'string' || line.length !== COLS) {
+        throw new Error(
+          `Arena "${name}": Zeile ${i + 1} ist ${String(line).length} Zeichen breit, erwartet ${COLS}.`,
+        );
+      }
+    });
+    const { grid, player, enemies } = arenaCells(def, name);
+    if (!player) throw new Error(`Arena "${name}": kein Spieler-Spawn ("spawn") im Raster.`);
+    if (!enemies.length) throw new Error(`Arena "${name}": kein Gegner-Spawn ("enemy") im Raster.`);
+    // Flood-Fill EINMALIG hier: sind alle Gegner-Spawns erreichbar?
+    const reach = reachableCells(grid, player[0], player[1]);
+    const blocked = enemies.filter(([c, r]) => !reach.has(r * COLS + c));
+    if (blocked.length) {
+      const list = blocked.map(([c, r]) => `(${c},${r})`).join(', ');
+      throw new Error(
+        `Arena "${name}" ist unloesbar: Gegner-Spawn ${list} vom Spieler-Spawn ` +
+          `(${player[0]},${player[1]}) aus nicht erreichbar.`,
+      );
+    }
+  }
+  return true;
+}
+
+// Baut einen Raum aus einem festen Layout (Weiche fuer `fixedLayout`).
+export function buildArenaRoom(arenasData, name, enemyCount) {
+  const arenas = (arenasData && arenasData.arenas) || arenasData || {};
+  const def = arenas[name];
+  if (!def) throw new Error(`Unbekanntes fixedLayout "${name}" (nicht in data/arenas.json).`);
+  const { grid, markers, player, enemies } = arenaCells(def, name);
+  // Mehr Gegner als Spawns -> die vorhandenen Spawns reihum nutzen.
+  const spots = [];
+  for (let i = 0; i < enemyCount; i++) spots.push(enemies[i % enemies.length]);
+  return {
+    grid,
+    markers,
+    playerSpawn: toSpawn(player),
+    enemySpawns: spots.map(toSpawn),
+    emergency: false,
+    fixedLayout: name,
+  };
+}
+
+// Hauptfunktion: generiert einen validierten Raum -- oder laedt ein festes
+// Layout, wenn das Raumspec `fixedLayout` setzt (Weiche, Phase 0b).
+export function generateRoom(tilesData, rng, enemyCount, weights, spec, arenasData) {
+  if (spec && spec.fixedLayout) {
+    return buildArenaRoom(arenasData, spec.fixedLayout, enemyCount);
+  }
   for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
     const grid = buildGrid(tilesData, rng, weights);
     const share = wallShare(grid);
