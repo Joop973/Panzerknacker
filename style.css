@@ -515,6 +515,22 @@ html, body {
   border-radius: 50%;
 }
 
+/* Zwei-Zonen-Modus (data/input.json stick.twoZone): Ring markiert die
+   Grenze, ab der gefeuert wird. Darunter wird nur gezielt. */
+.stick-firering {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px dashed rgba(255, 210, 60, 0.75);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.stick-firering.hidden {
+  display: none;
+}
+
 /* Minen-Button unten rechts (eigene Exklusionszone) */
 #mineBtn {
   display: none;

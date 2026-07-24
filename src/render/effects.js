@@ -196,6 +196,51 @@ export function drawMinePreview(ctx, state, preview) {
   ctx.fill();
 }
 
+// Dauerhafte Ziellinie (Phase 0a, Grundspiel -- kein Upgrade):
+// duenne Linie vom Rohr bis zur ersten Wand + kuerzeres Segment als
+// Vorschau des ersten Abprallers. Nutzt die ECHTE Geschossphysik
+// (traceTrajectory ruft updateBullet auf), damit Anzeige und Realitaet
+// nicht auseinanderdriften. Abschaltbar ueber data/options.json (aimLine).
+export function drawAimLine(ctx, state, trace) {
+  const p = state.player;
+  if (!p.alive) return;
+  const muzzle = p.cfg.radius + 8;
+  const x = p.x + Math.cos(p.turret) * muzzle;
+  const y = p.y + Math.sin(p.turret) * muzzle;
+  const pts = trace(state, x, y, p.turret, p.cfg);
+  if (pts.length < 2) return;
+  // Index des ersten Abprallers (danach duenner + blasser zeichnen).
+  let bounceAt = pts.findIndex((pt) => pt.bounce);
+  if (bounceAt < 0) bounceAt = pts.length - 1;
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  // Direktes Stueck bis zur ersten Wand.
+  ctx.strokeStyle = 'rgba(200,225,255,0.4)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i <= bounceAt; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+  // Vorschau des ersten Abprallers.
+  if (bounceAt < pts.length - 1) {
+    ctx.strokeStyle = 'rgba(200,225,255,0.2)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(pts[bounceAt].x, pts[bounceAt].y);
+    for (let i = bounceAt + 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Aufprallpunkt markieren.
+    ctx.fillStyle = 'rgba(200,225,255,0.5)';
+    ctx.beginPath();
+    ctx.arc(pts[bounceAt].x, pts[bounceAt].y, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 // Schwebende Kurztexte ("Abpraller!").
 export function drawTexts(ctx, state) {
   ctx.font = 'bold 12px monospace';

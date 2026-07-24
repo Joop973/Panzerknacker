@@ -119,6 +119,46 @@ function applyHoming(b, state, dt) {
   b.vy = Math.sin(na) * speed;
 }
 
+// Vorausberechnung der Flugbahn fuer die Ziellinie (Phase 0a).
+//
+// WICHTIG: Es wird bewusst dieselbe updateBullet()-Physik durchlaufen wie
+// im Spiel -- keine zweite Berechnung, sonst driften Anzeige und Realitaet
+// auseinander. Der Schattenzustand traegt nur Waende und data; ohne
+// `sounds` und ohne `destroyWall` bleibt der Aufruf nebenwirkungsfrei
+// (Wolframkern ist im Trace-Geschoss aus).
+//
+// Gibt Wegpunkte zurueck: [{x,y,bounce}] -- bounce=true markiert den
+// Punkt, an dem das Geschoss zum ersten Mal abprallt.
+export function traceTrajectory(state, x, y, angle, cfg, opts = {}) {
+  const maxBounces = opts.maxBounces ?? 1; // erster Abpraller als Vorschau
+  const steps = opts.steps ?? 240; // Sicherheitslimit (~4 s bei 60 Hz)
+  const dt = opts.dt ?? 1 / 60;
+  const b = createBullet(x, y, angle, {
+    speed: cfg.bulletSpeed,
+    radius: cfg.bulletRadius,
+    ricochets: maxBounces,
+    owner: null,
+    kind: 'bullet',
+    phaseWalls: cfg.phaseWalls || false,
+  });
+  const shadow = { walls: state.walls, data: state.data, tanks: [] };
+  const tailSteps = opts.tailSteps ?? 45; // Laenge des Abpraller-Segments
+  const pts = [{ x, y, bounce: false }];
+  let left = b.ricochetsLeft;
+  let sinceBounce = -1; // -1 = noch nicht abgeprallt
+  for (let i = 0; i < steps; i++) {
+    updateBullet(b, shadow, dt);
+    const bounced = b.ricochetsLeft < left;
+    left = b.ricochetsLeft;
+    pts.push({ x: b.x, y: b.y, bounce: bounced });
+    if (b.dead) break;
+    if (bounced && sinceBounce < 0) sinceBounce = 0;
+    // Nach dem Abpraller nur noch ein kurzes Stueck als Vorschau zeigen.
+    else if (sinceBounce >= 0 && ++sinceBounce >= tailSteps) break;
+  }
+  return pts;
+}
+
 export function updateBullet(b, state, dt) {
   if (b.dead) return;
   b.prevX = b.x;

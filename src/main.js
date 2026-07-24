@@ -39,7 +39,7 @@ import { createHud } from './ui/hud.js';
 import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
-  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events'];
+  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options'];
   const out = [];
   for (const n of names) {
     let res;
@@ -63,7 +63,8 @@ async function loadData() {
 }
 
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData] = await loadData();
+  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData] =
+    await loadData();
   // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
   // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
   // sind (Geschoss-Lifetime/Cap/Immunitaet, Minen-Radius/Fuse/Kette).
@@ -94,7 +95,10 @@ async function init() {
   }
   refreshBestStats();
 
-  const input = createInput(window, canvas);
+  // Touch-Treiber zuerst: die Eingabeschicht liest ihn als eine von drei
+  // Quellen. Die Spiellogik sieht nur noch input.getState().
+  const touch = createTouchControls(inputCfg);
+  const input = createInput(window, canvas, { inputCfg, touch });
   const audio = createAudio();
   audio.setMuted(getPref('muted', false));
   const unlockAll = () => {
@@ -113,7 +117,6 @@ async function init() {
   const eventScreen = createEventScreen();
   const workshopScreen = createWorkshopScreen();
   const preview = createPreview();
-  const touch = createTouchControls();
   const pause = createPause();
   const tutorial = createTutorial(getFlag('tutorial_seen'));
 
@@ -176,9 +179,19 @@ async function init() {
     }
   }
 
-  // Darstellungs-Optionen (gespeichert).
+  // Darstellungs-Optionen (gespeichert). Die Ziellinie kommt aus
+  // data/options.json (Phase 0a), lokal per Schalter uebersteuerbar.
   renderOpts.threatLines = getPref('threatLines', true);
   renderOpts.reduceMotion = getPref('reduceMotion', false);
+  renderOpts.aimLine = getPref('aimLine', optionsData.aimLine !== false);
+  const optAim = document.getElementById('optAim');
+  if (optAim) {
+    optAim.checked = renderOpts.aimLine;
+    optAim.addEventListener('change', () => {
+      renderOpts.aimLine = optAim.checked;
+      setPref('aimLine', optAim.checked);
+    });
+  }
   const optThreat = document.getElementById('optThreat');
   const optMotion = document.getElementById('optMotion');
   optThreat.checked = renderOpts.threatLines;
@@ -261,46 +274,29 @@ async function init() {
 
   function update(dt) {
     if (!run) return;
-    const gp = input.pollGamepad();
-    if (input.consumePause() || (gp && gp.pausePressed)) pause.toggle();
+    if (input.consumePause()) pause.toggle();
     if (pause.isPaused()) return;
 
-    // Tastatur/Maus, Gamepad und Touch zusammenfuehren: die gerade
-    // aktive Quelle gewinnt (Fahren: Tastatur > Gamepad > Touch;
-    // Zielen: Gamepad-Stick > Touch-Stick > Maus).
-    const kbMove = input.getMoveAxis();
-    const gpMove = gp && (gp.move.x || gp.move.y) ? gp.move : null;
-    const tMove = touch.getMove();
-    const move = kbMove.x || kbMove.y ? kbMove : gpMove || tMove;
-
+    // EINZIGE Eingabequelle der Spiellogik: der vereinheitlichte Zustand.
+    // Welches Geraet ihn erzeugt hat, ist hier bewusst nicht sichtbar.
     const p = run.state.player;
-    const tAim = touch.getAimDir();
-    let aim;
-    let autoFire = false;
-    if (gp && gp.aimDir) {
-      aim = { x: p.x + gp.aimDir.x * 120, y: p.y + gp.aimDir.y * 120 };
-      autoFire = true; // rechter Stick ausgelenkt -> Auto-Fire
-    } else if (tAim) {
-      aim = { x: p.x + tAim.x * 4, y: p.y + tAim.y * 4 };
-      autoFire = true;
-    } else {
-      aim = input.getAim();
-    }
-    const mineThrow = touch.consumeMineThrow(); // Touch-Wurfstick losgelassen
+    const st = input.getState(p);
     const cmd = {
-      move,
-      aim,
-      // Rechter Trigger = manuelles Schiessen (ueberschreibt Auto-Fire).
-      fire: input.consumeFire() || autoFire || !!(gp && gp.fireHeld),
-      mine: input.consumeMine() || touch.consumeMine() || !!(gp && gp.minePressed) || !!mineThrow,
-      mineThrow: mineThrow || null,
-      dash: input.consumeDash() || !!(gp && gp.dashPressed),
+      move: st.move,
+      aim: st.aim,
+      fire: st.firing,
+      mine: st.secondary,
+      mineThrow: st.secondaryThrow,
+      dash: st.dash,
     };
-    // Dash-Button nur zeigen, wenn das Upgrade aktiv ist.
-    dashBtn.classList.toggle('hidden', !(p.cfg.dash && touch.isActive()));
+    // Virtuelle Sticks + Bomben-Button nur bei Touch einblenden.
+    document.body.classList.toggle('touch-on', st.source === 'touch');
+    // Dash-Button nur zeigen, wenn das Upgrade aktiv ist (und Touch spielt).
+    const isTouch = st.source === 'touch';
+    dashBtn.classList.toggle('hidden', !(p.cfg.dash && isTouch));
     stepRun(run, cmd, dt);
     updateTelemetry();
-    toast = tutorial.update(run, cmd, touch.isActive(), dt);
+    toast = tutorial.update(run, cmd, isTouch, dt);
     if (tutorial.isDone() && !getFlag('tutorial_seen')) setFlag('tutorial_seen');
     // Raumwechsel erkennen -> Reifenspuren-Buffer leeren.
     if (run.state !== lastRoomState) {
@@ -314,11 +310,11 @@ async function init() {
     for (const name of run.state.sounds.splice(0)) {
       audio.play(name);
       // Haptik: Touch-Vibration (Android) und Gamepad-Rumble.
-      if (touch.isActive() && navigator.vibrate) {
+      if (isTouch && navigator.vibrate) {
         if (name === 'boom') navigator.vibrate(60);
         else if (name === 'death') navigator.vibrate(40);
       }
-      if (gp && (name === 'boom' || name === 'death')) {
+      if (st.source === 'gamepad' && (name === 'boom' || name === 'death')) {
         for (const pad of navigator.getGamepads?.() || []) {
           pad?.vibrationActuator
             ?.playEffect?.('dual-rumble', {
@@ -483,7 +479,7 @@ async function init() {
 
   function render(alpha) {
     if (!run) return;
-    renderer.render(run.state, alpha, tracks, run.phase === 'playing' ? touch.getMinePreview() : null);
+    renderer.render(run.state, alpha, tracks, run.phase === 'playing' ? input.getMinePreview() : null);
     if (input.isDebug() && run.phase === 'playing') {
       debugOverlay.render(run.state, fps);
     }

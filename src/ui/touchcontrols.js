@@ -10,7 +10,6 @@
 // - Doppeltipp auf den linken Stick legt ebenfalls eine Mine.
 
 const STICK_R = 48; // maximale Auslenkung in px (Bildschirm)
-const DEADZONE = 10;
 const DOUBLE_TAP_MS = 300;
 const MINE_STICK_R = 54; // Zugweg des Minen-Wurfsticks (Bildschirm-px)
 const MINE_MAX_THROW = 142; // maximale Wurfweite (Welt-px, -25 %)
@@ -25,7 +24,13 @@ function makeStickEl() {
   return { base, knob };
 }
 
-export function createTouchControls() {
+// cfg = data/input.json (stick.deadzone, stick.twoZone, stick.fireThreshold).
+export function createTouchControls(cfg = {}) {
+  const stickCfg = cfg.stick || {};
+  const deadzone = stickCfg.deadzone ?? 0.15; // normalisiert (0..1)
+  const twoZone = !!stickCfg.twoZone;
+  const fireThreshold = stickCfg.fireThreshold ?? 0.6;
+
   let active = false;
   let left = null; // { id, ox, oy, dx, dy }
   let right = null;
@@ -34,6 +39,16 @@ export function createTouchControls() {
 
   const leftEl = makeStickEl();
   const rightEl = makeStickEl();
+  // Zwei-Zonen-Modus: Ring auf dem Zielstick markiert die Feuergrenze.
+  // Wird nur eingeblendet, wenn stick.twoZone in data/input.json wahr ist.
+  const fireRing = document.createElement('div');
+  fireRing.className = 'stick-firering hidden';
+  rightEl.base.appendChild(fireRing);
+  if (twoZone) {
+    const d = fireThreshold * STICK_R * 2;
+    fireRing.style.width = d + 'px';
+    fireRing.style.height = d + 'px';
+  }
 
   // Minen-Button ist ein WURFSTICK: berueren + ziehen bestimmt Richtung
   // und Weite, Loslassen wirft die Bombe.
@@ -122,6 +137,7 @@ export function createTouchControls() {
       } else if (t.clientX >= window.innerWidth / 2 && right === null) {
         right = { id: t.identifier, ox: t.clientX, oy: t.clientY, dx: 0, dy: 0 };
         showStick(rightEl, right);
+        if (twoZone) fireRing.classList.remove('hidden');
       }
     }
   }
@@ -157,6 +173,7 @@ export function createTouchControls() {
       if (right && t.identifier === right.id) {
         right = null;
         rightEl.base.classList.add('hidden');
+        fireRing.classList.add('hidden');
       }
     }
   }
@@ -166,29 +183,33 @@ export function createTouchControls() {
   window.addEventListener('touchend', onEnd);
   window.addEventListener('touchcancel', onEnd);
 
+  // Dieser Treiber wird ausschliesslich von src/core/input.js gelesen --
+  // die Spiellogik sieht ihn nie direkt.
   return {
     isActive: () => active,
+    // Liegt gerade ein Finger? (Quellen-Erkennung in input.js)
+    hasContact: () => left !== null || right !== null || mineStick !== null,
     getMove() {
       if (!left) return { x: 0, y: 0 };
       return { x: left.dx / STICK_R, y: left.dy / STICK_R };
     },
-    // Zielrichtung in Bildschirm-Pixeln; null wenn nicht ausgelenkt.
-    getAimDir() {
+    // Normalisierte Zielrichtung { x, y, mag } (mag 0..1) oder null,
+    // wenn der Stick innerhalb der Deadzone liegt.
+    getAimVector() {
       if (!right) return null;
-      if (Math.hypot(right.dx, right.dy) < DEADZONE) return null;
-      return { x: right.dx, y: right.dy };
+      const len = Math.hypot(right.dx, right.dy);
+      const mag = len / STICK_R;
+      if (mag < deadzone) return null;
+      return { x: right.dx / len, y: right.dy / len, mag: Math.min(1, mag) };
     },
-    isAutoFire() {
-      return this.getAimDir() !== null;
-    },
-    // Doppeltipp-Mine (wirft in Blickrichtung, ohne Override).
-    consumeMine() {
+    // Doppeltipp-Mine (flankengetriggert).
+    consumeSecondary() {
       const m = mineQueued;
       mineQueued = false;
       return m;
     },
     // Wurfstick losgelassen -> { angle, dist } (Welt-px) oder null.
-    consumeMineThrow() {
+    consumeThrow() {
       const t = pendingThrow;
       pendingThrow = null;
       return t;
