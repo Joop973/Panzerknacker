@@ -150,7 +150,7 @@ In den letzten 15 % des Budgets blinkt die Kugel.
 
 # STUFE 0 — Fundament
 
-## Phase 0 — Eingabe und Weichen
+## Phase 0 — Eingabe und Weichen  ✅ erledigt
 **Aufwand:** 1–2 Sessions
 **Neu in v2. Muss zuerst gebaut werden, weil drei spätere Phasen daran hängen.**
 
@@ -193,7 +193,7 @@ ermöglicht später geteilte Seeds und Replays.
 **Fertig, wenn:** Zielen ohne Schießen funktioniert, ein `fixedLayout`-Testraum
 lädt, zwei Runs mit gleichem Seed identische Räume erzeugen.
 
-## Phase 1 — Telemetrie, Lesbarkeit, Speicherung
+## Phase 1 — Telemetrie, Lesbarkeit, Speicherung  ✅ erledigt
 **Aufwand:** 2 Sessions
 
 **Telemetrie v2** (`src/core/telemetry.js`), `localStorage.runs`, max. 100

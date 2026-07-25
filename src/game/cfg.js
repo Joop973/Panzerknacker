@@ -18,7 +18,9 @@ export function resolveCfg(data, type) {
     ricochets: t.ricochets,
     mines: t.mines,
     weapon: t.weapon,
-    bulletSpeed: data.bulletSpeeds[t.weapon],
+    // Spieler: Geschwindigkeit aus balance.json (v2), Gegner aus tanks.json.
+    bulletSpeed:
+      type === 'player' && bbullet?.speed ? bbullet.speed : data.bulletSpeeds[t.weapon],
     turret: t.turret,
     drive: t.drive,
     avoidMines: t.avoidMines || false,

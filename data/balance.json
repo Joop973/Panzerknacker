@@ -1,9 +1,17 @@
 {
   "bullet": {
-    "lifetime": 3.5,
+    "speed": 200,
+    "maxDistance": 1200,
+    "blinkFraction": 0.15,
     "maxActive": 5,
     "maxActiveCap": 8,
     "selfImmunity": 0.35
+  },
+  "enemyBullet": {
+    "maxActive": 24
+  },
+  "shield": {
+    "roomLifetime": 3
   },
   "mine": {
     "fuse": 3.0,

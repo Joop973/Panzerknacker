@@ -226,11 +226,14 @@ export function createRenderer(ctx) {
     }
 
     // Notschild-Ladungen: ein konzentrischer Ring je verbleibender Ladung.
-    if (t === state.player && state.shieldCharges > 0) {
-      ctx.strokeStyle = 'rgba(150,225,255,0.85)';
+    if (t === state.player && state.shieldCharges.length > 0) {
+      const life = state.data.balance.shield?.roomLifetime || 1;
       ctx.lineWidth = 2;
-      ctx.globalAlpha = 0.85;
-      for (let i = 0; i < state.shieldCharges; i++) {
+      for (let i = 0; i < state.shieldCharges.length; i++) {
+        // E2: Ladung verblasst, je naeher ihr Verfall rueckt.
+        const frac = Math.max(0, Math.min(1, state.shieldCharges[i] / life));
+        ctx.strokeStyle = `rgba(150,225,255,${(0.25 + 0.6 * frac).toFixed(3)})`;
+        ctx.globalAlpha = 1;
         ctx.beginPath();
         ctx.arc(x, y, t.cfg.radius + 8 + i * 3, 0, Math.PI * 2);
         ctx.stroke();
@@ -355,10 +358,19 @@ export function createRenderer(ctx) {
     ctx.globalAlpha = 1;
   }
 
+  let renderState = null;
   function drawBullets(bullets, alpha) {
+    const bcfg = renderState?.data?.balance?.bullet;
     for (const b of bullets) {
       const x = lerp(b.prevX, b.x, alpha);
       const y = lerp(b.prevY, b.y, alpha);
+
+      // E4: In den letzten blinkFraction des Wegbudgets blinkt die Kugel --
+      // sie verschwindet gleich.
+      if (bcfg?.maxDistance) {
+        const left = 1 - b.distance / bcfg.maxDistance;
+        if (left <= (bcfg.blinkFraction ?? 0.15) && Math.sin(b.distance * 0.35) < 0) continue;
+      }
 
       // Nach dem ersten Abpraller wird die Kugel gefaehrlich (auch fuer
       // den Spieler) -> heller Glow als Warnung.
@@ -428,6 +440,7 @@ export function createRenderer(ctx) {
 
   return {
     render(state, alpha, tracks, minePreview) {
+      renderState = state;
       ctx.imageSmoothingEnabled = true; // weiche Sprite-Skalierung
       // Screenshake: deterministisches Wackeln aus der Spielzeit.
       const sh = renderOpts.reduceMotion ? 0 : state.shake || 0;

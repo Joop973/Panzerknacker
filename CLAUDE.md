@@ -31,12 +31,17 @@ Service-Worker-Bump (kein Spiel-Asset).
 Der Nutzer schreibt Deutsch → **immer auf Deutsch antworten.**
 
 ## Aktueller Stand (Stand: 2026-07)
-Alle 10 Phasen umgesetzt; deterministisch; PWA/Offline; Touch + Gamepad;
-viele Upgrades. Zuletzt gemergt (PRs #9–#12):
-- Startet nicht mehr fälschlich pausiert (Portrait-Auto-Pause fixt sich im Querformat).
-- Echtes Handy-Vollbild im Querformat (`100dvh` + `viewport-fit=cover`).
-- **Grafik-Sprites** für Panzer (Rumpf+Turm), Böden/Wände, Geschosse + neues App-Icon.
-- Diese `CLAUDE.md`.
+Spielbar und deterministisch; PWA/Offline; Touch + Desktop + Gamepad;
+39 Upgrades, 5 Raumtypen, Schrott-Währung. Maßgeblich ist **`PLAN.md` v2**
+(ersetzt v1 vollständig). Erledigt: **Phase 0** (Eingabe/Ziellinie/RNG/Arena-
+Weiche) und **Phase 1** (Telemetrie v2, Lesbarkeit, Run-Speicherung).
+v2-**Phase 2** (Upgrade-Schema) und **Phase 3** (Schrott) sind inhaltlich schon
+durch die gleichnamigen v1-Phasen abgedeckt (Abweichungen auf Nutzerwunsch:
+`emergency_shield` gibt 1 statt 3 Ladungen je Stufe, Elite-Schrott ist
+`eliteMult: 2` statt `eliteBonus: 3`). **Nächste Phase: Phase 4 — Gerichtete
+Panzerung** (Stufe 1, „die wichtigste Phase des Plans").
+Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes Handy-Vollbild
+(`100dvh` + `viewport-fit=cover`), Grafik-Sprites + App-Icon, diese `CLAUDE.md`.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -82,27 +87,50 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
   Fehler werfen mit klarer Meldung (Arena-Name + Position) statt zur Laufzeit.
   Testweg: **`?arena=test_arena`** in der URL.
 
-### Phase 1 (Balance & Lesbarkeit + Telemetrie) — Branch `claude/phase-1-telemetry-balance-7qpy1a`
-- Neue Balance-Datei **`data/balance.json`** (aus Code referenziert, keine
-  hartkodierten Zahlen): `bullet.lifetime` 3.5, `bullet.maxActive` 5,
-  `bullet.maxActiveCap` 8, `bullet.selfImmunity` 0.35; `mine.fuse` 3.0,
-  `mine.radius` 64, `mine.chainDelay` 0.15, `mine.warningTime` 0.5.
-  (Die alten Minen-Felder `selfDetonateS/explosionRadiusPx/chainDelayS`
-  aus `tanks.json` sind entfernt — jetzt in `balance.json`.)
-- **Geschosse lesbarer**: hartes Despawn nach 3,5 s (unabhängig von
-  Restabprallern); Kugel wird erst nach dem **ersten Abpraller** gefährlich
-  für den Spieler (+ heller Glow + kurzer Tick-Sound); Selbst-Immunität
-  0,35 s nach Abschuss; harter Aktiv-Kugel-Cap (8) für den Spieler.
+### Phase 1 (Telemetrie, Lesbarkeit, Speicherung) — gemergt
+Alle Werte in **`data/balance.json`** (keine hartkodierten Zahlen im Code):
+`bullet.speed` 200, `bullet.maxDistance` 1200, `bullet.blinkFraction` 0.15,
+`bullet.maxActive` 5, `bullet.maxActiveCap` 8, `bullet.selfImmunity` 0.35,
+`enemyBullet.maxActive` 24, `shield.roomLifetime` 3; `mine.fuse` 3.0,
+`mine.radius` 64, `mine.chainDelay` 0.15, `mine.warningTime` 0.5.
+(Die alten Minen-Felder `selfDetonateS/explosionRadiusPx/chainDelayS` aus
+`tanks.json` sind entfernt.)
+- **Wegbudget statt Lebenszeit** (E4): `bullet.distance` zählt die tatsächlich
+  geflogenen Pixel; bei `maxDistance` ist Schluss. Ein doppelt so schneller
+  Schuss fliegt dadurch **schneller, nicht weiter**. In den letzten
+  `blinkFraction` des Budgets blinkt die Kugel (Renderer).
+- **Kugel wird erst nach dem ersten Abpraller** für den Spieler gefährlich
+  (+ heller Glow + Tick-Sound); Selbst-Immunität 0,35 s nach Abschuss;
+  harter Aktiv-Kugel-Cap (8) für den Spieler (**Feuersperre**, nie FIFO).
+- **Gegner-Geschosse** werden dagegen FIFO auf `enemyBullet.maxActive`
+  gedeckelt (Ende von `stepState`) — beim Spieler passiert das nie.
 - **Minen lesbarer**: pulsierender Warnring im Explosionsradius in den
-  letzten 0,5 s vor der Selbstzündung; Kettenreaktion mit 0,15 s
-  Verzögerung pro Glied.
-- **Telemetrie** (`src/core/telemetry.js`): schreibt pro beendetem Run ein
-  Objekt in `localStorage.runs` (Array, max. 100). Erfasst Seed, Zeit,
-  erreichter Raum, Todesursache (`enemy_bullet/own_bullet/own_mine/
-  enemy_mine`) + Gegnertyp, pro Raum Dauer+Leben, gewählte Upgrades in
-  Reihenfolge + abgelehnte Alternativen. Verdrahtet rein beobachtend in
-  `main.js`; die Spiellogik liest nie Telemetriedaten. **Debug-Tabelle +
-  JSON-Export nur bei `?debug=1`** in der URL, sonst unsichtbar/inaktiv.
+  letzten 0,5 s vor der Selbstzündung; Kettenreaktion mit 0,15 s Verzögerung.
+- **Schildladungen altern einzeln** (E2): `run.shieldCharges` ist eine
+  **Liste** von Restlaufzeiten (Anzahl noch geräumter Räume). Jeder geräumte
+  Raum zieht 1 ab (`ageShieldCharges`), 0 verfällt. `killTank` verbraucht die
+  **älteste** Ladung. Der Renderer blendet den Ring nach Restlaufzeit aus.
+- **Run-Speicherung** `localStorage.currentRun`: `runSnapshot(run)` wird in
+  `startRoom()` geschrieben — **nur beim Betreten** eines Raums, nie im
+  Kampf. Enthält Seed, Raumindex/-typ, Leben, Schildladungen mit Restlaufzeit,
+  Schrott, Upgrades, verbannte ids, tagCounts, Endlos-Flag, Spielzeit/Kills.
+  Bei Run-Ende `clearCurrentRun()`. Im Startmenü erscheint der Knopf
+  **„Run fortsetzen (Raum N, X ❤)"** (`#resumeBtn`), der über
+  `createRun(..., { resume })` genau denselben Raum neu erzeugt (Seed +
+  Raumnummer genügen). Abbruch mitten im Raum startet den Raum neu.
+  (Noch nicht im Snapshot, weil es die Mechanik noch nicht gibt:
+  Sekundärslot → Phase 6, Kartenpfad/Knoten → Phase 12.)
+- **Telemetrie v2** (`src/core/telemetry.js`, `schemaVersion: 2`): pro Run
+  `gameVersion`, Gerät, Auflösung, Seed, Zeitstempel, Modus, Sekundärwaffe,
+  erreichter Raum, gewählte/abgelehnte Upgrades. Pro Raum: `roomType`, Dauer,
+  Leben, `shieldCharges`, `scrapEarned`, `enemies` (Typ + Affix), `minFps`,
+  `ricochetKills`/`directKills`, `secondaryUses` (+ Platzhalter `modifier`,
+  `ghostKills`, `powershotsFired` für Phasen 10/7/5). Tod: `cause`,
+  `bulletOwner`, `bulletRicochets`, `bulletDistanceTravelled`, Gegnertyp.
+  **Die Debug-Ansicht rechnet selbst** (`computeMetrics`): Siegquote,
+  Median-Todesraum, Abpraller-Anteil, minFps, nie gewählte und am häufigsten
+  abgelehnte Karten. Verdrahtet rein beobachtend in `main.js`; die Spiellogik
+  liest nie Telemetriedaten. **Nur bei `?debug=1`** sichtbar/aktiv.
 
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
@@ -176,19 +204,19 @@ Zurückgebaut wurde:
   Überladung +50 %→+30 % (`ueberladung.mult` 1.5→1.3).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Vor Phase 6**: 15–20 Runs spielen und `localStorage.runs` (Export
-      über `?debug=1`) auswerten (meistabgelehnte Upgrades + Endraum), sonst
-      wird Welle 1 blind gebaut. Siehe `PLAN.md`.
+- [ ] **Vor Phase 18**: 15–20 Runs spielen und die Debug-Ansicht (`?debug=1`)
+      auswerten — sie rechnet jetzt selbst (Median-Todesraum, Abpraller-Anteil,
+      minFps, nie gewählte + meistabgelehnte Karten). Siehe `PLAN.md`.
+- [ ] `kavallerie` in `data/transformations.json` hat nach dem E5-Rückbau
+      **keine Implementierung mehr** (`ramKillsNonElite` — Rammen ist weg).
+      In Phase 17 ersetzen oder streichen.
 - [ ] Sprite-Look für **feste Wand** (`tile_wall`) und **Loch** (`tile_hole`)
       im Spiel noch mit eigenem Auge prüfen — Code-Pfad identisch zu
       breakable (das rendert korrekt), aber nicht separat verifiziert.
 - [ ] Geschoss-Sprites wirken recht hell/groß (weißer Glow-Blob). Ggf. Größe
       (`3.6 * b.radius` in `renderer.js`) oder Glow-Matte reduzieren.
-- [ ] Noch **prozedural** (keine Sprites vorhanden): Minen, Kampfdrohne,
-      Klingenkranz, Fallen, Explosionen/Partikel. Bei Bedarf Grafiken liefern.
-- [ ] Determinismus-Regression (5 Seeds → Sieg) nach den Render-Änderungen
-      nicht erneut gelaufen (nur Rendering geändert → Logik unberührt),
-      bei nächster Gelegenheit einmal bestätigen.
+- [ ] Noch **prozedural** (keine Sprites vorhanden): Minen, Fallen,
+      Explosionen/Partikel. Bei Bedarf Grafiken liefern.
 
 Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 
@@ -196,8 +224,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - **ES-Module**, kein Bundler. Einstieg `src/main.js`, verdrahtet alles.
 - **Fixed-Timestep-Loop** 60 Hz mit Akkumulator + Render-Interpolation (`alpha`).
   `src/core/loop.js`.
-- **Deterministisch**: gesäter RNG (Mulberry32, `src/core/rng.js`), zwei Ströme
-  (`genRng` = Raumbau, `aiRng` = KI). Gleicher Seed → gleicher Verlauf.
+- **Deterministisch**: gesäter RNG (Mulberry32, `src/core/rng.js`). Kein
+  laufender Zustand — pro Raum benannte Ströme aus `hash(seed, roomIndex,
+  label)` (`rooms`/`enemies`/`upgrades`/`scrap`/`doors`/`events` + `ai`).
+  Gleicher Seed + Raumnummer → gleicher Raum, unabhängig vom Spielverlauf.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
   `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`, `transformations.json`). `balance.json` enthält auch Rarity-Gewichte,
@@ -229,7 +259,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v36`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v37`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`

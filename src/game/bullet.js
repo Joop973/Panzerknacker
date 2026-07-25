@@ -54,6 +54,7 @@ export function createBullet(
     ricochetsStart: ricochets, // fuer "Abpraller-Kill"-Feedback
     owner, // Referenz auf den Schuetzen (fuer den 80-ms-Schutz)
     age: 0, // s seit Abschuss
+    distance: 0, // px zurueckgelegter Weg (E4: Wegbudget statt Zeit)
     dead: false,
     trail: [], // letzte Positionen, nur fuers Debug-Overlay
   };
@@ -165,21 +166,22 @@ export function updateBullet(b, state, dt) {
   b.prevY = b.y;
   b.age += dt;
 
-  // Hartes Despawn nach balance.bullet.lifetime -- unabhaengig von noch
-  // verbleibenden Abprallern. Haelt das Spielfeld lesbar. Epsilon: die
-  // als Summe von 1/60-Schritten aufaddierte Zeit trifft die Grenze
-  // sonst erst einen Tick zu spaet.
-  if (b.age >= state.data.balance.bullet.lifetime - 1e-9) {
-    b.dead = true;
-    return;
-  }
 
   if (b.homing > 0) applyHoming(b, state, dt);
 
+  const sx = b.x;
+  const sy = b.y;
   const hitX = moveAxis(b, state, 'x', dt);
   if (b.dead) return;
   const hitY = moveAxis(b, state, 'y', dt);
   if (b.dead) return;
+  // Wegbudget (PLAN.md v2 E4): WEG statt Zeit -- ein doppelt so schneller
+  // Powershot fliegt dadurch schneller, nicht weiter.
+  b.distance += Math.hypot(b.x - sx, b.y - sy);
+  if (b.distance >= state.data.balance.bullet.maxDistance) {
+    b.dead = true;
+    return;
+  }
 
   // Durchschlag-Geschosse werden von keiner Wand gestoppt -> sonst
   // fliegen sie ewig. Sterben, sobald sie die Arena verlassen.

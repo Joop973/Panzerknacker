@@ -117,3 +117,40 @@ export function recordRun({ won, rooms, kills, timeS, bestCombo }) {
   save(s);
   return s;
 }
+
+// --- Laufender Run (PLAN.md v2 Phase 1) ---------------------------------
+//
+// Wird BEIM BETRETEN eines Raums geschrieben, nie mitten im Kampf. Damit
+// ist ein Abbruch immer am Raumanfang wiederherstellbar; ein Abbruch
+// mitten im Raum startet den Raum neu. Bei Tod wird der Eintrag geloescht.
+const RUN_KEY = 'currentRun';
+
+export function saveCurrentRun(snapshot) {
+  const ls = store();
+  if (!ls) return;
+  try {
+    ls.setItem(RUN_KEY, JSON.stringify(snapshot));
+  } catch {
+    /* voll oder gesperrt -> egal */
+  }
+}
+
+export function loadCurrentRun() {
+  const ls = store();
+  if (!ls) return null;
+  try {
+    return JSON.parse(ls.getItem(RUN_KEY));
+  } catch {
+    return null;
+  }
+}
+
+export function clearCurrentRun() {
+  const ls = store();
+  if (!ls) return;
+  try {
+    ls.removeItem(RUN_KEY);
+  } catch {
+    /* egal */
+  }
+}

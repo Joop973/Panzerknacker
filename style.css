@@ -152,6 +152,21 @@ html, body {
   color: #c8b24a;
 }
 
+/* "Run fortsetzen" -- nur sichtbar, wenn ein abgebrochener Run gespeichert
+   ist (Phase 1). Abgesetzte Farbe, damit man ihn nicht mit Start verwechselt. */
+#resumeBtn {
+  background: #5a9e4a;
+  color: #0d1408;
+}
+
+#resumeBtn:hover {
+  background: #6fb95c;
+}
+
+#resumeBtn.hidden {
+  display: none;
+}
+
 /* Upgrade-Karten */
 .cards {
   display: flex;
