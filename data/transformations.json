@@ -1,0 +1,45 @@
+{
+  "threshold": 3,
+  "transformations": {
+    "pionier": {
+      "id": "pionier",
+      "tag": "mine",
+      "name": "Pionier",
+      "description": "Deine eigenen Minen verletzen dich nicht mehr.",
+      "symbol": "⚒",
+      "effects": { "ownMinesHarmless": true }
+    },
+    "kavallerie": {
+      "id": "kavallerie",
+      "tag": "mobility",
+      "name": "Kavallerie",
+      "description": "Rammen tötet Gegner ohne Elite-Affix.",
+      "symbol": "🐎",
+      "effects": { "ramKillsNonElite": true, "ramProtectS": 0.3 }
+    },
+    "taktiker": {
+      "id": "taktiker",
+      "tag": "information",
+      "name": "Taktiker",
+      "description": "Die Zeit läuft auf 40 %, solange eine Kugel näher als 64 px ist.",
+      "symbol": "⏳",
+      "effects": { "slowMoScale": 0.4, "slowMoRadiusPx": 64 }
+    },
+    "baumeister": {
+      "id": "baumeister",
+      "tag": "terrain",
+      "name": "Baumeister",
+      "description": "Wände halten doppelt so lange — sie überstehen eine Sprengung mehr.",
+      "symbol": "🧱",
+      "effects": { "wallDurability": 2 }
+    },
+    "saboteur": {
+      "id": "saboteur",
+      "tag": "control",
+      "name": "Saboteur",
+      "description": "Betäubte Gegner explodieren, sobald die Betäubung endet.",
+      "symbol": "💥",
+      "effects": { "stunExplodeRadiusPx": 56 }
+    }
+  }
+}

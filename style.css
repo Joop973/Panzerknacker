@@ -349,6 +349,43 @@ html, body {
   background: #2f4258;
 }
 
+/* --- Phase 5: Tag-Fortschritt + Transformations-Einblendung --- */
+.tagprogress {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 6px;
+}
+.tagprogress .tagchip {
+  font-family: monospace;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border: 1px solid #3a5068;
+  border-radius: 10px;
+  color: #9aa0a8;
+  background: #1b1b22;
+}
+.tagprogress .tagchip[data-done='1'] {
+  border-color: #7ade6a;
+  color: #7ade6a;
+}
+
+.tfkicker {
+  font-family: monospace;
+  font-size: 12px;
+  letter-spacing: 3px;
+  color: #7ade6a;
+}
+.tfsymbol {
+  font-size: 64px;
+  line-height: 1;
+}
+#transform h1 {
+  color: #7ade6a;
+}
+
 .workshophint {
   font-family: monospace;
   font-size: 13px;

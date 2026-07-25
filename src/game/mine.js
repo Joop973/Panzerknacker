@@ -46,8 +46,12 @@ export function explodeAt(state, x, y, R, spare, meta) {
   state.addShake?.(6);
   state.spawnParticles?.(x, y, '#ffb347', 14, 160);
 
+  // Transformation "Pionier" (Phase 5): eigene Minen verletzen den Spieler
+  // nicht mehr. Schalter kommt aus data/transformations.json.
+  const pionier = !!state.transform?.ownMinesHarmless && meta?.code === 'own_mine';
   for (const t of state.tanks) {
     if (!t.alive || t.protect > 0 || t === spare) continue;
+    if (pionier && t === state.player) continue;
     if (circlesOverlap(x, y, R, t.x, t.y, t.cfg.radius)) {
       state.killTank(t, 'eine Explosion', meta);
     }

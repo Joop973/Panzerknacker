@@ -133,7 +133,7 @@ Tür. Zurücksetzen bei Run-Ende sauber.
 
 ---
 
-## Phase 5 — Transformationen (Prompt 6)
+## Phase 5 — Transformationen (Prompt 6) ✅ gemergt
 
 Zähle pro Run gewählte Upgrades je `tag`. Bei 3 eines Tags automatische
 Transformation aus `data/transformations.json`:
