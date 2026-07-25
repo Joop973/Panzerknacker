@@ -91,7 +91,14 @@ export function createState(data, tiles, opts) {
     enemyKills: 0, // in diesem Raum getoetete Gegner
     playerDeaths: 0, // Tode des Spielers in diesem Raum
     playerShots: 0, // Spieler-Abzuege in diesem Raum (Trefferquote)
-    shieldCharges: shieldCharges || 0, // Notschild: absorbiert je 1 Treffer
+    // Telemetrie-Zaehler (nur Instrument -- die Spiellogik liest sie nie):
+    // Kills mit abgeprallter vs. direkter Spielerkugel + Zweitwaffen-Einsatz.
+    ricochetKills: 0,
+    directKills: 0,
+    secondaryUses: 0,
+    // Notschild-Ladungen als Liste: jede Ladung altert EINZELN (E2).
+    // Eintrag = verbleibende geraeumte Raeume bis zum Verfall.
+    shieldCharges: (shieldCharges || []).slice(),
     transform: transform || {}, // Phase 5: freigeschaltete Transformations-Effekte
     walls,
     tanks,
@@ -137,8 +144,8 @@ export function createState(data, tiles, opts) {
       // Notschild-Ladung faengt genau einen Treffer ab (raumuebergreifend,
       // keine Regeneration). Kurzer Schutz verhindert Mehrfachverbrauch im
       // selben Explosions-Frame.
-      if (tank === state.player && state.shieldCharges > 0) {
-        state.shieldCharges--;
+      if (tank === state.player && state.shieldCharges.length > 0) {
+        state.shieldCharges.shift(); // aelteste Ladung zuerst
         tank.protect = Math.max(tank.protect, 0.6);
         state.sounds.push('shield');
         state.spawnParticles(tank.x, tank.y, '#8ecaf0', 12, 130);
@@ -179,6 +186,9 @@ export function createState(data, tiles, opts) {
         // die Spiellogik liest diese Felder nie zurueck).
         state.lastDeathCauseCode = meta?.code || null;
         state.lastDeathEnemyType = meta?.enemyType || null;
+        state.lastDeathBulletOwner = meta?.bulletOwner || null;
+        state.lastDeathBulletRicochets = meta?.bulletRicochets ?? null;
+        state.lastDeathBulletDistance = meta?.bulletDistance ?? null;
         state.damageFlash = 0.5;
         state.respawnTimer = RESPAWN_DELAY;
       } else {
@@ -318,7 +328,7 @@ export function stepState(state, cmd, dt) {
     moveTank(p, cmd.move, state, dt);
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
     if (cmd.fire) fireBullet(p, state);
-    if (cmd.mine) layMine(p, state, cmd.mineThrow);
+    if (cmd.mine && layMine(p, state, cmd.mineThrow)) state.secondaryUses++;
   }
 
   // Gegner: getrennte Turm-/Fahr-KI liefert Bewegung, Schuss- und
@@ -379,7 +389,16 @@ export function stepState(state, cmd, dt) {
         state.killTank(t, cause, {
           code: own ? 'own_bullet' : 'enemy_bullet',
           enemyType: own ? null : b.owner?.type || null,
+          bulletOwner: own ? 'player' : 'enemy',
+          bulletRicochets: b.ricochetsStart - b.ricochetsLeft,
+          bulletDistance: Math.round(b.distance || 0),
         });
+        // Telemetrie: zaehlt nur Kills des Spielers an Gegnern (Kernfrage
+        // der USP -- wie oft toetet wirklich ein Abpraller?).
+        if (own && t !== state.player && !t.alive) {
+          if (bounced) state.ricochetKills++;
+          else state.directKills++;
+        }
         break;
       }
     }
@@ -423,4 +442,16 @@ export function stepState(state, cmd, dt) {
   state.shake = Math.max(0, state.shake - state.shake * 4 * dt - 0.5 * dt);
 
   state.bullets = state.bullets.filter((b) => !b.dead);
+
+  // Gegner-Geschosse deckeln (E4: enemyBullet.maxActive, aelteste zuerst).
+  // Beim SPIELER wird bewusst NICHT verdraengt -- dort sperrt das Feuern
+  // (sonst raeumen Verlegenheitsschuesse den gelegten Abprallschuss weg).
+  const enemyCap = state.data.balance.enemyBullet?.maxActive;
+  if (enemyCap) {
+    const enemyBullets = state.bullets.filter((b) => b.owner && b.owner !== state.player);
+    if (enemyBullets.length > enemyCap) {
+      const drop = new Set(enemyBullets.slice(0, enemyBullets.length - enemyCap));
+      state.bullets = state.bullets.filter((b) => !drop.has(b));
+    }
+  }
 }

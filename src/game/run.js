@@ -10,7 +10,7 @@
 // und eine Aenderung an einem System verschiebt die anderen nicht.
 
 import { rngFor, hashSeed } from '../core/rng.js';
-import { recordRun, loadStats } from '../core/storage.js';
+import { recordRun, loadStats, saveCurrentRun, clearCurrentRun } from '../core/storage.js';
 import { createState, stepState } from './state.js';
 import { rollOffers as rollFromPool, drawOne } from './upgradepool.js';
 
@@ -63,6 +63,44 @@ function makeRoomStreams(run) {
   };
 }
 
+// Neue Notschild-Ladungen mit voller Restlaufzeit (E2: shield.roomLifetime).
+function addShieldCharges(run, n) {
+  const life = run.data.balance.shield?.roomLifetime ?? Infinity;
+  for (let i = 0; i < n; i++) run.shieldCharges.push(life);
+}
+
+// Nach einem geraeumten Raum altern alle Ladungen um eins; abgelaufene
+// verfallen (E2: kein unbegrenztes Bunkern).
+function ageShieldCharges(run) {
+  run.shieldCharges = run.shieldCharges.map((r) => r - 1).filter((r) => r > 0);
+}
+
+// Zustand fuer "Run fortsetzen?" -- nur Werte, die den Raumanfang
+// beschreiben (kein Kampfzustand). Wird beim Betreten eines Raums
+// geschrieben.
+export function runSnapshot(run) {
+  return {
+    schema: 1,
+    seed: run.seed,
+    modeKey: run.modeKey,
+    roomIndex: run.roomIndex,
+    roomType: run.roomType,
+    prevRoomType: run.prevRoomType,
+    lives: run.lives,
+    shieldCharges: run.shieldCharges.slice(), // mit Restlaufzeit je Ladung
+    scrap: run.scrap,
+    upgrades: { ...run.upgrades },
+    banned: [...run.bannedUpgrades],
+    tagCounts: { ...run.tagCounts },
+    transformations: [...run.transformations],
+    endless: !!run.endless,
+    playTime: run.playTime,
+    kills: run.kills,
+    deaths: run.deaths,
+    roomsCleared: run.roomsCleared,
+  };
+}
+
 function resetRoomCounters(run) {
   run.seenRoomKills = 0;
   run.seenRoomDeaths = 0;
@@ -85,6 +123,7 @@ function startRoom(run, type = 'combat') {
   run.roomAffix = null;
   makeRoomStreams(run); // frische, aus dem Seed abgeleitete Stroeme
   resetRoomCounters(run);
+  saveCurrentRun(runSnapshot(run)); // nur am Raumanfang, nie im Kampf
   if (type === 'combat' || type === 'elite') {
     buildCombatRoom(run, type, isFinal);
   } else {
@@ -246,7 +285,8 @@ export function chooseEventOption(run, index) {
   const e = opt.effects || {};
   if (e.life) run.lives = Math.max(1, run.lives + e.life);
   if (e.scrap) run.scrap = Math.max(0, run.scrap + e.scrap);
-  if (e.shield) run.shieldCharges = Math.max(0, run.shieldCharges + e.shield);
+  if (e.shield > 0) addShieldCharges(run, e.shield);
+  else if (e.shield < 0) run.shieldCharges.splice(0, -e.shield);
   const evId = ev.id;
   run.currentEvent = null;
   afterRoomDone(run);
@@ -274,10 +314,13 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     difficulty,
     upgradesData,
     mode: mode.label,
+    modeKey,
     budgetMult: mode.budgetMult,
     upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}
     upgradeChoices: 0,
-    shieldCharges: 0, // Notschild-Ladungen (raumuebergreifend, keine Regen)
+    // Notschild-Ladungen als Liste (E2): Eintrag = verbleibende geraeumte
+    // Raeume bis zum Verfall. Jede Ladung altert einzeln.
+    shieldCharges: [],
     scrap: 0, // Schrott-Waehrung (Run-State, Phase 3)
     scrapThisRoom: 0, // im aktuellen Raum verdienter Schrott (Telemetrie)
     bannedUpgrades: new Set(), // im Run verbannte Upgrade-ids (nicht persistent)
@@ -312,12 +355,34 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     state: null,
     finalStats: null,
   };
+  // Fortsetzen: Zustand vor dem Raumbau einspielen, damit startRoom()
+  // denselben Raum wie beim Abbruch erzeugt (Seed + Raumnummer genuegen).
+  if (opts.resume) {
+    const r = opts.resume;
+    run.roomIndex = r.roomIndex;
+    run.lives = r.lives;
+    run.shieldCharges = (r.shieldCharges || []).slice();
+    run.scrap = r.scrap || 0;
+    run.upgrades = { ...(r.upgrades || {}) };
+    run.bannedUpgrades = new Set(r.banned || []);
+    run.tagCounts = { ...(r.tagCounts || {}) };
+    run.transformations = new Set(r.transformations || []);
+    run.endless = !!r.endless;
+    run.playTime = r.playTime || 0;
+    run.kills = r.kills || 0;
+    run.deaths = r.deaths || 0;
+    run.roomsCleared = r.roomsCleared || 0;
+    run.prevRoomType = r.prevRoomType || null;
+    startRoom(run, r.roomType || 'combat');
+    return run;
+  }
   startRoom(run);
   return run;
 }
 
 function finishRun(run, won) {
   run.phase = won ? 'victory' : 'gameover';
+  clearCurrentRun(); // beendeter Run ist nicht mehr fortsetzbar
   // Rekord-Erkennung VOR dem Eintragen (alte Bestwerte vergleichen).
   const prev = loadStats();
   run.newRecord =
@@ -433,6 +498,7 @@ export function stepRun(run, cmd, dt) {
     if (run.roomType === 'elite') earned *= sc.eliteMult;
     run.scrap += earned;
     run.scrapThisRoom += earned;
+    ageShieldCharges(run); // E2: Schildladungen altern pro geraeumtem Raum
     st.texts.push({
       x: st.player.x,
       y: st.player.y - 30,
@@ -545,7 +611,7 @@ export function buyShieldCharge(run) {
   const cost = run.data.balance.scrap.cost.shieldCharge;
   if (run.scrap < cost) return false;
   run.scrap -= cost;
-  run.shieldCharges = (run.shieldCharges || 0) + 1;
+  addShieldCharges(run, 1);
   return true;
 }
 
@@ -562,12 +628,12 @@ export function chooseUpgrade(run, index) {
     if (offer.id === 'glaskanone') run.lives = 1;
     // Notschild: jede Stufe gibt chargesPerStack Ladungen (raumuebergreifend).
     if (offer.id === 'emergency_shield') {
-      const cps = run.upgradesData.upgrades.emergency_shield.chargesPerStack || 3;
-      run.shieldCharges = (run.shieldCharges || 0) + cps;
+      const cps = run.upgradesData.upgrades.emergency_shield.chargesPerStack || 1;
+      addShieldCharges(run, cps);
     }
     // Trophäe (Elite): +Schildladung(en), dauerhaft.
     if (offer.id === 'trophaee') {
-      run.shieldCharges = (run.shieldCharges || 0) + (run.upgradesData.upgrades.trophaee.shieldCharges || 1);
+      addShieldCharges(run, run.upgradesData.upgrades.trophaee.shieldCharges || 1);
     }
   }
   run.upgradeChoices++;

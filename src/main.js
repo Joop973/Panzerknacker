@@ -30,7 +30,16 @@ import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
 import { createTutorial } from './ui/hud.js';
-import { getFlag, setFlag, loadStats, getPref, setPref, resetStats } from './core/storage.js';
+import {
+  getFlag,
+  setFlag,
+  loadStats,
+  getPref,
+  setPref,
+  resetStats,
+  loadCurrentRun,
+  clearCurrentRun,
+} from './core/storage.js';
 import { createRenderer, renderOpts } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
@@ -138,38 +147,87 @@ async function init() {
   let teleRoom = 0; // aktuell getimter Raum-Index
   let teleRoomStart = 0; // run.playTime beim Betreten dieses Raums
   let teleEnded = true; // schon abgeschlossen? (verhindert Doppel-Eintrag)
+  // Pro Raum mitgefuehrte Kennzahlen. Sie werden jeden Tick aus dem
+  // Raumzustand ABGELESEN (nie zurueckgeschrieben), weil beim Raumwechsel
+  // schon der naechste Zustand haengt.
+  let teleRoomType = null;
+  let teleEnemies = [];
+  let teleStateRef = null;
+  let teleShield = 0;
+  let teleMinFps = Infinity;
+  let teleRic = 0;
+  let teleDir = 0;
+  let teleSec = 0;
+
+  function resetRoomTelemetry() {
+    teleRoomType = null;
+    teleEnemies = [];
+    teleShield = 0;
+    teleMinFps = Infinity;
+    teleRic = 0;
+    teleDir = 0;
+    teleSec = 0;
+  }
+
+  // Momentaufnahme des laufenden Raums (jeden Tick, sehr billig).
+  function sampleRoomTelemetry() {
+    teleRoomType = run.roomType;
+    teleShield = run.shieldCharges.length;
+    // Nicht-Kampf-Raeume behalten den Vorraum als Kulisse -- deren Zaehler
+    // gehoeren nicht diesem Raum.
+    if (run.roomType !== 'combat' && run.roomType !== 'elite') return;
+    const st = run.state;
+    if (!st) return;
+    if (st !== teleStateRef) {
+      teleStateRef = st;
+      teleEnemies = st.tanks.slice(1).map((t) => ({ type: t.type, affix: t.affix || null }));
+    }
+    teleRic = st.ricochetKills;
+    teleDir = st.directKills;
+    teleSec = st.secondaryUses;
+  }
+
+  function flushRoomTelemetry() {
+    telemetry.recordRoom({
+      room: teleRoom,
+      roomType: teleRoomType,
+      durationS: run.playTime - teleRoomStart,
+      lives: run.lives,
+      shieldCharges: teleShield,
+      scrapEarned: run.scrapThisRoom,
+      enemies: teleEnemies,
+      minFps: teleMinFps === Infinity ? null : Math.round(teleMinFps),
+      ricochetKills: teleRic,
+      directKills: teleDir,
+      secondaryUses: teleSec,
+    });
+    run.scrapThisRoom = 0;
+  }
+
   // Setzt das Tracking fuer einen frisch erstellten Run auf und startet
   // den Telemetrie-Sammelpuffer.
   function beginTelemetry() {
     teleRoom = run.roomIndex;
     teleRoomStart = run.playTime;
     teleEnded = false;
-    telemetry.beginRun({ seed: run.seed, mode: run.mode });
+    teleStateRef = null;
+    resetRoomTelemetry();
+    telemetry.beginRun({ seed: run.seed, mode: run.mode, secondary: 'mine' });
   }
   // Wird jeden Tick nach stepRun aufgerufen: Raumwechsel + Run-Ende.
   function updateTelemetry() {
     if (!run || teleEnded) return;
-    // Raum abgeschlossen -> Dauer + Leben + verdienter Schrott festhalten.
+    // Raum abgeschlossen -> Dauer + Leben + Kennzahlen des ALTEN Raums.
     if (run.roomIndex !== teleRoom) {
-      telemetry.recordRoom({
-        room: teleRoom,
-        durationS: run.playTime - teleRoomStart,
-        lives: run.lives,
-        scrapEarned: run.scrapThisRoom,
-      });
-      run.scrapThisRoom = 0;
+      flushRoomTelemetry();
       teleRoom = run.roomIndex;
       teleRoomStart = run.playTime;
+      resetRoomTelemetry();
     }
+    sampleRoomTelemetry();
     if (run.phase === 'gameover' || run.phase === 'victory') {
       // Letzten (evtl. unvollstaendigen) Raum noch mitschreiben.
-      telemetry.recordRoom({
-        room: teleRoom,
-        durationS: run.playTime - teleRoomStart,
-        lives: run.lives,
-        scrapEarned: run.scrapThisRoom,
-      });
-      run.scrapThisRoom = 0;
+      flushRoomTelemetry();
       const st = run.state;
       telemetry.endRun({
         won: run.phase === 'victory',
@@ -177,6 +235,11 @@ async function init() {
         deathCause: st.lastDeathCauseCode || null,
         deathCauseLabel: st.lastDeathCause || null,
         enemyType: st.lastDeathEnemyType || null,
+        death: {
+          bulletOwner: st.lastDeathBulletOwner || null,
+          bulletRicochets: st.lastDeathBulletRicochets ?? null,
+          bulletDistanceTravelled: st.lastDeathBulletDistance ?? null,
+        },
       });
       teleEnded = true;
     }
@@ -241,11 +304,11 @@ async function init() {
     workshopShown = false;
   }
 
-  function startRun() {
-    const raw = seedInput.value.trim();
-    const seed = raw === '' ? Date.now() >>> 0 : Number(raw) >>> 0;
-    seedInput.value = String(seed);
-    run = createRun(tanksData, tilesData, diffData, upgradesData, seed, mode, { roomSpec: arenaSpec });
+  function launchRun(seed, modeKey, resume) {
+    run = createRun(tanksData, tilesData, diffData, upgradesData, seed, modeKey, {
+      roomSpec: arenaSpec,
+      resume: resume || null,
+    });
     lastSeed = seed;
     beginTelemetry();
     startOverlay.classList.add('hidden');
@@ -254,6 +317,40 @@ async function init() {
     goFullscreen();
     requestWakeLock();
   }
+
+  function startRun() {
+    const raw = seedInput.value.trim();
+    const seed = raw === '' ? Date.now() >>> 0 : Number(raw) >>> 0;
+    seedInput.value = String(seed);
+    // Ein neuer Run verwirft den gespeicherten Zwischenstand.
+    clearCurrentRun();
+    refreshResumeBtn();
+    launchRun(seed, mode);
+  }
+
+  // "Run fortsetzen": gespeicherter Zustand vom letzten Raumanfang. Der Raum
+  // selbst wird aus Seed + Raumnummer neu erzeugt (deterministisch), ein
+  // mitten im Raum abgebrochener Versuch beginnt den Raum also von vorn.
+  const resumeBtn = document.getElementById('resumeBtn');
+  function refreshResumeBtn() {
+    const saved = loadCurrentRun();
+    if (!saved) {
+      resumeBtn.classList.add('hidden');
+      return;
+    }
+    resumeBtn.textContent = `Run fortsetzen (Raum ${saved.roomIndex}, ${saved.lives} ❤)`;
+    resumeBtn.classList.remove('hidden');
+  }
+  resumeBtn.addEventListener('click', () => {
+    const saved = loadCurrentRun();
+    if (!saved) {
+      refreshResumeBtn();
+      return;
+    }
+    seedInput.value = String(saved.seed >>> 0);
+    launchRun(saved.seed >>> 0, saved.modeKey || mode, saved);
+  });
+  refreshResumeBtn();
 
   // Touch-Geraete: echtes Vollbild (Adressleiste weg) + Landscape-Lock
   // versuchen (Android; iOS unterstuetzt Element-Vollbild nicht -- dort
@@ -479,6 +576,8 @@ async function init() {
       fps = (frameCount * 1000) / (now - fpsWindowStart);
       frameCount = 0;
       fpsWindowStart = now;
+      // Telemetrie: schlechtester 0,5-s-Schnitt im laufenden Raum (Ziel >= 50).
+      if (run.phase === 'playing' && !teleEnded) teleMinFps = Math.min(teleMinFps, fps);
     }
   }
 
@@ -506,6 +605,7 @@ async function init() {
   // zum Start-Screen (Seed vorbefuellt) -> neuer Run.
   function backToStart() {
     refreshBestStats();
+    refreshResumeBtn(); // abgebrochener Run bleibt fortsetzbar
     startOverlay.classList.remove('hidden');
     seedInput.select();
     hideRoomScreens();
@@ -538,10 +638,8 @@ async function init() {
     // Pause-Menue: R = Run mit gleichem Seed neu starten, M = Hauptmenue.
     if (pause.isPaused() && run.phase === 'playing') {
       if (e.code === 'KeyR') {
-        run = createRun(tanksData, tilesData, diffData, upgradesData, lastSeed, mode);
-        beginTelemetry();
-        hideRoomScreens();
-        pause.set(false);
+        clearCurrentRun();
+        launchRun(lastSeed, mode);
       } else if (e.code === 'KeyM') {
         pause.set(false);
         backToStart();

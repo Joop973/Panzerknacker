@@ -12,6 +12,10 @@
 
 const KEY = 'runs';
 const MAX_RUNS = 100;
+// Bei jeder Bedeutungsaenderung der Felder hochzaehlen -- sonst werden
+// spaeter Runs verglichen, die gar nicht vergleichbar sind.
+const SCHEMA_VERSION = 2;
+const GAME_VERSION = 'v37';
 
 let current = null; // Sammelpuffer des laufenden Runs (null = keiner aktiv)
 
@@ -47,8 +51,21 @@ function persist(runs) {
 
 // Neuen Run beginnen. Verwirft einen evtl. nicht beendeten Vorlauf
 // (abgebrochene Runs werden nicht gespeichert).
-export function beginRun({ seed, mode }) {
+export function beginRun({ seed, mode, secondary }) {
+  let device = null;
+  let resolution = null;
+  try {
+    device = navigator.maxTouchPoints > 0 ? 'touch' : 'desktop';
+    resolution = `${window.innerWidth}x${window.innerHeight}`;
+  } catch {
+    /* egal */
+  }
   current = {
+    schemaVersion: SCHEMA_VERSION,
+    gameVersion: GAME_VERSION,
+    device,
+    resolution,
+    secondary: secondary || 'mine',
     seed: seed >>> 0,
     mode: mode || null,
     startedAt: Date.now(),
@@ -63,13 +80,23 @@ export function beginRun({ seed, mode }) {
 }
 
 // Einen abgeschlossenen (oder letzten, gescheiterten) Raum festhalten.
-export function recordRoom({ room, durationS, lives, scrapEarned }) {
+export function recordRoom(r) {
   if (!current) return;
   current.rooms.push({
-    room,
-    durationS: Math.round((durationS || 0) * 100) / 100,
-    lives,
-    scrapEarned: scrapEarned || 0,
+    room: r.room,
+    roomType: r.roomType || null,
+    durationS: Math.round((r.durationS || 0) * 100) / 100,
+    lives: r.lives,
+    shieldCharges: r.shieldCharges || 0,
+    scrapEarned: r.scrapEarned || 0,
+    modifier: r.modifier || null, // Phase 10
+    enemies: r.enemies || [], // [{type, affix}]
+    minFps: r.minFps ?? null,
+    ricochetKills: r.ricochetKills || 0,
+    directKills: r.directKills || 0,
+    ghostKills: r.ghostKills || 0, // Phase 7
+    powershotsFired: r.powershotsFired || 0, // Phase 5
+    secondaryUses: r.secondaryUses || 0,
   });
 }
 
@@ -117,9 +144,14 @@ export function recordUpgrade({ chosen, rejected }) {
 // Run beenden: Datensatz zusammenbauen, anhaengen, deckeln, speichern.
 // deathCause ist einer von: enemy_bullet, own_bullet, own_mine,
 // enemy_mine (oder null bei Sieg).
-export function endRun({ won, roomReached, deathCause, deathCauseLabel, enemyType }) {
+export function endRun({ won, roomReached, deathCause, deathCauseLabel, enemyType, death }) {
   if (!current) return null;
   const entry = {
+    schemaVersion: current.schemaVersion,
+    gameVersion: current.gameVersion,
+    device: current.device,
+    resolution: current.resolution,
+    secondary: current.secondary,
     seed: current.seed,
     mode: current.mode,
     timestamp: new Date(current.startedAt).toISOString(),
@@ -129,6 +161,17 @@ export function endRun({ won, roomReached, deathCause, deathCauseLabel, enemyTyp
     deathCause: won ? null : deathCause || null,
     deathCauseLabel: won ? null : deathCauseLabel || null,
     enemyType: won ? null : enemyType || null,
+    // Details des toedlichen Treffers: beantwortet, ob ein ungesehener
+    // Querschlaeger getoetet hat oder ein sauberer Gegnerschuss.
+    death: won
+      ? null
+      : {
+          cause: deathCause || null,
+          bulletOwner: death?.bulletOwner ?? null,
+          bulletRicochets: death?.bulletRicochets ?? null,
+          bulletDistanceTravelled: death?.bulletDistanceTravelled ?? null,
+          enemyType: enemyType || null,
+        },
     rooms: current.rooms,
     upgrades: current.upgrades,
     scrapSpends: current.scrapSpends,
@@ -208,7 +251,63 @@ function fmtUpgrades(ups) {
     .join('  →  ');
 }
 
+// Kennzahlen ueber ALLE Runs -- die Debug-Ansicht rechnet sie selbst aus,
+// weil ein JSON-Export am Handy nirgends zu oeffnen ist.
+export function computeMetrics(runs) {
+  if (!runs.length) return null;
+  const n = runs.length;
+  const wins = runs.filter((r) => r.won).length;
+  const deathRooms = runs.filter((r) => !r.won).map((r) => r.roomReached || 0).sort((a, b) => a - b);
+  const median = deathRooms.length
+    ? deathRooms[Math.floor(deathRooms.length / 2)]
+    : null;
+  const causes = {};
+  for (const r of runs) if (!r.won && r.deathCause) causes[r.deathCause] = (causes[r.deathCause] || 0) + 1;
+  let ric = 0, dir = 0, minFps = Infinity;
+  for (const r of runs) for (const room of r.rooms || []) {
+    ric += room.ricochetKills || 0;
+    dir += room.directKills || 0;
+    if (room.minFps != null) minFps = Math.min(minFps, room.minFps);
+  }
+  // Angebotene, aber nie gewaehlte Karten (Grundlage fuer Phase 18).
+  const offered = {}, chosen = {};
+  for (const r of runs) for (const u of r.upgrades || []) {
+    if (u.chosen?.id) chosen[u.chosen.id] = (chosen[u.chosen.id] || 0) + 1;
+    for (const c of [u.chosen, ...(u.rejected || [])]) if (c?.id) offered[c.id] = (offered[c.id] || 0) + 1;
+  }
+  const neverChosen = Object.keys(offered).filter((id) => !chosen[id]).sort();
+  const mostRejected = Object.entries(offered)
+    .map(([id, o]) => [id, o - (chosen[id] || 0)])
+    .sort((a, b) => b[1] - a[1]).slice(0, 5);
+  return {
+    runs: n, wins, winRate: Math.round((100 * wins) / n),
+    medianDeathRoom: median, causes,
+    ricochetKills: ric, directKills: dir,
+    ricochetShare: ric + dir ? Math.round((100 * ric) / (ric + dir)) : null,
+    minFps: minFps === Infinity ? null : minFps,
+    neverChosen, mostRejected,
+  };
+}
+
+let debugSummary = null;
+
+function refreshSummary() {
+  if (!debugSummary) return;
+  const m = computeMetrics(loadRuns());
+  if (!m) { debugSummary.textContent = 'Noch keine Runs aufgezeichnet.'; return; }
+  const causes = Object.entries(m.causes).map(([k, v]) => `${k} ${v}`).join(' · ') || '–';
+  debugSummary.innerHTML =
+    `<b>${m.runs} Runs</b> · Siege ${m.wins} (${m.winRate} %) · ` +
+    `Median-Todesraum <b>${m.medianDeathRoom ?? '–'}</b> (Ziel 8–14) · ` +
+    `Abpraller-Kills ${m.ricochetKills}/${m.ricochetKills + m.directKills}` +
+    `${m.ricochetShare != null ? ` (<b>${m.ricochetShare} %</b>)` : ''} · ` +
+    `minFps ${m.minFps ?? '–'} (Ziel &ge; 50)<br>Todesursachen: ${causes}<br>` +
+    `Nie gewaehlt: ${m.neverChosen.join(', ') || '–'}<br>` +
+    `Am haeufigsten abgelehnt: ${m.mostRejected.map(([id, c]) => `${id} (${c})`).join(', ') || '–'}`;
+}
+
 function refreshDebugView() {
+  refreshSummary();
   if (!debugBody) return;
   const runs = loadRuns().slice().reverse(); // neueste zuerst
   debugBody.innerHTML = '';
@@ -289,6 +388,11 @@ export function mountDebugView() {
 
   bar.append(title, exportBtn, refreshBtn, toggleBtn);
 
+  // Kennzahlen-Zusammenfassung ueber der Tabelle (rechnet selbst).
+  debugSummary = document.createElement('div');
+  debugSummary.style.cssText =
+    'padding:6px 8px;border-bottom:1px solid #333;background:#161a22;line-height:1.6;';
+
   const tableWrap = document.createElement('div');
   const table = document.createElement('table');
   table.style.cssText = 'border-collapse:collapse;width:100%;';
@@ -322,7 +426,7 @@ export function mountDebugView() {
   table.append(thead, debugBody);
   tableWrap.appendChild(table);
 
-  panel.append(bar, tableWrap);
+  panel.append(bar, debugSummary, tableWrap);
   document.body.appendChild(panel);
   refreshDebugView();
 }
