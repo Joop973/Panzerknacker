@@ -41,6 +41,25 @@ export function createUpgradeScreen() {
       el.appendChild(scrapLine);
     }
 
+    // Phase 5: Fortschritt je Tag (z. B. 2/3) -- ohne diese Anzeige waehlt
+    // niemand gezielt in eine Richtung.
+    if (ctx.getTagProgress) {
+      const prog = ctx.getTagProgress(); // [{tag, count, threshold, name, done}]
+      if (prog.length) {
+        const bar = document.createElement('div');
+        bar.className = 'tagprogress';
+        for (const p of prog) {
+          const chip = document.createElement('span');
+          chip.className = 'tagchip';
+          chip.dataset.done = p.done ? '1' : '0';
+          chip.textContent = `${p.tag} ${p.count}/${p.threshold}${p.done ? ' ✓' : ''}`;
+          chip.title = p.done ? `${p.name} freigeschaltet` : `${p.name} bei ${p.threshold}`;
+          bar.appendChild(chip);
+        }
+        el.appendChild(bar);
+      }
+    }
+
     const row = document.createElement('div');
     row.className = 'cards';
     offers.forEach((o, i) => {

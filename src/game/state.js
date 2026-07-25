@@ -57,7 +57,7 @@ function buildWalls(grid) {
 //         upgradesData -- Inhalt von upgrades.json (Stellwerte) }
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
-    roomSpec, arenas } = opts;
+    roomSpec, arenas, transform } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
@@ -92,6 +92,7 @@ export function createState(data, tiles, opts) {
     playerDeaths: 0, // Tode des Spielers in diesem Raum
     playerShots: 0, // Spieler-Abzuege in diesem Raum (Trefferquote)
     shieldCharges: shieldCharges || 0, // Notschild: absorbiert je 1 Treffer
+    transform: transform || {}, // Phase 5: freigeschaltete Transformations-Effekte
     walls,
     tanks,
     player,
@@ -117,6 +118,16 @@ export function createState(data, tiles, opts) {
       return cell === '#' || cell === 'b';
     },
     destroyWall(wall) {
+      // Transformation "Baumeister" (Phase 5): Waende halten wallDurability
+      // Treffer statt einem -- der erste Treffer beschaedigt sie nur.
+      const durability = state.transform.wallDurability || 1;
+      if (durability > 1) {
+        wall.hits = (wall.hits || 0) + 1;
+        if (wall.hits < durability) {
+          state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 3, 60);
+          return; // beschaedigt, aber noch da
+        }
+      }
       const i = state.walls.indexOf(wall);
       if (i >= 0) state.walls.splice(i, 1);
       grid[wall.row][wall.col] = '.';
@@ -239,12 +250,17 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
 function applyMelee(state, dt) {
   const p = state.player;
   if (!p.alive) return;
-  // Rammklinge: nur bei nennenswerter Fahrt.
-  if (p.cfg.ram && Math.hypot(p.vx, p.vy) > p.cfg.speed * 0.4) {
+  // Rammklinge (Upgrade) bzw. Transformation "Kavallerie" (Phase 5):
+  // Kavallerie toetet beim Rammen nur Gegner OHNE Elite-Affix.
+  const kavallerie = !!state.transform.ramKillsNonElite;
+  const ramProtect = p.cfg.ram || state.transform.ramProtectS || 0;
+  if ((p.cfg.ram || kavallerie) && Math.hypot(p.vx, p.vy) > p.cfg.speed * 0.4) {
     for (const t of state.tanks) {
       if (t === p || !t.alive) continue;
+      // Ohne Rammklinge-Upgrade greift Kavallerie nur bei Gegnern ohne Affix.
+      if (!p.cfg.ram && t.affix) continue;
       if (circlesOverlap(p.x, p.y, p.cfg.radius + 2, t.x, t.y, t.cfg.radius)) {
-        p.protect = Math.max(p.protect, p.cfg.ram); // kurz geschuetzt
+        p.protect = Math.max(p.protect, ramProtect); // kurz geschuetzt
         state.killTank(t, 'die Rammklinge');
       }
     }
@@ -350,10 +366,18 @@ export function stepState(state, cmd, dt) {
   const p = state.player;
   state.time += dt;
 
+  // Transformation "Saboteur" (Phase 5): betaeubte Gegner explodieren,
+  // sobald ihre Betaeubung endet.
+  const sabotageR = state.transform.stunExplodeRadiusPx || 0;
   for (const t of state.tanks) {
     if (!t.alive) continue;
     t.cooldown = Math.max(0, t.cooldown - dt);
+    const wasStunned = t.stunTimer > 0;
     t.stunTimer = Math.max(0, t.stunTimer - dt);
+    if (sabotageR && wasStunned && t.stunTimer <= 0 && t !== state.player) {
+      explodeAt(state, t.x, t.y, sabotageR, state.player);
+      continue;
+    }
     if (t.protect > 0) t.protect = Math.max(0, t.protect - dt);
     if (t.boostTimer > 0) t.boostTimer = Math.max(0, t.boostTimer - dt);
     if (t.bloodTimer > 0) t.bloodTimer = Math.max(0, t.bloodTimer - dt);

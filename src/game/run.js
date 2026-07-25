@@ -131,6 +131,8 @@ function buildCombatRoom(run, type, isFinal) {
     // aus data/arenas.json statt aus dem Kachelgenerator.
     roomSpec: run.roomSpec,
     arenas: run.data.arenas,
+    // Phase 5: aktive Transformations-Schalter (rein datengesteuert).
+    transform: transformEffects(run),
   });
   // Elite: genau 1 Affix auf alle Gegner (fuer Phase 5 einzeln markiert).
   if (type === 'elite') applyEliteAffix(run);
@@ -291,6 +293,10 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     bannedUpgrades: new Set(), // im Run verbannte Upgrade-ids (nicht persistent)
     pendingOffers: null,
     // --- Phase 4: Raumtypen + Tuerwahl ---
+    // --- Phase 5: Transformationen ---
+    tagCounts: {}, // {tag: Anzahl gewaehlter Upgrades} -- Stacks zaehlen einzeln
+    transformations: new Set(), // freigeschaltete Transformations-ids
+    pendingTransformation: null, // fuer die Freischalt-Einblendung (main.js)
     roomSpec: opts.roomSpec || null, // { fixedLayout } -> Arena-Weiche
     roomType: 'combat', // Typ des aktuellen Raums
     prevRoomType: null, // Typ des Vorraums (Regel: event/workshop nicht 2x)
@@ -355,6 +361,22 @@ export function stepRun(run, cmd, dt) {
     st.player.berserkerFire = Math.pow(bcfg.fire, stacks);
     st.player.berserkerSpeed = Math.pow(bcfg.speed, stacks);
   }
+  // Transformation "Taktiker" (Phase 5): Zeitlupe, solange eine Kugel
+  // naeher als slowMoRadiusPx am Spieler ist. Werte aus transformations.json.
+  const tx = st.transform || {};
+  let scale = 1;
+  if (tx.slowMoScale && st.player.alive) {
+    const r2 = (tx.slowMoRadiusPx || 64) ** 2;
+    for (const b of st.bullets) {
+      if (b.dead) continue;
+      if ((b.x - st.player.x) ** 2 + (b.y - st.player.y) ** 2 <= r2) {
+        scale = tx.slowMoScale;
+        break;
+      }
+    }
+  }
+  run.slowMo = scale < 1; // nur fuer die Anzeige
+  dt *= scale;
   stepState(st, cmd, dt);
   run.playTime += dt;
   // Notschild-Ladungen aus dem Raumzustand zuruecksynchronisieren, damit
@@ -561,9 +583,39 @@ export function chooseUpgrade(run, index) {
     }
   }
   run.upgradeChoices++;
+  // Phase 5: Tag zaehlen (Stacks einzeln) und ggf. Transformation freischalten.
+  if (!offer.fallback && offer.tag) {
+    run.tagCounts[offer.tag] = (run.tagCounts[offer.tag] || 0) + 1;
+    checkTransformation(run, offer.tag);
+  }
   run.pendingOffers = null;
   run.rewardKind = null;
   afterRoomDone(run); // Tuerwahl oder erzwungener Kampf
+}
+
+// Schaltet die Transformation eines Tags frei, sobald die Schwelle erreicht
+// ist. Definitionen kommen komplett aus data/transformations.json.
+function checkTransformation(run, tag) {
+  const tf = run.data.transformations;
+  if (!tf) return;
+  const threshold = tf.threshold ?? 3;
+  if ((run.tagCounts[tag] || 0) < threshold) return;
+  const def = Object.values(tf.transformations).find((t) => t.tag === tag);
+  if (!def || run.transformations.has(def.id)) return;
+  run.transformations.add(def.id);
+  run.pendingTransformation = def; // main.js zeigt die Einblendung
+}
+
+// Aktive Effektwerte aller freigeschalteten Transformationen (flach).
+// Die Spiellogik fragt nur diese Schalter ab -- keine Zahlen im Code.
+export function transformEffects(run) {
+  const tf = run.data.transformations;
+  const out = {};
+  if (!tf) return out;
+  for (const id of run.transformations) {
+    Object.assign(out, tf.transformations[id]?.effects || {});
+  }
+  return out;
 }
 
 // Nach dem Sieg weiterspielen (Endlos-Modus): Raeume laufen mit weiter

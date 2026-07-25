@@ -58,6 +58,7 @@ export function beginRun({ seed, mode }) {
     bans: [], // { room, id }
     doors: [], // { room, chosen, rejected: [] }  (Phase 4)
     eventChoices: [], // { room, event, option }   (Phase 4)
+    transformations: [], // { room, id }          (Phase 5)
   };
 }
 
@@ -88,6 +89,12 @@ export function recordBan({ room, id }) {
 export function recordDoor({ room, chosen, rejected }) {
   if (!current) return;
   current.doors.push({ room, chosen, rejected: rejected || [] });
+}
+
+// Eine freigeschaltete Transformation (Phase 5).
+export function recordTransformation({ room, id }) {
+  if (!current) return;
+  current.transformations.push({ room, id });
 }
 
 // Eine Event-Entscheidung (Phase 4).
@@ -128,6 +135,7 @@ export function endRun({ won, roomReached, deathCause, deathCauseLabel, enemyTyp
     bans: current.bans,
     doors: current.doors,
     eventChoices: current.eventChoices,
+    transformations: current.transformations,
   };
   const runs = loadRuns();
   runs.push(entry);
@@ -176,6 +184,10 @@ function fmtDoors(r) {
     .join('  ·  ') || '–';
 }
 
+function fmtTransforms(r) {
+  return (r.transformations || []).map((t) => `R${t.room}:${t.id}`).join(', ') || '–';
+}
+
 function fmtEvents(r) {
   return (r.eventChoices || []).map((e) => `${e.event}#${e.option}`).join(', ') || '–';
 }
@@ -215,6 +227,7 @@ function refreshDebugView() {
       fmtBans(r),
       fmtDoors(r),
       fmtEvents(r),
+      fmtTransforms(r),
       fmtRooms(r.rooms),
     ];
     for (const c of cells) {
@@ -294,6 +307,7 @@ export function mountDebugView() {
     'Verbannt',
     'Türen (gewählt ↯abgelehnt)',
     'Events',
+    'Transformationen',
     'Räume (Dauer / Leben / Schrott)',
   ];
   for (const c of cols) {

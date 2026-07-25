@@ -80,6 +80,43 @@ export function createEventScreen() {
   };
 }
 
+// ---- Transformation freigeschaltet (Phase 5) --------------------------
+export function createTransformScreen() {
+  const el = makeOverlay('transform');
+  return {
+    show({ transformation, onClose }) {
+      el.innerHTML = '';
+      const kicker = document.createElement('p');
+      kicker.className = 'tfkicker';
+      kicker.textContent = 'TRANSFORMATION FREIGESCHALTET';
+      el.appendChild(kicker);
+      const sym = document.createElement('div');
+      sym.className = 'tfsymbol';
+      sym.textContent = transformation.symbol || '★';
+      el.appendChild(sym);
+      const h = document.createElement('h1');
+      h.textContent = transformation.name;
+      el.appendChild(h);
+      const p = document.createElement('p');
+      p.className = 'eventtext';
+      p.textContent = transformation.description;
+      el.appendChild(p);
+      const btn = document.createElement('button');
+      btn.className = 'leavebtn';
+      btn.textContent = 'Weiter →';
+      btn.addEventListener('click', () => {
+        el.classList.add('hidden');
+        onClose();
+      });
+      el.appendChild(btn);
+      el.classList.remove('hidden');
+    },
+    hide() {
+      el.classList.add('hidden');
+    },
+  };
+}
+
 // ---- Werkstatt --------------------------------------------------------
 export function createWorkshopScreen() {
   const el = makeOverlay('workshop');

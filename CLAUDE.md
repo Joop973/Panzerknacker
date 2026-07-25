@@ -179,6 +179,28 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
 - `balance.json`: `scrap.eliteMult 2`, `scrap.dropRefund 2` (ersetzt
   `eliteBonus`).
 
+### Phase 5 (Transformationen) — gemergt
+- **`data/transformations.json`** (`threshold: 3`): 5 Transformationen, je an
+  einen Tag gebunden. Bei 3 gewählten Upgrades eines Tags (Stacks zählen
+  **einzeln**) schaltet `checkTransformation` sie frei (`run.tagCounts`,
+  `run.transformations`).
+- **Effekte als klar benannte Schalter** (`transformEffects(run)` →
+  `state.transform`, alle Werte aus der JSON):
+  `pionier` (mine) `ownMinesHarmless` — eigene Minen verletzen nicht mehr;
+  `kavallerie` (mobility) `ramKillsNonElite` — Rammen tötet Gegner **ohne**
+  Affix; `taktiker` (information) `slowMoScale 0.4`/`slowMoRadiusPx 64` —
+  Zeitlupe, solange eine Kugel nah ist (`run.slowMo` fürs UI);
+  `baumeister` (terrain) `wallDurability 2` — Wände überstehen eine
+  Sprengung mehr (`wall.hits`); `saboteur` (control)
+  `stunExplodeRadiusPx 56` — betäubte Gegner explodieren beim Aufwachen.
+- **UI**: Upgrade-Screen zeigt pro Tag einen Zähler (`2/3`, grün bei ✓);
+  Freischaltung als eigenes Overlay (`createTransformScreen`, Symbol + Name
+  + Effekttext), das Vorrang vor den anderen Overlays hat.
+- **Telemetrie**: freigeschaltete Transformationen mit Raumnummer
+  (`recordTransformation`), eigene Spalte in der Debug-Tabelle.
+- Hinweis: Transformationen greifen ab dem **nächsten Kampfraum** (dort wird
+  der State mit den Schaltern gebaut).
+
 ### Balance-Anpassungen (Nutzer-Feedback) — gemergt
 - **Wurfweite −25 %**: `mine.throwPx` 96→72 (Tastatur/Gamepad),
   `MINE_MAX_THROW` 190→142 (Touch-Wurfstick, `touchcontrols.js`).
@@ -212,7 +234,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   (`genRng` = Raumbau, `aiRng` = KI). Gleicher Seed → gleicher Verlauf.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
-  `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`). `balance.json` enthält auch Rarity-Gewichte,
+  `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`, `transformations.json`). `balance.json` enthält auch Rarity-Gewichte,
   `legendary.minRoom` + die `scrap`-Werte; `difficulty.json` die `doors`/
   `elite`/`treasure`-Konfiguration (Phase 4).
   `data/events.json` wird in `main.js` an `tanksData.events` gehängt.
@@ -241,7 +263,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v34`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v35`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`
