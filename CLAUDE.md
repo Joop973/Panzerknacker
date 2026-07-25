@@ -38,8 +38,9 @@ Weiche) und **Phase 1** (Telemetrie v2, Lesbarkeit, Run-Speicherung).
 v2-**Phase 2** (Upgrade-Schema) und **Phase 3** (Schrott) sind inhaltlich schon
 durch die gleichnamigen v1-Phasen abgedeckt (Abweichungen auf Nutzerwunsch:
 `emergency_shield` gibt 1 statt 3 Ladungen je Stufe, Elite-Schrott ist
-`eliteMult: 2` statt `eliteBonus: 3`). **Nächste Phase: Phase 4 — Gerichtete
-Panzerung** (Stufe 1, „die wichtigste Phase des Plans").
+`eliteMult: 2` statt `eliteBonus: 3`). **Phase 4** (gerichtete Panzerung) ist
+gebaut. **Nächste Phase: Phase 5 — Abprallen belohnen** (Trickshot-Belohnung,
+Spiegelwände, Powershot).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes Handy-Vollbild
 (`100dvh` + `viewport-fit=cover`), Grafik-Sprites + App-Icon, diese `CLAUDE.md`.
 
@@ -131,6 +132,40 @@ Alle Werte in **`data/balance.json`** (keine hartkodierten Zahlen im Code):
   Median-Todesraum, Abpraller-Anteil, minFps, nie gewählte und am häufigsten
   abgelehnte Karten. Verdrahtet rein beobachtend in `main.js`; die Spiellogik
   liest nie Telemetriedaten. **Nur bei `?debug=1`** sichtbar/aktiv.
+
+### Phase 4 v2 (Gerichtete Panzerung) — gemergt
+Stufe 1, der USP. Keine zusätzlichen Lebenspunkte — die **Trefferrichtung**
+entscheidet. Logik in **`src/game/armor.js`** (`armorBlocks`, `reflectBullet`,
+`hasWallBounced`, `isLive`), aufgerufen aus der Treffer-Schleife in `state.js`.
+- **Gepanzerter** (`t_armored`, ab Raum 4, 5 Punkte): `armor.arc: 120`,
+  `armor.reflects: true`. Treffer im Frontsektor (gemessen zur **Fahrtrichtung
+  der Wanne**) prallen ab, Seite/Rücken töten — **auch ein Abpraller kommt
+  vorn nicht durch**, beim Gepanzerten zählt nur die Richtung. Eigenes
+  Fahrverhalten `armor_push` (wie `pursue`, aber `turnSpeed 1.1` statt 3.0):
+  eng umkreisen bringt die Flanke, aus der Distanz nicht.
+- **Prisma** (`t_prism`, ab Raum 6, 7 Punkte, `maxPerRoom: 1`):
+  `requiresRicochet: true` — wirft **jeden** direkten Schuss zurück, stirbt nur
+  an einer Kugel mit mindestens einem **Wand**-Abpraller.
+- **`b.wallBounces`** zählt nur Wandabpraller (in `updateBullet`). Eine
+  Reflexion zählt bewusst NICHT mit, sonst könnte man zwei Prismen
+  gegeneinander ausspielen, ohne je eine Bande zu spielen. `isLive(b)` =
+  wallBounces > 0 **oder** reflektiert → so wird die zurückgeworfene Kugel für
+  den Schützen scharf.
+- **E3** (`balance.reflect`): reflektierte Kugeln behalten den Schützen als
+  Besitzer, verlieren alle Abpraller (`ricochetsLeft: 0` → sterben an der
+  nächsten Wand), bekommen `graceS 0.15` Immunität gegen den reflektierenden
+  Panzer und werden **cyan** gezeichnet.
+- **Explosionen ignorieren die Panzerung** (bewusst): sonst wäre ein Prisma
+  für Builds ohne Abpraller (Durchschlag, Streuschuss) gar nicht tötbar.
+- **`maxPerRoom`** in `difficulty.json` deckelt einzelne Gegnertypen pro Raum
+  (`buyEnemies` in `run.js`).
+- **Darstellung**: Gepanzerter = dicker heller Balken im gepanzerten Sektor
+  (dreht mit der Wanne, mit Endstegen); Prisma = rotierender Rautenkranz +
+  Ring. Beide **ohne neue Asset-Dateien**: `sprites.js` hat einen
+  `SPRITE_ALIAS` (`t_armored`→`t_grey`, `t_prism`→`t_teal`), die Identität
+  trägt das Overlay.
+- Frame-Budget: schlechtester Logikschritt mit 8 Gegnern **~1–3 ms** (Budget
+  16,7 ms bei 60 Hz) — Phase 4 kostet nichts Messbares.
 
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
@@ -243,7 +278,9 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `effects.js`/`cfg.js`).
 
 ### Wichtige Dateien
-- `src/game/state.js` — `stepState`, Treffer, Minen, Drohne, Melee, `killTank`.
+- `src/game/state.js` — `stepState`, Treffer, Minen, `killTank`.
+- `src/game/armor.js` — gerichtete Panzerung (Phase 4): `armorBlocks`,
+  `reflectBullet`, `hasWallBounced`, `isLive`.
 - `src/game/tank.js` — Feuern, Minen legen/werfen.
 - `src/game/cfg.js` — Panzer-cfg + alle ~39 Upgrade-Effekte.
 - `src/game/upgradepool.js` — Auswahl-Pool (Tag-Regel, Rarity, maxStacks,
@@ -259,7 +296,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v37`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v38`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`
@@ -276,7 +313,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - Kacheln `tile_{floor,wall,breakable,hole}.png`, Geschosse
   `bullet_{normal,rocket,bounce,tungsten,explosive}.png`.
 - Typen: `player`, `t_brown`, `t_grey`, `t_teal`, `t_yellow`, `t_pink`,
-  `t_green`, `t_purple`, `t_white`, `t_black`.
+  `t_green`, `t_purple`, `t_white`, `t_black`. `t_armored` und `t_prism`
+  haben **keine eigenen Sprites** — `sprites.js` mappt sie über
+  `SPRITE_ALIAS` auf `t_grey`/`t_teal`; ihre Identität ist das
+  Panzerungs-Overlay.
 - Spieler-Glow, Schild-Ring, Ziellinie, Betäubungs-Ring und die
   Unsichtbarkeit des Weißen sind Renderer-Overlays (nicht im Sprite).
 

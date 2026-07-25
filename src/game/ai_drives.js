@@ -48,6 +48,19 @@ function wander(tank, state, dt) {
   return steer(tank, state, dt, ai.wanderTarget, cfg);
 }
 
+// t_armored: schiebt sich stur auf den Spieler zu, dreht die Wanne dabei
+// aber bewusst TRAEGE (eigene turnSpeed in tanks.json). Genau daraus
+// entsteht die Entscheidung der Phase 4: eng umkreisen und die
+// ungepanzerte Flanke erwischen -- oder eine Bande spielen.
+function armorPush(tank, state, dt) {
+  const cfg = state.data.ai.drive.armor_push;
+  const p = state.player;
+  const target = p.alive
+    ? Math.atan2(p.y - tank.y, p.x - tank.x)
+    : (tank.ai.driveAngle ?? 0);
+  return steer(tank, state, dt, target, cfg);
+}
+
 // t_pink: offensiv, verfolgt den Spieler direkt.
 function pursue(tank, state, dt) {
   const cfg = state.data.ai.drive.pursue;
@@ -197,6 +210,7 @@ export const DRIVES = {
   none,
   wander,
   pursue,
+  armor_push: armorPush,
   evade,
   hunt,
   purple_pack: purplePack,

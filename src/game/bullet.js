@@ -55,6 +55,10 @@ export function createBullet(
     owner, // Referenz auf den Schuetzen (fuer den 80-ms-Schutz)
     age: 0, // s seit Abschuss
     distance: 0, // px zurueckgelegter Weg (E4: Wegbudget statt Zeit)
+    wallBounces: 0, // Abpraller an WAENDEN (Phase 4: zaehlt fuer Prisma)
+    reflected: false, // von einer Panzerung zurueckgeworfen (E3)
+    reflectImmune: null, // Panzer, der sie zurueckwarf (kurz unverwundbar)
+    reflectImmuneT: 0, // Restzeit dieses Fensters
     dead: false,
     trail: [], // letzte Positionen, nur fuers Debug-Overlay
   };
@@ -165,6 +169,7 @@ export function updateBullet(b, state, dt) {
   b.prevX = b.x;
   b.prevY = b.y;
   b.age += dt;
+  if (b.reflectImmuneT > 0) b.reflectImmuneT = Math.max(0, b.reflectImmuneT - dt);
 
 
   if (b.homing > 0) applyHoming(b, state, dt);
@@ -204,6 +209,7 @@ export function updateBullet(b, state, dt) {
     const firstBounce = b.ricochetsLeft === b.ricochetsStart;
     state.sounds?.push(firstBounce ? 'tick' : 'bounce');
     b.ricochetsLeft--;
+    b.wallBounces++; // nur WAND-Abpraller (Phase 4: toeten das Prisma)
   }
 
   b.trail.push({ x: b.x, y: b.y });

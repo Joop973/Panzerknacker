@@ -26,6 +26,9 @@ export function resolveCfg(data, type) {
     avoidMines: t.avoidMines || false,
     miner: t.miner,
     trackStampPx: t.trackStampPx || 3,
+    // Gerichtete Panzerung (Phase 4) -- reine Datenuebernahme.
+    armor: t.armor || null,
+    requiresRicochet: t.requiresRicochet || false,
   };
 }
 
