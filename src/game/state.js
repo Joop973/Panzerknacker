@@ -245,86 +245,6 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
   }
 }
 
-// Nahkampf: Rammklinge (Kontakt in Fahrt toetet) + Klingenkranz
-// (rotierende Klingen toeten bei Beruehrung).
-function applyMelee(state, dt) {
-  const p = state.player;
-  if (!p.alive) return;
-  // Rammklinge (Upgrade) bzw. Transformation "Kavallerie" (Phase 5):
-  // Kavallerie toetet beim Rammen nur Gegner OHNE Elite-Affix.
-  const kavallerie = !!state.transform.ramKillsNonElite;
-  const ramProtect = p.cfg.ram || state.transform.ramProtectS || 0;
-  if ((p.cfg.ram || kavallerie) && Math.hypot(p.vx, p.vy) > p.cfg.speed * 0.4) {
-    for (const t of state.tanks) {
-      if (t === p || !t.alive) continue;
-      // Ohne Rammklinge-Upgrade greift Kavallerie nur bei Gegnern ohne Affix.
-      if (!p.cfg.ram && t.affix) continue;
-      if (circlesOverlap(p.x, p.y, p.cfg.radius + 2, t.x, t.y, t.cfg.radius)) {
-        p.protect = Math.max(p.protect, ramProtect); // kurz geschuetzt
-        state.killTank(t, 'die Rammklinge');
-      }
-    }
-  }
-  // Klingenkranz: n Klingen umkreisen den Spieler.
-  if (p.cfg.blades) {
-    p.bladeAngle = (p.bladeAngle || 0) + p.cfg.bladeSpin * dt;
-    for (let i = 0; i < p.cfg.blades; i++) {
-      const a = p.bladeAngle + (i / p.cfg.blades) * Math.PI * 2;
-      const bx = p.x + Math.cos(a) * p.cfg.bladeOrbit;
-      const by = p.y + Math.sin(a) * p.cfg.bladeOrbit;
-      for (const t of state.tanks) {
-        if (t === p || !t.alive) continue;
-        if (circlesOverlap(bx, by, 6, t.x, t.y, t.cfg.radius)) {
-          state.killTank(t, 'der Klingenkranz');
-        }
-      }
-    }
-  }
-}
-
-// Kampfdrohne: umkreist den Spieler und feuert selbst auf den naechsten
-// Gegner (deterministisch: fester Drehwinkel, naechstes Ziel nach Distanz).
-function updateDrone(state, dt) {
-  const p = state.player;
-  const d = p.cfg.drone;
-  if (!d || !p.alive) return;
-  if (p.droneAngle === undefined) {
-    p.droneAngle = 0;
-    p.droneCd = d.intervalS;
-  }
-  p.droneAngle += 1.5 * dt;
-  const dx = p.x + Math.cos(p.droneAngle) * d.orbitPx;
-  const dy = p.y + Math.sin(p.droneAngle) * d.orbitPx;
-  p.droneX = dx;
-  p.droneY = dy;
-  p.droneCd -= dt;
-  if (p.droneCd > 0) return;
-  let best = null;
-  let bestDist = Infinity;
-  for (const t of state.tanks) {
-    if (t === p || !t.alive) continue;
-    const dd = (t.x - dx) ** 2 + (t.y - dy) ** 2;
-    if (dd < bestDist) {
-      bestDist = dd;
-      best = t;
-    }
-  }
-  if (!best) return;
-  p.droneCd = d.intervalS;
-  const a = Math.atan2(best.y - dy, best.x - dx);
-  state.bullets.push(
-    createBullet(dx, dy, a, {
-      speed: d.bulletSpeed,
-      radius: state.data.physics.bulletRadius,
-      ricochets: 0,
-      owner: p,
-      kind: 'bullet',
-      friendly: true, // Drohnenkugeln treffen den Spieler nie
-    }),
-  );
-  state.flashes.push({ x: dx, y: dy, age: 0 });
-}
-
 // Raum-Neustart nach Spielertod (Spec Abschnitt 8): identisches Layout,
 // getoetete Gegner bleiben tot, lebende starten auf ihren urspruenglichen
 // Spawns; Geschosse und Minen werden entfernt; zerstoerte Waende bleiben
@@ -399,7 +319,6 @@ export function stepState(state, cmd, dt) {
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
     if (cmd.fire) fireBullet(p, state);
     if (cmd.mine) layMine(p, state, cmd.mineThrow);
-    applyMelee(state, dt); // Rammklinge + Klingenkranz
   }
 
   // Gegner: getrennte Turm-/Fahr-KI liefert Bewegung, Schuss- und
@@ -466,7 +385,6 @@ export function stepState(state, cmd, dt) {
     }
   }
 
-  updateDrone(state, dt);
   updateMines(state, dt);
   updateTraps(state, dt);
 

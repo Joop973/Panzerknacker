@@ -444,32 +444,6 @@ export function createRenderer(ctx) {
       if (minePreview) drawMinePreview(ctx, state, minePreview);
       drawWalls(state.walls);
       for (const t of state.tanks) drawTank(state, t, alpha);
-      // Klingenkranz.
-      const pl = state.player;
-      if (pl.cfg.blades && pl.alive) {
-        ctx.fillStyle = '#d0d8e0';
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 1;
-        for (let i = 0; i < pl.cfg.blades; i++) {
-          const a = (pl.bladeAngle || 0) + (i / pl.cfg.blades) * Math.PI * 2;
-          const bx = pl.x + Math.cos(a) * pl.cfg.bladeOrbit;
-          const by = pl.y + Math.sin(a) * pl.cfg.bladeOrbit;
-          ctx.beginPath();
-          ctx.arc(bx, by, 5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-        }
-      }
-      // Kampfdrohne.
-      if (state.player.cfg.drone && state.player.alive && state.player.droneX !== undefined) {
-        ctx.fillStyle = '#8ecaf0';
-        ctx.strokeStyle = '#1a3050';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(state.player.droneX, state.player.droneY, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      }
       drawRadar(ctx, state);
       drawBullets(state.bullets, alpha);
       drawFlashes(ctx, state);

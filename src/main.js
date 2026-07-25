@@ -19,19 +19,12 @@ import {
   banOffer,
   buyFourthCard,
   buyShieldCharge,
-  pickDoor,
   dropUpgrade,
   leaveWorkshop,
   chooseEventOption,
-  ROOM_TYPE_INFO,
 } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
-import {
-  createDoorScreen,
-  createEventScreen,
-  createWorkshopScreen,
-  createTransformScreen,
-} from './ui/roomscreens.js';
+import { createEventScreen, createWorkshopScreen } from './ui/roomscreens.js';
 import { validateArenas } from './game/generator.js';
 import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
@@ -77,7 +70,7 @@ async function init() {
   tanksData.balance = balanceData;
   tanksData.events = eventsData; // Phase 4: Event-Raeume (run.data.events)
   tanksData.arenas = arenasData; // Phase 0b: feste Layouts (Arena-Weiche)
-  tanksData.transformations = transformData; // Phase 5: Transformationen
+  tanksData.transformations = transformData; // Definitionen fuer Phase 17
   // Feste Layouts EINMALIG beim Laden pruefen (Flood-Fill etc.). Ein
   // unloesbares Layout meldet sich hier mit klarer Meldung statt spaeter
   // im laufenden Spiel.
@@ -125,10 +118,8 @@ async function init() {
   const debugOverlay = createDebugOverlay(ctx);
   const hud = createHud(ctx);
   const upgradeScreen = createUpgradeScreen();
-  const doorScreen = createDoorScreen();
   const eventScreen = createEventScreen();
   const workshopScreen = createWorkshopScreen();
-  const transformScreen = createTransformScreen();
   const preview = createPreview();
   const pause = createPause();
   const tutorial = createTutorial(getFlag('tutorial_seen'));
@@ -136,10 +127,8 @@ async function init() {
   let run = null;
   let lastRoomState = null;
   let upgradeShown = false;
-  let doorShown = false;
   let eventShown = false;
   let workshopShown = false;
-  let transformShown = false;
   let previewShown = false;
   let toast = null;
   let lastSeed = 0;
@@ -244,16 +233,12 @@ async function init() {
   function hideRoomScreens() {
     upgradeScreen.hide();
     preview.hide();
-    doorScreen.hide();
     eventScreen.hide();
     workshopScreen.hide();
-    transformScreen.hide();
     upgradeShown = false;
     previewShown = false;
-    doorShown = false;
     eventShown = false;
     workshopShown = false;
-    transformShown = false;
   }
 
   function startRun() {
@@ -367,18 +352,6 @@ async function init() {
               : null,
         getOffers: () => run.pendingOffers,
         getScrap: () => run.scrap,
-        // Phase 5: Fortschritt je Tag (nur Tags mit Transformation).
-        getTagProgress: () => {
-          const tf = transformData.transformations;
-          const th = transformData.threshold ?? 3;
-          return Object.values(tf).map((d) => ({
-            tag: d.tag,
-            name: d.name,
-            count: Math.min(run.tagCounts[d.tag] || 0, th),
-            threshold: th,
-            done: run.transformations.has(d.id),
-          }));
-        },
         canFourth: () => run.pendingOffers.length < 4,
         onPick: (idx) => {
           // Telemetrie: gewaehlte Karte + abgelehnte Alternativen (id + tag).
@@ -413,40 +386,6 @@ async function init() {
           const ok = buyShieldCharge(run);
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shieldCharge', amount: costs.shieldCharge });
           return ok;
-        },
-      });
-    }
-
-    // Transformation freigeschaltet (Phase 5): deutliche Einblendung. Hat
-    // Vorrang vor den anderen Overlays, damit sie nicht verdeckt wird.
-    if (run.pendingTransformation && !transformShown) {
-      transformShown = true;
-      const tf = run.pendingTransformation;
-      telemetry.recordTransformation({ room: run.roomIndex, id: tf.id });
-      transformScreen.show({
-        transformation: tf,
-        onClose: () => {
-          run.pendingTransformation = null;
-          transformShown = false;
-        },
-      });
-    }
-
-    // Türwahl nach einem erledigten Raum (Phase 4).
-    if (run.phase === 'door' && !doorShown) {
-      doorShown = true;
-      const offers = run.doorOffers;
-      const targetRoom = run.roomIndex + 1;
-      doorScreen.show({
-        offers,
-        onPick: (idx) => {
-          telemetry.recordDoor({
-            room: targetRoom,
-            chosen: offers[idx].type,
-            rejected: offers.filter((_, i) => i !== idx).map((o) => o.type),
-          });
-          pickDoor(run, idx);
-          doorShown = false;
         },
       });
     }

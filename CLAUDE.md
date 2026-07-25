@@ -148,58 +148,24 @@ viele Upgrades. Zuletzt gemergt (PRs #9–#12):
 - **Endlosmodus-Fix**: nur ein NEU auf dem Endscreen begonnener Tipp führt
   ins Menü (der spielbeendende Tipp löste sonst sofort `backToStart`).
 
-### Phase 4 (Türwahl + Raumtypen) — gemergt
-- **Türwahl** nach jedem geräumten Raum (ab Raum 4): zwei Türen mit Typ +
-  Symbol (`src/ui/roomscreens.js` `createDoorScreen`), ersetzt den
-  automatischen Übergang. Verteilung aus `difficulty.json` (`doors.weights`,
-  `doors.firstDoorRoom`). Regeln in `run.js` `rollDoors`: nie zwei gleiche
-  Typen; Raum 1–3 + Finalraum immer `combat`; `treasure` gesperrt bei ≤1
-  Leben; `event`/`workshop` nicht zweimal hintereinander. `combat`+`elite`
-  nie gesperrt → keine Sackgasse (40 Seeds getestet).
-- **Raumtypen** (`run.js` `startRoom(type)`): `combat` (Standard); `elite`
-  (Budget ×`elite.budgetMult`, 1 Affix auf alle Gegner, doppelter Schrott
-  `scrap.eliteMult`, Belohnung aus Tag `elite`); `treasure` (kein Kampf,
-  −1 Leben, 1 garantiertes Legendär); `workshop` (kein Kampf, Schrott
-  ausgeben + Upgrade ablegen `dropUpgrade`); `event` (kein Kampf, Text-
-  entscheidung aus `data/events.json`). Nicht-Kampf-Räume bauen keine neue
-  Arena (der geräumte Vorraum bleibt Kulisse hinter dem Overlay).
-- **Fluss**: `afterRoomDone` entscheidet Tür vs. erzwungener Kampf;
-  `pickDoor`/`chooseEventOption`/`leaveWorkshop` treiben weiter.
-  `chooseUpgrade` endet jetzt in `afterRoomDone` (statt direkt nächster Raum).
-- **Elite-Affixe** (`difficulty.elite.affixes`): `gepanzert` (Gegnerschild,
-  fängt 1 Treffer — neue Enemy-Schild-Logik in `killTank`), `rasend`
-  (Tempo ×1.35), `brandstifter` (+2 Minen). Gegner tragen `tank.affix`
-  (Marker für Phase 5 „Gegner ohne Elite-Affix").
-- **Elite-Karten** (Tag `elite`, nur aus Eliteräumen): `beutepanzer`
-  (Kampfdrohne), `trophaee` (+1 Schildladung dauerhaft, `maxStacks 3`),
-  `kriegsmaschine` (+2 Magazin, schnellere Nachladung). Pool-Filter in
-  `upgradepool.js` (`includeTag`/`onlyRarity`/`bypassRoomGate`/`ignoreTagRule`).
-- **Telemetrie**: Türtyp gewählt+abgelehnt pro Raum, Event-Entscheidungen;
-  Debug-Tabelle zeigt Türen + Events.
-- `balance.json`: `scrap.eliteMult 2`, `scrap.dropRefund 2` (ersetzt
-  `eliteBonus`).
-
-### Phase 5 (Transformationen) — gemergt
-- **`data/transformations.json`** (`threshold: 3`): 5 Transformationen, je an
-  einen Tag gebunden. Bei 3 gewählten Upgrades eines Tags (Stacks zählen
-  **einzeln**) schaltet `checkTransformation` sie frei (`run.tagCounts`,
-  `run.transformations`).
-- **Effekte als klar benannte Schalter** (`transformEffects(run)` →
-  `state.transform`, alle Werte aus der JSON):
-  `pionier` (mine) `ownMinesHarmless` — eigene Minen verletzen nicht mehr;
-  `kavallerie` (mobility) `ramKillsNonElite` — Rammen tötet Gegner **ohne**
-  Affix; `taktiker` (information) `slowMoScale 0.4`/`slowMoRadiusPx 64` —
-  Zeitlupe, solange eine Kugel nah ist (`run.slowMo` fürs UI);
-  `baumeister` (terrain) `wallDurability 2` — Wände überstehen eine
-  Sprengung mehr (`wall.hits`); `saboteur` (control)
-  `stunExplodeRadiusPx 56` — betäubte Gegner explodieren beim Aufwachen.
-- **UI**: Upgrade-Screen zeigt pro Tag einen Zähler (`2/3`, grün bei ✓);
-  Freischaltung als eigenes Overlay (`createTransformScreen`, Symbol + Name
-  + Effekttext), das Vorrang vor den anderen Overlays hat.
-- **Telemetrie**: freigeschaltete Transformationen mit Raumnummer
-  (`recordTransformation`), eigene Spalte in der Debug-Tabelle.
-- Hinweis: Transformationen greifen ab dem **nächsten Kampfraum** (dort wird
-  der State mit den Schaltern gebaut).
+### Rückbau nach PLAN.md v2 (E5) — gemergt
+`PLAN.md` v2 ersetzt v1 und verwirft mehrere bereits gebaute Mechaniken.
+Zurückgebaut wurde:
+- **Begleiter**: `kampfdrohne`, `klingenkranz`, `beutepanzer` entfernt
+  (Karten + `cfg.drone`/`cfg.blades` + `updateDrone` + Rendering).
+- **Rammen/Kontaktschaden**: `rammklinge` entfernt, `applyMelee` gelöscht.
+- **Türwahl mit zwei Türen**: ersetzt durch geseedete automatische Wahl des
+  nächsten Raumtyps (`rollNextType`). Die **Raumtypen bleiben** (combat,
+  elite, treasure, workshop, event) — v2 nutzt sie als Knotentypen in
+  Phase 12. `pickDoor`, `doorOffers` und das Tür-Overlay sind weg.
+- **Transformationen**: auf Phase 17 verschoben und stillgelegt.
+  `run.tagCounts` zählt weiter (Telemetrie), `data/transformations.json`
+  bleibt als Definition für Phase 17. Freischaltung + Overlay + Tag-Zähler
+  im Upgrade-Screen sind ausgebaut.
+- **Tags auf das v2-Schema**: `pact`, `companion` und `mine` gestrichen.
+  Umgehängt: sprengmunition/streumine→`reactive`, glaskanone→`scaling`,
+  kettenglied/sprengkraft→`stat`, fernzuender/annaeherungsmine/klebemine→`control`.
+  39 Karten, alle Tags gültig.
 
 ### Balance-Anpassungen (Nutzer-Feedback) — gemergt
 - **Wurfweite −25 %**: `mine.throwPx` 96→72 (Tastatur/Gamepad),
@@ -253,7 +219,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/game/upgradepool.js` — Auswahl-Pool (Tag-Regel, Rarity, maxStacks,
   requires, minRoom; Phase 4: includeTag/onlyRarity/bypassRoomGate/
   ignoreTagRule für Elite-/Treasure-Belohnungen); von `run.js` genutzt.
-- `src/ui/roomscreens.js` — Tür-, Event-, Werkstatt-Overlays (Phase 4).
+- `src/ui/roomscreens.js` — Event- und Werkstatt-Overlays.
 - `src/render/renderer.js` — zeichnet alles (interpoliert). Nutzt Sprites,
   fällt auf prozedurale Formen zurück, falls Grafik fehlt/lädt.
 - `src/render/sprites.js` — lädt die PNG-Sprites (async, mit Fallback).
@@ -263,7 +229,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v35`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v36`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`
