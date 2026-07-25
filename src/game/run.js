@@ -17,7 +17,7 @@ import { rollOffers as rollFromPool, drawOne } from './upgradepool.js';
 const TRANSITION_S = 1.5;
 const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
 
-// Raumtyp -> Anzeige (Tuer-Overlay). Symbole sind DOM-Emojis.
+// Raumtyp -> Anzeige (Raumvorschau). Symbole sind DOM-Emojis.
 export const ROOM_TYPE_INFO = {
   combat: { name: 'Kampf', symbol: '⚔️', desc: 'Ein normaler Gefechtsraum.' },
   elite: { name: 'Elite', symbol: '★', desc: 'Härtere Gegner mit Affix · doppelter Schrott · Elite-Belohnung.' },
@@ -185,8 +185,12 @@ function afterRoomDone(run) {
     startRoom(run, 'combat');
     return;
   }
-  run.doorOffers = rollDoors(run);
-  run.phase = 'door';
+  // PLAN.md v2 E5: Die Wahl aus zwei Tueren ist verworfen ("bot nur
+  // Vorteile, war keine Entscheidung") -- sie wird in Phase 12 durch die
+  // Karte ersetzt. Bis dahin bestimmt der Seed den naechsten Raumtyp.
+  run.prevRoomType = run.roomType;
+  run.roomIndex = next;
+  startRoom(run, rollNextType(run));
 }
 
 function weightedType(list, weights, rng) {
@@ -200,10 +204,10 @@ function weightedType(list, weights, rng) {
   return list[list.length - 1];
 }
 
-// Zwei verschiedene Tuertypen. Regeln: nie zwei gleiche; treasure gesperrt
-// bei zu wenig Leben; event/workshop nicht zweimal hintereinander. combat und
-// elite sind nie gesperrt -> es gibt immer >= 2 Optionen (keine Sackgasse).
-function rollDoors(run) {
+// Naechster Raumtyp, geseedet. Regeln wie bisher: treasure gesperrt bei zu
+// wenig Leben; event/workshop nicht zweimal hintereinander. combat und elite
+// sind nie gesperrt -> es gibt immer einen gueltigen Typ.
+function rollNextType(run) {
   const diff = run.difficulty;
   const w = diff.doors.weights;
   const cur = run.roomType;
@@ -213,21 +217,7 @@ function rollDoors(run) {
     if (t === 'workshop' && cur === 'workshop') return false;
     return true;
   });
-  const first = weightedType(types, w, run.rng.doors);
-  const second = weightedType(types.filter((t) => t !== first), w, run.rng.doors);
-  return [{ type: first }, { type: second }];
-}
-
-// Vom Tuer-Overlay aufgerufen. Gibt den gewaehlten Typ zurueck (Telemetrie).
-export function pickDoor(run, index) {
-  if (run.phase !== 'door' || !run.doorOffers) return null;
-  const chosen = run.doorOffers[index];
-  if (!chosen) return null;
-  run.prevRoomType = run.roomType;
-  run.roomIndex++;
-  run.doorOffers = null;
-  startRoom(run, chosen.type);
-  return chosen.type;
+  return weightedType(types, w, run.rng.doors);
 }
 
 // Werkstatt: ein bereits gewaehltes Upgrade gegen Schrott ablegen (eine Stufe).
@@ -296,11 +286,9 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     // --- Phase 5: Transformationen ---
     tagCounts: {}, // {tag: Anzahl gewaehlter Upgrades} -- Stacks zaehlen einzeln
     transformations: new Set(), // freigeschaltete Transformations-ids
-    pendingTransformation: null, // fuer die Freischalt-Einblendung (main.js)
     roomSpec: opts.roomSpec || null, // { fixedLayout } -> Arena-Weiche
     roomType: 'combat', // Typ des aktuellen Raums
     prevRoomType: null, // Typ des Vorraums (Regel: event/workshop nicht 2x)
-    doorOffers: null, // [{type},{type}] waehrend phase 'door'
     currentEvent: null, // aktives Event waehrend phase 'event'
     rewardKind: null, // 'normal' | 'elite' | 'treasure' fuer den Belohnungspool
     roomAffix: null, // Name des Elite-Affix (nur Eliteraeume)
@@ -317,7 +305,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     deaths: 0,
     roomsCleared: 0,
     playTime: 0, // s aktive Spielzeit
-    // 'preview'|'transition'|'playing'|'upgrade'|'door'|'workshop'|'event'|
+    // 'preview'|'transition'|'playing'|'upgrade'|'workshop'|'event'|
     // 'gameover'|'victory'
     phase: 'transition',
     transitionTimer: TRANSITION_S,
@@ -583,37 +571,22 @@ export function chooseUpgrade(run, index) {
     }
   }
   run.upgradeChoices++;
-  // Phase 5: Tag zaehlen (Stacks einzeln) und ggf. Transformation freischalten.
+  // Tags weiter zaehlen (Telemetrie + spaeter Phase 17). Die Freischaltung
+  // selbst ist nach PLAN.md v2 auf Phase 17 verschoben und hier stillgelegt.
   if (!offer.fallback && offer.tag) {
     run.tagCounts[offer.tag] = (run.tagCounts[offer.tag] || 0) + 1;
-    checkTransformation(run, offer.tag);
   }
   run.pendingOffers = null;
   run.rewardKind = null;
   afterRoomDone(run); // Tuerwahl oder erzwungener Kampf
 }
 
-// Schaltet die Transformation eines Tags frei, sobald die Schwelle erreicht
-// ist. Definitionen kommen komplett aus data/transformations.json.
-function checkTransformation(run, tag) {
-  const tf = run.data.transformations;
-  if (!tf) return;
-  const threshold = tf.threshold ?? 3;
-  if ((run.tagCounts[tag] || 0) < threshold) return;
-  const def = Object.values(tf.transformations).find((t) => t.tag === tag);
-  if (!def || run.transformations.has(def.id)) return;
-  run.transformations.add(def.id);
-  run.pendingTransformation = def; // main.js zeigt die Einblendung
-}
-
-// Aktive Effektwerte aller freigeschalteten Transformationen (flach).
-// Die Spiellogik fragt nur diese Schalter ab -- keine Zahlen im Code.
+// Transformations-Schalter (Phase 17). Bis dahin bewusst leer -- die
+// Definitionen in data/transformations.json warten dort auf ihre Phase.
 export function transformEffects(run) {
-  const tf = run.data.transformations;
   const out = {};
-  if (!tf) return out;
   for (const id of run.transformations) {
-    Object.assign(out, tf.transformations[id]?.effects || {});
+    Object.assign(out, run.data.transformations?.transformations[id]?.effects || {});
   }
   return out;
 }

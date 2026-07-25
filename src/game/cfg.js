@@ -122,14 +122,8 @@ export function applyUpgrades(cfg, ups, upsData) {
     cfg.bloodlustIframe = U.blutrausch.iframeS; // kurzes Unverwundbarkeits-Fenster
   }
 
-  // --- 5 innovative Upgrades ---
-  if (l('kampfdrohne')) {
-    cfg.drone = {
-      intervalS: U.kampfdrohne.intervalS,
-      orbitPx: U.kampfdrohne.orbitPx,
-      bulletSpeed: U.kampfdrohne.bulletSpeed,
-    };
-  }
+  // Begleiter (Drohne) und Nahkampf (Rammklinge/Klingenkranz) sind nach
+  // PLAN.md v2 E5 verworfen -- automatischer Schaden entwertet das Zielen.
   if (l('schrapnell')) {
     cfg.schrapnell = U.schrapnell.count;
     cfg.schrapnellSpeed = U.schrapnell.bulletSpeed;
@@ -150,24 +144,10 @@ export function applyUpgrades(cfg, ups, upsData) {
 
   // --- Neue Combo-Achsen ---
   if (l('turbo')) cfg.speed *= U.turbo.speedMult; // extreme Geschwindigkeit
-  if (l('rammklinge')) cfg.ram = U.rammklinge.protectS; // Nahkampf: Rammen
-  if (l('klingenkranz')) {
-    cfg.blades = U.klingenkranz.count;
-    cfg.bladeOrbit = U.klingenkranz.orbitPx;
-    cfg.bladeSpin = U.klingenkranz.spinRate;
-  }
   if (l('uebermacht')) cfg.magazinePerEnemy = U.uebermacht.perEnemy;
   if (l('klebemine')) cfg.stickyMine = U.klebemine.stickDelayS;
 
   // --- Elite-Karten (Phase 4, nur aus Eliteräumen) ---
-  // Beutepanzer: Kampfdrohne (nur wenn nicht schon vorhanden).
-  if (l('beutepanzer') && !cfg.drone) {
-    cfg.drone = {
-      intervalS: U.beutepanzer.intervalS,
-      orbitPx: U.beutepanzer.orbitPx,
-      bulletSpeed: U.beutepanzer.bulletSpeed,
-    };
-  }
   // Kriegsmaschine: mehr Magazin + schnellere Nachladung.
   if (l('kriegsmaschine')) {
     cfg.magazine += U.kriegsmaschine.magazineBonus;

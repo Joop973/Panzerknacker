@@ -1,8 +1,6 @@
-// Raum-Overlays (Phase 4): Türwahl, Ereignis, Werkstatt.
+// Raum-Overlays: Ereignis und Werkstatt.
 // HTML-Overlays wie der Upgrade-Screen. Die Spiellogik (run.js) liefert
 // Daten und Callbacks; diese Module rendern nur.
-
-import { ROOM_TYPE_INFO } from '../game/run.js';
 
 function makeOverlay(id) {
   const el = document.createElement('div');
@@ -10,40 +8,6 @@ function makeOverlay(id) {
   el.id = id;
   document.body.appendChild(el);
   return el;
-}
-
-// ---- Türwahl ----------------------------------------------------------
-export function createDoorScreen() {
-  const el = makeOverlay('door');
-  return {
-    show({ offers, onPick }) {
-      el.innerHTML = '';
-      const h = document.createElement('h1');
-      h.textContent = 'Wähle eine Tür';
-      el.appendChild(h);
-      const row = document.createElement('div');
-      row.className = 'doors';
-      offers.forEach((o, i) => {
-        const info = ROOM_TYPE_INFO[o.type] || { name: o.type, symbol: '?', desc: '' };
-        const btn = document.createElement('button');
-        btn.className = 'doorcard';
-        btn.dataset.type = o.type;
-        btn.innerHTML =
-          `<span class="doorsym">${info.symbol}</span>` +
-          `<strong>${info.name}</strong><span>${info.desc}</span>`;
-        btn.addEventListener('click', () => {
-          el.classList.add('hidden');
-          onPick(i);
-        });
-        row.appendChild(btn);
-      });
-      el.appendChild(row);
-      el.classList.remove('hidden');
-    },
-    hide() {
-      el.classList.add('hidden');
-    },
-  };
 }
 
 // ---- Ereignis ---------------------------------------------------------
@@ -72,43 +36,6 @@ export function createEventScreen() {
         row.appendChild(btn);
       });
       el.appendChild(row);
-      el.classList.remove('hidden');
-    },
-    hide() {
-      el.classList.add('hidden');
-    },
-  };
-}
-
-// ---- Transformation freigeschaltet (Phase 5) --------------------------
-export function createTransformScreen() {
-  const el = makeOverlay('transform');
-  return {
-    show({ transformation, onClose }) {
-      el.innerHTML = '';
-      const kicker = document.createElement('p');
-      kicker.className = 'tfkicker';
-      kicker.textContent = 'TRANSFORMATION FREIGESCHALTET';
-      el.appendChild(kicker);
-      const sym = document.createElement('div');
-      sym.className = 'tfsymbol';
-      sym.textContent = transformation.symbol || '★';
-      el.appendChild(sym);
-      const h = document.createElement('h1');
-      h.textContent = transformation.name;
-      el.appendChild(h);
-      const p = document.createElement('p');
-      p.className = 'eventtext';
-      p.textContent = transformation.description;
-      el.appendChild(p);
-      const btn = document.createElement('button');
-      btn.className = 'leavebtn';
-      btn.textContent = 'Weiter →';
-      btn.addEventListener('click', () => {
-        el.classList.add('hidden');
-        onClose();
-      });
-      el.appendChild(btn);
       el.classList.remove('hidden');
     },
     hide() {
