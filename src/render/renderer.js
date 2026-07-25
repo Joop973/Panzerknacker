@@ -65,6 +65,9 @@ export const TANK_COLORS = {
   t_purple: '#8a5ad4',
   t_white: '#e8e8e8',
   t_black: '#33333c',
+
+  t_armored: '#9aa6b4', // Stahl -- der dicke Frontbalken traegt die Lesbarkeit
+  t_prism: '#b8ecff', // Prisma -- eigene Silhouette (Rautenkranz)
 };
 
 // Geschossfarben je Waffe.
@@ -193,6 +196,71 @@ export function createRenderer(ctx) {
         ctx.lineWidth = 1;
         ctx.stroke();
       }
+    }
+  }
+
+  // Panzerungsanzeige (Phase 4). Zwei klar verschiedene Sprachen:
+  //   Frontpanzerung -> dicker Balken im gepanzerten Sektor, dreht mit der
+  //     Wanne. Wo der Balken ist, prallt es ab.
+  //   Prisma -> rotierender Rautenkranz (eigene Silhouette, nicht nur eine
+  //     andere Farbe) plus geschlossener Ring: rundum dicht.
+  function drawArmor(state, t, x, y, r) {
+    const armor = t.cfg.armor;
+    if (!armor) return;
+
+    if (t.cfg.requiresRicochet) {
+      const spin = state.time * 0.8;
+      const R = r + 9;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(spin);
+      ctx.strokeStyle = '#0d1b22';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const px = Math.cos(a) * R;
+        const py = Math.sin(a) * R;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.strokeStyle = '#7fe6ff';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(127,230,255,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 3, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
+
+    const arc = armor.arc;
+    if (!arc) return;
+    const half = (arc * Math.PI) / 360;
+    const R = r + 5;
+    ctx.beginPath();
+    ctx.arc(x, y, R, t.heading - half, t.heading + half);
+    ctx.strokeStyle = '#12161c';
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, R, t.heading - half, t.heading + half);
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    // Zwei kurze Stege an den Kanten: markieren, wo die Panzerung endet.
+    ctx.strokeStyle = '#12161c';
+    ctx.lineWidth = 2;
+    for (const s of [-1, 1]) {
+      const a = t.heading + s * half;
+      ctx.beginPath();
+      ctx.moveTo(x + Math.cos(a) * (R - 4), y + Math.sin(a) * (R - 4));
+      ctx.lineTo(x + Math.cos(a) * (R + 4), y + Math.sin(a) * (R + 4));
+      ctx.stroke();
     }
   }
 
@@ -344,6 +412,11 @@ export function createRenderer(ctx) {
       ctx.restore();
     }
 
+    // --- Gerichtete Panzerung (Phase 4) ---------------------------------
+    // Muss auf einem Handydisplay in einer Sekunde lesbar sein, deshalb
+    // bewusst zu deutlich: dicker Balken bzw. eigener Rautenkranz.
+    drawArmor(state, t, x, y, r);
+
     // Krallenfalle: gefangener Panzer bekommt einen pulsierenden Ring.
     if (t.stunTimer > 0) {
       ctx.strokeStyle = '#c25a4a';
@@ -373,13 +446,15 @@ export function createRenderer(ctx) {
       }
 
       // Nach dem ersten Abpraller wird die Kugel gefaehrlich (auch fuer
-      // den Spieler) -> heller Glow als Warnung.
-      if (b.ricochetsLeft < b.ricochetsStart) {
+      // den Spieler) -> heller Glow als Warnung. Von einer Panzerung
+      // zurueckgeworfene Kugeln (E3) bekommen einen eigenen kalten Glow --
+      // sie kommen direkt zurueck und sterben an der naechsten Wand.
+      if (b.reflected || b.wallBounces > 0) {
         ctx.save();
-        ctx.globalAlpha = 0.45;
-        ctx.fillStyle = '#fff2c0';
+        ctx.globalAlpha = b.reflected ? 0.6 : 0.45;
+        ctx.fillStyle = b.reflected ? '#7fe6ff' : '#fff2c0';
         ctx.beginPath();
-        ctx.arc(x, y, b.radius + 4, 0, Math.PI * 2);
+        ctx.arc(x, y, b.radius + (b.reflected ? 5 : 4), 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -401,10 +476,13 @@ export function createRenderer(ctx) {
         continue;
       }
 
-      // Wolframkern-Kugeln kalt-blau eingefaerbt (durchschlagen breakable).
-      const c = b.tungsten
-        ? { fill: '#d9e2ff', edge: '#6a7adf' }
-        : BULLET_COLORS[b.kind] || BULLET_COLORS.bullet;
+      // Reflektierte Kugeln wechseln die Farbe (E3), Wolframkern-Kugeln
+      // sind kalt-blau (durchschlagen breakable).
+      const c = b.reflected
+        ? { fill: '#c8f4ff', edge: '#3aa8c8' }
+        : b.tungsten
+          ? { fill: '#d9e2ff', edge: '#6a7adf' }
+          : BULLET_COLORS[b.kind] || BULLET_COLORS.bullet;
 
       // Raketen bekommen einen kurzen Schweif entgegen der Flugrichtung.
       if (b.kind !== 'bullet') {

@@ -61,8 +61,16 @@ export function spritesReady() {
   return ready;
 }
 
+// Panzertypen ohne eigene Grafik borgen sich eine vorhandene Wanne
+// (Phase 4: keine neuen Asset-Dateien). Ihre Identitaet traegt das
+// Panzerungs-Overlay im Renderer -- dicker Frontbalken bzw. Rautenkranz.
+const SPRITE_ALIAS = {
+  t_armored: 't_grey',
+  t_prism: 't_teal',
+};
+
 // Einzelnes Sprite, oder null wenn (noch) nicht ladbar.
 export function sprite(cat, key) {
-  const img = SPRITES[cat][key];
+  const img = SPRITES[cat][SPRITE_ALIAS[key] || key];
   return img && img.complete && img.naturalWidth > 0 ? img : null;
 }

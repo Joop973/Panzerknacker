@@ -16,6 +16,7 @@ import { updateEnemy } from './ai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
 import { resolveCfg, applyUpgrades } from './cfg.js';
+import { armorBlocks, reflectBullet, hasWallBounced, isLive } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
 const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole' };
@@ -23,6 +24,8 @@ const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole' };
 // Truemmerfarben fuer Partikel (Politur, Phase 10).
 const DEBRIS_COLORS = {
   player: '#3d8ef0',
+  t_armored: '#7d8794',
+  t_prism: '#8fd8ee',
   t_brown: '#8a5a33',
   t_grey: '#9aa0a8',
   t_teal: '#3aa8a0',
@@ -371,10 +374,20 @@ export function stepState(state, cmd, dt) {
     if (b.dead) continue;
     for (const t of state.tanks) {
       if (!t.alive) continue;
-      const bounced = b.ricochetsLeft < b.ricochetsStart;
-      if (b.owner === t && (b.age < grace || !bounced || b.friendly)) continue;
+      const bounced = hasWallBounced(b);
+      if (b.owner === t && (b.age < grace || !isLive(b) || b.friendly)) continue;
       if (t.protect > 0) continue; // Spawn-Schutz
+      // Kurzes Fenster nach einer Reflexion: die zurueckgeworfene Kugel
+      // darf denselben Panzer nicht sofort wieder treffen.
+      if (b.reflectImmune === t && b.reflectImmuneT > 0) continue;
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
+        // Gerichtete Panzerung (Phase 4): Frontsektor bzw. Prisma faengt
+        // den Treffer ab -- reflects wirft die Kugel zurueck (E3).
+        if (armorBlocks(t, b)) {
+          if (t.cfg.armor?.reflects) reflectBullet(b, t, state);
+          else b.dead = true;
+          break;
+        }
         b.dead = true;
         // Banden-Kill-Feedback: Gegner mit abgeprallter Kugel erwischt.
         if (t !== state.player && bounced) {
@@ -390,7 +403,7 @@ export function stepState(state, cmd, dt) {
           code: own ? 'own_bullet' : 'enemy_bullet',
           enemyType: own ? null : b.owner?.type || null,
           bulletOwner: own ? 'player' : 'enemy',
-          bulletRicochets: b.ricochetsStart - b.ricochetsLeft,
+          bulletRicochets: b.wallBounces || 0,
           bulletDistance: Math.round(b.distance || 0),
         });
         // Telemetrie: zaehlt nur Kills des Spielers an Gegnern (Kernfrage

@@ -27,17 +27,23 @@ export const ROOM_TYPE_INFO = {
 };
 
 // Kauft Gegner vom Gefahrenbudget (nur freigeschaltete Typen, max. 8).
+// `maxPerRoom` in difficulty.json deckelt einzelne Typen zusaetzlich
+// (Phase 4: hoechstens ein Prisma pro Raum).
 function buyEnemies(diff, genRng, roomIndex, budget) {
   const unlocked = Object.entries(diff.danger).filter(
     ([, d]) => roomIndex >= d.unlockRoom,
   );
   const types = [];
+  const taken = {};
   let rest = budget;
   while (types.length < diff.maxEnemiesPerRoom) {
-    const affordable = unlocked.filter(([, d]) => d.points <= rest);
+    const affordable = unlocked.filter(
+      ([ty, d]) => d.points <= rest && (d.maxPerRoom == null || (taken[ty] || 0) < d.maxPerRoom),
+    );
     if (!affordable.length) break;
     const [type, d] = affordable[Math.floor(genRng() * affordable.length)];
     types.push(type);
+    taken[type] = (taken[type] || 0) + 1;
     rest -= d.points;
   }
   return types;

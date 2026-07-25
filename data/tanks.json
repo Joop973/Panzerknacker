@@ -83,6 +83,12 @@
         "escapeSpreadRad": 1.0,
         "escapeHoldS": 0.8
       },
+      "armor_push": {
+        "turnSpeed": 1.1,
+        "blockedRetargetS": 0.25,
+        "escapeSpreadRad": 1.0,
+        "escapeHoldS": 0.8
+      },
       "evade": {
         "turnSpeed": 4.0,
         "keepDistancePx": 170,
@@ -244,6 +250,37 @@
       "avoidMines": true,
       "label": "Weißer",
       "desc": "Wird nach Rundenstart unsichtbar! Achte auf Spuren, Schimmer und Mündungsblitz."
+    },
+    "t_armored": {
+      "speed": "slow",
+      "magazine": 1,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "turret": "weak_aim",
+      "drive": "armor_push",
+      "armor": {
+        "arc": 120,
+        "reflects": true
+      },
+      "label": "Gepanzerter",
+      "desc": "Dicke Frontpanzerung: Schüsse von vorn prallen an ihm ab. Er fährt auf dich zu — triff ihn von der Seite oder von hinten."
+    },
+    "t_prism": {
+      "speed": "slow",
+      "magazine": 1,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "turret": "weak_aim",
+      "drive": "wander",
+      "armor": {
+        "arc": 360,
+        "reflects": true
+      },
+      "requiresRicochet": true,
+      "label": "Prisma",
+      "desc": "Wirft jeden direkten Schuss zurück. Nur eine an einer Wand abgeprallte Kugel tötet ihn (Explosionen ebenfalls)."
     },
     "t_black": {
       "speed": "veryfast",

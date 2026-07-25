@@ -28,9 +28,18 @@
       "points": 5,
       "unlockRoom": 4
     },
+    "t_armored": {
+      "points": 5,
+      "unlockRoom": 4
+    },
     "t_green": {
       "points": 6,
       "unlockRoom": 5
+    },
+    "t_prism": {
+      "points": 7,
+      "unlockRoom": 6,
+      "maxPerRoom": 1
     },
     "t_purple": {
       "points": 9,

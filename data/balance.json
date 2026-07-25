@@ -13,6 +13,12 @@
   "shield": {
     "roomLifetime": 3
   },
+  "reflect": {
+    "ricochetsLeft": 0,
+    "speedMult": 1.0,
+    "pushPx": 2,
+    "graceS": 0.15
+  },
   "mine": {
     "fuse": 3.0,
     "radius": 64,

@@ -267,7 +267,7 @@ vierte Karte, Schildladung. Schrottstand permanent im HUD.
 
 # STUFE 1 — Der USP
 
-## Phase 4 — Gerichtete Panzerung
+## Phase 4 — Gerichtete Panzerung  ✅ erledigt
 **Aufwand:** 2 Sessions
 **Die wichtigste Phase des Plans.**
 
