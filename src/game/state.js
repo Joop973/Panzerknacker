@@ -1,9 +1,10 @@
 // Spiel-Zustand und Spiellogik-Schritt (Spec Abschnitt 3: game/state.js).
 //
 // Phase 6: Raeume kommen aus dem Generator (Kachelsystem, data/tiles.json).
-// Zwei getrennte RNG-Stroeme: genRng (Raumbau -- muss unabhaengig vom
-// Spielverlauf deterministisch sein, Spec Abschnitt 6) und aiRng
-// (Gegner-KI). Alle Balancing-Werte kommen aus data/*.json.
+// RNG: genRng ist der RAUMBAU-Strom (aus hash(seed, roomIndex, 'rooms'),
+// siehe core/rng.js) und aiRng der KI-Strom -- getrennt, damit der
+// Spielverlauf den Raumbau nicht verschiebt. Alle Balancing-Werte kommen
+// aus data/*.json.
 
 import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
 import { mulberry32 } from '../core/rng.js';
@@ -55,10 +56,12 @@ function buildWalls(grid) {
 //         playerUpgrades -- Upgrade-Level {id: stufe}
 //         upgradesData -- Inhalt von upgrades.json (Stellwerte) }
 export function createState(data, tiles, opts) {
-  const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges } = opts;
+  const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
+    roomSpec, arenas } = opts;
+  // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
-    : generateRoom(tiles, genRng, enemyTypes.length, weights);
+    : generateRoom(tiles, genRng, enemyTypes.length, weights, roomSpec, arenas);
   const grid = room.grid;
   const walls = buildWalls(grid);
 

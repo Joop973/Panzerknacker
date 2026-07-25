@@ -33,7 +33,7 @@ getrennte Fehlerquellen — zusammen wäre bei einem Fehler nicht klar, welche.
   nutzt über `traceTrajectory` die **echte** `updateBullet`-Physik (kein
   zweiter Rechenweg) inkl. Vorschau des ersten Abprallers.
 
-### 0b — RNG und Arena-Weiche (nächste Session)
+### 0b — RNG und Arena-Weiche ✅ gemergt
 - RNG ohne fortlaufenden Run-Zustand: pro Raum ein Generator aus
   `hash(seed, roomIndex)`; eigene Ströme für Upgrades/Schrott/Spawns
   (`hash(seed, roomIndex, "upgrades")` …), damit Änderungen an einem System

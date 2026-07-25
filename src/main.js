@@ -27,6 +27,7 @@ import {
 } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
 import { createDoorScreen, createEventScreen, createWorkshopScreen } from './ui/roomscreens.js';
+import { validateArenas } from './game/generator.js';
 import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
@@ -39,7 +40,7 @@ import { createHud } from './ui/hud.js';
 import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
-  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options'];
+  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas'];
   const out = [];
   for (const n of names) {
     let res;
@@ -63,13 +64,18 @@ async function loadData() {
 }
 
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData] =
+  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData] =
     await loadData();
   // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
   // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
   // sind (Geschoss-Lifetime/Cap/Immunitaet, Minen-Radius/Fuse/Kette).
   tanksData.balance = balanceData;
   tanksData.events = eventsData; // Phase 4: Event-Raeume (run.data.events)
+  tanksData.arenas = arenasData; // Phase 0b: feste Layouts (Arena-Weiche)
+  // Feste Layouts EINMALIG beim Laden pruefen (Flood-Fill etc.). Ein
+  // unloesbares Layout meldet sich hier mit klarer Meldung statt spaeter
+  // im laufenden Spiel.
+  validateArenas(arenasData);
   // Debug-Ansicht der Telemetrie nur bei ?debug=1 aufbauen.
   telemetry.mountDebugView();
 
@@ -221,6 +227,11 @@ async function init() {
   let frameCount = 0;
   let fpsWindowStart = performance.now();
 
+  // Testweg fuer die Arena-Weiche: ?arena=<name> laesst alle Kampfraeume
+  // das feste Layout aus data/arenas.json nutzen statt zu generieren.
+  const arenaName = new URLSearchParams(window.location.search).get('arena');
+  const arenaSpec = arenaName ? { fixedLayout: arenaName } : null;
+
   // Alle Raum-Overlays verstecken + Anzeige-Flags zuruecksetzen.
   function hideRoomScreens() {
     upgradeScreen.hide();
@@ -239,7 +250,7 @@ async function init() {
     const raw = seedInput.value.trim();
     const seed = raw === '' ? Date.now() >>> 0 : Number(raw) >>> 0;
     seedInput.value = String(seed);
-    run = createRun(tanksData, tilesData, diffData, upgradesData, seed, mode);
+    run = createRun(tanksData, tilesData, diffData, upgradesData, seed, mode, { roomSpec: arenaSpec });
     lastSeed = seed;
     beginTelemetry();
     startOverlay.classList.add('hidden');
