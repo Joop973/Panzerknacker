@@ -1,7 +1,14 @@
-# PLAN.md — Beta zu fertigem Spiel (v2)
+# PLAN.md — Beta zu fertigem Spiel (v3)
 
 Verbindliche Roadmap. Ersetzt v1 vollständig.
 Alle in der Review gefundenen Widersprüche sind eingearbeitet.
+
+**v3-Hinweis:** Konsistenz-Pass nach dem Bau der Phasen 0–4. Korrigiert tote
+Verweise auf gelöschten/umbenannten Code, löst Widersprüche zwischen Text und
+tatsächlichem Stand auf und ergänzt jeder noch offenen Phase, welche Dateien
+sie wirklich betrifft. Ändert v2 inhaltlich nicht, sondern macht die noch
+offenen Phasen (5–18) direkt umsetzbar, ohne dass der Programmierer zuerst
+selbst den Code-Stand gegenprüfen muss.
 
 ---
 
@@ -144,7 +151,7 @@ In den letzten 15 % des Budgets blinkt die Kugel.
 | Gegner mit mehreren Lebenspunkten | Macht Räume zäh statt schwer. Ersetzt durch gerichtete Panzerung |
 | Türwahl mit zwei Türen | Bot nur Vorteile, war keine Entscheidung. Ersetzt durch Karte |
 | Hälfte der reinen Stat-Upgrades | Karten, die man beim Ziehen nicht liest, sind verschwendete Auswahl |
-| Meta-Progression | Bewusst zurückgestellt, nicht verworfen. Entscheidung nach Stufe 3 |
+| Meta-Progression | Bewusst zurückgestellt, nicht verworfen. → Kandidat **Phase 19** (noch nicht eingeplant), Entscheidung nach Stufe 3 |
 
 ---
 
@@ -231,7 +238,7 @@ Schildladungen mit Restlaufzeit, Schrott, Upgrade-`id`s, verbannte `id`s,
 Sekundärslot, Kartenpfad, aktueller Knoten. Bei Tod löschen. Beim Start
 "Run fortsetzen?" anbieten. Abbruch mitten im Raum startet den Raum neu.
 
-## Phase 2 — Upgrade-Schema
+## Phase 2 — Upgrade-Schema  ✅ erledigt (durch v1-Phase 2 abgedeckt)
 **Aufwand:** 1 Session
 
 Struktur, keine neuen Effekte.
@@ -250,15 +257,27 @@ Raum 5. `maxStacks` und `requires` werden respektiert. Tags `weapon` und
 `stat` auffüllen.
 
 **Einziges neues Upgrade:** `emergency_shield`, Tag `defense`, rare,
-`maxStacks: 3`, 3 Ladungen nach E2 mit Verfall nach 3 Räumen.
+`maxStacks: 3`. Insgesamt **3 Ladungen bei vollem Ausbau**
+(`chargesPerStack: 1` × `maxStacks: 3`, mit Verfall nach `shield.roomLifetime`
+geräumten Räumen laut E2) — v1 hatte hier noch 3 Ladungen *pro* Stufe (9
+insgesamt), auf Nutzerwunsch auf 1 pro Stufe abgeschwächt.
 
-## Phase 3 — Schrott als Währung
+**Tote Taxonomie-Einträge (Fund beim v3-Review):** Tag `resource` wird von
+keiner der 39 Karten benutzt, `requires` ist bei allen 39 Karten `[]`. Beides
+ist kein Bug — der Pool-Code (`upgradepool.js`) respektiert beide Felder
+bereits, kostet also nichts, liegt nur brach. Erste Belegung: `resource` und
+die erste `requires`-Kombo-Karte kommen sinnvollerweise mit der ersten
+Kartenwelle in Phase 18 (siehe dort).
+
+## Phase 3 — Schrott als Währung  ✅ erledigt (durch v1-Phase 3 abgedeckt)
 **Aufwand:** 1 Session
 
 Muss vor Stufe 1 stehen, weil die Trickshot-Belohnung Schrott ausschüttet.
 
-`scrap.perRoom: [1,3]`, `eliteBonus: 3`, `cost.reroll: 2`, `cost.ban: 1`,
-`cost.fourthCard: 3`, `cost.shieldCharge: 4`.
+`scrap.perRoom: [1,3]`, `eliteMult: 2` (multiplikativ auf den Raum-Schrott,
+nicht additiv — im ursprünglichen Entwurf stand hier `eliteBonus: 3`, das
+Feld heißt in `data/balance.json` aber `eliteMult`), `cost.reroll: 2`,
+`cost.ban: 1`, `cost.fourthCard: 3`, `cost.shieldCharge: 4`.
 
 Vier Aktionen im Upgrade-Screen mit sichtbarem Preis: neu würfeln, verbannen,
 vierte Karte, Schildladung. Schrottstand permanent im HUD.
@@ -320,6 +339,13 @@ Entsprechend niedrig einstufen: rare, nicht legendary.
 Bewusst **nicht** über Kills oder Feuerpausen nachladbar. Eine Aufladung durch
 Feuerpause wäre der Ladungsschuss durch die Hintertür.
 
+**Betroffene Dateien:** `data/balance.json` (Trickshot-Werte), `data/tiles.json`
++ `src/game/generator.js` (Spiegelwand-Kacheltyp + Platzierung), `data/upgrades.json`
+(`powershot`), `src/game/tank.js` (`fireBullet` — erster Schuss im Raum markieren),
+`src/game/cfg.js` (Powershot-Effekt anwenden), `src/render/renderer.js`
+(geladener Schuss am Rohr sichtbar), `src/core/telemetry.js` (`powershotsFired`
+ist als Feld schon vorbereitet).
+
 ## Phase 6 — Sekundärslot
 **Aufwand:** 2 Sessions
 
@@ -337,6 +363,15 @@ Alle Werte in `data/secondaries.json`. Tag `secondary`, `maxStacks: 1`.
 - `smoke` — unterbricht Sichtlinien für 4 s
 - `trap_wall` — Wand, die 3 Schüsse hält, erzeugt eigene Bankshot-Winkel
 
+**Betroffene Dateien:** `data/secondaries.json` (neu), `src/game/tank.js`
+(`layMine` wird zum generischen Sekundär-Dispatch), `src/core/input.js`
+(`secondary`/`secondaryThrow` sind bereits Teil des Eingabezustands, keine
+Änderung nötig), `data/upgrades.json` (Tag `secondary`, `maxStacks: 1`),
+`src/render/renderer.js` + `src/render/effects.js` (je Sekundärwaffe eigenes
+Overlay). **Hinweis für Phase 4:** `deflector` reflektiert einen Treffer und
+soll gegen Prisma-Panzer als Abprallschuss zählen — dafür `b.wallBounces`
+erhöhen (nicht `b.reflected` setzen), sonst greift `requiresRicochet` nicht.
+
 ## Phase 7 — Geisterpanzer
 **Aufwand:** 1 Session
 (Rammen gestrichen, siehe E5.)
@@ -349,27 +384,56 @@ Ziel. Geister blockieren keine Kugeln, sind nicht tötbar,
 
 Upgrade `ghost_crew`, Tag `reactive`, legendary.
 
+**Betroffene Dateien:** `data/balance.json` (`ghost.duration`,
+`ghost.killBonus`, `ghost.maxActive`), `src/game/state.js` (Geister-Liste,
+`killTank`-Hook), `src/game/ai.js`/`ai_turrets.js` (automatisches Zielen des
+Geistes auf den nächsten Gegner), `src/render/renderer.js` (durchscheinende
+Darstellung), `src/core/telemetry.js` (`ghostKills` ist als Feld schon
+vorbereitet).
+
 ## Phase 7b — Audio
 **Aufwand:** 1 Session
-**Neu in v2. Steht hier, weil Phase 5 auf einem Sound beruht.**
+**Neu in v2.**
 
-Keine Dateien: **prozedurale Synthese mit WebAudio** — Oszillator, Rauschen,
-Hüllkurve. Definitionen in `data/sounds.json` (Wellenform, Frequenzverlauf,
-Dauer, Filter), also vom Handy tunbar.
+**Korrektur (v3-Review):** Die Begründung "steht hier, weil Phase 5 auf einem
+Sound beruht" stimmt nicht — die prozedurale WebAudio-Synthese
+(`src/core/audio.js`, `beep`/`noise`, kein Asset, Unlock nach erster
+Berührung) läuft schon seit Phase 0 und wächst seither einfach mit: jede neue
+Phase hängt ihren Sound in den bestehenden `play(name)`-Switch ein (Phase 4
+hat für die Prisma-Reflexion genau das getan — Wiederverwendung von
+`'shield'`, kein Warten auf diese Phase). Phase 5 kann seinen Trickshot-Sound
+genauso ergänzen. Diese Phase ist der Zeitpunkt, an dem der gewachsene
+`if/else`-Switch in eine echte `data/sounds.json` überführt wird (Wellenform,
+Frequenzverlauf, Dauer, Filter — vom Handy tunbar), keine Blockade davor.
 
 Reihenfolge nach Informationswert:
-1. Eigener Abpraller-Tick — ab hier ist die Kugel gefährlich
-2. Prisma-Reflexion
-3. Gegnerschuss mit Stereopanning nach Position
-4. Minen-Warnpuls
-5. Trickshot-Kill, deutlich anders als normaler Kill
+1. Eigener Abpraller-Tick — ab hier ist die Kugel gefährlich (schon da: `'tick'`)
+2. Prisma-Reflexion (schon da: reflectBullet() spielt `'shield'`)
+3. Gegnerschuss mit Stereopanning nach Position (neu — aktuell nur ein
+   Mono-Kanal über `master`)
+4. Minen-Warnpuls (neu — aktuell nur ein `'mine'`-Sound beim Legen, kein
+   wiederholter Puls vor der Zündung)
+5. Trickshot-Kill, deutlich anders als normaler Kill (neu, siehe Phase 5)
 6. Leben verloren und Schild verloren — zwingend zwei verschiedene Sounds
-7. Raum geräumt, Upgrade gewählt
+7. Raum geräumt, Upgrade gewählt (schon da: `'clear'`, kein eigener
+   Upgrade-Sound)
 
-WebAudio-Unlock nach erster Berührung nicht vergessen.
+**Bekannter Fehler, der hier als Abnahmekriterium gehört:** `killTank()` in
+`src/game/state.js` spielt aktuell für JEDEN Tod denselben `'death'`-Sound —
+ein Gegner-Kill klingt identisch zum eigenen Tod. Schild-Verlust hat schon
+einen eigenen Sound (`'shield'`, die drei frühen `return`-Zweige in
+`killTank`), Leben-Verlust vs. Gegner-Kill aber nicht. Erst wenn diese beiden
+unterscheidbar sind, gilt Punkt 6 der Liste als erledigt.
+
+WebAudio-Unlock nach erster Berührung nicht vergessen (schon vorhanden).
 **Jede Information per Ton braucht ein sichtbares Gegenstück** — viele spielen
 stumm. Der Abpraller-Tick hat es bereits, die Prisma-Reflexion braucht einen
 Blitz.
+
+**Betroffene Dateien:** `data/sounds.json` (neu), `src/core/audio.js`
+(`play()`-Switch durch datengetriebenen Aufruf ersetzen, `StereoPannerNode`
+ergänzen), `src/game/state.js` (`killTank` — Todesursache statt pauschal
+`'death'` an den Sound-Namen übergeben).
 
 ---
 
@@ -388,28 +452,65 @@ Panzerung sind frei kombinierbar.
 
 Je Rolle: `aggression`, `preferredRange`, `fireRate`, `accuracy`.
 
+**Größtenteils ein Refactor, kein Neubau (Fund beim v3-Review):**
+`src/game/ai_drives.js` deckt die vier Rollen schon verhaltensähnlich ab —
+`evade` ≈ `sieger` (hält Distanz), `wander` + `miner` ≈ `sapper` (legt Minen,
+weicht aus), `none` ≈ `guardian` (verlässt die Zone nie), `hunt`/`pursue` ≈
+`hunter` (sucht Nähe). Phase 8 konsolidiert das in ein datengetriebenes
+Rollen-Schema statt pro Typ eigenen Code zu behalten — kein neues Verhalten.
+Panzerung (`armor`/`requiresRicochet`) bleibt orthogonal dazu, wie schon bei
+`t_armored`/`t_prism`.
+
+**Betroffene Dateien:** `data/tanks.json` (Rolle statt `turret`+`drive` pro
+Typ), `src/game/ai_drives.js` + `ai_turrets.js` (auf Rollenparameter
+umstellen), `src/game/ai.js` (Dispatch).
+
 ## Phase 9 — Elite-Affixe, Wellen, Elite-Belohnung
 **Aufwand:** 2 Sessions
 
-**Affixe** als Modifikatoren auf beliebige Gegner, sichtbar als Farbring:
-`swift`, `armored_elite`, `minelayer`, `twinshot`. Kombinierbar. Ab Raum 8
-einer pro Raum, ab Raum 14 zwei.
+**Baut auf einem bereits bestehenden System auf (Fund beim v3-Review) —
+nicht neu erfinden:** Elite-Affixe gibt es schon
+(`data/difficulty.json: elite.affixes`, angewendet in `applyEliteAffix()` in
+`run.js`): `gepanzert` (Schild-Ladung), `rasend` (+35 % Tempo),
+`brandstifter` (+2 Minen). Das deckt `armored_elite`, `swift` und `minelayer`
+inhaltlich bereits ab — **nicht umbenennen oder duplizieren.** Wirklich neu
+hinzuzufügen sind nur:
 
-`regenerating_shield` **nur als Elite-Affix und nur auf dem billigsten und dem
-teuersten Panzer** der KI-Auswahl. Als Ladung mit sichtbarem Ring, nicht als
-verstecktes Lebenspolster — sonst widerspricht er der Kernentscheidung gegen
-Lebenspunkte.
+- `twinshot` — Gegner feuert zwei Kugeln gleichzeitig statt einer
+- `regenerating_shield` — **nur als Elite-Affix und nur auf dem billigsten und
+  dem teuersten Panzer** der KI-Auswahl. Als Ladung mit sichtbarem Ring, nicht
+  als verstecktes Lebenspolster — sonst widerspricht er der Kernentscheidung
+  gegen Lebenspunkte. (Einziger Affix, der wirklich neuen Code braucht: eine
+  Ladung, die sich zwischen Räumen regeneriert statt zu verfallen — das
+  Gegenstück zu Schild-Verfall bei E2.)
 
-**Elite-Belohnung ohne Karte:** Ein Raum mit mindestens einem Affix-Gegner
-zählt als Eliteraum und gibt zusätzlich zur normalen Dreierauswahl eine
-garantierte Karte aus dem Tag `elite`, separat dargestellt. In Phase 12 ändert
-sich nur der Auslöser auf "Knotentyp ist `elite`". Damit liegt der Tag nicht
-drei Phasen lang tot im Pool.
+Kombinierbar, sichtbar als Farbring. Ab Raum 8 einer pro Raum, ab Raum 14 zwei.
 
-Elite-Karten: `beutepanzer`, `trophaee`, `kriegsmaschine`.
+**Elite-Belohnung — Korrektur (v3-Review):** Der bereits gebaute Code
+(`rollReward()` in `run.js`) ERSETZT die normale Dreierauswahl komplett durch
+den Elite-Pool, sobald `rewardKind === 'elite'`. Bei nur zwei bis drei
+Elite-Karten ist das die schlechtere Wahl (weniger Auswahl als eine normale
+Runde, ständiger `stat`-Fallback für den fehlenden dritten Slot). **Auf ein
+additives Modell umstellen:** Die normale Dreierauswahl bleibt unverändert,
+zusätzlich wird automatisch (ohne Schrottkosten) eine vierte Karte aus dem
+Tag `elite` gezogen — dieselbe `upgradepool.drawOne()`-Funktion, die
+`buyFourthCard` schon nutzt, nur mit `includeTag: 'elite'` statt Schrottpreis.
+In Phase 12 ändert sich nur der Auslöser auf "Knotentyp ist `elite`".
+
+Elite-Karten: `trophaee`, `kriegsmaschine`. **`beutepanzer` (aus v1) existiert
+nicht mehr** — der Begleitpanzer wurde im E5-Rückbau komplett gestrichen
+(`cfg.drone`, `updateDrone`, Rendering). Mit nur zwei Karten wiederholt sich
+die Elite-Belohnung ab Raum 4 (erster möglicher Eliteraum) schnell — **vor
+dieser Phase mindestens eine dritte Elite-Karte ergänzen.**
 
 **Wellen:** große Räume spawnen in zwei Schüben, zweite Welle bei 50 %
 Restgegnern, Spawnpunkte mit 1 s Vorwarnung.
+
+**Betroffene Dateien:** `data/difficulty.json` (`elite.affixes` um
+`twinshot`/`regenerating_shield` erweitern), `data/upgrades.json` (dritte
+Elite-Karte), `src/game/run.js` (`applyEliteAffix`, `rollReward` auf additiv
+umstellen), `src/game/tank.js` (Twinshot-Feuerlogik), `src/game/state.js`
+(Wellen-Spawn), `src/render/effects.js` (Farbring je Affix).
 
 ## Phase 10 — Raum-Modifikatoren
 **Aufwand:** 1 Session, höchster Ertrag pro Aufwand
@@ -421,12 +522,28 @@ alle), `darkness`, `slippery`, `crowded` (+50 % Gegner, −30 % Aggression),
 `sniper_alley` (alle Gegner `sieger`), `no_secondary`, `mirror_hall` (alle
 Wände sind Spiegelwände).
 
+**Betroffene Dateien:** `data/modifiers.json` (neu), `src/game/run.js`
+(Modifikator pro Raum ziehen + in die Vorschau reichen), `src/ui/preview.js`
+(vor dem Betreten sichtbar), `src/game/state.js`/`cfg.js` (Modifikator auf
+Kugeltempo/Aggression/Sichtfeld anwenden).
+
 ## Phase 11 — Zerstörbare Wände
 **Aufwand:** 1 Session
 
 `wall.destructible.hits: 3`. Die Arena verändert sich im Kampf. Anteil pro Raum
 aus `difficulty.json`. Flood-Fill muss auch nach Zerstörung gelten — Wände,
 deren Wegfall den Raum unlösbar macht, sind nicht zerstörbar.
+
+**Wiederverwendung (Fund beim v3-Review):** `state.destroyWall()` in
+`src/game/state.js` trägt bereits einen `wall.hits`/`durability`-Zähler
+(gebaut für die Baumeister-Transformation, Phase 17). Phase 11 muss
+`durability` nur generisch aus `wall.destructible.hits` lesen, statt
+ausschließlich aus `state.transform.wallDurability` — kein Parallelsystem
+bauen.
+
+**Betroffene Dateien:** `data/difficulty.json` (Anteil zerstörbarer Wände pro
+Raum), `src/game/generator.js` (Flood-Fill-Check nach Zerstörung), `src/game/state.js`
+(`destroyWall` generalisieren).
 
 ## Phase 11b — Performance-Budget
 **Aufwand:** 1 Session
@@ -475,11 +592,38 @@ Pfad, der nicht wehtun kann, ist Dekoration.
 
 Raum 1–2 immer `combat`.
 
+**Größtenteils Navigation, kein Raumtyp-Neubau (Fund beim v3-Review):** Die
+Knotentypen `combat`/`elite`/`treasure`/`workshop`(≙ zukünftig `shop`,
+Phase 13)/`event` sind inhaltlich bereits fertig und laufen seit den
+v1-Phasen — `rollNextType()` in `run.js` wählt heute nur unsichtbar und
+automatisch den nächsten Raumtyp (inkl. der Regeln "kein `treasure` bei 1
+Leben", "kein `event`/`workshop` zweimal hintereinander"). Phase 12 ersetzt
+**ausschließlich** diese Automatik durch eine sichtbare, wählbare Knotenkarte
+— die Raumlogik jedes Typs bleibt unverändert. Wirklich neu ist nur `cursed`
+(und `shop` als Erweiterung der Werkstatt, siehe Phase 13). Der Aufwand liegt
+damit überwiegend in Kartenlayout/Generator/UI, nicht in neuer Spiellogik.
+
+**Betroffene Dateien:** `src/game/run.js` (`rollNextType`/`afterRoomDone`
+durch Kartennavigation ersetzen, restliche Raumlogik unverändert lassen),
+neue `src/ui/mapscreen.js` (Kartenanzeige + Knotenwahl), `src/core/rng.js`
+(zusätzlicher `map`-Strom für die Kartengenerierung).
+
 ## Phase 13 — Shop
 **Aufwand:** 1 Session
 
 Schrott ausgeben für: Karte aus fünf kaufen, gewähltes Upgrade ablegen,
 Schildladungen, Sekundärwaffe tauschen, Leben (teuer, einmal pro Shop).
+
+**Wiederverwendung (Fund beim v3-Review):** Keine Neuentwicklung — baut
+direkt auf der bestehenden Werkstatt auf (`workshop`-Raumtyp,
+`createWorkshopScreen()` in `src/ui/roomscreens.js`,
+`buyShieldCharge`/`dropUpgrade` in `run.js`). Neu sind nur Kartenkauf
+(`upgradepool.drawOne()` wiederverwenden), Sekundärtausch (setzt Phase 6
+voraus) und Lebenskauf.
+
+**Betroffene Dateien:** `src/ui/roomscreens.js` (`createWorkshopScreen` um
+drei Aktionen erweitern oder zu `createShopScreen` umbenennen), `src/game/run.js`
+(neue Aktionen neben `buyShieldCharge`/`dropUpgrade`).
 
 ## Phase 14 — Bosse
 **Aufwand:** 2–3 Sessions
@@ -492,6 +636,11 @@ Nutzt die Arena-Weiche aus Phase 0. Alle 5 Räume.
 - **Die Phalanx**: fünf `armored`-Panzer in Formation, drehen sich gemeinsam,
   Lücke nur für Sekundenbruchteile
 
+**Betroffene Dateien:** `data/arenas.json` (Boss-Layouts, `mirror`/`generator`
+-Marker sind seit Phase 0b schon als `room.markers` verfügbar), `src/game/state.js`
+(Boss-HP/Trefferlogik je Typ), `src/game/ai_drives.js` (Spiegel-Bewegung,
+Phalanx-Formation), `src/render/renderer.js` (Boss-Darstellung).
+
 ---
 
 # STUFE 4 — Kür
@@ -501,11 +650,18 @@ Nutzt die Arena-Weiche aus Phase 0. Alle 5 Räume.
 Wandsegmente verschieben sich alle 8 s. Ölpfützen, Laserbarrieren (blocken
 Kugeln, nicht Panzer), Förderbänder. **Ein** Element pro Raum.
 
+**Betroffene Dateien:** `data/tiles.json` (neue Gefahren-Kacheltypen),
+`src/game/generator.js` (Platzierung + Flood-Fill über die Zeit), `src/game/state.js`
+(Bewegungstakt, Kontaktschaden/-blockade), `src/render/renderer.js`.
+
 ## Phase 16 — Deckungs-KI
 **Aufwand:** 1–2 Sessions
 Gegner mit niedriger `aggression` brechen die Sichtlinie, wenn du zielst.
 **Performance-Auflage:** Sichtlinien mit 15 Hz statt pro Frame, höchstens vier
 Gegner pro Frame im Reihum-Verfahren. Für Deckungsverhalten reicht das.
+
+**Betroffene Dateien:** `src/game/ai.js` (Sichtlinien-Takt + Reihum-Auswahl),
+`src/game/ai_drives.js` (Deckungs-Zielpunkt suchen).
 
 ## Phase 17 — Transformationen
 **Aufwand:** 1 Session
@@ -523,14 +679,53 @@ Drei Upgrades desselben Tags schalten einen Bonus frei. Fortschritt als Zähler
   Sekundärwaffe schadet dir nicht mehr
 - `control` → **Saboteur**: betäubte Gegner explodieren beim Aufwachen
 
+**Migration von `data/transformations.json` (Fund beim v3-Review) — die Datei
+existiert schon (Freischaltung seit E5 stillgelegt, `run.tagCounts` zählt
+aber schon mit):**
+
+| Transformation | Zustand | Aktion für diese Phase |
+|---|---|---|
+| **Taktiker** (`information`) | Effekt (`slowMoScale: 0.4`, `slowMoRadiusPx: 64`) entspricht bereits 1:1 dem Plan | Unverändert übernehmen, nur den Freischalt-Trigger reaktivieren |
+| **Saboteur** (`control`) | Effekt (`stunExplodeRadiusPx`) entspricht bereits dem Plan | Unverändert übernehmen |
+| **Baumeister/Pionier → Pionier** (`terrain`) | Zwei getrennte Einträge: `baumeister` (`wallDurability: 2`, Tag `terrain`, gültig) und `pionier` (`ownMinesHarmless`, Tag **`mine`** — dieser Tag wurde beim v2-Umbau aus dem Schema gestrichen, keine Karte trägt ihn mehr, `pionier` kann so nie freigeschaltet werden) | Beide Effekte unter einem Eintrag (Tag `terrain`) zusammenführen, den verwaisten zweiten Eintrag auflösen |
+| **Kavallerie** (`mobility`) | Aktueller Effekt (`ramKillsNonElite`, `ramProtectS`) basiert auf Rammen — nach E5 komplett gestrichen | Effekt vollständig neu schreiben: `dashCooldownMult: 0.5` + Unverwundbarkeit für die gesamte Boost-Dauer, verdrahtet gegen das bestehende `cfg.dash = {dist, iframe, cooldown}` (`tank.js`/`cfg.js`). Wirkt nur mit dem `dash`-Upgrade — im Upgrade-Screen als Hinweis anzeigen |
+| **Bollwerk** (`defense`) | Existiert noch gar nicht | Neuer Eintrag: Schildladungen altern nicht mehr (`ageShieldCharges()` in `run.js` bei aktiver Transformation überspringen) |
+
+**Betroffene Dateien:** `data/transformations.json` (Migration + `bollwerk`),
+`src/game/run.js` (Freischalt-Trigger bei `chooseUpgrade` reaktivieren —
+Zähler existiert bereits in `run.tagCounts`; `ageShieldCharges` für Bollwerk),
+`src/game/cfg.js`/`tank.js` (Kavallerie-Dash-Interaktion), `src/ui/upgradescreen.js`
+(Fortschrittsanzeige "2/3" reaktivieren).
+
 ## Phase 18 — Kartenwellen
 **Aufwand:** laufend, je 1 Session
 
 Neue Upgrades in Wellen zu 5–8. **Jede Welle beginnt mit einer
 Telemetrie-Auswertung**: Welche Karten wurden angeboten und nie gewählt?
 Höchstens ein Drittel reine Statwerte im Pool.
-Waffen-Karten (`weapon`) frühestens hier, zuerst nur `doppelrohr` und `flak`,
-weil jede weitere ein eigenes Physikverhalten ist.
+
+**Korrektur (v3-Review):** `doppelrohr` (Tag `weapon`, `minRoom: 3`) steht
+bereits in `data/upgrades.json`, ist aber vom Pool ausgeschlossen
+(`upgradepool.js` schließt Tag `weapon` explizit aus) — diese Phase muss den
+Ausschluss nur aufheben, nicht `doppelrohr` neu bauen. Zuerst nur `doppelrohr`
+und `flak` (neu) freigeben, weil jede weitere Waffenkarte ein eigenes
+Physikverhalten ist.
+
+**Ballistikrechner (Fund beim v3-Review — E1 kündigt dieses Upgrade an, keine
+Phase listet es bisher):** Tag `information`, zeigt in der Ziellinie
+(`traceTrajectory()` in `bullet.js`) zwei Abpraller statt einen. Die Funktion
+hat dafür bereits einen `opts.maxBounces`-Parameter — das Upgrade ist im Kern
+`maxBounces: 2` statt `1`, wenn es aktiv ist. Gehört in die erste Welle dieser
+Phase.
+
+**Erste Belegung der toten Taxonomie aus Phase 2:** erste Karte mit Tag
+`resource` (z. B. höherer `scrap.perRoom`) und erste Karte mit echtem
+`requires` (z. B. eine `doppelrohr`-Erweiterung, die `magazin` voraussetzt).
+
+**Betroffene Dateien:** `data/upgrades.json` (neue Karten + Wellen-Metadaten),
+`src/game/upgradepool.js` (Tag-`weapon`-Ausschluss aufheben, sobald die erste
+Waffenkarte regulär gezogen werden soll), `src/render/effects.js`/`bullet.js`
+(Ballistikrechner-Anbindung an `traceTrajectory`).
 
 ---
 

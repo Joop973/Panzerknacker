@@ -39,8 +39,11 @@ v2-**Phase 2** (Upgrade-Schema) und **Phase 3** (Schrott) sind inhaltlich schon
 durch die gleichnamigen v1-Phasen abgedeckt (Abweichungen auf Nutzerwunsch:
 `emergency_shield` gibt 1 statt 3 Ladungen je Stufe, Elite-Schrott ist
 `eliteMult: 2` statt `eliteBonus: 3`). **Phase 4** (gerichtete Panzerung) ist
-gebaut. **Nächste Phase: Phase 5 — Abprallen belohnen** (Trickshot-Belohnung,
-Spiegelwände, Powershot).
+gebaut. `PLAN.md` wurde auf **v3** konsistenzgeprüft: tote Verweise (u. a.
+gelöschte Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
+`eliteBonus`-Feldname) entfernt, jede offene Phase bekommt jetzt eine
+"Betroffene Dateien"-Zeile. **Nächste Phase: Phase 5 — Abprallen belohnen**
+(Trickshot-Belohnung, Spiegelwände, Powershot).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes Handy-Vollbild
 (`100dvh` + `viewport-fit=cover`), Grafik-Sprites + App-Icon, diese `CLAUDE.md`.
 
@@ -242,9 +245,9 @@ Zurückgebaut wurde:
 - [ ] **Vor Phase 18**: 15–20 Runs spielen und die Debug-Ansicht (`?debug=1`)
       auswerten — sie rechnet jetzt selbst (Median-Todesraum, Abpraller-Anteil,
       minFps, nie gewählte + meistabgelehnte Karten). Siehe `PLAN.md`.
-- [ ] `kavallerie` in `data/transformations.json` hat nach dem E5-Rückbau
-      **keine Implementierung mehr** (`ramKillsNonElite` — Rammen ist weg).
-      In Phase 17 ersetzen oder streichen.
+- [ ] `data/transformations.json` braucht vor Phase 17 eine Migration
+      (`kavallerie` basiert noch auf Rammen, `pionier` trägt den toten Tag
+      `mine`) — konkrete Tabelle dazu jetzt in `PLAN.md` Phase 17.
 - [ ] Sprite-Look für **feste Wand** (`tile_wall`) und **Loch** (`tile_hole`)
       im Spiel noch mit eigenem Auge prüfen — Code-Pfad identisch zu
       breakable (das rendert korrekt), aber nicht separat verifiziert.
