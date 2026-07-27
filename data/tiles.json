@@ -1,4 +1,8 @@
 {
+ "mirror": {
+  "minPerRoom": 2,
+  "maxPerRoom": 4
+ },
  "tiles": {
   "open_a": {
    "category": "open",

@@ -38,12 +38,12 @@ Weiche) und **Phase 1** (Telemetrie v2, Lesbarkeit, Run-Speicherung).
 v2-**Phase 2** (Upgrade-Schema) und **Phase 3** (Schrott) sind inhaltlich schon
 durch die gleichnamigen v1-Phasen abgedeckt (Abweichungen auf Nutzerwunsch:
 `emergency_shield` gibt 1 statt 3 Ladungen je Stufe, Elite-Schrott ist
-`eliteMult: 2` statt `eliteBonus: 3`). **Phase 4** (gerichtete Panzerung) ist
+`eliteMult: 2` statt `eliteBonus: 3`). **Phase 4** (gerichtete Panzerung) und
+**Phase 5** (Abprallen belohnen: Trickshot, Spiegelwände, Powershot) sind
 gebaut. `PLAN.md` wurde auf **v3** konsistenzgeprüft: tote Verweise (u. a.
 gelöschte Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
 `eliteBonus`-Feldname) entfernt, jede offene Phase bekommt jetzt eine
-"Betroffene Dateien"-Zeile. **Nächste Phase: Phase 5 — Abprallen belohnen**
-(Trickshot-Belohnung, Spiegelwände, Powershot).
+"Betroffene Dateien"-Zeile. **Nächste Phase: Phase 6 — Sekundärslot.**
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes Handy-Vollbild
 (`100dvh` + `viewport-fit=cover`), Grafik-Sprites + App-Icon, diese `CLAUDE.md`.
 
@@ -169,6 +169,48 @@ entscheidet. Logik in **`src/game/armor.js`** (`armorBlocks`, `reflectBullet`,
   trägt das Overlay.
 - Frame-Budget: schlechtester Logikschritt mit 8 Gegnern **~1–3 ms** (Budget
   16,7 ms bei 60 Hz) — Phase 4 kostet nichts Messbares.
+
+### Phase 5 v2 (Abprallen belohnen) — gemergt
+Stufe 1, der USP wird lohnend statt nur notwendig.
+- **Spiegelwände** (`data/tiles.json: mirror.min/maxPerRoom` 2–4): neuer
+  Wandtyp intern `reflect` (Zeichen `r`, `WALL_TYPES.r` in `state.js`) —
+  bewusst NICHT `mirror` genannt, das ist schon die Bezeichnung des
+  Boss-Arena-Markers aus Phase 0b/14. `generator.js: placeReflectWalls()`
+  ersetzt 2–4 Außenrand-Zellen nach dem Schließen des Rands (ändert weder
+  Wandanteil noch Erreichbarkeit). `bullet.js: moveAxis()` gibt jetzt
+  `{hit, mirror}` zurück; ein Treffer auf `reflect` prallt ab, **ohne**
+  `ricochetsLeft` zu verringern, **aber** `wallBounces` zählt normal mit
+  (Prisma-Kills bleiben möglich). Eine Kugel mit `ricochetsLeft <= 0` (z. B.
+  eine E3-reflektierte) stirbt **auch** an einer Spiegelwand, sonst würde das
+  E3-"stirbt am nächsten Wandkontakt" ausgehebelt. `traceTrajectory()`
+  erkennt Abpraller jetzt über `wallBounces`-Delta statt `ricochetsLeft`-Delta
+  (sonst unsichtbar in der Ziellinien-Vorschau an einer Spiegelwand).
+  `isSolid()`/`hasLos()` behandeln `reflect` wie `solid` (blockiert
+  Sichtlinie/KI-Raycast/Minenwurf). Darstellung immer prozedural (cyan
+  Diagonalstreifen), auch wenn Sprites geladen sind — sonst identisch zur
+  normalen Wandsprite.
+- **Trickshot-Belohnung** (`balance.trickshot`): Kill mit Wandabpraller gibt
+  Schrott (`scrap: 1`, ab `strongRicochets: 2` Wandabprallern `scrapStrong: 2`)
+  + kurze Zeitlupe (`state.trickshotTimer`, `slowMoScale: 0.35`) + eigenen
+  Sound. Ersetzt an derselben Stelle die reine "Abpraller!"-Textmeldung
+  (Gold "Trickshot! +N Schrott" bei Spieler-Kills, weiterhin cyan
+  "Abpraller!" bei allen anderen bounced Kills). Der Zeitlupen-Scale
+  kombiniert sich in `run.js: stepRun()` mit der bestehenden
+  Taktiker-Transformation (der stärkere/kleinere Wert gewinnt). Schrott
+  läuft wie alle anderen Raum-Zähler über einen `seenTrickshotScrap`-Delta
+  von `state.js` nach `run.scrap`.
+- **Powershot** (Upgrade, Tag `reactive` — **nicht** `weapon`, siehe unten):
+  `tank.powershotCharges` (frisch pro Raum, weil `createTank()` bei jedem
+  Raumwechsel/Respawn ohnehin neu aufgerufen wird — kein eigener
+  "Raum betreten"-Hook nötig). Jeder Abzug, solange Ladungen da sind, ist ein
+  Powershot (`speedFactor: 2.0`, `bonusRicochets: 2`); Reichweite bleibt
+  gleich, das folgt automatisch aus dem Wegbudget (E4). Heller Marker an der
+  Rohrspitze, solange eine Ladung wartet. `powershotsFired` (Telemetrie-Feld
+  aus Phase 1 schon vorbereitet) jetzt in `main.js` verdrahtet.
+  **Umsetzungsfund:** `upgradepool.js` schließt Tag `weapon` explizit vom
+  Pool aus (reserviert für Phase 18) — mit `weapon` wäre Powershot in dieser
+  Phase unerreichbar gewesen (derselbe Fehler wie `doppelrohr`, siehe
+  `PLAN.md` v3). Deshalb Tag `reactive`.
 
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
@@ -299,7 +341,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v38`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v39`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`

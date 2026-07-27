@@ -159,6 +159,32 @@ export function createRenderer(ctx) {
 
   function drawWalls(walls) {
     for (const wall of walls) {
+      // Spiegelwand (Phase 5): IMMER prozedural, auch wenn Sprites geladen
+      // sind -- sonst sähe sie identisch zur normalen Wand aus (die
+      // generische 'wall'-Sprite-Zuordnung unten wuerde das verdecken),
+      // und "optisch klar unterscheidbar" waere nicht mehr erfuellt.
+      if (wall.type === 'reflect') {
+        ctx.fillStyle = '#1c2b33';
+        ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+        ctx.strokeStyle = '#7fe6ff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(wall.x + 1, wall.y + 1, wall.w - 2, wall.h - 2);
+        // Verspiegelte Diagonalstreifen.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(wall.x, wall.y, wall.w, wall.h);
+        ctx.clip();
+        ctx.strokeStyle = 'rgba(180,240,255,0.55)';
+        ctx.lineWidth = 3;
+        for (let d = -wall.h; d < wall.w + wall.h; d += 8) {
+          ctx.beginPath();
+          ctx.moveTo(wall.x + d, wall.y);
+          ctx.lineTo(wall.x + d + wall.h, wall.y + wall.h);
+          ctx.stroke();
+        }
+        ctx.restore();
+        continue;
+      }
       // Kachel-Sprite (falls geladen) über die ganze Wandfläche legen.
       const key = wall.type === 'hole' ? 'hole' : wall.type === 'breakable' ? 'breakable' : 'wall';
       const img = sprite('tile', key);
@@ -416,6 +442,19 @@ export function createRenderer(ctx) {
     // Muss auf einem Handydisplay in einer Sekunde lesbar sein, deshalb
     // bewusst zu deutlich: dicker Balken bzw. eigener Rautenkranz.
     drawArmor(state, t, x, y, r);
+
+    // Powershot geladen (Phase 5): heller Punkt an der Rohrspitze, solange
+    // eine Ladung wartet -- verschwindet mit dem letzten geladenen Schuss.
+    if (t === state.player && t.powershotCharges > 0) {
+      const mx = x + Math.cos(t.turret) * (r + 10);
+      const my = y + Math.sin(t.turret) * (r + 10);
+      ctx.fillStyle = '#ffd23c';
+      ctx.globalAlpha = 0.6 + 0.3 * Math.sin(state.time * 6);
+      ctx.beginPath();
+      ctx.arc(mx, my, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
     // Krallenfalle: gefangener Panzer bekommt einen pulsierenden Ring.
     if (t.stunTimer > 0) {

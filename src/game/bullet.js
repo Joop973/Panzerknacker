@@ -68,27 +68,30 @@ export function createBullet(
 // Wolframkern (Spec Abschnitt 8): trifft ein Wolfram-Geschoss eine
 // zerstoerbare Wand, wird die Wand zerstoert und das Geschoss
 // verschwindet; solid-Waende bleiben normale Abpraller.
-// Gibt true zurueck, wenn eine Wand getroffen wurde.
+// Gibt { hit, mirror } zurueck -- mirror markiert einen Treffer auf einer
+// Spiegelwand (Phase 5: kostet keinen Abpraller, siehe updateBullet).
 function moveAxis(b, state, axis, dt) {
   b[axis] += (axis === 'x' ? b.vx : b.vy) * dt;
-  if (b.phaseWalls) return false; // Durchschlag: ignoriert alle Waende
+  if (b.phaseWalls) return { hit: false, mirror: false }; // Durchschlag: ignoriert alle Waende
   let hit = false;
+  let mirror = false;
   for (const wall of [...state.walls]) {
     if (wall.type === 'hole') continue; // Geschosse fliegen ueber Loecher
     if (!circleOverlapsAABB(b.x, b.y, b.radius, wall)) continue;
     if (b.tungsten && wall.type === 'breakable') {
       state.destroyWall(wall);
       b.dead = true;
-      return true;
+      return { hit: true, mirror: false };
     }
     // Sprengmunition/Glaskanone: zuenden am Wandkontakt (statt
     // abzuprallen) -- so toetet die Explosion durch die Wand. Die
     // Sprengschuss-Salve hat detonateOnWall=false und prallt ab.
     if (b.explosive && b.detonateOnWall) {
       b.dead = true;
-      return true;
+      return { hit: true, mirror: false };
     }
     hit = true;
+    if (wall.type === 'reflect') mirror = true; // Spiegelwand (Phase 5)
     if (axis === 'x') {
       b.x = b.vx > 0 ? wall.x - b.radius : wall.x + wall.w + b.radius;
       b.vx = -b.vx;
@@ -97,7 +100,7 @@ function moveAxis(b, state, axis, dt) {
       b.vy = -b.vy;
     }
   }
-  return hit;
+  return { hit, mirror };
 }
 
 // Lenkt ein Zielsucher-Geschoss weich zum naechsten gegnerischen Panzer.
@@ -149,12 +152,15 @@ export function traceTrajectory(state, x, y, angle, cfg, opts = {}) {
   const shadow = { walls: state.walls, data: state.data, tanks: [] };
   const tailSteps = opts.tailSteps ?? 45; // Laenge des Abpraller-Segments
   const pts = [{ x, y, bounce: false }];
-  let left = b.ricochetsLeft;
+  // Ueber wallBounces statt ricochetsLeft erkennen (Phase 5: eine
+  // Spiegelwand aendert ricochetsLeft nicht, waere sonst unsichtbar
+  // fuer die Vorschau).
+  let left = b.wallBounces;
   let sinceBounce = -1; // -1 = noch nicht abgeprallt
   for (let i = 0; i < steps; i++) {
     updateBullet(b, shadow, dt);
-    const bounced = b.ricochetsLeft < left;
-    left = b.ricochetsLeft;
+    const bounced = b.wallBounces > left;
+    left = b.wallBounces;
     pts.push({ x: b.x, y: b.y, bounce: bounced });
     if (b.dead) break;
     if (bounced && sinceBounce < 0) sinceBounce = 0;
@@ -195,7 +201,21 @@ export function updateBullet(b, state, dt) {
     return;
   }
 
-  if (hitX || hitY) {
+  if (hitX.hit || hitY.hit) {
+    const mirror = hitX.mirror || hitY.mirror;
+    // Spiegelwand (Phase 5): reflektiert, ohne einen Abpraller zu
+    // verbrauchen -- ABER nur, solange noch einer da ist. Eine Kugel mit
+    // ricochetsLeft <= 0 (z. B. eine von Phase 4 reflektierte E3-Kugel)
+    // stirbt auch an einer Spiegelwand, sonst wuerde E3s "stirbt beim
+    // naechsten Wandkontakt" durch eine Spiegelwand ausgehebelt.
+    if (mirror && b.ricochetsLeft > 0) {
+      const firstBounce = b.wallBounces === 0;
+      state.sounds?.push(firstBounce ? 'tick' : 'bounce');
+      b.wallBounces++;
+      b.trail.push({ x: b.x, y: b.y });
+      if (b.trail.length > TRAIL_MAX) b.trail.shift();
+      return;
+    }
     // Ein Wandkontakt pro Schritt kostet genau einen Abpraller --
     // auch im Eckenfall (hitX && hitY). Bei 0 verbleibenden
     // Abprallern verschwindet das Geschoss.

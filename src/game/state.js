@@ -19,7 +19,9 @@ import { resolveCfg, applyUpgrades } from './cfg.js';
 import { armorBlocks, reflectBullet, hasWallBounced, isLive } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
-const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole' };
+// 'reflect' (Phase 5, Spiegelwand): physisch wie 'solid', aber bullet.js
+// laesst Geschosse dort abprallen, ohne einen Abpraller zu verbrauchen.
+const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole', r: 'reflect' };
 
 // Truemmerfarben fuer Partikel (Politur, Phase 10).
 const DEBRIS_COLORS = {
@@ -99,6 +101,12 @@ export function createState(data, tiles, opts) {
     ricochetKills: 0,
     directKills: 0,
     secondaryUses: 0,
+    powershotsFired: 0,
+    // Trickshot-Belohnung (PLAN.md v2 Phase 5): kurze Zeitlupe nach einem
+    // Abpraller-Kill. trickshotTimer zaehlt in (moeglicherweise bereits
+    // verlangsamter) dt herunter -- run.js liest ihn fuer den Zeitlupen-Scale.
+    trickshotTimer: 0,
+    trickshotScrap: 0,
     // Notschild-Ladungen als Liste: jede Ladung altert EINZELN (E2).
     // Eintrag = verbleibende geraeumte Raeume bis zum Verfall.
     shieldCharges: (shieldCharges || []).slice(),
@@ -120,12 +128,14 @@ export function createState(data, tiles, opts) {
     time: 0,
     respawnTimer: 0,
     // Solid-Test fuer Geschosse/Sichtlinien: 'o' (hole) blockiert NICHT.
+    // 'r' (Spiegelwand, Phase 5) ist optisch/physisch eine normale Wand --
+    // nur bullet.js behandelt sie beim Abprallen anders.
     isSolid(px, py) {
       const col = Math.floor(px / CELL);
       const row = Math.floor(py / CELL);
       if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return true;
       const cell = grid[row][col];
-      return cell === '#' || cell === 'b';
+      return cell === '#' || cell === 'b' || cell === 'r';
     },
     destroyWall(wall) {
       // Transformation "Baumeister" (Phase 5): Waende halten wallDurability
@@ -298,6 +308,7 @@ function respawnPlayer(state) {
 export function stepState(state, cmd, dt) {
   const p = state.player;
   state.time += dt;
+  if (state.trickshotTimer > 0) state.trickshotTimer = Math.max(0, state.trickshotTimer - dt);
 
   // Transformation "Saboteur" (Phase 5): betaeubte Gegner explodieren,
   // sobald ihre Betaeubung endet.
@@ -389,13 +400,33 @@ export function stepState(state, cmd, dt) {
           break;
         }
         b.dead = true;
-        // Banden-Kill-Feedback: Gegner mit abgeprallter Kugel erwischt.
-        if (t !== state.player && bounced) {
-          state.texts.push({ x: t.x, y: t.y - 18, text: 'Abpraller!', age: 0, life: 0.9, color: '#8ecae6' });
-        }
         // Todesursache fuer den Game-Over-Screen + Telemetrie.
         const WEAPON_LABEL = { bullet: 'Kugel', rocket: 'Rakete', bounce_rocket: 'Bounce-Rakete' };
         const own = b.owner === state.player;
+        // Trickshot-Belohnung (Phase 5): nur fuer Spieler-Kills mit
+        // Wandabpraller. Ab strongRicochets Wandabprallern deutlicher
+        // (mehr Schrott, staerkere Zeitlupe). Ersetzt die reine
+        // "Abpraller!"-Textmeldung an dieser Stelle, statt einen zweiten,
+        // ueberlappenden Text zu zeigen.
+        if (t !== state.player && bounced) {
+          if (own) {
+            const ts = state.data.balance.trickshot;
+            const strong = b.wallBounces >= (ts.strongRicochets ?? 2);
+            state.trickshotScrap += strong ? ts.scrapStrong : ts.scrap;
+            state.trickshotTimer = ts.slowMoS;
+            state.sounds.push(strong ? 'trickshot2' : 'trickshot');
+            state.texts.push({
+              x: t.x,
+              y: t.y - 18,
+              text: strong ? `Trickshot!! +${ts.scrapStrong} Schrott` : `Trickshot! +${ts.scrap} Schrott`,
+              age: 0,
+              life: 0.9,
+              color: '#ffd23c',
+            });
+          } else {
+            state.texts.push({ x: t.x, y: t.y - 18, text: 'Abpraller!', age: 0, life: 0.9, color: '#8ecae6' });
+          }
+        }
         const cause = own
           ? 'die eigene Kugel'
           : `${state.data.types[b.owner?.type]?.label || '?'} (${WEAPON_LABEL[b.kind] || b.kind})`;

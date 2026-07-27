@@ -115,7 +115,13 @@ export function createAudio() {
       else if (name === 'combo') beep(660, 0.1, 0.08, 'square', 990);
       else if (name === 'dash') beep(420, 0.12, 0.07, 'sine', 720);
       else if (name === 'shield') beep(300, 0.18, 0.1, 'triangle', 520);
-      else if (name === 'clear' && ctx) {
+      // Trickshot-Belohnung (Phase 5): heller, kurzer Doppelton -- bewusst
+      // anders als 'combo' (Kill-Serie ohne Abpraller-Bezug).
+      else if (name === 'trickshot') beep(760, 0.09, 0.1, 'triangle', 1200);
+      else if (name === 'trickshot2' && ctx) {
+        beepAt(760, ctx.currentTime, 0.08, 0.1, 'triangle');
+        beepAt(1200, ctx.currentTime + 0.06, 0.12, 0.11, 'triangle');
+      } else if (name === 'clear' && ctx) {
         // Raum geschafft: kurzes aufsteigendes Jingle.
         [392, 523, 659].forEach((f, i) => beepAt(f, ctx.currentTime + i * 0.09, 0.12, 0.1, 'triangle'));
       } else if (name === 'fanfare' && ctx) {

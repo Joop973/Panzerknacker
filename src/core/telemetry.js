@@ -15,7 +15,7 @@ const MAX_RUNS = 100;
 // Bei jeder Bedeutungsaenderung der Felder hochzaehlen -- sonst werden
 // spaeter Runs verglichen, die gar nicht vergleichbar sind.
 const SCHEMA_VERSION = 2;
-const GAME_VERSION = 'v38';
+const GAME_VERSION = 'v39';
 
 let current = null; // Sammelpuffer des laufenden Runs (null = keiner aktiv)
 

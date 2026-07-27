@@ -309,7 +309,7 @@ erkennbar sein.** Lieber zu deutlich als zu elegant.
 **Fertig, wenn:** ein Raum mit zwei Prisma-Panzern ohne Abprallschuss
 nachweislich nicht lösbar ist.
 
-## Phase 5 — Abprallen belohnen
+## Phase 5 — Abprallen belohnen  ✅ erledigt
 **Aufwand:** 1–2 Sessions
 
 **Trickshot-Belohnung:** Kill mit `ricochets >= 1` gibt +1 Schrott, 0,15 s
@@ -322,11 +322,17 @@ bevorzugt an Außenwänden.
 **Powershot** — als Upgrade, nicht als Grundmechanik. Kein Halten, kein Laden,
 keine zusätzliche Eingabe.
 
-`powershot`, Tag `weapon`, rare, `maxStacks: 3`. Beim Betreten eines Raums sind
-`powershot.perRoom: 1` Schuss geladen (pro Stack einer mehr). Der **erste
-abgefeuerte Schuss** im Raum ist automatisch der Powershot:
-`powershot.bonusRicochets: 2`, `powershot.speedFactor: 2.0`, Reichweite
-unverändert (E4).
+`powershot`, Tag `reactive` (**nicht** `weapon`, siehe unten), rare,
+`maxStacks: 3`. Beim Betreten eines Raums sind `powershot.perRoom: 1` Schuss
+geladen (pro Stack einer mehr). Der **erste abgefeuerte Schuss** im Raum ist
+automatisch der Powershot: `powershot.bonusRicochets: 2`,
+`powershot.speedFactor: 2.0`, Reichweite unverändert (E4).
+
+**Umsetzungsfund:** Tag `weapon` ist in `upgradepool.js` explizit vom Pool
+ausgeschlossen (reserviert für Phase 18, siehe PLAN.md v3 Fund #4) — mit
+`weapon` wäre Powershot in dieser Phase für Spieler unerreichbar gewesen.
+Deshalb Tag `reactive`, passt inhaltlich (automatischer Bonus bei Trigger,
+wie `sprengschuss`/`zielsucher`).
 
 Der geladene Schuss ist am Rohr sichtbar, solange er vorhanden ist.
 
