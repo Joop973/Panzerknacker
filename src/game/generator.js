@@ -56,6 +56,30 @@ function pickTile(tilesData, rng, weights) {
   return tilesData.tiles[names[names.length - 1]];
 }
 
+// Spiegelwaende (Phase 5): ersetzt 2-4 Aussenrand-Zellen (ohne Ecken) durch
+// 'r' (Reflekt-Wandtyp). Nur der Aussenrand ist bereits geschlossene Wand,
+// also aendert das weder den Wandanteil noch die Erreichbarkeit -- kein
+// Risiko fuer Flood-Fill/Spawn-Platzierung.
+function placeReflectWalls(grid, rng, count) {
+  const border = [];
+  for (let c = 1; c < COLS - 1; c++) {
+    border.push([c, 0]);
+    border.push([c, ROWS - 1]);
+  }
+  for (let r = 1; r < ROWS - 1; r++) {
+    border.push([0, r]);
+    border.push([COLS - 1, r]);
+  }
+  for (let i = border.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [border[i], border[j]] = [border[j], border[i]];
+  }
+  for (let i = 0; i < count && i < border.length; i++) {
+    const [c, r] = border[i];
+    grid[r][c] = 'r';
+  }
+}
+
 // Baut das 24x16-Rohlayout aus 3x2 zufaelligen Kacheln.
 function buildGrid(tilesData, rng, weights) {
   const grid = Array.from({ length: ROWS }, () => new Array(COLS).fill('.'));
@@ -81,6 +105,10 @@ function buildGrid(tilesData, rng, weights) {
     grid[r][0] = '#';
     grid[r][COLS - 1] = '#';
   }
+  const mirrorCfg = tilesData.mirror || { minPerRoom: 2, maxPerRoom: 4 };
+  const span = mirrorCfg.maxPerRoom - mirrorCfg.minPerRoom;
+  const count = mirrorCfg.minPerRoom + Math.floor(rng() * (span + 1));
+  placeReflectWalls(grid, rng, count);
   return grid;
 }
 
@@ -114,8 +142,9 @@ function reachableCells(grid, startC, startR) {
   return seen;
 }
 
-// Sichtlinie zwischen zwei Zellzentren; '#' und 'b' blockieren
-// (Geschosse fliegen ueber 'o' hinweg, also blockiert 'o' NICHT).
+// Sichtlinie zwischen zwei Zellzentren; '#', 'b' und 'r' (Spiegelwand,
+// Phase 5) blockieren (Geschosse fliegen ueber 'o' hinweg, also blockiert
+// 'o' NICHT).
 function hasLos(grid, c0, r0, c1, r1) {
   const x0 = c0 * CELL + CELL / 2;
   const y0 = r0 * CELL + CELL / 2;
@@ -127,7 +156,7 @@ function hasLos(grid, c0, r0, c1, r1) {
     const x = x0 + ((x1 - x0) * i) / steps;
     const y = y0 + ((y1 - y0) * i) / steps;
     const cell = grid[Math.floor(y / CELL)][Math.floor(x / CELL)];
-    if (cell === '#' || cell === 'b') return false;
+    if (cell === '#' || cell === 'b' || cell === 'r') return false;
   }
   return true;
 }

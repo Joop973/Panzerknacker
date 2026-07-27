@@ -112,6 +112,7 @@ function resetRoomCounters(run) {
   run.seenRoomDeaths = 0;
   run.seenKillLog = 0;
   run.seenRoomShots = 0;
+  run.seenTrickshotScrap = 0;
   run.combo = 0; // Combo gilt nur innerhalb eines Raums
   run.comboTimer = 0;
 }
@@ -434,6 +435,11 @@ export function stepRun(run, cmd, dt) {
       }
     }
   }
+  // Trickshot-Belohnung (Phase 5): kurze Zeitlupe nach einem Abpraller-Kill.
+  // Kombiniert sich mit Taktiker -- der staerkere (kleinere) Wert gewinnt.
+  if (st.trickshotTimer > 0) {
+    scale = Math.min(scale, run.data.balance.trickshot.slowMoScale);
+  }
   run.slowMo = scale < 1; // nur fuer die Anzeige
   dt *= scale;
   stepState(st, cmd, dt);
@@ -474,6 +480,14 @@ export function stepRun(run, cmd, dt) {
   if (st.playerShots > run.seenRoomShots) {
     run.shotsFired += st.playerShots - run.seenRoomShots;
     run.seenRoomShots = st.playerShots;
+  }
+  // Trickshot-Schrott (Phase 5) genauso ueberfuehren wie andere
+  // Raum-Zaehler -- state.js kennt nur `run`-unabhaengige Rohwerte.
+  if (st.trickshotScrap > run.seenTrickshotScrap) {
+    const gained = st.trickshotScrap - run.seenTrickshotScrap;
+    run.seenTrickshotScrap = st.trickshotScrap;
+    run.scrap += gained;
+    run.scrapThisRoom += gained;
   }
 
   // Spielertod: Leben abziehen; bei 0 ist der Run vorbei (der Raum-

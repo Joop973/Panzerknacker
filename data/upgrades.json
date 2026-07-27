@@ -102,6 +102,19 @@
       "armDelayS": 0.8,
       "maxActive": 3
     },
+    "powershot": {
+      "id": "powershot",
+      "name": "Powershot",
+      "description": "Die ersten Schüsse in jedem Raum sind automatisch verstärkt: doppelt so schnell, +2 Abpraller",
+      "tag": "reactive",
+      "rarity": "rare",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "perRoom": 1,
+      "bonusRicochets": 2,
+      "speedFactor": 2.0
+    },
     "doppelrohr": {
       "id": "doppelrohr",
       "name": "Doppelrohr",

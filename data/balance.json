@@ -19,6 +19,13 @@
     "pushPx": 2,
     "graceS": 0.15
   },
+  "trickshot": {
+    "scrap": 1,
+    "scrapStrong": 2,
+    "strongRicochets": 2,
+    "slowMoS": 0.15,
+    "slowMoScale": 0.35
+  },
   "mine": {
     "fuse": 3.0,
     "radius": 64,

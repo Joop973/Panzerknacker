@@ -158,6 +158,7 @@ async function init() {
   let teleRic = 0;
   let teleDir = 0;
   let teleSec = 0;
+  let telePowershots = 0;
 
   function resetRoomTelemetry() {
     teleRoomType = null;
@@ -167,6 +168,7 @@ async function init() {
     teleRic = 0;
     teleDir = 0;
     teleSec = 0;
+    telePowershots = 0;
   }
 
   // Momentaufnahme des laufenden Raums (jeden Tick, sehr billig).
@@ -185,6 +187,7 @@ async function init() {
     teleRic = st.ricochetKills;
     teleDir = st.directKills;
     teleSec = st.secondaryUses;
+    telePowershots = st.powershotsFired;
   }
 
   function flushRoomTelemetry() {
@@ -200,6 +203,7 @@ async function init() {
       ricochetKills: teleRic,
       directKills: teleDir,
       secondaryUses: teleSec,
+      powershotsFired: telePowershots,
     });
     run.scrapThisRoom = 0;
   }

@@ -164,6 +164,13 @@ export function applyUpgrades(cfg, ups, upsData) {
     cfg.ricochets += U.scharfschuetze.ricochetsBonus;
     cfg.singleShot = true; // Magazin 1 (hart, unten angewandt)
   }
+  // Powershot (Phase 5): die ersten powershotPerRoom Schuesse jedes Raums
+  // sind automatisch verstaerkt (tank.js verwaltet den Ladungszaehler).
+  if (l('powershot')) {
+    cfg.powershotPerRoom = l('powershot') * U.powershot.perRoom;
+    cfg.powershotBonusRicochets = U.powershot.bonusRicochets;
+    cfg.powershotSpeedFactor = U.powershot.speedFactor;
+  }
 
   // Zielsucher: hartes Magazin-Limit 3 (ueberschreibt alle anderen
   // Magazin-Effekte -- ganz am Ende angewandt).

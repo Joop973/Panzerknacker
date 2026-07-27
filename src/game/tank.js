@@ -38,6 +38,10 @@ export function createTank(type, cfg, x, y) {
     berserkerSpeed: 1, // dynamischer Tempo-Multiplikator (Berserker)
     magazineBonus: 0, // dynamischer Magazin-Bonus (Uebermacht)
     shieldReady: (cfg && (cfg.shield || cfg.counterShield)) || false, // Schild geladen?
+    // Powershot-Ladungen (Phase 5): frisch pro Raum, weil createTank() bei
+    // jedem neuen Raum (und Respawn) ohnehin neu aufgerufen wird -- kein
+    // eigener "Raum betreten"-Hook noetig.
+    powershotCharges: (cfg && cfg.powershotPerRoom) || 0,
     alive: true,
     ai: {}, // Zustandsspeicher der KI-Verhalten (leer beim Spieler)
   };
@@ -145,6 +149,12 @@ export function fireBullet(tank, state) {
     angles = [tank.turret];
   }
 
+  // Powershot (Phase 5): solange Ladungen da sind, ist JEDER Abzug ein
+  // Powershot (nicht nur der allererste) -- ein Abzug verbraucht genau
+  // eine Ladung, unabhaengig davon, wie viele Kugeln er erzeugt (Doppelrohr
+  // o. ae. bekommen den Bonus dann auf beide Kugeln).
+  const boosted = tank.powershotCharges > 0;
+
   const muzzle = tank.cfg.radius + 8; // Spitze des Rohrs
   let fired = false;
   for (let i = 0; i < angles.length; i++) {
@@ -155,11 +165,12 @@ export function fireBullet(tank, state) {
     // Sprengschuss prallt ab (mind. 1 Abpraller); Sprengmunition/
     // Glaskanone zuenden hart an der Wand (detonateOnWall).
     const isExplosive = explosiveShot || tank.cfg.allExplosive;
+    const baseRicochets = explosiveShot ? Math.max(1, tank.cfg.ricochets) : tank.cfg.ricochets;
     state.bullets.push(
       createBullet(mx, my, a, {
-        speed: tank.cfg.bulletSpeed,
+        speed: boosted ? tank.cfg.bulletSpeed * tank.cfg.powershotSpeedFactor : tank.cfg.bulletSpeed,
         radius: tank.cfg.bulletRadius,
-        ricochets: explosiveShot ? Math.max(1, tank.cfg.ricochets) : tank.cfg.ricochets,
+        ricochets: boosted ? baseRicochets + tank.cfg.powershotBonusRicochets : baseRicochets,
         owner: tank,
         kind: tank.cfg.weapon,
         tungsten: tank.cfg.tungsten || false,
@@ -177,6 +188,10 @@ export function fireBullet(tank, state) {
   if (!fired) {
     tank.shots--;
     return false;
+  }
+  if (boosted) {
+    tank.powershotCharges--;
+    if (tank === state.player) state.powershotsFired++;
   }
   if (tank === state.player) state.playerShots++;
   if (tank.cfg.afterburnerMult) tank.boostTimer = tank.cfg.afterburnerS; // Nachbrenner
