@@ -68,7 +68,28 @@ export function createDebugOverlay(ctx) {
     ctx.setLineDash([]);
   }
 
-  function drawPanel(state, fps) {
+  // Performance-Budget (Phase 11b): feste Obergrenzen aus data/limits.json
+  // (enemiesAlive/mines/particles, Phase 11b neu) und data/balance.json
+  // (playerBullets/enemyBullets/ghosts, schon seit Phase 1/7 dort
+  // durchgesetzt -- keine Duplikate, die Anzeige liest jeden Wert aus
+  // genau EINER Quelle).
+  function capLines(state) {
+    const limits = state.data.limits || {};
+    const balance = state.data.balance || {};
+    const enemiesAlive = state.tanks.filter((t) => t !== state.player && t.alive).length;
+    const playerBullets = state.bullets.filter((b) => b.owner === state.player && !b.dead).length;
+    const enemyBullets = state.bullets.filter((b) => b.owner && b.owner !== state.player && !b.dead).length;
+    return [
+      `Gegner ${enemiesAlive}/${limits.enemiesAlive ?? '–'}`,
+      `Spieler-Kugeln ${playerBullets}/${balance.bullet?.maxActiveCap ?? '–'}`,
+      `Gegner-Kugeln ${enemyBullets}/${balance.enemyBullet?.maxActive ?? '–'}`,
+      `Minen ${state.mines.length}/${limits.mines ?? '–'}`,
+      `Geister ${state.ghosts.length}/${balance.ghost?.maxActive ?? '–'}`,
+      `Partikel ${state.particles.length}/${limits.particles ?? '–'}`,
+    ];
+  }
+
+  function drawPanel(state, fps, timing) {
     const liveTanks = state.tanks.filter((t) => t.alive).length;
     const entities = liveTanks + state.bullets.length + state.mines.length;
     const lines = [
@@ -78,9 +99,18 @@ export function createDebugOverlay(ctx) {
       `Bullets ${state.bullets.length}`,
       `Mines ${state.mines.length}`,
       `Cooldown ${state.player.cooldown.toFixed(2)}s`,
+      ...capLines(state),
     ];
+    if (timing) {
+      // Frame-Budget 16,6 ms bei 60 Hz: Logik/Rendering je eigene Zeile,
+      // "max" ist der schlechteste Frame im AKTUELLEN Raum (Phase 11b).
+      lines.push(
+        `Logik ${timing.logicMs.toFixed(1)}ms (max ${timing.worstLogicMs.toFixed(1)})`,
+        `Render ${timing.renderMs.toFixed(1)}ms (max ${timing.worstRenderMs.toFixed(1)})`,
+      );
+    }
     ctx.fillStyle = COLORS.panelBg;
-    ctx.fillRect(4, 4, 120, 14 * lines.length + 8);
+    ctx.fillRect(4, 4, 168, 14 * lines.length + 8);
     ctx.fillStyle = COLORS.text;
     ctx.font = '11px monospace';
     for (let i = 0; i < lines.length; i++) {
@@ -89,7 +119,7 @@ export function createDebugOverlay(ctx) {
   }
 
   return {
-    render(state, fps) {
+    render(state, fps, timing) {
       drawWallBoxes(state.walls);
       for (const t of state.tanks) {
         if (t.alive) drawCircle(t.x, t.y, t.cfg.radius);
@@ -99,7 +129,7 @@ export function createDebugOverlay(ctx) {
       drawMineRadii(state);
       drawTrails(state.bullets);
       drawRicochetCounters(state.bullets);
-      drawPanel(state, fps);
+      drawPanel(state, fps, timing);
     },
   };
 }

@@ -47,7 +47,7 @@ import { createHud } from './ui/hud.js';
 import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
-  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations', 'secondaries', 'modifiers'];
+  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations', 'secondaries', 'modifiers', 'limits'];
   const out = [];
   for (const n of names) {
     let res;
@@ -71,7 +71,7 @@ async function loadData() {
 }
 
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData, secondariesData, modifiersData] =
+  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData, secondariesData, modifiersData, limitsData] =
     await loadData();
   // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
   // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
@@ -82,6 +82,10 @@ async function init() {
   tanksData.transformations = transformData; // Definitionen fuer Phase 17
   tanksData.secondaries = secondariesData; // Phase 6: Sekundärslot-Stellwerte
   tanksData.modifiers = modifiersData; // Phase 10: Raum-Modifikatoren
+  // Phase 11b: nur die NEUEN Deckel (Gegner gleichzeitig/Minen/Partikel) --
+  // Spieler-Kugeln/Gegner-Kugeln/Geister haben ihre Obergrenze schon in
+  // balance.json, die Debug-Ansicht liest die von dort (keine Duplikate).
+  tanksData.limits = limitsData;
   // Feste Layouts EINMALIG beim Laden pruefen (Flood-Fill etc.). Ein
   // unloesbares Layout meldet sich hier mit klarer Meldung statt spaeter
   // im laufenden Spiel.
@@ -163,6 +167,11 @@ async function init() {
   let teleSecondary = 'mine';
   let teleGhosts = 0;
   let teleModifier = null;
+  // Phase 11b: schlechtester Logik-/Render-Frame IM AKTUELLEN RAUM, nur fuer
+  // die Debug-Anzeige -- bewusst nicht in der Telemetrie (die hat mit
+  // minFps schon ihre eigene, persistierte Kennzahl seit Phase 1).
+  let worstLogicMs = 0;
+  let worstRenderMs = 0;
 
   function resetRoomTelemetry() {
     teleRoomType = null;
@@ -173,6 +182,8 @@ async function init() {
     teleDir = 0;
     teleSec = 0;
     telePowershots = 0;
+    worstLogicMs = 0;
+    worstRenderMs = 0;
     teleGhosts = 0;
     teleModifier = null;
   }
@@ -593,7 +604,10 @@ async function init() {
     if (!run) return;
     renderer.render(run.state, alpha, tracks, run.phase === 'playing' ? input.getMinePreview() : null);
     if (input.isDebug() && run.phase === 'playing') {
-      debugOverlay.render(run.state, fps);
+      // Timing-Werte sind eine Frame-Anzeigeverzoegerung alt (timedRender()
+      // aktualisiert sie erst NACH diesem Aufruf) -- fuer eine Debug-Anzeige
+      // voellig ausreichend genau.
+      debugOverlay.render(run.state, fps, { logicMs: lastFrameLogicMs, renderMs: lastFrameRenderMs, worstLogicMs, worstRenderMs });
     }
     hud.render(run, { paused: pause.isPaused(), toast });
     endlessBtn.classList.toggle('hidden', run.phase !== 'victory');
@@ -609,7 +623,30 @@ async function init() {
     }
   }
 
-  const loop = createLoop({ update, render, step: STEP });
+  // Frame-Budget-Messung (Phase 11b): kein Eingriff in core/loop.js noetig --
+  // die Logikzeit summiert sich ueber ggf. mehrere update()-Aufrufe pro
+  // echtem Frame (Aufholschritte), die Renderzeit ist ein einzelner Aufruf.
+  let logicMsAccum = 0;
+  let lastFrameLogicMs = 0;
+  let lastFrameRenderMs = 0;
+  function timedUpdate(dt) {
+    const t0 = performance.now();
+    update(dt);
+    logicMsAccum += performance.now() - t0;
+  }
+  function timedRender(alpha) {
+    const t0 = performance.now();
+    render(alpha);
+    lastFrameRenderMs = performance.now() - t0;
+    lastFrameLogicMs = logicMsAccum;
+    logicMsAccum = 0;
+    if (run && run.phase === 'playing' && !teleEnded) {
+      worstLogicMs = Math.max(worstLogicMs, lastFrameLogicMs);
+      worstRenderMs = Math.max(worstRenderMs, lastFrameRenderMs);
+    }
+  }
+
+  const loop = createLoop({ update: timedUpdate, render: timedRender, step: STEP });
 
   startBtn.addEventListener('click', startRun);
   document.getElementById('resetBtn').addEventListener('click', () => {
