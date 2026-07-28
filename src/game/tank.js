@@ -42,6 +42,14 @@ export function createTank(type, cfg, x, y) {
     // jedem neuen Raum (und Respawn) ohnehin neu aufgerufen wird -- kein
     // eigener "Raum betreten"-Hook noetig.
     powershotCharges: (cfg && cfg.powershotPerRoom) || 0,
+    // Sekundärslot (Phase 6): frisch pro Raum, aus demselben Grund.
+    secondaryMineCount: 0, // fuer "jede 4. Mine ist EMP" (emp_mine)
+    secondaryCooldown: 0, // Abklingzeit fuer hook/deflector/smoke/trap_wall
+    hookTimer: 0, // > 0: wird gerade zur Wand gezogen (Enterhaken)
+    hookTarget: null,
+    deflectorTimer: 0, // Restzeit des aktiven Deflektor-Fensters
+    deflectorCharges: 0, // > 0: naechster Treffer wird reflektiert
+    turretStunTimer: 0, // > 0: EMP-Mine -- Turm dreht sich nicht (stunTimer bleibt fuer Bewegung)
     alive: true,
     ai: {}, // Zustandsspeicher der KI-Verhalten (leer beim Spieler)
   };
@@ -72,6 +80,33 @@ function resolveTankBlocking(tank, tanks) {
 export function moveTank(tank, axis, state, dt) {
   tank.prevX = tank.x;
   tank.prevY = tank.y;
+
+  // Sekundärslot "Enterhaken" (Phase 6): waehrend des Zugs ignoriert die
+  // Bewegung jede Eingabe komplett und naehert sich stattdessen dem
+  // Zielpunkt an der getroffenen Wand.
+  if (tank.hookTimer > 0) {
+    const scfg = state.data.secondaries?.hook || {};
+    const speed = scfg.pullSpeedPx ?? 520;
+    const tx = tank.hookTarget.x - tank.x;
+    const ty = tank.hookTarget.y - tank.y;
+    const dist = Math.hypot(tx, ty);
+    const step = speed * dt;
+    if (dist <= step || dist < 1) {
+      tank.x = tank.hookTarget.x;
+      tank.y = tank.hookTarget.y;
+      tank.hookTimer = 0;
+    } else {
+      tank.x += (tx / dist) * step;
+      tank.y += (ty / dist) * step;
+      tank.heading = Math.atan2(ty, tx);
+    }
+    resolveCircleWalls(tank, tank.cfg.radius, state.walls);
+    resolveTankBlocking(tank, state.tanks);
+    resolveCircleWalls(tank, tank.cfg.radius, state.walls);
+    tank.vx = (tank.x - tank.prevX) / dt;
+    tank.vy = (tank.y - tank.prevY) / dt;
+    return;
+  }
 
   // Krallenfalle: gefangene Panzer koennen nicht fahren (Turm geht).
   let dx = tank.stunTimer > 0 ? 0 : axis.x;
@@ -261,7 +296,16 @@ export function layMine(tank, state, throwOverride) {
       ly = ny;
     }
   }
-  state.mines.push(createMine(lx, ly, tank, state.data.mine.radiusPx));
+  // Sekundärslot "EMP-Mine" (Phase 6): teilt sich die Legemechanik mit
+  // der normalen Mine -- jede vierte gelegte Mine ist EMP (kein Schaden,
+  // betaeubt stattdessen). Gegner setzen cfg.secondary nie -> immer false.
+  let isEmp = false;
+  if (tank.cfg.secondary === 'emp_mine') {
+    tank.secondaryMineCount = (tank.secondaryMineCount || 0) + 1;
+    const everyNth = state.data.secondaries?.emp_mine?.everyNth ?? 4;
+    isEmp = tank.secondaryMineCount % everyNth === 0;
+  }
+  state.mines.push(createMine(lx, ly, tank, state.data.mine.radiusPx, isEmp));
   state.sounds.push('mine');
   // Schockwelle: nahe Gegner um die gelegte Mine wegstossen.
   if (tank.cfg.shockwaveRadius) {
@@ -281,4 +325,74 @@ export function layMine(tank, state, throwOverride) {
     }
   }
   return true;
+}
+
+// Sekundärslot (Phase 6): generischer Dispatch fuer die aktive
+// Sekundärwaffe des Spielers. mine/emp_mine laufen weiter ueber layMine()
+// (teilen sich Zuend-/Wurfmechanik); die vier neuen teilen sich stattdessen
+// eine Abklingzeit (tank.secondaryCooldown), da sie Aktionen statt Vorraete
+// sind. Gibt true zurueck, wenn tatsaechlich etwas ausgeloest wurde.
+export function useSecondary(tank, state, throwOverride) {
+  const sec = tank.cfg.secondary || 'mine';
+  if (sec === 'mine' || sec === 'emp_mine') return layMine(tank, state, throwOverride);
+  if (tank.secondaryCooldown > 0) return false;
+  const scfg = state.data.secondaries?.[sec] || {};
+  let used = false;
+  if (sec === 'hook') {
+    used = fireHook(tank, state, scfg);
+  } else if (sec === 'deflector') {
+    tank.deflectorTimer = scfg.activeS ?? 1.5;
+    tank.deflectorCharges = 1;
+    state.sounds.push('shield');
+    used = true;
+  } else if (sec === 'smoke') {
+    state.smokeClouds.push({
+      x: tank.x,
+      y: tank.y,
+      radius: scfg.radiusPx ?? 90,
+      age: 0,
+      life: scfg.durationS ?? 4,
+    });
+    state.sounds.push('mine');
+    state.spawnParticles?.(tank.x, tank.y, '#9aa0a8', 12, 70);
+    used = true;
+  } else if (sec === 'trap_wall') {
+    used = placeTrapWall(tank, state, scfg);
+  }
+  if (used) tank.secondaryCooldown = scfg.cooldownS ?? 4;
+  return used;
+}
+
+// Enterhaken: Raymarch in Blickrichtung bis maxRangePx. Trifft er eine
+// Wand, wird der Panzer ueber mehrere Ticks dorthin gezogen (moveTank()
+// uebernimmt den eigentlichen Zug via tank.hookTimer/hookTarget).
+function fireHook(tank, state, scfg) {
+  const step = state.data.ai.raycastStepPx;
+  const maxRange = scfg.maxRangePx ?? 260;
+  const cos = Math.cos(tank.turret);
+  const sin = Math.sin(tank.turret);
+  let x = tank.x;
+  let y = tank.y;
+  for (let d = 0; d < maxRange; d += step) {
+    const nx = x + cos * step;
+    const ny = y + sin * step;
+    if (state.isSolid(nx, ny)) {
+      tank.hookTarget = { x: nx - cos * tank.cfg.radius, y: ny - sin * tank.cfg.radius };
+      tank.hookTimer = 1;
+      state.sounds.push('dash');
+      return true;
+    }
+    x = nx;
+    y = ny;
+  }
+  return false; // keine Wand in Reichweite -> kein Cooldown verbraucht
+}
+
+// Sperrmauer: entsteht auf der Kachel vor dem Panzer, wenn diese begehbar
+// und panzerfrei ist (Details/Haltbarkeit in state.placeTrapWall()).
+function placeTrapWall(tank, state, scfg) {
+  const dist = scfg.placeDistPx ?? 48;
+  const x = tank.x + Math.cos(tank.turret) * dist;
+  const y = tank.y + Math.sin(tank.turret) * dist;
+  return state.placeTrapWall(x, y, scfg.hits ?? 3);
 }

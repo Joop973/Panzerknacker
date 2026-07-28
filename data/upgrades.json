@@ -457,6 +457,66 @@
       "minRoom": 1,
       "magazineBonus": 2,
       "cooldownMult": 0.85
+    },
+    "mine": {
+      "id": "mine",
+      "name": "Mine",
+      "description": "Startbelegung des Sekundärslots — legt/wirft eine Mine",
+      "tag": "secondary",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1
+    },
+    "emp_mine": {
+      "id": "emp_mine",
+      "name": "EMP-Mine",
+      "description": "Sekundärslot: jede 4. Mine ist blau und betäubt statt zu töten — Gegner drehen den Turm nicht, blockieren aber weiter Geschosse",
+      "tag": "secondary",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1
+    },
+    "hook": {
+      "id": "hook",
+      "name": "Enterhaken",
+      "description": "Sekundärslot: zieht dich zur getroffenen Wand",
+      "tag": "secondary",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1
+    },
+    "deflector": {
+      "id": "deflector",
+      "name": "Deflektor",
+      "description": "Sekundärslot: 1,5 s aktiv, reflektiert den nächsten Treffer in deine Blickrichtung",
+      "tag": "secondary",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1
+    },
+    "smoke": {
+      "id": "smoke",
+      "name": "Rauchgranate",
+      "description": "Sekundärslot: unterbricht Sichtlinien für 4 s",
+      "tag": "secondary",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1
+    },
+    "trap_wall": {
+      "id": "trap_wall",
+      "name": "Sperrmauer",
+      "description": "Sekundärslot: errichtet eine Wand, die 3 Schüsse hält — eigene Bankshot-Winkel",
+      "tag": "secondary",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1
     }
   },
   "fallback": {

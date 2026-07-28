@@ -33,11 +33,14 @@ export function createHud(ctx) {
     const liveMines = st.mines.filter((m) => m.owner === p && !m.dead).length;
     ctx.font = '11px monospace';
     ctx.fillStyle = '#9aa0a8';
-    ctx.fillText(
-      `Kugeln ${p.cfg.magazine - liveBullets}/${p.cfg.magazine}  Minen ${p.cfg.mines - liveMines}/${p.cfg.mines}`,
-      118,
-      15,
-    );
+    let ammoLine = `Kugeln ${p.cfg.magazine - liveBullets}/${p.cfg.magazine}  Minen ${p.cfg.mines - liveMines}/${p.cfg.mines}`;
+    // EMP-Mine (Phase 6, Sekundärslot): Zähler bis zur naechsten blauen Mine.
+    if (p.cfg.secondary === 'emp_mine') {
+      const everyNth = run.data.secondaries?.emp_mine?.everyNth ?? 4;
+      const rest = everyNth - ((p.secondaryMineCount || 0) % everyNth);
+      ammoLine += `  ⚡${rest}`;
+    }
+    ctx.fillText(ammoLine, 118, 15);
     // Schrottstand permanent (Phase 3) -- Gold, zwischen Munition und Mitte.
     ctx.fillStyle = '#e0c860';
     ctx.fillText(`⚙ ${run.scrap || 0}`, 296, 15);

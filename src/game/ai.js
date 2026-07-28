@@ -36,7 +36,7 @@ export function clearLine(state, x0, y0, x1, y1) {
   let x = x0;
   let y = y0;
   for (let d = 0; d < dist; d += step) {
-    if (state.isSolid(x, y)) return false;
+    if (state.blocksSight(x, y)) return false;
     x += dx;
     y += dy;
   }
@@ -55,7 +55,7 @@ export function playerInSight(tank, state) {
   let x = tank.x + cos * (tank.cfg.radius + 8);
   let y = tank.y + sin * (tank.cfg.radius + 8);
   for (let d = 0; d < raycastMaxPx; d += raycastStepPx) {
-    if (state.isSolid(x, y)) return false;
+    if (state.blocksSight(x, y)) return false;
     const dx = x - p.x;
     const dy = y - p.y;
     if (dx * dx + dy * dy < hitR * hitR) return true;
@@ -154,7 +154,10 @@ export function steer(tank, state, dt, targetAngle, cfg) {
 // die Anwendung (Bewegung, Schuss, Minenlegen) macht state.js.
 export function updateEnemy(tank, state, dt) {
   const move = DRIVES[tank.cfg.drive](tank, state, dt);
-  const fire = TURRETS[tank.cfg.turret](tank, state, dt);
+  // EMP-Mine (Phase 6): betaeubte Gegner drehen den Turm nicht und feuern
+  // nicht -- eigenes Feld turretStunTimer, damit die bestehende Krallenfalle
+  // (stunTimer allein) den Turm weiter benutzbar laesst (siehe PLAN.md).
+  const fire = tank.turretStunTimer > 0 ? false : TURRETS[tank.cfg.turret](tank, state, dt);
 
   // Dritte Achse: Minenleger (t_yellow "ohne taktischen Grund" per
   // Zufallstimer -- das beabsichtigte Sich-selbst-Einsperren entsteht

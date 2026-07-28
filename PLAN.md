@@ -352,8 +352,21 @@ Feuerpause wäre der Ladungsschuss durch die Hintertür.
 (geladener Schuss am Rohr sichtbar), `src/core/telemetry.js` (`powershotsFired`
 ist als Feld schon vorbereitet).
 
-## Phase 6 — Sekundärslot
+## Phase 6 — Sekundärslot  ✅ erledigt
 **Aufwand:** 2 Sessions
+
+**Umsetzungsfunde** (Abweichungen von der Ausgangsbeschreibung, siehe
+`CLAUDE.md` für Details): Turm-Einfrieren braucht ein NEUES Feld
+(`turretStunTimer`), nicht das bestehende `stunTimer` — sonst hätte das
+die bewusste Krallenfalle-Eigenschaft "Turm bleibt nutzbar" gebrochen.
+Ausrüsten läuft über ein explizites `run.equippedSecondary`-Feld (nicht
+über einen Level-Scan der sechs Karten), da mehrere Sekundärkarten
+gleichzeitig Level > 0 haben können. `emp_mine` teilt sich die
+Legemechanik 1:1 mit `mine` (kein zweiter Button), die vier neuen
+Sekundärwaffen teilen sich stattdessen einen generischen
+`secondaryCooldown`. `trap_wall` nutzt die bestehende
+`destroyWall()`-Haltbarkeit wieder (neues Feld `wall.customDurability`),
+statt eine zweite Zähllogik zu bauen.
 
 Die Mine wird von der festen Zweitwaffe zu einer Option von sechs. Ein Slot,
 per Upgrade austauschbar, eigener Cooldown, bestehender Knopf.
