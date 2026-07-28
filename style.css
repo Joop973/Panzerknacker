@@ -544,6 +544,14 @@ html, body {
   text-align: center;
 }
 
+.pv-mod {
+  font-family: monospace;
+  font-size: 12px;
+  color: #e0a860;
+  max-width: 70vw;
+  text-align: center;
+}
+
 /* Vollbild-Touch: floating Sticks als DOM-Elemente (auch neben dem Canvas) */
 .stick-base {
   position: fixed;

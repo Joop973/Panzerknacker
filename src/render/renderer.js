@@ -696,6 +696,26 @@ export function createRenderer(ctx) {
     }
   }
 
+  // Raum-Modifikator "Nebel"/"Dunkelheit" (Phase 10): rein optische Maske --
+  // begrenzt die SICHTBARKEIT des Spielers, nicht die KI-Sichtlinien (die
+  // laufen weiter unveraendert ueber state.blocksSight/clearLine). Ein
+  // Radialgradient um den Spieler ist transparent im Kern und geht in
+  // fogColor ueber; jenseits des aeusseren Gradient-Stopps fuellt Canvas
+  // automatisch mit der letzten Farbe weiter -- deckt so auch die Ecken ab.
+  function drawFog(ctx, state, alpha) {
+    const mod = state.modifier;
+    if (!mod || !mod.visionRadiusPx) return;
+    const p = state.player;
+    const x = lerp(p.prevX, p.x, alpha);
+    const y = lerp(p.prevY, p.y, alpha);
+    const r = mod.visionRadiusPx;
+    const grad = ctx.createRadialGradient(x, y, r * 0.45, x, y, r);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, mod.fogColor || 'rgba(4,5,9,0.9)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+
   return {
     render(state, alpha, tracks, minePreview) {
       renderState = state;
@@ -725,6 +745,7 @@ export function createRenderer(ctx) {
       drawSmoke(ctx, state);
 
       drawTexts(ctx, state);
+      drawFog(ctx, state, alpha);
       ctx.restore();
 
       // Roter Flash nach eigenem Tod (ungeschuettelt, ueber allem).

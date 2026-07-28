@@ -16,7 +16,7 @@ import { createGhost, updateGhosts } from './ghost.js';
 import { updateEnemy } from './ai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
-import { resolveCfg, applyUpgrades } from './cfg.js';
+import { resolveCfg, applyUpgrades, applyRoomModifier } from './cfg.js';
 import { armorBlocks, reflectBullet, reflectFromAim, hasWallBounced, isLive } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
@@ -91,17 +91,27 @@ function applyAffixByIndex(t, index, eliteAffixes) {
 
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
-    roomSpec, arenas, transform, equippedSecondary, waveSplit, waveCfg, eliteAffixes } = opts;
+    roomSpec, arenas, transform, equippedSecondary, waveSplit, waveCfg, eliteAffixes, modifier } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
     : generateRoom(tiles, genRng, enemyTypes.length, weights, roomSpec, arenas);
   const grid = room.grid;
   const walls = buildWalls(grid);
+  // Raum-Modifikator "Spiegelsaal" (Phase 10): feste Waende werfen Kugeln
+  // zurueck -- nur `solid`, durchschiessbare (`breakable`) Waende behalten
+  // ihre eigene Mechanik, sonst waere die Wandzerstoerung im Raum entwertet.
+  if (modifier?.mirrorHall) {
+    for (const w of walls) if (w.type === 'solid') w.type = 'reflect';
+  }
 
   const player = createTank(
     'player',
-    applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData, equippedSecondary),
+    applyRoomModifier(
+      applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData, equippedSecondary),
+      modifier,
+      true,
+    ),
     room.playerSpawn.x,
     room.playerSpawn.y,
   );
@@ -113,7 +123,7 @@ export function createState(data, tiles, opts) {
   enemyTypes.forEach((type, i) => {
     if (i >= firstWaveCount) return;
     const s = room.enemySpawns[i];
-    const t = createTank(type, resolveCfg(data, type), s.x, s.y);
+    const t = createTank(type, applyRoomModifier(resolveCfg(data, type), modifier, false), s.x, s.y);
     t.spawnX = s.x;
     t.spawnY = s.y;
     applyAffixByIndex(t, i, eliteAffixes);
@@ -164,6 +174,7 @@ export function createState(data, tiles, opts) {
     smokeClouds: [], // Phase 6: Rauchgranate -- blockiert nur KI-Sichtlinien
     pendingWave, // Phase 9: zurueckgehaltene zweite Welle (oder null)
     eliteAffixes: eliteAffixes || null, // Phase 9: fuer spaeter nachspawnende Welle
+    modifier: modifier || null, // Phase 10: Raum-Modifikator (data/modifiers.json)
     walls,
     tanks,
     player,
@@ -373,7 +384,11 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
 function respawnPlayer(state) {
   const fresh = createTank(
     'player',
-    applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades, state.upgradesData, state.equippedSecondary),
+    applyRoomModifier(
+      applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades, state.upgradesData, state.equippedSecondary),
+      state.modifier,
+      true,
+    ),
     state.playerSpawn.x,
     state.playerSpawn.y,
   );
@@ -423,7 +438,7 @@ function updateWave(state, dt) {
   if (w.warningTimer > 0) return;
   w.types.forEach((type, i) => {
     const s = w.spawns[i];
-    const t = createTank(type, resolveCfg(state.data, type), s.x, s.y);
+    const t = createTank(type, applyRoomModifier(resolveCfg(state.data, type), state.modifier, false), s.x, s.y);
     t.spawnX = s.x;
     t.spawnY = s.y;
     applyAffixByIndex(t, w.startIdx + i, state.eliteAffixes);

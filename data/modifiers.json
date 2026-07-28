@@ -1,0 +1,63 @@
+{
+  "minRoom": 3,
+  "modifiers": [
+    {
+      "id": "fog",
+      "name": "Nebel",
+      "desc": "Sicht auf einen weiten Radius um dich begrenzt.",
+      "visionRadiusPx": 260,
+      "fogColor": "rgba(200,210,220,0.55)"
+    },
+    {
+      "id": "darkness",
+      "name": "Dunkelheit",
+      "desc": "Nur ein kleiner Lichtkreis um dich -- der Rest bleibt schwarz.",
+      "visionRadiusPx": 150,
+      "fogColor": "rgba(4,5,9,0.9)"
+    },
+    {
+      "id": "jammer",
+      "name": "Stoersender",
+      "desc": "Alle Geschosse fliegen 30 % langsamer.",
+      "bulletSpeedMult": 0.7
+    },
+    {
+      "id": "overpressure",
+      "name": "Ueberdruck",
+      "desc": "Alle Geschosse prallen einmal mehr ab.",
+      "ricochetsBonus": 1
+    },
+    {
+      "id": "slippery",
+      "name": "Glatteis",
+      "desc": "Der Boden ist rutschig -- alle Panzer gleiten nach.",
+      "slippery": true,
+      "gripPerSec": 3
+    },
+    {
+      "id": "crowded",
+      "name": "Ueberfuellt",
+      "desc": "50 % mehr Gegner, dafuer deutlich weniger aggressiv.",
+      "enemyBudgetMult": 1.5,
+      "aggressionMult": 0.7
+    },
+    {
+      "id": "sniper_alley",
+      "name": "Scharfschuetzengasse",
+      "desc": "Alle Gegner halten Distanz und zielen praezise.",
+      "roleOverride": "sieger"
+    },
+    {
+      "id": "no_secondary",
+      "name": "Ausruestungssperre",
+      "desc": "Deine Sekundaerwaffe ist in diesem Raum gesperrt.",
+      "noSecondary": true
+    },
+    {
+      "id": "mirror_hall",
+      "name": "Spiegelsaal",
+      "desc": "Alle festen Waende werfen Geschosse zurueck.",
+      "mirrorHall": true
+    }
+  ]
+}

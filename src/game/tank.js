@@ -26,6 +26,8 @@ export function createTank(type, cfg, x, y) {
     turret: -Math.PI / 2, // Turm, unabhaengig vom Rumpf
     vx: 0, // tatsaechliche Geschwindigkeit (px/s, nach Kollisionen)
     vy: 0, // -- gebraucht vom Vorhaltezielen (t_black)
+    iceVx: 0, // Raum-Modifikator "Glatteis" (Phase 10): nachgleitende Geschwindigkeit
+    iceVy: 0,
     cooldown: 0,
     protect: 0, // > 0: Spawn-Schutz (unverwundbar, blinkt)
     stunTimer: 0, // > 0: Krallenfalle -- kann nicht fahren
@@ -116,10 +118,25 @@ export function moveTank(tank, axis, state, dt) {
     // Normalisieren, damit Diagonale nicht schneller ist.
     dx /= len;
     dy /= len;
-    // Effektives Tempo: Basis * Berserker * Nachbrenner * Blutrausch.
-    const boost = tank.boostTimer > 0 ? tank.cfg.afterburnerMult || 1 : 1;
-    const blood = tank.bloodTimer > 0 ? tank.cfg.bloodlustSpeed || 1 : 1;
-    const spd = tank.cfg.speed * (tank.berserkerSpeed || 1) * boost * blood;
+  }
+  // Effektives Tempo: Basis * Berserker * Nachbrenner * Blutrausch.
+  const boost = tank.boostTimer > 0 ? tank.cfg.afterburnerMult || 1 : 1;
+  const blood = tank.bloodTimer > 0 ? tank.cfg.bloodlustSpeed || 1 : 1;
+  const spd = tank.cfg.speed * (tank.berserkerSpeed || 1) * boost * blood;
+  const mod = state.modifier;
+  if (mod?.slippery) {
+    // Glatteis (Phase 10): die tatsaechliche Geschwindigkeit naehert sich der
+    // Eingabe nur allmaehlich an (Grip statt Sofort-Stopp/-Start) -- betrifft
+    // ALLE Panzer gleich, gilt daher generisch in moveTank() statt in einem
+    // der vier KI-Verhalten.
+    const grip = mod.gripPerSec ?? 3;
+    const t = Math.min(1, grip * dt);
+    tank.iceVx += (dx * spd - tank.iceVx) * t;
+    tank.iceVy += (dy * spd - tank.iceVy) * t;
+    tank.x += tank.iceVx * dt;
+    tank.y += tank.iceVy * dt;
+    if (len > 0) tank.heading = Math.atan2(dy, dx);
+  } else if (len > 0) {
     tank.x += dx * spd * dt;
     tank.y += dy * spd * dt;
     tank.heading = Math.atan2(dy, dx);
@@ -333,6 +350,10 @@ export function layMine(tank, state, throwOverride) {
 // eine Abklingzeit (tank.secondaryCooldown), da sie Aktionen statt Vorraete
 // sind. Gibt true zurueck, wenn tatsaechlich etwas ausgeloest wurde.
 export function useSecondary(tank, state, throwOverride) {
+  // Raum-Modifikator "Ausruestungssperre" (Phase 10): Sekundärwaffe fuer
+  // diesen Raum komplett gesperrt (nicht ueber cfg.secondary=null geloest,
+  // weil `sec = tank.cfg.secondary || 'mine'` sonst wieder auf Mine faellt).
+  if (tank.cfg.secondaryDisabled) return false;
   const sec = tank.cfg.secondary || 'mine';
   if (sec === 'mine' || sec === 'emp_mine') return layMine(tank, state, throwOverride);
   if (tank.secondaryCooldown > 0) return false;
