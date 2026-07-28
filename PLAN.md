@@ -727,7 +727,7 @@ Raum), `src/game/generator.js` (Flood-Fill-Check nach Zerstörung), `src/game/st
   Mechanik unentdeckbar, da zerstörbare Wände sonst wie normale Wände
   aussehen.
 
-## Phase 11b — Performance-Budget
+## Phase 11b — Performance-Budget  ✅ erledigt
 **Aufwand:** 1 Session
 **Neu in v2.**
 
@@ -748,6 +748,48 @@ Telemetrie.
 
 Kollision ist unkritisch (30 Kugeln × 12 Panzer = 360 Prüfungen pro Frame).
 Der Risikopunkt ist die Sichtlinien-KI aus Phase 16.
+
+**Umsetzungsfunde:**
+- **Drei der sechs Zeilen waren schon durchgesetzt, bevor diese Phase begann**
+  (`balance.json: bullet.maxActiveCap` 8, `enemyBullet.maxActive` 24,
+  `ghost.maxActive` 4 aus Phase 1/7) — `data/limits.json` (neu) enthält
+  deshalb bewusst NUR die drei wirklich neuen Deckel (`enemiesAlive: 12`,
+  `mines: 8`, `particles: 300`). Die Debug-Tabelle liest die anderen drei
+  Werte direkt aus `balance.json` mit — kein Parallelsystem, jeder Wert hat
+  genau eine Quelle. ("Spielergeschosse: 5" aus der PLAN-Tabelle ist der
+  Basis-Magazinwert `bullet.maxActive`, nicht die Performance-Obergrenze;
+  die tatsaechlich harte Sicherheitsgrenze ist `bullet.maxActiveCap` 8 --
+  in der Debug-Zeile steht deshalb der Cap-Wert.)
+- **`particles`-Deckel war schon vorhanden, aber hartcodiert** (`if (state
+  .particles.length > 280) return;` in `state.js: spawnParticles()`) --
+  jetzt `state.data.limits?.particles ?? 300` (Fallback fuer Aufrufe ohne
+  geladene `limits`-Daten, z. B. isolierte Tests).
+- **`enemiesAlive`-Deckel ist ein reines Sicherheitsnetz**, kein aktives
+  Gameplay-Element: Budget-Kauf (`maxEnemiesPerRoom: 8`) und der
+  Finalraum (6 Spawnpunkte) bleiben schon unter 12. Guard in
+  `createState()`s Spawn-Schleife und `updateWave()`s Welle-2-Schleife
+  (`if (tanks.length - 1 >= enemyCap) return;`) -- greift im normalen
+  Spiel nie, verhindert aber unbegrenztes Wachstum, falls ein kuenftiges
+  System (neuer Raumtyp, Bug) das je aushebeln wuerde.
+- **`mines`-Deckel ist als EIN gemeinsames Budget** (Spieler- + Gegner-Minen
+  zusammen) umgesetzt, nicht wie beim Gegner-Geschoss-Deckel als reiner
+  Gegner-Teilmengen-Deckel -- PLAN.md fuehrt Minen als eine einzige Tabellen-
+  zeile statt (wie bei Geschossen) getrennt nach Spieler/Gegner. Verdraengt
+  wird trotzdem nur von GEGNER-Minen (aeltestes zuerst); eigene
+  (Spieler-)Minen werden nie entfernt, dieselbe Asymmetrie wie beim
+  Gegner-Geschoss-Deckel seit Phase 1 ("Feuersperre statt Verdraengung").
+- **Logik-/Render-Zeitmessung ohne Eingriff in `core/loop.js`**: `main.js`
+  wickelt `update`/`render` in `timedUpdate`/`timedRender` (Summe aller
+  `update()`-Aufrufe pro echtem Frame plus ein `render()`-Aufruf, je per
+  `performance.now()`), haelt `worstLogicMs`/`worstRenderMs` als raum-
+  lokales Maximum (Reset in `resetRoomTelemetry()`, analog zu `teleMinFps`
+  seit Phase 1). Bewusst NICHT Teil der Telemetrie -- die hat mit `minFps`
+  schon ihre eigene, persistierte FPS-Kennzahl; die neuen Werte sind reine
+  Debug-Anzeige (`?debug=1` UND F1-Overlay).
+- **FPS-Zaehler + `minFps` in der Telemetrie existierten schon seit Phase 1**
+  (`main.js`s 500-ms-Fenster + `telemetry.recordRoom()`), diese Phase hat
+  daran nichts geaendert -- nur `debug.js`s F1-Overlay bekam die neue
+  Deckel-Tabelle + die beiden Logik-/Render-ms-Zeilen dazu.
 
 ---
 

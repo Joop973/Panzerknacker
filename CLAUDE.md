@@ -46,14 +46,17 @@ als durchscheinender Verbündeter weiter), **Phase 8** (Gegner-Rollen statt
 Gegner-Typen: vier datengetriebene Rollen statt neun eigener
 Fahr-/Turmfunktionen), **Phase 9** (Elite-Affixe, Wellen, additive
 Elite-Belohnung), **Phase 10** (Raum-Modifikatoren: 9 Effekte aus
-`data/modifiers.json`, ab Raum 3 einer pro Kampf-/Eliteraum) und **Phase 11**
+`data/modifiers.json`, ab Raum 3 einer pro Kampf-/Eliteraum), **Phase 11**
 (Zerstörbare Wände: ein Anteil innerer Wände pro Raum hält 3 Treffer aus,
-bevor sie fallen) sind gebaut. `PLAN.md` wurde auf **v3** konsistenzgeprüft:
-tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`, doppelt gebautes
-Affix-System, falscher `eliteBonus`-Feldname) entfernt, jede offene Phase
-bekommt jetzt eine "Betroffene Dateien"-Zeile. **Nächste Phase: Phase 11b —
-Performance-Budget.** Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix,
-echtes Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
+bevor sie fallen) und **Phase 11b** (Performance-Budget: feste Obergrenzen
+aus `data/limits.json` + `balance.json`, im F1-Debug-Overlay sichtbar
+zusammen mit Logik-/Render-Frame-Zeit) sind gebaut. `PLAN.md` wurde auf
+**v3** konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte
+`beutepanzer`, doppelt gebautes Affix-System, falscher `eliteBonus`-
+Feldname) entfernt, jede offene Phase bekommt jetzt eine "Betroffene
+Dateien"-Zeile. **Nächste Phase: Phase 12 — Roguelike-Karte** (Stufe 3:
+Struktur). Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
+Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
@@ -483,6 +486,36 @@ Zellen mit einem neuen Grid-Zeichen `'d'` (Aussenrand bleibt immer `'#'`).
   der Sperrmauer, aber schon unbeschädigt schwach sichtbar (kein
   `frac === 1`-Unsichtbarkeitsfall) — sonst wäre die Mechanik unentdeckbar,
   weil zerstörbare Wände sonst aussehen wie normale.
+
+### Phase 11b (Performance-Budget) — gemergt
+Neu: **`data/limits.json`** — enthält bewusst NUR die drei wirklich neuen
+Deckel (`enemiesAlive: 12`, `mines: 8`, `particles: 300`). Drei der sechs
+PLAN-Tabellenzeilen waren schon vorher durchgesetzt
+(`balance.json: bullet.maxActiveCap` 8, `enemyBullet.maxActive` 24,
+`ghost.maxActive` 4 aus Phase 1/7) — die Debug-Anzeige liest diese direkt
+aus `balance.json` mit, statt sie zu duplizieren (jeder Cap-Wert hat genau
+eine Quelle).
+- **`particles`-Deckel war schon da, aber hartcodiert** (`280` inline in
+  `state.js: spawnParticles()`) — jetzt `state.data.limits?.particles ?? 300`.
+- **`enemiesAlive`** ist ein reines Sicherheitsnetz (Guard in `createState()`s
+  Spawn-Schleife und `updateWave()`s Welle-2-Schleife), greift im normalen
+  Spiel nie (Budget-Kauf max. 8, Finalraum max. 6 Spawns, beides < 12).
+- **`mines`** ist EIN gemeinsames Budget für Spieler- UND Gegner-Minen
+  zusammen (anders als der reine Gegner-Teilmengen-Deckel bei Geschossen,
+  weil PLAN.md Minen als eine einzige Tabellenzeile führt) — verdrängt wird
+  trotzdem nur von der ältesten GEGNER-Mine, eigene (Spieler-)Minen werden
+  nie entfernt (dieselbe Asymmetrie wie beim Gegner-Geschoss-Deckel seit
+  Phase 1, "Feuersperre statt Verdrängung").
+- **Logik-/Render-Zeitmessung ohne Eingriff in `core/loop.js`**: `main.js`
+  wickelt `update`/`render` in `timedUpdate`/`timedRender`
+  (`performance.now()` um alle `update()`-Aufrufe eines echten Frames +
+  einen `render()`-Aufruf), hält `worstLogicMs`/`worstRenderMs` als
+  raumlokales Maximum (Reset in `resetRoomTelemetry()`, wie `teleMinFps`
+  seit Phase 1). Bewusst NICHT in der Telemetrie — nur im F1-Debug-Overlay
+  (`debug.js: drawPanel()`) sichtbar, zusammen mit der neuen Deckel-Tabelle
+  (live/Cap je Zeile).
+- FPS-Zähler + `minFps` in der Telemetrie existierten schon seit Phase 1 —
+  unverändert.
 
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,

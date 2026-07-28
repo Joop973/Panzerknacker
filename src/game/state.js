@@ -127,8 +127,14 @@ export function createState(data, tiles, opts) {
   // (waveSplit-Grenze); der Rest wartet an denselben, vom Generator schon
   // erzeugten Spawnpunkten in state.pendingWave (siehe stepState()).
   const firstWaveCount = waveSplit ?? enemyTypes.length;
+  // Sicherheitsnetz (Phase 11b, data/limits.json: enemiesAlive) -- greift im
+  // normalen Spiel nie (Budget-Kauf + Wellen bleiben schon unter der Zahl),
+  // schuetzt aber vor unbegrenztem Wachstum, falls ein kuenftiges System
+  // (z. B. ein neuer Raumtyp) das jemals aushebeln wuerde.
+  const enemyCap = data.limits?.enemiesAlive ?? Infinity;
   enemyTypes.forEach((type, i) => {
     if (i >= firstWaveCount) return;
+    if (tanks.length - 1 >= enemyCap) return;
     const s = room.enemySpawns[i];
     const t = createTank(type, applyRoomModifier(resolveCfg(data, type), modifier, false), s.x, s.y);
     t.spawnX = s.x;
@@ -348,7 +354,8 @@ export function createState(data, tiles, opts) {
       state.shake = Math.min(10, state.shake + amount);
     },
     spawnParticles(x, y, color, n, speed) {
-      if (state.particles.length > 280) return; // Deckel
+      // Phase 11b: Deckel aus data/limits.json statt hartcodierter Zahl.
+      if (state.particles.length > (state.data.limits?.particles ?? 300)) return;
       for (let i = 0; i < n; i++) {
         const ang = state.rng() * Math.PI * 2;
         const v = speed * (0.4 + state.rng() * 0.8);
@@ -445,7 +452,11 @@ function updateWave(state, dt) {
   }
   w.warningTimer -= dt;
   if (w.warningTimer > 0) return;
+  // Sicherheitsnetz (Phase 11b), siehe createState() -- greift im normalen
+  // Spiel nie, schuetzt aber vor unbegrenztem Wachstum.
+  const enemyCap = state.data.limits?.enemiesAlive ?? Infinity;
   w.types.forEach((type, i) => {
+    if (state.tanks.length - 1 >= enemyCap) return;
     const s = w.spawns[i];
     const t = createTank(type, applyRoomModifier(resolveCfg(state.data, type), state.modifier, false), s.x, s.y);
     t.spawnX = s.x;
@@ -689,5 +700,19 @@ export function stepState(state, cmd, dt) {
       const drop = new Set(enemyBullets.slice(0, enemyBullets.length - enemyCap));
       state.bullets = state.bullets.filter((b) => !drop.has(b));
     }
+  }
+
+  // Minen-Deckel (Phase 11b, data/limits.json: mines) -- anders als beim
+  // Gegner-Geschoss-Deckel EIN gemeinsames Budget fuer ALLE Minen zusammen
+  // (PLAN.md fuehrt Minen als eine einzige Zeile, nicht getrennt nach
+  // Spieler/Gegner wie bei den Geschossen). Verdraengt wird trotzdem nur
+  // von GEGNER-Minen, aeltestes zuerst -- eigene (Spieler-)Minen werden nie
+  // entfernt, dieselbe Asymmetrie wie beim Gegner-Geschoss-Deckel.
+  const mineCap = state.data.limits?.mines;
+  if (mineCap && state.mines.length > mineCap) {
+    const excess = state.mines.length - mineCap;
+    const enemyMines = state.mines.filter((m) => m.owner !== state.player);
+    const drop = new Set(enemyMines.slice(0, Math.min(excess, enemyMines.length)));
+    state.mines = state.mines.filter((m) => !drop.has(m));
   }
 }
