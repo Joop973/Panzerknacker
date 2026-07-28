@@ -8,7 +8,7 @@
 
 import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
 import { mulberry32 } from '../core/rng.js';
-import { createTank, moveTank, fireBullet, layMine, dashTank } from './tank.js';
+import { createTank, moveTank, fireBullet, layMine, useSecondary, dashTank } from './tank.js';
 import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
@@ -16,7 +16,7 @@ import { updateEnemy } from './ai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
 import { resolveCfg, applyUpgrades } from './cfg.js';
-import { armorBlocks, reflectBullet, hasWallBounced, isLive } from './armor.js';
+import { armorBlocks, reflectBullet, reflectFromAim, hasWallBounced, isLive } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
 // 'reflect' (Phase 5, Spiegelwand): physisch wie 'solid', aber bullet.js
@@ -62,7 +62,7 @@ function buildWalls(grid) {
 //         upgradesData -- Inhalt von upgrades.json (Stellwerte) }
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
-    roomSpec, arenas, transform } = opts;
+    roomSpec, arenas, transform, equippedSecondary } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
@@ -72,7 +72,7 @@ export function createState(data, tiles, opts) {
 
   const player = createTank(
     'player',
-    applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData),
+    applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData, equippedSecondary),
     room.playerSpawn.x,
     room.playerSpawn.y,
   );
@@ -90,6 +90,7 @@ export function createState(data, tiles, opts) {
     tiles,
     playerUpgrades,
     upgradesData,
+    equippedSecondary: equippedSecondary || 'mine', // Phase 6: fuer respawnPlayer()
     rng: mulberry32((aiSeed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
     playerSpawn: room.playerSpawn,
     emergencyRoom: room.emergency,
@@ -111,6 +112,7 @@ export function createState(data, tiles, opts) {
     // Eintrag = verbleibende geraeumte Raeume bis zum Verfall.
     shieldCharges: (shieldCharges || []).slice(),
     transform: transform || {}, // Phase 5: freigeschaltete Transformations-Effekte
+    smokeClouds: [], // Phase 6: Rauchgranate -- blockiert nur KI-Sichtlinien
     walls,
     tanks,
     player,
@@ -137,10 +139,40 @@ export function createState(data, tiles, opts) {
       const cell = grid[row][col];
       return cell === '#' || cell === 'b' || cell === 'r';
     },
+    // Sicht-Test fuer KI-Raycasts (Phase 6): zusaetzlich zu Waenden
+    // blockieren aktive Rauchwolken die Sicht -- Geschossphysik/Bewegung
+    // bleiben unberuehrt (isSolid() ist dafuer weiter allein zustaendig).
+    blocksSight(px, py) {
+      if (state.isSolid(px, py)) return true;
+      for (const c of state.smokeClouds) {
+        const dx = px - c.x;
+        const dy = py - c.y;
+        if (dx * dx + dy * dy <= c.radius * c.radius) return true;
+      }
+      return false;
+    },
+    // Sekundärslot "Sperrmauer" (Phase 6): platziert eine haltbare Wand auf
+    // der Zielzelle, sofern diese begehbar und frei von Panzern ist.
+    placeTrapWall(x, y, hits) {
+      const col = Math.floor(x / CELL);
+      const row = Math.floor(y / CELL);
+      if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return false;
+      if (grid[row][col] !== '.') return false;
+      const cx = col * CELL + CELL / 2;
+      const cy = row * CELL + CELL / 2;
+      for (const t of state.tanks) {
+        if (t.alive && circlesOverlap(cx, cy, CELL / 2, t.x, t.y, t.cfg.radius)) return false;
+      }
+      state.walls.push({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'trap', col, row, customDurability: hits });
+      grid[row][col] = '#';
+      state.sounds.push('mine');
+      return true;
+    },
     destroyWall(wall) {
       // Transformation "Baumeister" (Phase 5): Waende halten wallDurability
       // Treffer statt einem -- der erste Treffer beschaedigt sie nur.
-      const durability = state.transform.wallDurability || 1;
+      // Sperrmauer (Phase 6): eigene Haltbarkeit ueberschreibt das.
+      const durability = wall.customDurability || state.transform.wallDurability || 1;
       if (durability > 1) {
         wall.hits = (wall.hits || 0) + 1;
         if (wall.hits < durability) {
@@ -275,7 +307,7 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
 function respawnPlayer(state) {
   const fresh = createTank(
     'player',
-    applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades, state.upgradesData),
+    applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades, state.upgradesData, state.equippedSecondary),
     state.playerSpawn.x,
     state.playerSpawn.y,
   );
@@ -326,7 +358,19 @@ export function stepState(state, cmd, dt) {
     if (t.boostTimer > 0) t.boostTimer = Math.max(0, t.boostTimer - dt);
     if (t.bloodTimer > 0) t.bloodTimer = Math.max(0, t.bloodTimer - dt);
     if (t.dashCd > 0) t.dashCd = Math.max(0, t.dashCd - dt);
+    // Phase 6: Sekundärslot-Timer (Turm-Betäubung EMP-Mine, Cooldown der
+    // vier neuen Sekundärwaffen, Enterhaken-Zug, Deflektor-Fenster).
+    if (t.turretStunTimer > 0) t.turretStunTimer = Math.max(0, t.turretStunTimer - dt);
+    if (t.secondaryCooldown > 0) t.secondaryCooldown = Math.max(0, t.secondaryCooldown - dt);
+    if (t.deflectorTimer > 0) {
+      t.deflectorTimer = Math.max(0, t.deflectorTimer - dt);
+      if (t.deflectorTimer <= 0) t.deflectorCharges = 0;
+    }
   }
+
+  // Rauchwolken altern unabhaengig von Panzern (einmal pro Schritt).
+  for (const c of state.smokeClouds) c.age += dt;
+  state.smokeClouds = state.smokeClouds.filter((c) => c.age < c.life);
 
   if (!p.alive) {
     state.respawnTimer -= dt;
@@ -342,7 +386,7 @@ export function stepState(state, cmd, dt) {
     moveTank(p, cmd.move, state, dt);
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
     if (cmd.fire) fireBullet(p, state);
-    if (cmd.mine && layMine(p, state, cmd.mineThrow)) state.secondaryUses++;
+    if (cmd.mine && useSecondary(p, state, cmd.mineThrow)) state.secondaryUses++;
   }
 
   // Gegner: getrennte Turm-/Fahr-KI liefert Bewegung, Schuss- und
@@ -392,6 +436,13 @@ export function stepState(state, cmd, dt) {
       // darf denselben Panzer nicht sofort wieder treffen.
       if (b.reflectImmune === t && b.reflectImmuneT > 0) continue;
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
+        // Sekundärslot "Deflektor" (Phase 6): reflektiert den naechsten
+        // Treffer in Blickrichtung -- zaehlt als Abprallschuss gegen Prisma.
+        if (t === state.player && t.deflectorCharges > 0 && b.owner !== t) {
+          t.deflectorCharges--;
+          reflectFromAim(b, t, state);
+          break;
+        }
         // Gerichtete Panzerung (Phase 4): Frontsektor bzw. Prisma faengt
         // den Treffer ab -- reflects wirft die Kugel zurueck (E3).
         if (armorBlocks(t, b)) {

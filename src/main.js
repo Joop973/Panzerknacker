@@ -47,7 +47,7 @@ import { createHud } from './ui/hud.js';
 import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
-  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations'];
+  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations', 'secondaries'];
   const out = [];
   for (const n of names) {
     let res;
@@ -71,7 +71,7 @@ async function loadData() {
 }
 
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData] =
+  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData, secondariesData] =
     await loadData();
   // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
   // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
@@ -80,6 +80,7 @@ async function init() {
   tanksData.events = eventsData; // Phase 4: Event-Raeume (run.data.events)
   tanksData.arenas = arenasData; // Phase 0b: feste Layouts (Arena-Weiche)
   tanksData.transformations = transformData; // Definitionen fuer Phase 17
+  tanksData.secondaries = secondariesData; // Phase 6: Sekundärslot-Stellwerte
   // Feste Layouts EINMALIG beim Laden pruefen (Flood-Fill etc.). Ein
   // unloesbares Layout meldet sich hier mit klarer Meldung statt spaeter
   // im laufenden Spiel.
@@ -159,6 +160,7 @@ async function init() {
   let teleDir = 0;
   let teleSec = 0;
   let telePowershots = 0;
+  let teleSecondary = 'mine';
 
   function resetRoomTelemetry() {
     teleRoomType = null;
@@ -175,6 +177,7 @@ async function init() {
   function sampleRoomTelemetry() {
     teleRoomType = run.roomType;
     teleShield = run.shieldCharges.length;
+    teleSecondary = run.equippedSecondary;
     // Nicht-Kampf-Raeume behalten den Vorraum als Kulisse -- deren Zaehler
     // gehoeren nicht diesem Raum.
     if (run.roomType !== 'combat' && run.roomType !== 'elite') return;
@@ -204,6 +207,7 @@ async function init() {
       directKills: teleDir,
       secondaryUses: teleSec,
       powershotsFired: telePowershots,
+      secondary: teleSecondary,
     });
     run.scrapThisRoom = 0;
   }
@@ -308,12 +312,21 @@ async function init() {
     workshopShown = false;
   }
 
+  // Sekundärslot (Phase 6): Touch-Button-Beschriftung der aktiven
+  // Sekundärwaffe nachziehen (Start, Fortsetzen, nach jeder Kartenwahl).
+  function updateSecondaryLabel() {
+    if (!run) return;
+    const label = tanksData.secondaries?.[run.equippedSecondary]?.label || 'BOMBE';
+    touch.setSecondaryLabel(label);
+  }
+
   function launchRun(seed, modeKey, resume) {
     run = createRun(tanksData, tilesData, diffData, upgradesData, seed, modeKey, {
       roomSpec: arenaSpec,
       resume: resume || null,
     });
     lastSeed = seed;
+    updateSecondaryLabel();
     beginTelemetry();
     startOverlay.classList.add('hidden');
     hideRoomScreens();
@@ -462,6 +475,7 @@ async function init() {
             rejected: offers.filter((_, i) => i !== idx).map(cardOf),
           });
           chooseUpgrade(run, idx);
+          updateSecondaryLabel();
           upgradeShown = false;
         },
         onReroll: () => {

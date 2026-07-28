@@ -81,3 +81,26 @@ export function reflectBullet(b, tank, state) {
   state.sounds.push('shield');
   state.spawnParticles?.(b.x, b.y, '#b6f0ff', 5, 90);
 }
+
+// Sekundärslot "Deflektor" (Phase 6): reflektiert eine eingehende Kugel in
+// die Blickrichtung des Spielers -- anders als reflectBullet() (Richtung
+// "weg vom reflektierenden Panzer") ist die Quelle hier tank.turret, daher
+// eine eigene, bewusst getrennte Funktion. b.owner bleibt unveraendert
+// (wie bei E3 bleibt der urspruengliche Schuetze Besitzer); b.wallBounces
+// erhoeht sich (nicht b.reflected), damit der Treffer wie ein Wandabpraller
+// gegen Prisma-Panzer zaehlt.
+export function reflectFromAim(b, tank, state) {
+  const rc = state.data.balance.reflect || {};
+  const speed = Math.hypot(b.vx, b.vy) * (rc.speedMult ?? 1);
+  b.vx = Math.cos(tank.turret) * speed;
+  b.vy = Math.sin(tank.turret) * speed;
+  const push = tank.cfg.radius + b.radius + (rc.pushPx ?? 2);
+  b.x = tank.x + Math.cos(tank.turret) * push;
+  b.y = tank.y + Math.sin(tank.turret) * push;
+  b.prevX = b.x;
+  b.prevY = b.y;
+  b.wallBounces++;
+  b.homing = 0;
+  state.sounds.push('shield');
+  state.spawnParticles?.(b.x, b.y, '#ffd23c', 6, 110);
+}

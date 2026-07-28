@@ -38,14 +38,16 @@ Weiche) und **Phase 1** (Telemetrie v2, Lesbarkeit, Run-Speicherung).
 v2-**Phase 2** (Upgrade-Schema) und **Phase 3** (Schrott) sind inhaltlich schon
 durch die gleichnamigen v1-Phasen abgedeckt (Abweichungen auf Nutzerwunsch:
 `emergency_shield` gibt 1 statt 3 Ladungen je Stufe, Elite-Schrott ist
-`eliteMult: 2` statt `eliteBonus: 3`). **Phase 4** (gerichtete Panzerung) und
-**Phase 5** (Abprallen belohnen: Trickshot, Spiegelwände, Powershot) sind
-gebaut. `PLAN.md` wurde auf **v3** konsistenzgeprüft: tote Verweise (u. a.
-gelöschte Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
-`eliteBonus`-Feldname) entfernt, jede offene Phase bekommt jetzt eine
-"Betroffene Dateien"-Zeile. **Nächste Phase: Phase 6 — Sekundärslot.**
-Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes Handy-Vollbild
-(`100dvh` + `viewport-fit=cover`), Grafik-Sprites + App-Icon, diese `CLAUDE.md`.
+`eliteMult: 2` statt `eliteBonus: 3`). **Phase 4** (gerichtete Panzerung),
+**Phase 5** (Abprallen belohnen: Trickshot, Spiegelwände, Powershot) und
+**Phase 6** (Sekundärslot: Mine wird zu einer von sechs austauschbaren
+Sekundärwaffen) sind gebaut. `PLAN.md` wurde auf **v3** konsistenzgeprüft:
+tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`, doppelt gebautes
+Affix-System, falscher `eliteBonus`-Feldname) entfernt, jede offene Phase
+bekommt jetzt eine "Betroffene Dateien"-Zeile. **Nächste Phase: Phase 7 —
+Geisterpanzer.** Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
+Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites + App-Icon,
+diese `CLAUDE.md`.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -212,6 +214,61 @@ Stufe 1, der USP wird lohnend statt nur notwendig.
   Phase unerreichbar gewesen (derselbe Fehler wie `doppelrohr`, siehe
   `PLAN.md` v3). Deshalb Tag `reactive`.
 
+### Phase 6 (Sekundärslot) — gemergt
+Die Mine ist jetzt eine von sechs gleichwertigen, per Upgrade austauschbaren
+Sekundärwaffen (Tag `secondary`, `maxStacks: 1`, Werte in `data/secondaries.json`).
+- **Ausrüsten ohne Level-Scan:** `run.equippedSecondary` (Start: `'mine'`,
+  `run.upgrades = { mine: 1 }` als Startbelegung) wird in `chooseUpgrade()`
+  bei `offer.tag === 'secondary'` gesetzt und bis `cfg.secondary`
+  durchgereicht (`cfg.js: applyUpgrades()` bekommt dafür einen expliziten
+  Parameter statt einen `l()`-Level-Scan — mehrere Sekundärkarten können
+  gleichzeitig Level > 0 in `run.upgrades` stehen, da alte Karten beim
+  Wechsel nicht zurückgesetzt werden). Ein Wechsel ist pro Karte einmalig
+  (dieselbe `maxStacks: 1`-Regel wie bei `schild`/`dash`) — kein eigenes
+  "Zurückwechseln"-UI.
+- **`emp_mine`** teilt sich die Legemechanik 1:1 mit `mine`
+  (`tank.js: layMine()`/`useSecondary()`, kein zweiter Button): jede 4.
+  gelegte Mine (`tank.secondaryMineCount`) ist `isEmp`. `mine.js:
+  explodeEmpAt()` betäubt statt zu töten (`stunTimer` **und** neues
+  `turretStunTimer`), zerstört keine Wände, nimmt an Kettenreaktionen in
+  beiden Richtungen nicht teil (`other.isEmp`-Ausschluss in `explodeAt()`s
+  Kettenschleife).
+- **`turretStunTimer` ist ein NEUES, von `stunTimer` getrenntes Feld** —
+  Krallenfalle (`trap.js`) setzt bewusst nur `stunTimer` ("Turm bleibt
+  nutzbar"); `stunTimer` generell die Turmdrehung sperren zu lassen hätte
+  das gebrochen. Gate an der einzigen Stelle, die den Turm dreht:
+  `ai.js: updateEnemy()` → `TURRETS[...]` nur bei `turretStunTimer <= 0`.
+- **`hook`**: Raymarch in Blickrichtung (`tank.js: fireHook()`), trifft er
+  eine Wand, zieht `moveTank()` den Panzer über `tank.hookTimer`/
+  `hookTarget` dorthin — Bewegungseingabe wird währenddessen komplett
+  ignoriert.
+- **`deflector`**: `armor.js: reflectFromAim()` — eigene, zu `reflectBullet()`
+  (E3) parallele Funktion, weil die Richtungsquelle unterschiedlich ist
+  (Blickrichtung des Spielers statt "weg vom reflektierenden Panzer").
+  Erhöht `b.wallBounces` (**nicht** `b.reflected`), damit der Treffer wie
+  ein Wandabpraller gegen Prisma-Panzer zählt; `b.owner` bleibt unverändert
+  (wie bei E3).
+- **`trap_wall`**: `state.placeTrapWall()` legt eine Wand mit
+  `wall.customDurability` an; `destroyWall()` (state.js) nutzt dafür
+  dieselbe Zähllogik wie die Baumeister-Transformation
+  (`wall.customDurability || state.transform.wallDurability`), statt eine
+  zweite zu bauen. `bullet.js: moveAxis()` ruft bei jedem Treffer auf
+  `wall.type === 'trap'` `destroyWall()` auf, bevor sie wie eine normale
+  Wand abprallt ("eigene Bankshot-Winkel").
+- **`smoke`**: legt am Spielerstandort eine Wolke (`state.smokeClouds`) ab,
+  die nur `state.blocksSight()` (neu, für KI-Sichtprüfungen
+  `clearLine()`/`playerInSight()` in `ai.js`) beeinflusst — Geschossphysik
+  (`isSolid()`) und die eigene Ziellinie des Spielers bleiben unberührt.
+- **Pool-Gating:** die 7 alten Minen-Karten (`kettenglied`, `sprengkraft`,
+  `fernzuender`, `schockwelle`, `annaeherungsmine`, `klebemine`,
+  `streumine`) erscheinen in `upgradepool.js` nur, solange `mine`/`emp_mine`
+  ausgerüstet ist (`MINE_ONLY_IDS` + neue `equippedSecondary`-Option in
+  `buildCandidates()`).
+- Touch-Button-Beschriftung folgt der ausgerüsteten Waffe
+  (`touchcontrols.js: setSecondaryLabel()`, von `main.js` nach jeder
+  Kartenwahl/Run-Start aufgerufen). HUD zeigt bei `emp_mine` einen Zähler
+  bis zur nächsten blauen Mine.
+
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
   `tag`, `rarity` (`common`/`rare`/`legendary`), `maxStacks`, `requires`,
@@ -296,7 +353,9 @@ Zurückgebaut wurde:
 - [ ] Geschoss-Sprites wirken recht hell/groß (weißer Glow-Blob). Ggf. Größe
       (`3.6 * b.radius` in `renderer.js`) oder Glow-Matte reduzieren.
 - [ ] Noch **prozedural** (keine Sprites vorhanden): Minen, Fallen,
-      Explosionen/Partikel. Bei Bedarf Grafiken liefern.
+      Explosionen/Partikel, Sekundärwaffen-Overlays (Phase 6: Sperrmauer,
+      Rauchwolke, Enterhaken-Linie, Deflektor-/EMP-Ringe). Bei Bedarf
+      Grafiken liefern.
 
 Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 
@@ -310,7 +369,8 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Gleicher Seed + Raumnummer → gleicher Raum, unabhängig vom Spielverlauf.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
-  `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`, `transformations.json`). `balance.json` enthält auch Rarity-Gewichte,
+  `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`,
+  `transformations.json`, `secondaries.json`). `balance.json` enthält auch Rarity-Gewichte,
   `legendary.minRoom` + die `scrap`-Werte; `difficulty.json` die `doors`/
   `elite`/`treasure`-Konfiguration (Phase 4).
   `data/events.json` wird in `main.js` an `tanksData.events` gehängt.
@@ -326,7 +386,8 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/game/state.js` — `stepState`, Treffer, Minen, `killTank`.
 - `src/game/armor.js` — gerichtete Panzerung (Phase 4): `armorBlocks`,
   `reflectBullet`, `hasWallBounced`, `isLive`.
-- `src/game/tank.js` — Feuern, Minen legen/werfen.
+- `src/game/tank.js` — Feuern, Minen legen/werfen, `useSecondary()`
+  (Phase 6: generischer Sekundärwaffen-Dispatch inkl. Enterhaken/Sperrmauer).
 - `src/game/cfg.js` — Panzer-cfg + alle ~39 Upgrade-Effekte.
 - `src/game/upgradepool.js` — Auswahl-Pool (Tag-Regel, Rarity, maxStacks,
   requires, minRoom; Phase 4: includeTag/onlyRarity/bypassRoomGate/
@@ -341,7 +402,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v39`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v40`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`

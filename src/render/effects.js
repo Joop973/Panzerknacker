@@ -5,7 +5,9 @@ export function drawMines(ctx, state) {
   const mcfg = state.data.mine;
   const bmine = state.data.balance.mine;
   for (const m of state.mines) {
-    ctx.fillStyle = '#3c4038';
+    // EMP-Mine (Phase 6, Sekundärslot): blauer statt gruen-brauner Koerper --
+    // "jede 4. Mine ist blau" (kein Schaden, betaeubt stattdessen).
+    ctx.fillStyle = m.isEmp ? '#1c4a5a' : '#3c4038';
     ctx.beginPath();
     ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2);
     ctx.fill();
@@ -38,7 +40,7 @@ export function drawMines(ctx, state) {
     const hot = remaining < bmine.warningTime * 2;
     const freq = hot ? 8 : 3;
     if (Math.sin(m.age * freq * Math.PI * 2) > 0) {
-      ctx.fillStyle = hot ? '#ff5030' : '#ffd23c';
+      ctx.fillStyle = m.isEmp ? '#5ad4f0' : hot ? '#ff5030' : '#ffd23c';
       ctx.beginPath();
       ctx.arc(m.x, m.y, 2.5, 0, Math.PI * 2);
       ctx.fill();

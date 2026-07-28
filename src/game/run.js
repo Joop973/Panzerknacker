@@ -96,6 +96,7 @@ export function runSnapshot(run) {
     shieldCharges: run.shieldCharges.slice(), // mit Restlaufzeit je Ladung
     scrap: run.scrap,
     upgrades: { ...run.upgrades },
+    equippedSecondary: run.equippedSecondary,
     banned: [...run.bannedUpgrades],
     tagCounts: { ...run.tagCounts },
     transformations: [...run.transformations],
@@ -172,6 +173,7 @@ function buildCombatRoom(run, type, isFinal) {
     weights,
     playerUpgrades: run.upgrades,
     upgradesData: run.upgradesData,
+    equippedSecondary: run.equippedSecondary,
     shieldCharges: run.shieldCharges, // raumuebergreifende Notschild-Ladungen
     // Weiche (Phase 0b): setzt das Raumspec `fixedLayout`, kommt das Layout
     // aus data/arenas.json statt aus dem Kachelgenerator.
@@ -323,7 +325,8 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     mode: mode.label,
     modeKey,
     budgetMult: mode.budgetMult,
-    upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}
+    upgrades: { mine: 1 }, // gewaehlte Upgrade-Level {id: stufe} -- Mine ist Startbelegung
+    equippedSecondary: 'mine', // Phase 6: aktive Sekundärwaffe (austauschbar per Upgrade)
     upgradeChoices: 0,
     // Notschild-Ladungen als Liste (E2): Eintrag = verbleibende geraeumte
     // Raeume bis zum Verfall. Jede Ladung altert einzeln.
@@ -371,6 +374,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     run.shieldCharges = (r.shieldCharges || []).slice();
     run.scrap = r.scrap || 0;
     run.upgrades = { ...(r.upgrades || {}) };
+    run.equippedSecondary = r.equippedSecondary || 'mine';
     run.bannedUpgrades = new Set(r.banned || []);
     run.tagCounts = { ...(r.tagCounts || {}) };
     run.transformations = new Set(r.transformations || []);
@@ -551,6 +555,7 @@ function poolOpts(run) {
     balance: run.data.balance,
     count: run.upgradesData.offersPerScreen,
     banned: run.bannedUpgrades,
+    equippedSecondary: run.equippedSecondary,
   };
 }
 
@@ -644,6 +649,10 @@ export function chooseUpgrade(run, index) {
     run.lives++;
   } else {
     run.upgrades[offer.id] = (run.upgrades[offer.id] || 0) + 1;
+    // Sekundärslot (Phase 6): eine neue Sekundärkarte ersetzt die aktive
+    // Sekundärwaffe -- die alte Karte bleibt in run.upgrades stehen
+    // (maxStacks 1 verhindert ein erneutes Ziehen), ist aber nicht mehr aktiv.
+    if (offer.tag === 'secondary') run.equippedSecondary = offer.id;
     // Glaskanone: reduziert die Leben dauerhaft auf 1 (starker Trade-off).
     if (offer.id === 'glaskanone') run.lives = 1;
     // Notschild: jede Stufe gibt chargesPerStack Ladungen (raumuebergreifend).

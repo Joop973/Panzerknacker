@@ -97,6 +97,7 @@ export function recordRoom(r) {
     ghostKills: r.ghostKills || 0, // Phase 7
     powershotsFired: r.powershotsFired || 0, // Phase 5
     secondaryUses: r.secondaryUses || 0,
+    secondary: r.secondary || null, // Phase 6: aktive Sekundärwaffe dieses Raums
   });
 }
 

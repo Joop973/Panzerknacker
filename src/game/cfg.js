@@ -35,7 +35,7 @@ export function resolveCfg(data, type) {
 // Upgrade-Level auf das Spieler-cfg anwenden (Spec Abschnitt 8 +
 // Erweiterungen). Die Stellwerte der neuen Upgrades kommen aus
 // upgrades.json (upsData).
-export function applyUpgrades(cfg, ups, upsData) {
+export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   if (!ups) return cfg;
   const l = (k) => ups[k] || 0;
   cfg.magazine += 2 * l('magazin');
@@ -177,6 +177,10 @@ export function applyUpgrades(cfg, ups, upsData) {
   if (l('zielsucher')) cfg.magazine = Math.min(cfg.magazine, 3);
   // Scharfschuetze: hartes Magazin 1 (schlaegt alles).
   if (cfg.singleShot) cfg.magazine = 1;
+  // Sekundärslot (Phase 6): explizit vom Run vorgegeben, kein Level-Scan
+  // (mehrere Sekundärkarten koennen gleichzeitig Level > 0 haben, siehe
+  // run.js: chooseUpgrade -- nur equippedSecondary bestimmt die aktive).
+  cfg.secondary = equippedSecondary || 'mine';
   return cfg;
 }
 

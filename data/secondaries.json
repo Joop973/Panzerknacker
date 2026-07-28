@@ -1,0 +1,32 @@
+{
+  "mine": { "label": "BOMBE" },
+  "emp_mine": {
+    "label": "EMP",
+    "everyNth": 4,
+    "stunRadius": 96,
+    "stunDuration": 1.5
+  },
+  "hook": {
+    "label": "HAKEN",
+    "maxRangePx": 260,
+    "pullSpeedPx": 520,
+    "cooldownS": 3.0
+  },
+  "deflector": {
+    "label": "SCHILD",
+    "activeS": 1.5,
+    "cooldownS": 4.0
+  },
+  "smoke": {
+    "label": "RAUCH",
+    "radiusPx": 90,
+    "durationS": 4.0,
+    "cooldownS": 5.0
+  },
+  "trap_wall": {
+    "label": "MAUER",
+    "hits": 3,
+    "placeDistPx": 48,
+    "cooldownS": 4.0
+  }
+}

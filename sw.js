@@ -2,8 +2,8 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v39';
-const PREV_CACHE = 'panzerknacker-v38'; // bleibt fuer eine evtl. offene Alt-Seite intakt
+const CACHE = 'panzerknacker-v40';
+const PREV_CACHE = 'panzerknacker-v39'; // bleibt fuer eine evtl. offene Alt-Seite intakt
 
 const ASSETS = [
   './',
@@ -22,6 +22,7 @@ const ASSETS = [
   'data/options.json',
   'data/arenas.json',
   'data/transformations.json',
+  'data/secondaries.json',
   'src/config.js',
   'src/main.js',
   'src/core/audio.js',

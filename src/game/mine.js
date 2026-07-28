@@ -16,7 +16,7 @@ import { circlesOverlap, circleOverlapsAABB } from './collision.js';
 
 let nextMineId = 1;
 
-export function createMine(x, y, owner, radius) {
+export function createMine(x, y, owner, radius, isEmp) {
   return {
     id: nextMineId++,
     x,
@@ -26,6 +26,7 @@ export function createMine(x, y, owner, radius) {
     age: 0, // s seit dem Legen
     fuse: null, // != null: Restzeit bis Ketten-Explosion
     stuckTo: null, // Klebemine: Panzer, an dem die Mine haftet
+    isEmp: !!isEmp, // Sekundärslot EMP-Mine (Phase 6): betaeubt statt zu toeten
     dead: false,
   };
 }
@@ -64,12 +65,32 @@ export function explodeAt(state, x, y, R, spare, meta) {
   }
 
   // Kettenreaktion: getroffene scharfe Minen zuenden mit chainDelay
-  // Verzoegerung pro Glied (nicht im selben Frame).
+  // Verzoegerung pro Glied (nicht im selben Frame). EMP-Minen (Phase 6)
+  // nehmen an Kettenreaktionen nicht teil -- weder loesen sie eine aus
+  // (siehe explodeEmpAt) noch werden sie durch eine externe Explosion
+  // mitgezuendet.
   for (const other of state.mines) {
-    if (other.dead || other.fuse !== null) continue;
+    if (other.dead || other.fuse !== null || other.isEmp) continue;
     if (!isArmed(other, mcfg)) continue;
     if (circlesOverlap(x, y, R, other.x, other.y, other.radius)) {
       other.fuse = state.data.balance.mine.chainDelay;
+    }
+  }
+}
+
+// Sekundärslot "EMP-Mine" (Phase 6): kein Schaden, kein Wandabriss, keine
+// Kettenreaktion -- betaeubt Panzer im Radius (Bewegung UND Turm) statt sie
+// zu toeten. Betaeubte Panzer blockieren weiterhin Geschosse (bleiben alive).
+function explodeEmpAt(state, x, y, R) {
+  const scfg = state.data.secondaries?.emp_mine || {};
+  const dur = scfg.stunDuration ?? 1.5;
+  state.sounds.push('shield');
+  state.spawnParticles?.(x, y, '#5ad4f0', 10, 130);
+  for (const t of state.tanks) {
+    if (!t.alive || t.protect > 0) continue;
+    if (circlesOverlap(x, y, R, t.x, t.y, t.cfg.radius)) {
+      t.stunTimer = Math.max(t.stunTimer, dur);
+      t.turretStunTimer = Math.max(t.turretStunTimer || 0, dur);
     }
   }
 }
@@ -79,6 +100,10 @@ function explode(mine, state) {
   mine.dead = true;
   // Sprengkraft-Upgrade: Radius-Multiplikator des Legers.
   const R = state.data.balance.mine.radius * (mine.owner?.cfg?.mineRadiusMult || 1);
+  if (mine.isEmp) {
+    explodeEmpAt(state, mine.x, mine.y, R);
+    return; // keine Kettenreaktion, keine Streumine, keine Wandzerstoerung
+  }
   // Todesursache fuer die Telemetrie: eigene vs. gegnerische Mine.
   const own = mine.owner === state.player;
   const meta = { code: own ? 'own_mine' : 'enemy_mine', enemyType: own ? null : mine.owner?.type || null };

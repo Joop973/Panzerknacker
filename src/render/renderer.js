@@ -185,6 +185,30 @@ export function createRenderer(ctx) {
         ctx.restore();
         continue;
       }
+      // Sperrmauer (Phase 6, Sekundärslot): IMMER prozedural -- Risse
+      // werden mit sinkender Resthaltbarkeit deutlicher sichtbar.
+      if (wall.type === 'trap') {
+        const rest = Math.max(0, wall.customDurability - (wall.hits || 0));
+        const frac = wall.customDurability ? rest / wall.customDurability : 1;
+        ctx.fillStyle = '#3a2f28';
+        ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+        ctx.strokeStyle = `rgba(226,150,90,${0.4 + (1 - frac) * 0.5})`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(wall.x + 1, wall.y + 1, wall.w - 2, wall.h - 2);
+        if (frac < 1) {
+          ctx.strokeStyle = `rgba(226,150,90,${0.3 + (1 - frac) * 0.6})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(wall.x + 6, wall.y + 6);
+          ctx.lineTo(wall.x + wall.w - 8, wall.y + wall.h - 10);
+          if (frac < 0.5) {
+            ctx.moveTo(wall.x + wall.w - 6, wall.y + 8);
+            ctx.lineTo(wall.x + 8, wall.y + wall.h - 6);
+          }
+          ctx.stroke();
+        }
+        continue;
+      }
       // Kachel-Sprite (falls geladen) über die ganze Wandfläche legen.
       const key = wall.type === 'hole' ? 'hole' : wall.type === 'breakable' ? 'breakable' : 'wall';
       const img = sprite('tile', key);
@@ -467,6 +491,39 @@ export function createRenderer(ctx) {
       ctx.setLineDash([]);
     }
 
+    // EMP-Mine (Phase 6): Turm-Betaeubung bekommt einen eigenen, elektrisch
+    // wirkenden Ring (cyan, schneller Puls), unterscheidbar vom Krallenfalle-Ring.
+    if (t.turretStunTimer > 0) {
+      ctx.strokeStyle = '#5ad4f0';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.arc(x, y, r + 9 + Math.sin(t.turretStunTimer * 16) * 1.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Deflektor (Phase 6, Sekundärslot): duenner heller Ring, solange das
+    // Reflexionsfenster aktiv ist.
+    if (t === state.player && t.deflectorTimer > 0) {
+      ctx.strokeStyle = '#ffd23c';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 7, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Enterhaken (Phase 6, Sekundärslot): kurze Linie zum Zielpunkt,
+    // solange der Zug laeuft.
+    if (t === state.player && t.hookTimer > 0 && t.hookTarget) {
+      ctx.strokeStyle = 'rgba(200,210,220,0.8)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(t.hookTarget.x, t.hookTarget.y);
+      ctx.stroke();
+    }
+
     ctx.globalAlpha = 1;
   }
 
@@ -555,6 +612,19 @@ export function createRenderer(ctx) {
     }
   }
 
+  // Rauchgranate (Phase 6, Sekundärslot): halbtransparente Wolken, die mit
+  // ihrem Alter ausblenden. Blockiert nur die KI-Sicht (state.blocksSight),
+  // rein optisch hier ueber allem gezeichnet.
+  function drawSmoke(ctx, state) {
+    for (const c of state.smokeClouds) {
+      const frac = 1 - c.age / c.life;
+      ctx.fillStyle = `rgba(150,155,160,${(0.35 * frac).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   return {
     render(state, alpha, tracks, minePreview) {
       renderState = state;
@@ -579,6 +649,7 @@ export function createRenderer(ctx) {
       drawFlashes(ctx, state);
       drawParticles(ctx, state);
       drawExplosions(ctx, state);
+      drawSmoke(ctx, state);
 
       drawTexts(ctx, state);
       ctx.restore();

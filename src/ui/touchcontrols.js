@@ -218,5 +218,11 @@ export function createTouchControls(cfg = {}) {
     getMinePreview() {
       return mineStick ? mineDrag() : null;
     },
+    // Sekundärslot (Phase 6): Beschriftung des Buttons, wenn die aktive
+    // Sekundärwaffe wechselt (main.js ruft dies nach chooseUpgrade()/
+    // Run-Start auf).
+    setSecondaryLabel(text) {
+      mineLabel.textContent = text;
+    },
   };
 }
