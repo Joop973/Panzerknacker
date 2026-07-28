@@ -70,6 +70,15 @@ export const TANK_COLORS = {
   t_prism: '#b8ecff', // Prisma -- eigene Silhouette (Rautenkranz)
 };
 
+// Elite-Affixe (Phase 9): Farbpunkt je Affix-id (drawTank()).
+const AFFIX_COLORS = {
+  gepanzert: '#8ecaf0',
+  rasend: '#ffae42',
+  brandstifter: '#ff5030',
+  twinshot: '#b28dff',
+  regenerating_shield: '#5ad4f0',
+};
+
 // Geschossfarben je Waffe.
 const BULLET_COLORS = {
   bullet: { fill: '#e8e4d8', edge: '#8a8578' },
@@ -524,6 +533,23 @@ export function createRenderer(ctx) {
       ctx.stroke();
     }
 
+    // Elite-Affixe (Phase 9): ein kleiner Farbpunkt pro aktivem Affix,
+    // im Bogen ueber dem Panzer -- sichtbar auch bei mehreren
+    // kombinierten Affixen (ab Raum 14 zwei gleichzeitig).
+    if (t.affixes && t.affixes.length) {
+      const n = t.affixes.length;
+      t.affixes.forEach((id, i) => {
+        const spread = 0.5;
+        const a = -Math.PI / 2 + (i - (n - 1) / 2) * spread;
+        const dotX = x + Math.cos(a) * (r + 12);
+        const dotY = y + Math.sin(a) * (r + 12);
+        ctx.fillStyle = AFFIX_COLORS[id] || '#e8e4d8';
+        ctx.beginPath();
+        ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
     ctx.globalAlpha = 1;
   }
 
@@ -654,6 +680,22 @@ export function createRenderer(ctx) {
     }
   }
 
+  // Wellen (Phase 9): pulsierender Warnring an den Spawnpunkten der
+  // zweiten Welle, 1 s bevor sie erscheint -- kein Ueberraschungs-Kill
+  // aus dem Nichts.
+  function drawWaveWarning(ctx, state) {
+    const w = state.pendingWave;
+    if (!w || !w.spawning) return;
+    const pulse = 0.5 + 0.5 * Math.sin(state.time * 14);
+    for (const s of w.spawns) {
+      ctx.strokeStyle = `rgba(255,120,60,${(0.4 + 0.5 * pulse).toFixed(3)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 14 + pulse * 4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+
   return {
     render(state, alpha, tracks, minePreview) {
       renderState = state;
@@ -672,6 +714,7 @@ export function createRenderer(ctx) {
       if (renderOpts.aimLine) drawAimLine(ctx, state, traceTrajectory);
       if (minePreview) drawMinePreview(ctx, state, minePreview);
       drawWalls(state.walls);
+      drawWaveWarning(ctx, state);
       drawGhosts(ctx, state, alpha);
       for (const t of state.tanks) drawTank(state, t, alpha);
       drawRadar(ctx, state);

@@ -42,15 +42,16 @@ durch die gleichnamigen v1-Phasen abgedeckt (Abweichungen auf Nutzerwunsch:
 **Phase 5** (Abprallen belohnen: Trickshot, Spiegelwände, Powershot),
 **Phase 6** (Sekundärslot: Mine wird zu einer von sechs austauschbaren
 Sekundärwaffen), **Phase 7** (Geisterpanzer: getötete Gegner kämpfen kurz
-als durchscheinender Verbündeter weiter) und **Phase 8** (Gegner-Rollen
-statt Gegner-Typen: vier datengetriebene Rollen statt neun eigener
-Fahr-/Turmfunktionen) sind gebaut. `PLAN.md` wurde auf **v3**
-konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`,
-doppelt gebautes Affix-System, falscher `eliteBonus`-Feldname) entfernt,
-jede offene Phase bekommt jetzt eine "Betroffene Dateien"-Zeile. **Nächste
-Phase: Phase 9 — Elite-Affixe, Wellen, Elite-Belohnung.** Frühere Merges
-(PRs #9–#12): Portrait-Auto-Pause-Fix, echtes Handy-Vollbild (`100dvh` +
-`viewport-fit=cover`), Grafik-Sprites + App-Icon, diese `CLAUDE.md`.
+als durchscheinender Verbündeter weiter), **Phase 8** (Gegner-Rollen statt
+Gegner-Typen: vier datengetriebene Rollen statt neun eigener
+Fahr-/Turmfunktionen) und **Phase 9** (Elite-Affixe, Wellen, additive
+Elite-Belohnung) sind gebaut. `PLAN.md` wurde auf **v3** konsistenzgeprüft:
+tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`, doppelt gebautes
+Affix-System, falscher `eliteBonus`-Feldname) entfernt, jede offene Phase
+bekommt jetzt eine "Betroffene Dateien"-Zeile. **Nächste Phase: Phase 10 —
+Raum-Modifikatoren.** Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix,
+echtes Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
+App-Icon, diese `CLAUDE.md`.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -356,6 +357,52 @@ kombinierbar (unverändert seit Phase 4).
 - Validiert über die bestehende 40-Seed-Regressionssuite: 40/40 Siege,
   0 Hänger — die Konsolidierung ändert die Gewinnbarkeit nicht.
 
+### Phase 9 (Elite-Affixe, Wellen, additive Elite-Belohnung) — gemergt
+- **Affixe gestaffelt nach Raumnummer** (`difficulty.json: elite.affixRules`):
+  vor Raum 8 keiner, Raum 8–13 einer, ab Raum 14 zwei kombinierbar
+  (`run.js: rollEliteAffixes()`). Zwei neue Affixe: `twinshot` (Gegner
+  feuert zwei Kugeln gleichzeitig) und `regenerating_shield` (Ladung
+  verfällt nicht, lädt sich nach `regenS` neu auf — nur beim günstigsten
+  und teuersten Gegner der KI-Auswahl nach `difficulty.danger`-Punkten).
+- **`twinshot` braucht keine neue Feuerlogik**: `tank.js: fireBullet()`
+  liest `cfg.twinShot`/`cfg.twinSpreadRad` bereits generisch (Spieler-
+  Upgrade "Doppelrohr") — der Affix setzt nur dieselben Felder auf dem
+  Gegner, plus ein Magazin-Mindestwert von 2 (sonst wäre nach der ersten
+  der beiden Kugeln kein Platz mehr für die zweite).
+- **Affix-Rezeptur ist index-basiert, nicht Tank-basiert**: `run.js`
+  würfelt Affixe + Index des günstigsten/teuersten Gegners VOR
+  `createState()` über die reine Typliste und reicht sie als
+  `eliteAffixes` durch. Grund: **Wellen** — `generateRoom()` erzeugt
+  weiterhin die volle Spawnpunkt-Zahl, `createState()` instanziiert nur
+  die erste Hälfte (`waveSplit`) und hält den Rest in `state.pendingWave`
+  zurück (Typen + Spawnpunkte). `state.js: updateWave()` löst bei ≤50 %
+  lebender Welle-1-Gegner eine 1-s-Vorwarnung aus (pulsierender Ring an den
+  Spawnpunkten, Sound `'wave'`) und wendet beim Spawnen der zweiten Welle
+  dieselbe `eliteAffixes`-Rezeptur erneut an (`applyAffixByIndex()`) — sonst
+  hätte die zweite Welle keinen Affix bekommen.
+- **`regenerating_shield`**: neues Feld `regenShieldTimer`, gestartet in
+  `killTank()` beim Verbrauch der Ladung, heruntergezählt im bestehenden
+  Tank-Tick-Loop — Gegenstück zum Schild-Verfall des Spielers (E2), keine
+  zweite Ladungs-Verwaltung.
+- **Elite-Belohnung additiv statt ersetzend**: `run.js: rollReward()` zieht
+  jetzt IMMER die normale Dreierauswahl (Tag-Regel gilt) UND zusätzlich
+  automatisch (ohne Schrottkosten) eine 4. Karte aus Tag `elite`
+  (`upgradepool.drawOne()` wiederverwenden). Ist der Elite-Pool erschöpft
+  (alle 3 Karten `maxStacks` erreicht), bleibt es bei 3 Karten statt eines
+  zweiten Fallbacks.
+- **Dritte Elite-Karte `kriegsbeute`** (sofort +5 Schrott): bewusst eine
+  ökonomische Belohnung statt einer weiteren Kampfstat, um nicht mit
+  bestehenden harten Obergrenzen (z. B. Abpraller-Deckel 2) zu kollidieren.
+- **Darstellung**: Farbpunkte im Bogen über dem Panzer (ein Punkt je
+  aktivem Affix) direkt in `renderer.js` (Muster `drawSmoke`/`drawGhosts`),
+  plus pulsierender Warnring an Wellen-Spawnpunkten. Neuer Sound `'wave'`
+  in `audio.js` (zwei kurze, drohende Töne) statt des bestehenden
+  `'clear'`-Jingles, das am Ankunftspunkt einer zweiten Welle das falsche
+  Signal wäre.
+- Telemetrie sampelt `teleEnemies` jetzt jeden Tick statt einmalig pro
+  Raum (`main.js`), da Wellen die Gegnerliste mitten im Raum verändern
+  können; Feld `affix` (Singular) wurde zu `affixes` (Array).
+
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
   `tag`, `rarity` (`common`/`rare`/`legendary`), `maxStacks`, `requires`,
@@ -491,7 +538,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v42`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v43`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`

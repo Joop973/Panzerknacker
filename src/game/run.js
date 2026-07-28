@@ -129,6 +129,7 @@ function startRoom(run, type = 'combat') {
   if (isFinal || run.roomIndex < diff.doors.firstDoorRoom) type = 'combat';
   run.roomType = type;
   run.roomAffix = null;
+  run.roomAffixes = [];
   makeRoomStreams(run); // frische, aus dem Seed abgeleitete Stroeme
   resetRoomCounters(run);
   saveCurrentRun(runSnapshot(run)); // nur am Raumanfang, nie im Kampf
@@ -165,6 +166,21 @@ function buildCombatRoom(run, type, isFinal) {
       run.roomCharacter = ch.name;
     }
   }
+  // Elite-Affixe (Phase 9): VOR createState() ueber die Typliste (nicht die
+  // spaeter erzeugten Tank-Objekte) bestimmen -- so gilt dieselbe "Rezeptur"
+  // (welche Affixe, welcher Index ist guenstigster/teuerster) unabhaengig
+  // vom Wellen-Split auch fuer die spaeter nachspawnende zweite Welle.
+  const eliteAffixes = type === 'elite' ? rollEliteAffixes(run, enemyTypes) : null;
+  // Wellen (Phase 9): grosse Raeume spawnen nur die erste Haelfte sofort,
+  // der Rest wartet an denselben (vom Generator ohnehin erzeugten)
+  // Spawnpunkten -- deshalb bekommt generateRoom() weiter die VOLLE
+  // enemyTypes.length, nur createState() instanziiert weniger Panzer
+  // (waveSplit) und haelt den Rest in state.pendingWave zurueck.
+  const wavesCfg = run.difficulty.waves;
+  const waveSplit =
+    !isFinal && wavesCfg && enemyTypes.length >= wavesCfg.minEnemiesForWaves
+      ? Math.ceil(enemyTypes.length / 2)
+      : null;
   run.state = createState(run.data, run.tiles, {
     genRng: run.rng.rooms,
     enemyTypes,
@@ -181,26 +197,50 @@ function buildCombatRoom(run, type, isFinal) {
     arenas: run.data.arenas,
     // Phase 5: aktive Transformations-Schalter (rein datengesteuert).
     transform: transformEffects(run),
+    waveSplit,
+    waveCfg: waveSplit != null ? wavesCfg : null,
+    eliteAffixes,
   });
-  // Elite: genau 1 Affix auf alle Gegner (fuer Phase 5 einzeln markiert).
-  if (type === 'elite') applyEliteAffix(run);
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.
   run.phase = 'preview';
   run.transitionTimer = TRANSITION_S;
 }
 
-function applyEliteAffix(run) {
-  const affixes = run.difficulty.elite.affixes;
-  const affix = affixes[Math.floor(run.rng.enemies() * affixes.length)];
-  run.roomAffix = affix.name;
-  for (const t of run.state.tanks) {
-    if (t === run.state.player || !t.alive) continue;
-    t.affix = affix.id; // Marker (Phase 5: "Gegner ohne Elite-Affix")
-    if (affix.shield) t.shieldReady = true;
-    if (affix.speedMult) t.cfg.speed *= affix.speedMult;
-    if (affix.extraMines) t.cfg.mines += affix.extraMines;
+// Elite-Affixe (Phase 9): vor Raum 8 keiner, ab Raum 8 einer, ab Raum 14
+// zwei -- kombinierbar (mehrere Affixe auf denselben Gegnern). Ausnahme
+// `regenerating_shield`: nur der guenstigste und der teuerste Panzer der
+// KI-Auswahl (per Index in enemyTypes) bekommen ihn, damit er gezielt
+// "besondere" Gegner auszeichnet statt den ganzen Raum. Gibt die Rezeptur
+// zurueck ({chosen, cheapestIdx, priciestIdx}) statt sie direkt auf Tanks
+// anzuwenden -- state.js wendet sie beim Erzeugen jedes Panzers an (auch
+// bei einer spaeter nachspawnenden zweiten Welle).
+function rollEliteAffixes(run, enemyTypes) {
+  const diff = run.difficulty;
+  const rules = diff.elite.affixRules;
+  const count = run.roomIndex >= rules.minRoomForTwo ? 2 : run.roomIndex >= rules.minRoomForOne ? 1 : 0;
+  run.roomAffixes = [];
+  run.roomAffix = null;
+  if (count === 0 || !enemyTypes.length) return null;
+
+  const pool = [...diff.elite.affixes];
+  const chosen = [];
+  for (let i = 0; i < count && pool.length; i++) {
+    const idx = Math.floor(run.rng.enemies() * pool.length);
+    chosen.push(pool[idx]);
+    pool.splice(idx, 1);
   }
+  run.roomAffixes = chosen.map((a) => a.name);
+  run.roomAffix = run.roomAffixes.join(' + ');
+
+  let cheapestIdx = 0;
+  let priciestIdx = 0;
+  enemyTypes.forEach((ty, i) => {
+    const pts = diff.danger[ty]?.points ?? 0;
+    if (pts < (diff.danger[enemyTypes[cheapestIdx]]?.points ?? 0)) cheapestIdx = i;
+    if (pts > (diff.danger[enemyTypes[priciestIdx]]?.points ?? 0)) priciestIdx = i;
+  });
+  return { chosen, cheapestIdx, priciestIdx };
 }
 
 // Nicht-Kampf-Raum: kein neuer Arena-Zustand -- der Vorraum bleibt Kulisse.
@@ -344,7 +384,8 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     prevRoomType: null, // Typ des Vorraums (Regel: event/workshop nicht 2x)
     currentEvent: null, // aktives Event waehrend phase 'event'
     rewardKind: null, // 'normal' | 'elite' | 'treasure' fuer den Belohnungspool
-    roomAffix: null, // Name des Elite-Affix (nur Eliteraeume)
+    roomAffix: null, // Name(n) des Elite-Affix, "A + B" bei zweien (nur Eliteraeume)
+    roomAffixes: [], // dieselben Affixe als Namensliste (Phase 9: 0-2 kombinierbar)
     killsByType: {}, // Statistik fuer die Endscreens
     shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)
     combo: 0, // laufende Kill-Combo
@@ -561,18 +602,29 @@ function poolOpts(run) {
 
 // Belohnungs-Angebote je nach Raumtyp (Seed-RNG -> deterministisch):
 //   normal   = Standardpool (Tag-Regel, Rarity, maxStacks/requires/minRoom)
-//   elite    = nur Tag 'elite' (Tag-Regel aus, Raumgrenzen aus)
+//   elite    = normale Dreierauswahl BLEIBT, zusaetzlich automatisch (ohne
+//              Schrottkosten) eine 4. Karte aus Tag 'elite' (Phase 9,
+//              v3-Review-Korrektur: die alte Variante ERSETZTE die normale
+//              Auswahl komplett -- bei nur 2-3 Elite-Karten die schlechtere
+//              Wahl als eine normale Runde)
 //   treasure = nur Legendaries (Tag-Regel aus, Raumgrenzen aus)
 // Fehlende Slots fuellt der Pool mit "+1 Leben" auf.
 function rollReward(run) {
   const base = poolOpts(run);
   if (run.rewardKind === 'elite') {
-    return rollFromPool(run.upgradesData, {
-      ...base,
-      includeTag: 'elite',
-      bypassRoomGate: true,
-      ignoreTagRule: true,
-    });
+    const offers = rollFromPool(run.upgradesData, base);
+    const avoidTags = new Set(offers.filter((o) => !o.fallback).map((o) => o.tag));
+    const avoidIds = new Set(offers.filter((o) => !o.fallback).map((o) => o.id));
+    const eliteCard = drawOne(
+      run.upgradesData,
+      { ...base, includeTag: 'elite', bypassRoomGate: true },
+      avoidTags,
+      avoidIds,
+    );
+    // Elite-Pool erschoepft (alle 3 Karten maxStacks erreicht) -> keine
+    // 4. Karte statt eines redundanten zweiten Fallbacks.
+    if (!eliteCard.fallback) offers.push(eliteCard);
+    return offers;
   }
   if (run.rewardKind === 'treasure') {
     return rollFromPool(run.upgradesData, {
@@ -663,6 +715,10 @@ export function chooseUpgrade(run, index) {
     // Trophäe (Elite): +Schildladung(en), dauerhaft.
     if (offer.id === 'trophaee') {
       addShieldCharges(run, run.upgradesData.upgrades.trophaee.shieldCharges || 1);
+    }
+    // Kriegsbeute (Elite, Phase 9): sofortiger Schrott-Bonus.
+    if (offer.id === 'kriegsbeute') {
+      run.scrap += run.upgradesData.upgrades.kriegsbeute.scrapBonus || 5;
     }
   }
   run.upgradeChoices++;

@@ -153,7 +153,6 @@ async function init() {
   // schon der naechste Zustand haengt.
   let teleRoomType = null;
   let teleEnemies = [];
-  let teleStateRef = null;
   let teleShield = 0;
   let teleMinFps = Infinity;
   let teleRic = 0;
@@ -185,10 +184,10 @@ async function init() {
     if (run.roomType !== 'combat' && run.roomType !== 'elite') return;
     const st = run.state;
     if (!st) return;
-    if (st !== teleStateRef) {
-      teleStateRef = st;
-      teleEnemies = st.tanks.slice(1).map((t) => ({ type: t.type, affix: t.affix || null }));
-    }
+    // Jeden Tick statt einmalig sampeln (Phase 9: Wellen koennen dem
+    // Raum spaeter neue Panzer hinzufuegen -- st.tanks.length ist nicht
+    // mehr ueber die ganze Raumdauer konstant).
+    teleEnemies = st.tanks.slice(1).map((t) => ({ type: t.type, affixes: t.affixes || [] }));
     teleRic = st.ricochetKills;
     teleDir = st.directKills;
     teleSec = st.secondaryUses;
@@ -222,7 +221,6 @@ async function init() {
     teleRoom = run.roomIndex;
     teleRoomStart = run.playTime;
     teleEnded = false;
-    teleStateRef = null;
     resetRoomTelemetry();
     telemetry.beginRun({ seed: run.seed, mode: run.mode, secondary: 'mine' });
   }
