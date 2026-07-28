@@ -44,14 +44,16 @@ durch die gleichnamigen v1-Phasen abgedeckt (Abweichungen auf Nutzerwunsch:
 Sekundärwaffen), **Phase 7** (Geisterpanzer: getötete Gegner kämpfen kurz
 als durchscheinender Verbündeter weiter), **Phase 8** (Gegner-Rollen statt
 Gegner-Typen: vier datengetriebene Rollen statt neun eigener
-Fahr-/Turmfunktionen) und **Phase 9** (Elite-Affixe, Wellen, additive
-Elite-Belohnung) sind gebaut. `PLAN.md` wurde auf **v3** konsistenzgeprüft:
-tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`, doppelt gebautes
-Affix-System, falscher `eliteBonus`-Feldname) entfernt, jede offene Phase
-bekommt jetzt eine "Betroffene Dateien"-Zeile. **Nächste Phase: Phase 10 —
-Raum-Modifikatoren.** Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix,
-echtes Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
-App-Icon, diese `CLAUDE.md`.
+Fahr-/Turmfunktionen), **Phase 9** (Elite-Affixe, Wellen, additive
+Elite-Belohnung) und **Phase 10** (Raum-Modifikatoren: 9 Effekte aus
+`data/modifiers.json`, ab Raum 3 einer pro Kampf-/Eliteraum) sind gebaut.
+`PLAN.md` wurde auf **v3** konsistenzgeprüft: tote Verweise (u. a. gelöschte
+Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
+`eliteBonus`-Feldname) entfernt, jede offene Phase bekommt jetzt eine
+"Betroffene Dateien"-Zeile. **Nächste Phase: Phase 11 — Zerstörbare Wände.**
+Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes Handy-Vollbild
+(`100dvh` + `viewport-fit=cover`), Grafik-Sprites + App-Icon, diese
+`CLAUDE.md`.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -403,6 +405,46 @@ kombinierbar (unverändert seit Phase 4).
   Raum (`main.js`), da Wellen die Gegnerliste mitten im Raum verändern
   können; Feld `affix` (Singular) wurde zu `affixes` (Array).
 
+### Phase 10 (Raum-Modifikatoren) — gemergt
+Neu: **`data/modifiers.json`** (`minRoom: 3` + 9 Modifikatoren). Ab Raum 3
+wird pro Kampf-/Eliteraum GENAU EINER geseedet gezogen (eigener RNG-Strom
+`modifiers` in `makeRoomStreams()`), in der Vorschau sichtbar (`.pv-mod`,
+analog zum Elite-Affix). Der Finalraum bleibt ausgenommen (wie Wellen in
+Phase 9). `run.roomModifier` landet NICHT im `runSnapshot()` — Seed +
+Raumnummer erzeugen ihn beim Fortsetzen deterministisch neu.
+- **Neue, symmetrische Funktion `applyRoomModifier(cfg, modifier, isPlayer)`**
+  in `cfg.js`: läuft nach `resolveCfg()`/`applyUpgrades()` in ALLEN drei
+  Tank-Erzeugungsstellen (`createState()`, `respawnPlayer()`,
+  `updateWave()` in `state.js`). `jammer` (`bulletSpeedMult`) und
+  `overpressure` (`ricochetsBonus`) wirken auf Spieler UND Gegner gleich;
+  `crowded` (`aggressionMult`) und `sniper_alley` (`roleOverride: 'sieger'`,
+  nutzt Phase 8s Rollen-System) nur auf Gegner; `no_secondary` nur auf den
+  Spieler (`cfg.secondaryDisabled = true`, geprüft ganz am Anfang von
+  `useSecondary()` — bewusst NICHT `cfg.secondary = null`, sonst würde
+  dessen `|| 'mine'`-Fallback die Sperre gleich wieder aufheben).
+- **`crowded`** erhöht zusätzlich das Gefahrenbudget in `run.js:
+  buildCombatRoom()` um `enemyBudgetMult` (50 %) — mehr/teurere Gegner,
+  kompensiert durch die gesenkte Aggression.
+- **`mirror_hall`**: `createState()` wandelt nach `buildWalls()` alle Wände
+  vom Typ `solid` zu `reflect` (Phase-5-Mechanismus, `bullet.js`
+  unverändert) — **`breakable` bleibt unangetastet**, sonst wäre die
+  Wandzerstörung im ganzen Raum entwertet.
+- **`slippery`**: echte Bewegungsphysik, nicht nur Kosmetik. `moveTank()`
+  in `tank.js` gleicht bei `state.modifier?.slippery` die tatsächliche
+  Geschwindigkeit (neue Felder `tank.iceVx/iceVy`) nur allmählich der
+  Eingabe an (`gripPerSec` aus den Modifikator-Daten) statt sie pro Tick
+  hart zu setzen — gilt dadurch automatisch für Spieler UND alle Gegner,
+  ohne `ai_drives.js` anzufassen.
+- **`fog`/`darkness`** sind rein optisch: neue Funktion `drawFog()` in
+  `renderer.js` (Radialgradient um den interpolierten Spielerort,
+  transparent im Kern → `fogColor` am Rand), ganz zuletzt in `render()`
+  gezeichnet. Die KI-Sichtprüfungen (`clearLine()`/`blocksSight()`) und
+  `accuracy` (Phase 8) bleiben unverändert — die beiden Modifikatoren
+  schränken nur die Sicht des Spielers ein, nicht die KI-Zielgenauigkeit.
+- Telemetrie-Feld `modifier` war seit Phase 3 als Platzhalter in
+  `telemetry.js: recordRoom()` vorbereitet — `main.js` befüllt es jetzt
+  (`teleModifier`, gleiches Muster wie `teleGhosts`).
+
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
   `tag`, `rarity` (`common`/`rare`/`legendary`), `maxStacks`, `requires`,
@@ -499,12 +541,14 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `src/core/loop.js`.
 - **Deterministisch**: gesäter RNG (Mulberry32, `src/core/rng.js`). Kein
   laufender Zustand — pro Raum benannte Ströme aus `hash(seed, roomIndex,
-  label)` (`rooms`/`enemies`/`upgrades`/`scrap`/`doors`/`events` + `ai`).
-  Gleicher Seed + Raumnummer → gleicher Raum, unabhängig vom Spielverlauf.
+  label)` (`rooms`/`enemies`/`upgrades`/`scrap`/`doors`/`events`/`modifiers`
+  + `ai`). Gleicher Seed + Raumnummer → gleicher Raum, unabhängig vom
+  Spielverlauf.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
   `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`,
-  `transformations.json`, `secondaries.json`). `balance.json` enthält auch Rarity-Gewichte,
+  `transformations.json`, `secondaries.json`, `modifiers.json`).
+  `balance.json` enthält auch Rarity-Gewichte,
   `legendary.minRoom` + die `scrap`-Werte; `difficulty.json` die `doors`/
   `elite`/`treasure`-Konfiguration (Phase 4).
   `data/events.json` wird in `main.js` an `tanksData.events` gehängt.

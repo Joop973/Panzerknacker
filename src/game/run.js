@@ -66,6 +66,7 @@ function makeRoomStreams(run) {
     scrap: rngFor(s, i, 'scrap'), // Schrottmenge
     doors: rngFor(s, i, 'doors'), // Tuertypen
     events: rngFor(s, i, 'events'), // Ereignis-Auswahl
+    modifiers: rngFor(s, i, 'modifiers'), // Raum-Modifikator (Phase 10)
   };
 }
 
@@ -130,6 +131,7 @@ function startRoom(run, type = 'combat') {
   run.roomType = type;
   run.roomAffix = null;
   run.roomAffixes = [];
+  run.roomModifier = null;
   makeRoomStreams(run); // frische, aus dem Seed abgeleitete Stroeme
   resetRoomCounters(run);
   saveCurrentRun(runSnapshot(run)); // nur am Raumanfang, nie im Kampf
@@ -142,6 +144,11 @@ function startRoom(run, type = 'combat') {
 
 function buildCombatRoom(run, type, isFinal) {
   const diff = run.difficulty;
+  // Raum-Modifikator (Phase 10): ab data/modifiers.json.minRoom einer pro
+  // Kampf-/Eliteraum, sichtbar in der Vorschau. Der Finalraum bleibt davon
+  // ausgenommen -- handgebaute Encounter sollen wie geplant bleiben, gleiches
+  // Prinzip wie der Wellen-Ausschluss (`!isFinal`) in Phase 9.
+  const modifier = isFinal ? null : rollRoomModifier(run);
   let enemyTypes;
   let fixedRoom = null;
   let weights = null;
@@ -155,8 +162,11 @@ function buildCombatRoom(run, type, isFinal) {
     run.roomCharacter = 'Finale';
   } else {
     const eliteMult = type === 'elite' ? diff.elite.budgetMult : 1;
+    // Modifikator "Ueberfuellt" (Phase 10): 50 % mehr Gefahrenbudget -> mehr
+    // (bzw. staerkere) Gegner, kompensiert durch aggressionMult in cfg.js.
+    const crowdedMult = modifier?.enemyBudgetMult || 1;
     const budget =
-      (diff.budget.base + run.roomIndex * diff.budget.perRoom) * run.budgetMult * eliteMult;
+      (diff.budget.base + run.roomIndex * diff.budget.perRoom) * run.budgetMult * eliteMult * crowdedMult;
     enemyTypes = buyEnemies(diff, run.rng.enemies, run.roomIndex, budget);
     // Raumcharakter: Kachelgewichte alternieren (Spec Abschnitt 7B).
     const chars = diff.roomCharacters;
@@ -200,6 +210,7 @@ function buildCombatRoom(run, type, isFinal) {
     waveSplit,
     waveCfg: waveSplit != null ? wavesCfg : null,
     eliteAffixes,
+    modifier,
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.
@@ -241,6 +252,22 @@ function rollEliteAffixes(run, enemyTypes) {
     if (pts > (diff.danger[enemyTypes[priciestIdx]]?.points ?? 0)) priciestIdx = i;
   });
   return { chosen, cheapestIdx, priciestIdx };
+}
+
+// Raum-Modifikator (Phase 10): ab data/modifiers.json.minRoom wird pro
+// Kampf-/Eliteraum GENAU einer geseedet gezogen (eigener RNG-Strom, siehe
+// makeRoomStreams) und in run.roomModifier fuer die Vorschau abgelegt. Vor
+// minRoom bleibt der eigene Stream einfach ungenutzt -- Streams sind je
+// Label unabhaengig, das verschiebt keine anderen Systeme.
+function rollRoomModifier(run) {
+  const cfg = run.data.modifiers;
+  run.roomModifier = null;
+  if (!cfg || run.roomIndex < (cfg.minRoom ?? Infinity)) return null;
+  const list = cfg.modifiers;
+  if (!list || !list.length) return null;
+  const mod = list[Math.floor(run.rng.modifiers() * list.length)];
+  run.roomModifier = mod;
+  return mod;
 }
 
 // Nicht-Kampf-Raum: kein neuer Arena-Zustand -- der Vorraum bleibt Kulisse.
@@ -386,6 +413,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     rewardKind: null, // 'normal' | 'elite' | 'treasure' fuer den Belohnungspool
     roomAffix: null, // Name(n) des Elite-Affix, "A + B" bei zweien (nur Eliteraeume)
     roomAffixes: [], // dieselben Affixe als Namensliste (Phase 9: 0-2 kombinierbar)
+    roomModifier: null, // Raum-Modifikator-Objekt aus data/modifiers.json (Phase 10)
     killsByType: {}, // Statistik fuer die Endscreens
     shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)
     combo: 0, // laufende Kill-Combo

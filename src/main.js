@@ -47,7 +47,7 @@ import { createHud } from './ui/hud.js';
 import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
-  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations', 'secondaries'];
+  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations', 'secondaries', 'modifiers'];
   const out = [];
   for (const n of names) {
     let res;
@@ -71,7 +71,7 @@ async function loadData() {
 }
 
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData, secondariesData] =
+  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData, secondariesData, modifiersData] =
     await loadData();
   // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
   // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
@@ -81,6 +81,7 @@ async function init() {
   tanksData.arenas = arenasData; // Phase 0b: feste Layouts (Arena-Weiche)
   tanksData.transformations = transformData; // Definitionen fuer Phase 17
   tanksData.secondaries = secondariesData; // Phase 6: Sekundärslot-Stellwerte
+  tanksData.modifiers = modifiersData; // Phase 10: Raum-Modifikatoren
   // Feste Layouts EINMALIG beim Laden pruefen (Flood-Fill etc.). Ein
   // unloesbares Layout meldet sich hier mit klarer Meldung statt spaeter
   // im laufenden Spiel.
@@ -161,6 +162,7 @@ async function init() {
   let telePowershots = 0;
   let teleSecondary = 'mine';
   let teleGhosts = 0;
+  let teleModifier = null;
 
   function resetRoomTelemetry() {
     teleRoomType = null;
@@ -172,6 +174,7 @@ async function init() {
     teleSec = 0;
     telePowershots = 0;
     teleGhosts = 0;
+    teleModifier = null;
   }
 
   // Momentaufnahme des laufenden Raums (jeden Tick, sehr billig).
@@ -193,6 +196,7 @@ async function init() {
     teleSec = st.secondaryUses;
     telePowershots = st.powershotsFired;
     teleGhosts = st.ghostKills;
+    teleModifier = st.modifier?.id || null;
   }
 
   function flushRoomTelemetry() {
@@ -211,6 +215,7 @@ async function init() {
       powershotsFired: telePowershots,
       secondary: teleSecondary,
       ghostKills: teleGhosts,
+      modifier: teleModifier,
     });
     run.scrapThisRoom = 0;
   }
@@ -570,6 +575,9 @@ async function init() {
               : run.roomCharacter,
           upgradesLine: ups ? `Deine Upgrades: ${ups}` : null,
           dangerByType,
+          modifierLine: run.roomModifier
+            ? `Modifikator: ${run.roomModifier.name} — ${run.roomModifier.desc}`
+            : null,
         },
         run.state.tanks.slice(1).map((t) => t.type),
         tanksData,

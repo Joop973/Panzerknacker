@@ -14,7 +14,7 @@ export function createPreview() {
   return {
     // opts: { title, character (Raumtyp-Text), upgradesLine (eigene Ausruestung) }
     show(opts, enemyTypes, tanksData, onGo) {
-      const { title, character, upgradesLine, dangerByType } = opts;
+      const { title, character, upgradesLine, dangerByType, modifierLine } = opts;
       // Typen gruppieren: ["t_brown","t_brown","t_grey"] -> Brauner x2 ...
       const counts = new Map();
       for (const t of enemyTypes) counts.set(t, (counts.get(t) || 0) + 1);
@@ -58,6 +58,16 @@ export function createPreview() {
       }
       el.appendChild(row);
       el.appendChild(desc);
+
+      // Raum-Modifikator (Phase 10): eigene Zeile, sichtbar bevor der
+      // Raum betreten wird -- derselbe "vorher sichtbar" Grundsatz wie beim
+      // Elite-Affix, nur nicht an ein Raumtyp gebunden.
+      if (modifierLine) {
+        const mod = document.createElement('p');
+        mod.className = 'pv-mod';
+        mod.textContent = modifierLine;
+        el.appendChild(mod);
+      }
 
       if (upgradesLine) {
         const own = document.createElement('p');

@@ -197,3 +197,23 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   return cfg;
 }
 
+// Raum-Modifikator (Phase 10, data/modifiers.json) auf ein aufgeloestes cfg
+// anwenden -- nach resolveCfg()/applyUpgrades(), fuer Spieler UND Gegner.
+// bulletSpeedMult/ricochetsBonus wirken symmetrisch auf beide Seiten (das
+// ist der Punkt: Stoersender/Ueberdruck veraendern das Gefecht fuer alle
+// gleich). aggressionMult/roleOverride betreffen nur Gegner (der Spieler
+// hat kein KI-Verhalten), noSecondary nur den Spieler (Gegner setzen nie
+// eine Sekundaerwaffe).
+export function applyRoomModifier(cfg, modifier, isPlayer) {
+  if (!modifier) return cfg;
+  if (modifier.bulletSpeedMult) cfg.bulletSpeed *= modifier.bulletSpeedMult;
+  if (modifier.ricochetsBonus) cfg.ricochets += modifier.ricochetsBonus;
+  if (!isPlayer) {
+    if (modifier.aggressionMult) cfg.aggression *= modifier.aggressionMult;
+    if (modifier.roleOverride) cfg.role = modifier.roleOverride;
+  } else if (modifier.noSecondary) {
+    cfg.secondaryDisabled = true;
+  }
+  return cfg;
+}
+

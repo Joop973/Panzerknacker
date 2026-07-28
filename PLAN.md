@@ -601,7 +601,7 @@ umstellen), `src/game/tank.js` (Twinshot-Feuerlogik), `src/game/state.js`
   bestehenden `'clear'`-Jingles — Letzteres wäre am Ankunftspunkt einer
   zweiten Welle das falsche Signal (klingt nach "Raum geschafft").
 
-## Phase 10 — Raum-Modifikatoren
+## Phase 10 — Raum-Modifikatoren  ✅ erledigt
 **Aufwand:** 1 Session, höchster Ertrag pro Aufwand
 
 Vor dem Betreten sichtbar, `data/modifiers.json`, ab Raum 3, einer pro Raum.
@@ -615,6 +615,57 @@ Wände sind Spiegelwände).
 (Modifikator pro Raum ziehen + in die Vorschau reichen), `src/ui/preview.js`
 (vor dem Betreten sichtbar), `src/game/state.js`/`cfg.js` (Modifikator auf
 Kugeltempo/Aggression/Sichtfeld anwenden).
+
+**Umsetzungsfunde:**
+- Eigener RNG-Strom `modifiers` (`hash(seed, roomIndex, 'modifiers')`) in
+  `makeRoomStreams()` — Muster wie bei allen anderen Strömen: eine Änderung
+  am Modifikator-System verschiebt keinen anderen Raumaufbau.
+- Der Finalraum bleibt bewusst ohne Modifikator (`isFinal ? null :
+  rollRoomModifier(run)`), gleiches Prinzip wie der Wellen-Ausschluss in
+  Phase 9 — der handgebaute 2×t_black-Encounter soll wie geplant bleiben.
+- `jammer`/`overpressure` wirken über eine neue, symmetrische Funktion
+  `applyRoomModifier(cfg, modifier, isPlayer)` in `cfg.js` **auf Spieler UND
+  Gegner gleichermaßen** (nach `resolveCfg()`/`applyUpgrades()`, in
+  `createState()`, `respawnPlayer()` UND `updateWave()` — überall dort, wo
+  ein Tank-cfg neu aufgelöst wird). `crowded` (Aggression) und
+  `sniper_alley` (Rollen-Override) betreffen dagegen nur Gegner-cfgs
+  (`isPlayer=false`-Zweig), `no_secondary` nur den Spieler.
+- `no_secondary` setzt `cfg.secondaryDisabled = true` statt
+  `cfg.secondary = null` — sonst würde `useSecondary()`s
+  `tank.cfg.secondary || 'mine'`-Fallback die Sperre wieder aufheben.
+  `useSecondary()` prüft das Flag als allererstes und gibt `false` zurück.
+- `mirror_hall` konvertiert in `createState()` nach `buildWalls()` nur
+  Wände vom Typ `solid` zu `reflect` — **durchschießbare (`breakable`)
+  Wände bleiben unangetastet**, sonst wäre die Wandzerstörungs-Mechanik im
+  ganzen Raum entwertet. Nutzt exakt denselben `wall.type === 'reflect'`-
+  Mechanismus wie die Spiegelwände aus Phase 5 (`bullet.js` unverändert).
+- `slippery` (Glatteis) ist keine reine Renderer-Kosmetik, sondern echte
+  Bewegungsphysik: `moveTank()` in `tank.js` bekommt einen neuen Zweig, der
+  bei `state.modifier?.slippery` die tatsächliche Geschwindigkeit
+  (`tank.iceVx/iceVy`, neue Felder) nur allmählich der Eingabe angleicht
+  (`gripPerSec` aus `data/modifiers.json`) statt sie pro Tick hart zu
+  setzen — betrifft dadurch automatisch ALLE Panzer (Spieler + Gegner),
+  ohne die vier KI-Verhalten in `ai_drives.js` anfassen zu müssen.
+- `fog`/`darkness` sind bewusst **rein optisch** (neue Funktion `drawFog()`
+  in `renderer.js`: Radialgradient um den interpolierten Spielerort,
+  transparent im Kern → `fogColor` am Rand, in `render()` ganz zuletzt
+  gezeichnet). Die KI-Sichtprüfungen (`clearLine()`/`blocksSight()`) bleiben
+  unverändert — die beiden Modifikatoren sollen die Sicht des SPIELERS
+  einschränken, nicht die Zielgenauigkeit der Gegner-KI verändern (dafür
+  gibt es mit `accuracy` aus Phase 8 bereits einen eigenen Regler).
+- Vorschau-Zeile analog zum Elite-Affix: `preview.js` bekommt ein neues
+  `opts.modifierLine` (eigener Absatz `.pv-mod`), von `main.js` aus
+  `run.roomModifier.name`/`.desc` gebaut — sichtbar, bevor der Raum
+  betreten wird, wie in `PLAN.md` gefordert.
+- `run.roomModifier` landet NICHT in `runSnapshot()` (wie schon
+  `roomAffix`/`roomAffixes` vorher nicht) — beim Fortsetzen erzeugt
+  derselbe Seed + dieselbe Raumnummer über den `modifiers`-Stream
+  deterministisch wieder denselben Modifikator, ein Persistieren wäre
+  redundant.
+- Telemetrie-Feld `modifier` war bereits seit Phase 3 als Platzhalter in
+  `telemetry.js: recordRoom()` vorbereitet (`r.modifier || null`) — nur
+  `main.js` musste es tatsächlich befüllen (`teleModifier`, gleiches Muster
+  wie `teleGhosts`/`teleSecondary`).
 
 ## Phase 11 — Zerstörbare Wände
 **Aufwand:** 1 Session
