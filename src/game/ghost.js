@@ -1,0 +1,100 @@
+// Geisterpanzer (PLAN.md v3, Phase 7).
+//
+// Getoetete Gegner kaempfen mit dem ghost_crew-Upgrade als durchscheinender
+// Verbuendeter weiter: eigenes state.ghosts-Array (kein Eintrag in
+// state.tanks) -- das erfuellt "blockieren keine Kugeln, sind nicht
+// toetbar" automatisch, weil die Geschoss-vs-Panzer-Treffer-Schleife in
+// state.js nur ueber state.tanks laeuft. Ein Geist behaelt die aufgeloeste
+// cfg seines Ursprungs-Panzers (Tempo, Geschossgeschwindigkeit, Abpraller,
+// Waffenart) -- er kaempft weiter, wie er lebte.
+
+import { angleDiff, turnToward, clearLine } from './ai.js';
+import { resolveCircleWalls } from './collision.js';
+import { createBullet } from './bullet.js';
+
+const TURN_SPEED = 4; // rad/s -- Drehen von Rumpf UND Turm Richtung Ziel
+const FIRE_CONE = 0.15; // rad -- muss so genau ausgerichtet sein, um zu feuern
+
+let nextGhostId = 1;
+
+// tank = der soeben gestorbene Panzer (liefert Position/Ausrichtung/cfg).
+export function createGhost(tank, balance) {
+  return {
+    id: nextGhostId++,
+    x: tank.x,
+    y: tank.y,
+    prevX: tank.x,
+    prevY: tank.y,
+    heading: tank.heading,
+    turret: tank.turret,
+    type: tank.type,
+    cfg: tank.cfg, // dieselbe aufgeloeste cfg -- kein neuer Balance-Wert noetig
+    cooldown: 0,
+    timeLeft: balance.ghost.duration,
+    isGhost: true,
+    dead: false,
+  };
+}
+
+function nearestEnemy(state, ghost) {
+  let best = null;
+  let bestD = Infinity;
+  for (const t of state.tanks) {
+    if (t === state.player || !t.alive) continue;
+    const d = (t.x - ghost.x) ** 2 + (t.y - ghost.y) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = t;
+    }
+  }
+  return best;
+}
+
+export function updateGhosts(state, dt) {
+  for (const g of state.ghosts) {
+    g.timeLeft -= dt;
+    if (g.timeLeft <= 0) {
+      g.dead = true;
+      continue;
+    }
+    g.prevX = g.x;
+    g.prevY = g.y;
+
+    const target = nearestEnemy(state, g);
+    if (g.cooldown > 0) g.cooldown -= dt;
+    if (!target) continue; // kein Gegner mehr -- nur der Timer laeuft weiter
+
+    const angleToTarget = Math.atan2(target.y - g.y, target.x - g.x);
+    g.turret = turnToward(g.turret, angleToTarget, TURN_SPEED * dt);
+    g.heading = g.turret; // faehrt in die Richtung, in die er zielt
+
+    const dx = Math.cos(g.heading);
+    const dy = Math.sin(g.heading);
+    g.x += dx * g.cfg.speed * dt;
+    g.y += dy * g.cfg.speed * dt;
+    // Nicht durch Waende clippen, aber keine resolveTankBlocking --
+    // Geister blockieren echte Panzer nicht und werden nicht von ihnen
+    // blockiert (passend zu "blockieren keine Kugeln").
+    resolveCircleWalls(g, g.cfg.radius, state.walls);
+
+    if (
+      g.cooldown <= 0 &&
+      Math.abs(angleDiff(g.turret, angleToTarget)) < FIRE_CONE &&
+      clearLine(state, g.x, g.y, target.x, target.y)
+    ) {
+      const muzzle = g.cfg.radius + 8;
+      state.bullets.push(
+        createBullet(g.x + dx * muzzle, g.y + dy * muzzle, g.turret, {
+          speed: g.cfg.bulletSpeed,
+          radius: state.data.physics.bulletRadius,
+          ricochets: g.cfg.ricochets,
+          owner: g,
+          kind: g.cfg.weapon,
+        }),
+      );
+      g.cooldown = g.cfg.fireCooldown;
+      state.sounds.push('shoot');
+    }
+  }
+  state.ghosts = state.ghosts.filter((g) => !g.dead);
+}

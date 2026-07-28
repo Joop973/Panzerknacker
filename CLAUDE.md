@@ -39,13 +39,15 @@ v2-**Phase 2** (Upgrade-Schema) und **Phase 3** (Schrott) sind inhaltlich schon
 durch die gleichnamigen v1-Phasen abgedeckt (Abweichungen auf Nutzerwunsch:
 `emergency_shield` gibt 1 statt 3 Ladungen je Stufe, Elite-Schrott ist
 `eliteMult: 2` statt `eliteBonus: 3`). **Phase 4** (gerichtete Panzerung),
-**Phase 5** (Abprallen belohnen: Trickshot, Spiegelwände, Powershot) und
+**Phase 5** (Abprallen belohnen: Trickshot, Spiegelwände, Powershot),
 **Phase 6** (Sekundärslot: Mine wird zu einer von sechs austauschbaren
-Sekundärwaffen) sind gebaut. `PLAN.md` wurde auf **v3** konsistenzgeprüft:
-tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`, doppelt gebautes
-Affix-System, falscher `eliteBonus`-Feldname) entfernt, jede offene Phase
-bekommt jetzt eine "Betroffene Dateien"-Zeile. **Nächste Phase: Phase 7 —
-Geisterpanzer.** Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
+Sekundärwaffen) und **Phase 7** (Geisterpanzer: getötete Gegner kämpfen kurz
+als durchscheinender Verbündeter weiter) sind gebaut. `PLAN.md` wurde auf
+**v3** konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte
+`beutepanzer`, doppelt gebautes Affix-System, falscher `eliteBonus`-
+Feldname) entfernt, jede offene Phase bekommt jetzt eine "Betroffene
+Dateien"-Zeile. **Nächste Phase: Phase 8 — Gegner-Rollen statt
+Gegner-Typen.** Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites + App-Icon,
 diese `CLAUDE.md`.
 
@@ -269,6 +271,50 @@ Sekundärwaffen (Tag `secondary`, `maxStacks: 1`, Werte in `data/secondaries.jso
   Kartenwahl/Run-Start aufgerufen). HUD zeigt bei `emp_mine` einen Zähler
   bis zur nächsten blauen Mine.
 
+### Phase 7 (Geisterpanzer) — gemergt
+Getötete Gegner kämpfen mit dem `ghost_crew`-Upgrade (Tag `reactive`,
+legendary) als durchscheinender Verbündeter weiter, Werte in
+`data/balance.json: ghost` (`duration: 3.0`, `killBonus: 1.0`,
+`maxActive: 4`).
+- **Neues Modul `src/game/ghost.js`** (Muster wie `mine.js`/`trap.js`):
+  `createGhost(tank, balance)` übernimmt Position/Ausrichtung UND die
+  aufgelöste `cfg` des gestorbenen Panzers per Referenz (Tempo,
+  Geschossgeschwindigkeit, Abpraller, Waffenart — "kämpft weiter, wie er
+  lebte", keine neuen Balance-Werte nötig). `updateGhosts()` sucht pro Tick
+  den nächsten lebenden Gegner, dreht Rumpf+Turm dorthin, fährt in
+  Zielrichtung (`resolveCircleWalls`, aber bewusst **ohne**
+  `resolveTankBlocking` — Geister blockieren echte Panzer nicht und werden
+  nicht von ihnen blockiert) und feuert bei ausreichender Ausrichtung +
+  freier Sichtlinie (`clearLine()` aus `ai.js`, nutzt automatisch
+  `state.blocksSight` — eine Rauchgranate aus Phase 6 blockiert also auch
+  einen Geist).
+- **Geister sind KEINE Einträge in `state.tanks`**, sondern ein eigenes
+  `state.ghosts`-Array. Das erfüllt "blockieren keine Kugeln, sind nicht
+  tötbar" automatisch durch Konstruktion — die Geschoss-vs-Panzer-Treffer-
+  Schleife in `state.js` iteriert nur über `state.tanks`, ein Geist kann
+  darin nie als Ziel vorkommen. `ai_turrets.js`/`ai_drives.js` bleiben
+  unangetastet (die zielen strukturell fest auf `state.player`).
+- **`killTank()` ist der einzige Erzeugungs-Hook** (nicht die Treffer-
+  Schleife): jeder Gegnertod läuft durch `killTank()`, egal ob durch Kugel,
+  Mine, Kamikaze oder Kettenblitz — passend zu "Kettenreaktionen sind das
+  Ziel". Deckel `maxActive` per FIFO-Verdrängung (`state.ghosts.shift()`),
+  nicht durch Verweigern neuer Geister — Muster wie die Krallenfalle-
+  Obergrenze in `trap.js`.
+- **Geister-Kugeln treffen den Spieler nie** (neuer Guard in der Treffer-
+  Schleife: `t === state.player && b.owner?.isGhost` → `continue`, `friendly`
+  reicht nicht, das schützt nur den Besitzer selbst). Geister-Kills zählen
+  NICHT als Spieler-Trickshot/Ricochet (`b.owner` ist der Geist, nicht der
+  Spieler — akzeptierter Nebeneffekt, dasselbe Muster wie beim Deflektor in
+  Phase 6), stattdessen `state.ghostKills++` (Telemetrie-Feld seit Phase 1
+  vorbereitet) und `b.owner.timeLeft += balance.ghost.killBonus`.
+- **Darstellung**: neue lokale Funktion `drawGhosts()` direkt in
+  `renderer.js` (Muster: `drawSmoke` aus Phase 6, bewusst nicht in
+  `effects.js` — vermeidet einen zirkulären Import, weil `TANK_COLORS` in
+  `renderer.js` liegt und `effects.js` bereits von `renderer.js` importiert
+  wird). Einfache rotierte Wanne+Rohr-Form in `TANK_COLORS[typ]` bei fester
+  Transparenz, keine der tankspezifischen Overlays (Schild/Panzerung/
+  Powershot).
+
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
   `tag`, `rarity` (`common`/`rare`/`legendary`), `maxStacks`, `requires`,
@@ -388,6 +434,8 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `reflectBullet`, `hasWallBounced`, `isLive`.
 - `src/game/tank.js` — Feuern, Minen legen/werfen, `useSecondary()`
   (Phase 6: generischer Sekundärwaffen-Dispatch inkl. Enterhaken/Sperrmauer).
+- `src/game/ghost.js` — Geisterpanzer (Phase 7): `createGhost`,
+  `updateGhosts` (eigenes `state.ghosts`-Array, kein Eintrag in `state.tanks`).
 - `src/game/cfg.js` — Panzer-cfg + alle ~39 Upgrade-Effekte.
 - `src/game/upgradepool.js` — Auswahl-Pool (Tag-Regel, Rarity, maxStacks,
   requires, minRoom; Phase 4: includeTag/onlyRarity/bypassRoomGate/
@@ -402,7 +450,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v40`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v41`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`

@@ -12,6 +12,7 @@ import { createTank, moveTank, fireBullet, layMine, useSecondary, dashTank } fro
 import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
+import { createGhost, updateGhosts } from './ghost.js';
 import { updateEnemy } from './ai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
@@ -103,6 +104,7 @@ export function createState(data, tiles, opts) {
     directKills: 0,
     secondaryUses: 0,
     powershotsFired: 0,
+    ghostKills: 0, // Phase 7: Kills durch Geister-Kugeln (nicht dem Spieler zugerechnet)
     // Trickshot-Belohnung (PLAN.md v2 Phase 5): kurze Zeitlupe nach einem
     // Abpraller-Kill. trickshotTimer zaehlt in (moeglicherweise bereits
     // verlangsamter) dt herunter -- run.js liest ihn fuer den Zeitlupen-Scale.
@@ -119,6 +121,7 @@ export function createState(data, tiles, opts) {
     bullets: [],
     mines: [],
     traps: [],
+    ghosts: [], // Phase 7: Geisterpanzer (kein Eintrag in tanks -- s. ghost.js)
     explosions: [],
     flashes: [],
     sounds: [],
@@ -256,6 +259,17 @@ export function createState(data, tiles, opts) {
         if (pc.chainLightning) {
           explodeAt(state, tank.x, tank.y, pc.chainLightning, state.player);
         }
+        // Geisterbesatzung (Phase 7): JEDER Gegnertod erzeugt einen
+        // Geist, egal ob durch Kugel, Mine, Kamikaze oder Kettenblitz --
+        // killTank() ist der Funnel fuer alle Tode ("Kettenreaktionen sind
+        // das Ziel"). Deckel per FIFO-Verdraengung, kein Verweigern
+        // (Muster wie die Krallenfalle-Obergrenze in trap.js).
+        if (pc.ghostCrew) {
+          state.ghosts.push(createGhost(tank, state.data.balance));
+          if (state.ghosts.length > state.data.balance.ghost.maxActive) {
+            state.ghosts.shift();
+          }
+        }
       }
     },
     addShake(amount) {
@@ -330,6 +344,7 @@ function respawnPlayer(state) {
   state.bullets = [];
   state.mines = [];
   state.traps = [];
+  state.ghosts = [];
   state.explosions = [];
   state.flashes = [];
   state.respawnTimer = 0;
@@ -429,6 +444,10 @@ export function stepState(state, cmd, dt) {
     if (b.dead) continue;
     for (const t of state.tanks) {
       if (!t.alive) continue;
+      // Geisterpanzer (Phase 7): ihre Kugeln treffen den Spieler nie --
+      // `friendly` reicht nicht, das schuetzt nur den Besitzer selbst, und
+      // der Besitzer ist der Geist, kein echter Tank.
+      if (t === state.player && b.owner?.isGhost) continue;
       const bounced = hasWallBounced(b);
       if (b.owner === t && (b.age < grace || !isLive(b) || b.friendly)) continue;
       if (t.protect > 0) continue; // Spawn-Schutz
@@ -488,6 +507,13 @@ export function stepState(state, cmd, dt) {
           bulletRicochets: b.wallBounces || 0,
           bulletDistance: Math.round(b.distance || 0),
         });
+        // Geisterpanzer (Phase 7): eigener Kill-Zaehler statt Spieler-
+        // Trickshot/Ricochet -- verlaengert die eigene Restzeit
+        // (Kettenreaktionen sind das Ziel).
+        if (b.owner?.isGhost && t !== state.player && !t.alive) {
+          state.ghostKills++;
+          b.owner.timeLeft += state.data.balance.ghost.killBonus;
+        }
         // Telemetrie: zaehlt nur Kills des Spielers an Gegnern (Kernfrage
         // der USP -- wie oft toetet wirklich ein Abpraller?).
         if (own && t !== state.player && !t.alive) {
@@ -501,6 +527,7 @@ export function stepState(state, cmd, dt) {
 
   updateMines(state, dt);
   updateTraps(state, dt);
+  updateGhosts(state, dt);
 
   // Sprengschuss-Upgrade: markierte Geschosse explodieren beim Tod
   // (Wandkontakt, Panzertreffer, Geschoss-gegen-Geschoss, Minenzuendung).
