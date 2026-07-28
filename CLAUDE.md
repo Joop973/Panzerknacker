@@ -51,15 +51,17 @@ Elite-Belohnung), **Phase 10** (Raum-Modifikatoren: 9 Effekte aus
 (Zerstörbare Wände: ein Anteil innerer Wände pro Raum hält 3 Treffer aus,
 bevor sie fallen), **Phase 11b** (Performance-Budget: feste Obergrenzen
 aus `data/limits.json` + `balance.json`, im F1-Debug-Overlay sichtbar
-zusammen mit Logik-/Render-Frame-Zeit) und **Phase 12** (Roguelike-Karte:
+zusammen mit Logik-/Render-Frame-Zeit), **Phase 12** (Roguelike-Karte:
 sichtbarer, wählbarer Kartengraph ersetzt die unsichtbare Raumtyp-Automatik,
-neuer Raumtyp `cursed`) und **Phase 13** (Shop: fünf Schrott-Aktionen im
-früheren Werkstatt-Raum) sind gebaut. `PLAN.md` wurde auf **v3**
+neuer Raumtyp `cursed`), **Phase 13** (Shop: fünf Schrott-Aktionen im
+früheren Werkstatt-Raum) und **Phase 14** (Bosse: Reaktor/Spiegel/Phalanx,
+1 von 3 Arenen deterministisch am Ende des Runs statt des alten
+handgebauten Finalraums) sind gebaut. `PLAN.md` wurde auf **v3**
 konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`,
 doppelt gebautes Affix-System, falscher `eliteBonus`-Feldname) entfernt,
 jede offene Phase bekommt jetzt eine "Betroffene Dateien"-Zeile.
-**Nächste Phase: Phase 14 — Bosse** (Stufe 3: Struktur). Frühere Merges
-(PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
+**Nächste Phase: Phase 15 — Bewegliche Wände und Gefahren** (Stufe 4: Kür).
+Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
 
@@ -595,6 +597,66 @@ Karte aus einem Fünferregal kaufen, Schildladung, Sekundärwaffe tauschen,
   `shopLife`; gekaufte Karten laufen zusätzlich durch `recordUpgrade()`
   (ohne abgelehnte Alternativen — im Shop lehnt man nichts ab).
 
+### Phase 14 (Bosse) — gemergt
+Ersetzt den alten handgebauten Finalraum (`data/tiles.json: finalRoom`,
+jetzt entfernt) durch genau EINEN Boss-Raum am Run-Ende (Phase 12: letzte
+Kartenreihe ist immer der Boss-Knoten) — `diff.finalRoom.bosses` (3 Namen)
+wird deterministisch über `run.rng.enemies()` gewürfelt, die Arena kommt
+über die Phase-0b-Weiche (`roomSpec.fixedLayout`) aus `data/arenas.json`.
+PLAN.md nannte "alle 5 Räume" — veraltete Formulierung aus der Zeit vor
+Phase 12, siehe Umsetzungsfund dort.
+- **Der Reaktor** (`t_reactor`, `data/arenas.json: boss_reactor`):
+  unverwundbar, solange mindestens einer von 4 Generatoren in den Ecken
+  steht (`state.bossGeneratorsLeft`, Gate in `killTank()`, kein Verbrauch/
+  Verfall). Generatoren sind ein neuer Wandtyp (`state.js:
+  WALL_TYPES.g = 'generator'`, `data/balance.json: boss.generatorHits`),
+  der wie eine zerstörbare Wand (Phase 11) über `destroyWall()` läuft,
+  aber NUR Schaden nimmt, wenn die treffende Kugel schon `wallBounces > 0`
+  hat (`bullet.js: moveAxis()` — ein direkter Treffer prallt wirkungslos
+  ab). Explosionen (Minen, Kettenblitz) können Generatoren bewusst NICHT
+  beschädigen (`mine.js: explodeAt()` nimmt sie nicht in den Zerstörungs-
+  filter auf) — sonst wäre die Bankshot-Hürde umgehbar. Braucht sonst
+  keine neue Logik: die Rolle bleibt `guardian` (steht fest, `roleTurret()`
+  zielt/feuert normal).
+- **Der Spiegel** (`t_mirror`, `boss_mirror`): Position + Fahrtrichtung
+  sind jeden Tick die Punktspiegelung der Spielerposition durch die
+  Raummitte (`WIDTH - p.x, HEIGHT - p.y`, neues Modul `src/game/bossai.js:
+  stepMirrorBoss()`) — "kopiert deine Bewegungen gespiegelt". Die Arena ist
+  bewusst punktsymmetrisch gebaut, damit jede erreichbare Spielerposition
+  auf eine ebenso begehbare Bodenzelle spiegelt (keine eigene Kollisions-
+  prüfung nötig). Stirbt nur an einer Kugel mit `wallBounces > 0` --
+  wiederverwendet `requiresRicochet`/`armor.reflects` 1:1 vom Prisma
+  (Phase 4), keine neue Trefferlogik.
+- **Die Phalanx** (`t_phalanx` × 5, `boss_phalanx`): rotiert als starre
+  Formation um die Raummitte (`bossai.js: stepPhalanxBoss()`,
+  `tank.phalanxIndex` 0–4 einmalig in `createState()` vergeben,
+  `data/balance.json: boss.phalanx.radiusPx/rotationSpeedRad`). Panzerung
+  (`armor.arc: 60°`) ist absichtlich enger als die 72° Formationsabstand
+  zum Nachbarn — die ungedeckte Lücke wandert dadurch kontinuierlich um
+  die Formation und trifft jede Blickrichtung nur für Sekundenbruchteile.
+  Auch hier keine neue Trefferlogik (wiederverwendetes `armor.arc`).
+- **Zwei echte Sonderbewegungen bypassen `DRIVES`/`updateEnemy()` komplett**
+  (`state.js: stepState()` prüft `t.cfg.mirrorBoss`/`t.cfg.phalanx` VOR dem
+  normalen Rollen-Dispatch) — reine Funktionen von Zeit/Spielerposition,
+  keine steer()-Physik. Turm/Feuerentscheidung bleibt trotzdem die normale
+  `roleTurret()`-Logik, nur die Fahrfunktion ist ersetzt.
+- **`resolveCfg()` ist eine explizite Whitelist** (Testfund): `cfg.js`
+  musste `bossInvincible`/`mirrorBoss`/`phalanx` explizit wie
+  `armor`/`requiresRicochet` durchreichen, sonst kommen sie nie im
+  aufgelösten `cfg` an.
+- **`arenaEnemySpawnCount()`** (neu, `generator.js`) lässt `run.js` vor
+  `createState()` wissen, wie viele Panzer eine feste Arena aufnehmen kann
+  (Boss-Typ(en) + gekaufte Unterstützung über `diff.finalRoom
+  .supportBudget`, wie vorher, werden darauf gekürzt) — ohne die
+  Grid-Scan-Logik zu duplizieren.
+- **Darstellung ohne neue Asset-Dateien**: `sprites.js: SPRITE_ALIAS`
+  bekommt drei neue Einträge (borgen sich vorhandene Wannen); Panzerungs-
+  Overlay (`renderer.js: drawArmor()`) ist unverändert und zeichnet Spiegel/
+  Phalanx automatisch korrekt (rotierender Rautenkranz bzw. Frontbalken,
+  wie beim Prisma/Gepanzerten). Neu ist nur der Generator-Wand-Look
+  (pulsierender Kern, Muster wie die Phase-11-Riss-Optik) und ein
+  Warnring um den Reaktorkern, solange er unverwundbar ist.
+
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
   `tag`, `rarity` (`common`/`rare`/`legendary`), `maxStacks`, `requires`,
@@ -718,6 +780,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   (Phase 6: generischer Sekundärwaffen-Dispatch inkl. Enterhaken/Sperrmauer).
 - `src/game/ghost.js` — Geisterpanzer (Phase 7): `createGhost`,
   `updateGhosts` (eigenes `state.ghosts`-Array, kein Eintrag in `state.tanks`).
+- `src/game/bossai.js` — Boss-Sonderbewegungen (Phase 14): `stepMirrorBoss`
+  (Punktspiegelung der Spielerposition), `stepPhalanxBoss` (rotierende
+  5er-Formation); bypassen `DRIVES`/`updateEnemy()`, Turm/Feuern bleibt
+  die normale `roleTurret()`-Logik.
 - `src/game/cfg.js` — Panzer-cfg + alle ~39 Upgrade-Effekte.
 - `src/game/upgradepool.js` — Auswahl-Pool (Tag-Regel, Rarity, maxStacks,
   requires, minRoom; Phase 4: includeTag/onlyRarity/bypassRoomGate/

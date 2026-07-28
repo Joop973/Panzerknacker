@@ -242,9 +242,14 @@ export function buildFixedRoom(roomDef, enemyCount) {
 // Layouts erzeugen exakt dieselbe Kachelstruktur (dasselbe grid-Format) wie
 // generierte Raeume.
 //
-// Legende -> Rasterzeichen der Engine. Unbekannte Sonderfelder (mirror,
-// generator) blockieren vorerst wie eine solide Wand und werden zusaetzlich
-// als Marker gemeldet -- die eigentlichen Boss-Elemente kommen in Phase 14.
+// Legende -> Rasterzeichen der Engine. Phase 14 aktiviert die beiden
+// Sonderfelder: 'mirror' wird zur bereits bestehenden Spiegelwand ('r',
+// Phase 5 -- Der Spiegel-Boss braucht keine eigene Wandmechanik dafuer),
+// 'generator' zu einem neuen, eigenen Wandtyp mit Bankshot-Haltbarkeit
+// (state.js: WALL_TYPES.g, bullet.js: nur Treffer mit wallBounces>0
+// beschaedigen ihn). Beide werden trotzdem weiter als Marker gemeldet
+// (siehe arenaCells()) -- ungenutzt fuer diese zwei Kinds, aber offen fuer
+// spaetere Spezialfaelle.
 const LEGEND_TO_CELL = {
   wall: '#',
   breakable: 'b',
@@ -252,8 +257,8 @@ const LEGEND_TO_CELL = {
   floor: '.',
   spawn: '.',
   enemy: '.',
-  mirror: '#',
-  generator: '#',
+  mirror: 'r',
+  generator: 'g',
 };
 
 function arenaCells(def, name) {
@@ -321,6 +326,17 @@ export function validateArenas(arenasData) {
     }
   }
   return true;
+}
+
+// Anzahl der 'enemy'-markierten Zellen eines festen Layouts (Phase 14):
+// run.js braucht das VOR createState(), um Boss + eingekaufte Unterstuetzung
+// auf die tatsaechlich vorhandenen Spawnpunkte zu kuerzen -- wiederverwendet
+// dieselbe arenaCells()-Zaehlung statt sie zu duplizieren.
+export function arenaEnemySpawnCount(arenasData, name) {
+  const arenas = (arenasData && arenasData.arenas) || arenasData || {};
+  const def = arenas[name];
+  if (!def) return 0;
+  return arenaCells(def, name).enemies.length;
 }
 
 // Baut einen Raum aus einem festen Layout (Weiche fuer `fixedLayout`).

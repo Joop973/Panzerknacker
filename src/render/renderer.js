@@ -68,6 +68,10 @@ export const TANK_COLORS = {
 
   t_armored: '#9aa6b4', // Stahl -- der dicke Frontbalken traegt die Lesbarkeit
   t_prism: '#b8ecff', // Prisma -- eigene Silhouette (Rautenkranz)
+
+  t_reactor: '#e0a83c', // Reaktorkern -- warnendes Orange
+  t_mirror: '#7fe6ff', // Der Spiegel -- kaltes Cyan, eigener Ton als das Prisma
+  t_phalanx: '#c9d0da', // Phalanx-Wache -- helles Stahlgrau
 };
 
 // Elite-Affixe (Phase 9): Farbpunkt je Affix-id (drawTank()).
@@ -166,7 +170,7 @@ export function createRenderer(ctx) {
     ctx.drawImage(floorCanvas, 0, 0);
   }
 
-  function drawWalls(walls) {
+  function drawWalls(walls, time) {
     for (const wall of walls) {
       // Spiegelwand (Phase 5): IMMER prozedural, auch wenn Sprites geladen
       // sind -- sonst sähe sie identisch zur normalen Wand aus (die
@@ -249,6 +253,36 @@ export function createRenderer(ctx) {
         if (dmg > 0.66) {
           ctx.moveTo(wall.x + wall.w / 2, wall.y + 4);
           ctx.lineTo(wall.x + wall.w / 2, wall.y + wall.h - 4);
+        }
+        ctx.stroke();
+        continue;
+      }
+      // Reaktor-Generator (Phase 14): IMMER prozedural -- eigene, klar von
+      // der zerstoerbaren Wand unterscheidbare Silhouette (pulsierender
+      // Kern), damit "hier zaehlt nur ein Bankshot" sofort lesbar ist.
+      if (wall.type === 'generator') {
+        const dur = wall.destructibleHits || 1;
+        const rest = Math.max(0, dur - (wall.hits || 0));
+        const dmg = dur ? 1 - rest / dur : 0;
+        const cx = wall.x + wall.w / 2;
+        const cy = wall.y + wall.h / 2;
+        ctx.fillStyle = '#2a2410';
+        ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+        ctx.strokeStyle = `rgba(255,210,60,${(0.5 + dmg * 0.4).toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(wall.x + 1, wall.y + 1, wall.w - 2, wall.h - 2);
+        const pulse = 0.5 + 0.5 * Math.sin((time ?? 0) * 4);
+        ctx.fillStyle = `rgba(255,210,60,${(0.4 + pulse * 0.5).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6 + pulse * 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#12161c';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(a) * (wall.w / 2 - 3), cy + Math.sin(a) * (wall.h / 2 - 3));
         }
         ctx.stroke();
         continue;
@@ -511,6 +545,17 @@ export function createRenderer(ctx) {
     // bewusst zu deutlich: dicker Balken bzw. eigener Rautenkranz.
     drawArmor(state, t, x, y, r);
 
+    // Reaktorkern (Phase 14): solange Generatoren stehen, ein deutlicher
+    // pulsierender Schutzring -- sonst wirkt jeder Treffer wie ein Bug
+    // ("warum stirbt er nicht?").
+    if (t.cfg.bossInvincible && state.bossGeneratorsLeft > 0) {
+      ctx.strokeStyle = `rgba(255,210,60,${(0.35 + 0.25 * Math.sin(state.time * 5)).toFixed(3)})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 10, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     // Powershot geladen (Phase 5): heller Punkt an der Rohrspitze, solange
     // eine Ladung wartet -- verschwindet mit dem letzten geladenen Schuss.
     if (t === state.player && t.powershotCharges > 0) {
@@ -768,7 +813,7 @@ export function createRenderer(ctx) {
       if (renderOpts.threatLines) drawThreatLines(ctx, state);
       if (renderOpts.aimLine) drawAimLine(ctx, state, traceTrajectory);
       if (minePreview) drawMinePreview(ctx, state, minePreview);
-      drawWalls(state.walls);
+      drawWalls(state.walls, state.time);
       drawWaveWarning(ctx, state);
       drawGhosts(ctx, state, alpha);
       for (const t of state.tanks) drawTank(state, t, alpha);

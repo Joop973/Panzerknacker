@@ -61,5 +61,12 @@
     "duration": 3.0,
     "killBonus": 1.0,
     "maxActive": 4
+  },
+  "boss": {
+    "generatorHits": 2,
+    "phalanx": {
+      "radiusPx": 150,
+      "rotationSpeedRad": 1.0
+    }
   }
 }
