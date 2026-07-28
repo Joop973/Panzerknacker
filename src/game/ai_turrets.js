@@ -1,79 +1,34 @@
 // Turmverhalten der Gegner (Spec Abschnitt 5) -- eine Achse der KI.
 //
-// Jede Funktion bekommt (tank, state, dt), stellt tank.turret und gibt
-// den Schusswunsch (bool) zurueck. Stellwerte: data/tanks.json -> ai.turret.
+// Phase 8: statt sechs benannter Turmfunktionen gibt es eine einzige,
+// generische Funktion, die tank.cfg.accuracy (0..1) kontinuierlich statt
+// diskreter Stufen (random_seek/weak_aim/aim/strong_aim) verwendet:
+//   accuracy === 0  -> rein zufaellig schwenkender Turm, kein Spieler-
+//                      Tracking (frueher t_brown: random_seek).
+//   accuracy < 0.3  -> zielt auf den Spieler mit grobem Fehlerwinkel,
+//                      feuert auch ohne Sichtlinie (frueher: weak_aim).
+//   accuracy >= 0.3 -> zielt praezise, braucht freie Sichtlinie
+//                      (frueher: aim/strong_aim).
+// Zwei orthogonale Sonderverhalten (wie armor/miner): leadAim (Vorhalte-
+// zielen, frueher t_black: predict) und requiresBounceShot (Abpraller-
+// Rechner, frueher t_green-Vorschlag "bounce_solver" -- aktuell von
+// keinem Typ genutzt, Mechanik bleibt fuer spaetere Phasen/Typen bereit).
 
 import { range } from '../core/rng.js';
 import { angleDiff, turnToward, playerInSight, muzzleBlocked, clearLine } from './ai.js';
 
-// t_brown: Turm schwenkt zufaellig suchend; gefeuert wird nur, wenn der
-// Lauf dabei zufaellig freie Sicht auf den Spieler hat.
-function randomSeek(tank, state, dt) {
-  const cfg = state.data.ai.turret.random_seek;
-  const ai = tank.ai;
-  if (ai.seekTimer === undefined) ai.seekTimer = 0;
-  ai.seekTimer -= dt;
-  if (ai.seekTimer <= 0) {
-    ai.seekTarget = range(state.rng, -Math.PI, Math.PI);
-    ai.seekTimer = range(state.rng, cfg.retargetMinS, cfg.retargetMaxS);
-  }
-  tank.turret = turnToward(tank.turret, ai.seekTarget, cfg.turnSpeed * dt);
-  return playerInSight(tank, state);
+function turnSpeedFor(accuracy) {
+  return 1.6 + accuracy * 2.4;
 }
 
-// Zielendes Grundmuster: aktuelle Spielerposition plus Fehlerwinkel.
-// weak_aim (t_grey): grosser Fehler, feuert auch ohne Sichtlinie (blind).
-// aim (t_pink/t_purple/t_white): kleiner Fehler, braucht Sichtlinie.
-// strong_aim (t_teal): minimaler Fehler, braucht Sichtlinie -- zielt auf
-// die AKTUELLE Position, deshalb funktioniert seitliches Ausweichen.
-function makeTrackAim(cfgKey, needSight) {
-  return function trackAim(tank, state, dt) {
-    const cfg = state.data.ai.turret[cfgKey];
-    const ai = tank.ai;
-    const p = state.player;
-    if (ai.jitterTimer === undefined) ai.jitterTimer = 0;
-    ai.jitterTimer -= dt;
-    if (ai.jitterTimer <= 0) {
-      ai.jitter = range(state.rng, -cfg.jitterRad, cfg.jitterRad);
-      ai.jitterTimer = cfg.rejitterS;
-    }
-    if (!p.alive) return false;
-    const target = Math.atan2(p.y - tank.y, p.x - tank.x) + ai.jitter;
-    tank.turret = turnToward(tank.turret, target, cfg.turnSpeed * dt);
-    if (Math.abs(angleDiff(tank.turret, target)) >= cfg.fireConeRad) return false;
-    if (muzzleBlocked(tank, state, cfg.muzzleClearPx)) return false;
-    if (needSight && !clearLine(state, tank.x, tank.y, p.x, p.y)) return false;
-    return true;
-  };
+function jitterFor(accuracy) {
+  return 0.4 * (1 - accuracy);
 }
 
-// t_black: Vorhaltezielen -- zielt auf die VORHERGESAGTE Spielerposition
-// (Position + Geschwindigkeit * Geschossflugzeit, iterativ verfeinert).
-// Deshalb funktioniert seitliches Ausweichen gegen t_black nicht.
-function predict(tank, state, dt) {
-  const cfg = state.data.ai.turret.predict;
-  const p = state.player;
-  if (!p.alive) return false;
-  let tx = p.x;
-  let ty = p.y;
-  for (let i = 0; i < 2; i++) {
-    const t = Math.hypot(tx - tank.x, ty - tank.y) / tank.cfg.bulletSpeed;
-    tx = p.x + p.vx * t;
-    ty = p.y + p.vy * t;
-  }
-  const target = Math.atan2(ty - tank.y, tx - tank.x);
-  tank.turret = turnToward(tank.turret, target, cfg.turnSpeed * dt);
-  return (
-    Math.abs(angleDiff(tank.turret, target)) < cfg.fireConeRad &&
-    !muzzleBlocked(tank, state, cfg.muzzleClearPx) &&
-    clearLine(state, tank.x, tank.y, tx, ty)
-  );
-}
-
-// t_green: Abpraller-Rechner. Simuliert Kandidatenwinkel als
-// reflektierende Strahlen (bis zu ricochets Abpraller) und feuert NUR,
-// wenn eine Ein- oder Zwei-Wand-Loesung existiert. Direkte Treffer
-// werden verworfen -- t_green schiesst fast nie direkt (Spec).
+// Abpraller-Rechner: simuliert Kandidatenwinkel als reflektierende
+// Strahlen (bis zu ricochets Abpraller) und liefert NUR eine Loesung,
+// wenn ein Ein- oder Zwei-Wand-Treffer existiert. Direkte Treffer werden
+// verworfen -- ein Panzer mit requiresBounceShot schiesst fast nie direkt.
 function solveBounce(tank, state, cfg) {
   const p = state.player;
   if (!p.alive) return null;
@@ -92,7 +47,6 @@ function solveBounce(tank, state, cfg) {
       const nx = x + dx * step;
       const ny = y + dy * step;
       if (state.isSolid(nx, ny)) {
-        // Achsweise Reflexion wie bei echten Geschossen (inkl. Eckenfall).
         const sx = state.isSolid(nx, y);
         const sy = state.isSolid(x, ny);
         if (sx) dx = -dx;
@@ -118,8 +72,8 @@ function solveBounce(tank, state, cfg) {
   return null;
 }
 
-function bounceSolver(tank, state, dt) {
-  const cfg = state.data.ai.turret.bounce_solver;
+function bounceShot(tank, state, dt) {
+  const cfg = state.data.ai.bounceShot;
   const ai = tank.ai;
   if (ai.solveTimer === undefined) ai.solveTimer = range(state.rng, 0, cfg.solveIntervalS);
   ai.solveTimer -= dt;
@@ -128,7 +82,6 @@ function bounceSolver(tank, state, dt) {
     ai.solveTimer = cfg.solveIntervalS;
   }
   if (ai.solution == null) {
-    // Keine Loesung: Turm folgt dem Spieler traege, feuert aber nie.
     const p = state.player;
     if (p.alive) {
       const toP = Math.atan2(p.y - tank.y, p.x - tank.x);
@@ -140,11 +93,62 @@ function bounceSolver(tank, state, dt) {
   return Math.abs(angleDiff(tank.turret, ai.solution)) < cfg.fireConeRad;
 }
 
-export const TURRETS = {
-  random_seek: randomSeek,
-  weak_aim: makeTrackAim('weak_aim', false),
-  aim: makeTrackAim('aim', true),
-  strong_aim: makeTrackAim('strong_aim', true),
-  predict,
-  bounce_solver: bounceSolver,
-};
+export function roleTurret(tank, state, dt) {
+  const cfg = tank.cfg;
+  const p = state.player;
+  if (!p.alive) return false;
+
+  if (cfg.requiresBounceShot) return bounceShot(tank, state, dt);
+
+  const acc = cfg.accuracy ?? 0.5;
+  const turnSpeed = turnSpeedFor(acc);
+  const muzzleClearPx = state.data.ai.muzzleClearPx;
+
+  // Rein zufaellig schwenkender Turm (frueher t_brown: random_seek) --
+  // kein Spieler-Tracking, feuert nur bei zufaelliger freier Sicht.
+  if (acc <= 0 && !cfg.leadAim) {
+    const ai = tank.ai;
+    if (ai.seekTimer === undefined) ai.seekTimer = 0;
+    ai.seekTimer -= dt;
+    if (ai.seekTimer <= 0) {
+      ai.seekTarget = range(state.rng, -Math.PI, Math.PI);
+      ai.seekTimer = range(state.rng, 0.8, 2.2);
+    }
+    tank.turret = turnToward(tank.turret, ai.seekTarget, turnSpeed * dt);
+    return playerInSight(tank, state);
+  }
+
+  // Vorhaltezielen (frueher t_black: predict): zielt auf die
+  // VORHERGESAGTE Spielerposition (Position + Geschwindigkeit *
+  // Geschossflugzeit, iterativ verfeinert) -- kein Fehlerwinkel, seitliches
+  // Ausweichen hilft dagegen kaum.
+  let targetX = p.x;
+  let targetY = p.y;
+  if (cfg.leadAim) {
+    for (let i = 0; i < 2; i++) {
+      const t = Math.hypot(targetX - tank.x, targetY - tank.y) / cfg.bulletSpeed;
+      targetX = p.x + p.vx * t;
+      targetY = p.y + p.vy * t;
+    }
+  }
+
+  const ai = tank.ai;
+  if (ai.jitterTimer === undefined) ai.jitterTimer = 0;
+  ai.jitterTimer -= dt;
+  const jitterMag = cfg.leadAim ? 0 : jitterFor(acc);
+  if (ai.jitterTimer <= 0) {
+    ai.jitter = jitterMag > 0 ? range(state.rng, -jitterMag, jitterMag) : 0;
+    ai.jitterTimer = 0.5;
+  }
+  const target = Math.atan2(targetY - tank.y, targetX - tank.x) + ai.jitter;
+  tank.turret = turnToward(tank.turret, target, turnSpeed * dt);
+  const fireConeRad = 0.13 - acc * 0.05;
+  if (Math.abs(angleDiff(tank.turret, target)) >= fireConeRad) return false;
+  if (muzzleBlocked(tank, state, muzzleClearPx)) return false;
+  // Grober Fehlerwinkel feuert auch blind (frueher: weak_aim); ab
+  // praezisem Zielen wird eine freie Sichtlinie verlangt (frueher: aim/
+  // strong_aim). Vorhaltezielen verlangt sie immer.
+  const needSight = acc >= 0.3 || cfg.leadAim;
+  if (needSight && !clearLine(state, tank.x, tank.y, targetX, targetY)) return false;
+  return true;
+}

@@ -9,7 +9,7 @@ export function resolveCfg(data, type) {
     radius: data.physics.tankRadius,
     bulletRadius: data.physics.bulletRadius,
     // Typ-eigene Feuerrate (t_green: 2 s) vor globalem Standard.
-    fireCooldown: t.fireCooldownS ?? data.physics.fireCooldownS,
+    fireCooldown: t.fireRate ?? data.physics.fireCooldownS,
     speed: data.speeds[t.speed],
     // Spieler-Basismagazin (gleichzeitig aktive Kugeln) aus balance.json;
     // harter Deckel selbst mit Magazin-Upgrades (Lesbarkeit).
@@ -21,8 +21,19 @@ export function resolveCfg(data, type) {
     // Spieler: Geschwindigkeit aus balance.json (v2), Gegner aus tanks.json.
     bulletSpeed:
       type === 'player' && bbullet?.speed ? bbullet.speed : data.bulletSpeeds[t.weapon],
-    turret: t.turret,
-    drive: t.drive,
+    // Gegner-Rolle statt Gegner-Typ (Phase 8): vier Rollen (guardian/
+    // sapper/hunter/sieger), parametrisiert statt pro Typ eigener
+    // Turm-/Fahrfunktion. Rolle und Panzerung bleiben frei kombinierbar.
+    role: t.role,
+    aggression: t.aggression ?? 0.5,
+    preferredRange: t.preferredRange ?? 0,
+    accuracy: t.accuracy ?? 0.5,
+    // Sonderverhalten, orthogonal zur Rolle (wie armor/miner): nur die
+    // Typen setzen sie, die sie tatsaechlich nutzen.
+    packFlank: t.packFlank || false,
+    leadAim: t.leadAim || false,
+    requiresBounceShot: t.requiresBounceShot || false,
+    phaseToggle: t.phaseToggle || null,
     avoidMines: t.avoidMines || false,
     miner: t.miner,
     trackStampPx: t.trackStampPx || 3,

@@ -27,109 +27,37 @@
     "raycastStepPx": 4,
     "raycastMaxPx": 900,
     "mineAvoidRadiusPx": 110,
-    "turret": {
-      "random_seek": {
-        "turnSpeed": 1.6,
-        "retargetMinS": 0.8,
-        "retargetMaxS": 2.2
+    "muzzleClearPx": 48,
+    "escape": {
+      "blockedRetargetS": 0.25,
+      "escapeSpreadRad": 1.0,
+      "escapeHoldS": 0.8
+    },
+    "roles": {
+      "sapper": {
+        "retargetMinS": 1.5,
+        "retargetMaxS": 3.0
       },
-      "weak_aim": {
-        "turnSpeed": 2.4,
-        "jitterRad": 0.35,
-        "rejitterS": 0.7,
-        "fireConeRad": 0.12,
-        "muzzleClearPx": 48
+      "hunter": {
+        "bulletDangerPx": 130,
+        "flankAngleRad": 0.7,
+        "flankStandoffPx": 140
       },
-      "aim": {
-        "turnSpeed": 3.0,
-        "jitterRad": 0.1,
-        "rejitterS": 0.5,
-        "fireConeRad": 0.12,
-        "muzzleClearPx": 48
-      },
-      "strong_aim": {
-        "turnSpeed": 3.6,
-        "jitterRad": 0.03,
-        "rejitterS": 0.5,
-        "fireConeRad": 0.1,
-        "muzzleClearPx": 48
-      },
-      "predict": {
-        "turnSpeed": 4.0,
-        "fireConeRad": 0.1,
-        "muzzleClearPx": 48
-      },
-      "bounce_solver": {
-        "turnSpeed": 2.2,
-        "fireConeRad": 0.06,
-        "solveIntervalS": 0.4,
-        "angleSamples": 180,
-        "hitTolerancePx": 14,
-        "maxTravelPx": 1200
+      "sieger": {
+        "bulletDangerPx": 140,
+        "rangeTolerancePx": 60,
+        "defaultRangePx": 220,
+        "orbitFlipMinS": 2.0,
+        "orbitFlipMaxS": 5.0
       }
     },
-    "drive": {
-      "wander": {
-        "turnSpeed": 2.0,
-        "retargetMinS": 1.5,
-        "retargetMaxS": 3.0,
-        "blockedRetargetS": 0.25,
-        "escapeSpreadRad": 1.0,
-        "escapeHoldS": 0.8
-      },
-      "pursue": {
-        "turnSpeed": 3.0,
-        "blockedRetargetS": 0.25,
-        "escapeSpreadRad": 1.0,
-        "escapeHoldS": 0.8
-      },
-      "armor_push": {
-        "turnSpeed": 1.1,
-        "blockedRetargetS": 0.25,
-        "escapeSpreadRad": 1.0,
-        "escapeHoldS": 0.8
-      },
-      "evade": {
-        "turnSpeed": 4.0,
-        "keepDistancePx": 170,
-        "bulletDangerPx": 130,
-        "blockedRetargetS": 0.25,
-        "escapeSpreadRad": 1.0,
-        "escapeHoldS": 0.8,
-        "orbitFlipMinS": 2.0,
-        "orbitFlipMaxS": 5.0,
-        "approachDistancePx": 280
-      },
-      "purple_pack": {
-        "turnSpeed": 3.0,
-        "flankAngleRad": 0.7,
-        "standoffPx": 140,
-        "blockedRetargetS": 0.25,
-        "escapeSpreadRad": 1.0,
-        "escapeHoldS": 0.8
-      },
-      "black_skirmish": {
-        "turnSpeed": 4.5,
-        "minDistPx": 150,
-        "maxDistPx": 300,
-        "bulletDangerPx": 150,
-        "blockedRetargetS": 0.2,
-        "escapeSpreadRad": 1.0,
-        "escapeHoldS": 0.5,
-        "orbitFlipMinS": 1.5,
-        "orbitFlipMaxS": 4.0
-      },
-      "white_phase": {
-        "modeSwitchMinS": 4.0,
-        "modeSwitchMaxS": 8.0
-      },
-      "hunt": {
-        "turnSpeed": 3.4,
-        "bulletDangerPx": 120,
-        "blockedRetargetS": 0.25,
-        "escapeSpreadRad": 1.0,
-        "escapeHoldS": 0.7
-      }
+    "bounceShot": {
+      "turnSpeed": 2.2,
+      "fireConeRad": 0.06,
+      "solveIntervalS": 0.4,
+      "angleSamples": 180,
+      "hitTolerancePx": 14,
+      "maxTravelPx": 1200
     },
     "white": {
       "invisibleAfterS": 1.5,
@@ -151,8 +79,8 @@
       "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
-      "turret": "random_seek",
-      "drive": "none",
+      "role": "guardian",
+      "accuracy": 0,
       "label": "Brauner",
       "desc": "Steht fest. Turm schwenkt suchend und schießt bei freier Sicht."
     },
@@ -162,8 +90,9 @@
       "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
-      "turret": "weak_aim",
-      "drive": "wander",
+      "role": "sapper",
+      "aggression": 0.17,
+      "accuracy": 0.2,
       "label": "Grauer",
       "desc": "Fährt ziellos umher und zielt ungenau auf dich."
     },
@@ -173,11 +102,13 @@
       "ricochets": 0,
       "mines": 0,
       "weapon": "rocket",
-      "turret": "strong_aim",
-      "drive": "evade",
+      "role": "sieger",
+      "aggression": 0.83,
+      "preferredRange": 220,
+      "accuracy": 0.8,
       "label": "Türkiser",
       "desc": "Hält Abstand, weicht Kugeln aus. Feuert Raketen mit 1,6 s Pause dazwischen.",
-      "fireCooldownS": 1.6
+      "fireRate": 1.6
     },
     "t_yellow": {
       "speed": "fast",
@@ -185,8 +116,9 @@
       "ricochets": 1,
       "mines": 4,
       "weapon": "bullet",
-      "turret": "weak_aim",
-      "drive": "wander",
+      "role": "sapper",
+      "aggression": 0.17,
+      "accuracy": 0.2,
       "avoidMines": true,
       "miner": {
         "intervalMinS": 2.5,
@@ -201,8 +133,9 @@
       "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
-      "turret": "aim",
-      "drive": "hunt",
+      "role": "hunter",
+      "aggression": 0.63,
+      "accuracy": 0.5,
       "label": "Pinker",
       "desc": "Jagt dich und weicht dabei deinen Kugeln aus. Bis zu 3 Geschosse."
     },
@@ -212,11 +145,11 @@
       "ricochets": 0,
       "mines": 0,
       "weapon": "rocket",
-      "turret": "strong_aim",
-      "drive": "none",
+      "role": "guardian",
+      "accuracy": 0.8,
       "label": "Grüner",
       "desc": "Steht fest und zielt sehr präzise. Feuert schnelle Raketen — lädt 2 s pro Schuss nach.",
-      "fireCooldownS": 2.0
+      "fireRate": 2.0
     },
     "t_purple": {
       "speed": "fast",
@@ -224,8 +157,10 @@
       "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
-      "turret": "aim",
-      "drive": "purple_pack",
+      "role": "hunter",
+      "aggression": 0.5,
+      "accuracy": 0.5,
+      "packFlank": true,
       "miner": {
         "intervalMinS": 6.0,
         "intervalMaxS": 10.0
@@ -240,8 +175,14 @@
       "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
-      "turret": "aim",
-      "drive": "white_phase",
+      "role": "hunter",
+      "aggression": 0.5,
+      "accuracy": 0.5,
+      "phaseToggle": {
+        "roles": ["sieger", "hunter"],
+        "switchMinS": 4.0,
+        "switchMaxS": 8.0
+      },
       "trackStampPx": 5,
       "miner": {
         "intervalMinS": 6.0,
@@ -257,8 +198,9 @@
       "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
-      "turret": "weak_aim",
-      "drive": "armor_push",
+      "role": "hunter",
+      "aggression": 0,
+      "accuracy": 0.2,
       "armor": {
         "arc": 120,
         "reflects": true
@@ -272,8 +214,9 @@
       "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
-      "turret": "weak_aim",
-      "drive": "wander",
+      "role": "sapper",
+      "aggression": 0.17,
+      "accuracy": 0.2,
       "armor": {
         "arc": 360,
         "reflects": true
@@ -288,8 +231,11 @@
       "ricochets": 0,
       "mines": 2,
       "weapon": "rocket",
-      "turret": "predict",
-      "drive": "black_skirmish",
+      "role": "sieger",
+      "aggression": 1.0,
+      "preferredRange": 220,
+      "accuracy": 0.9,
+      "leadAim": true,
       "miner": {
         "intervalMinS": 5.0,
         "intervalMaxS": 9.0

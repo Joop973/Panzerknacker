@@ -1,15 +1,16 @@
 // Gegner-KI, Dispatcher + gemeinsame Helfer (Spec Abschnitt 5).
 //
-// Zwei GETRENNTE Achsen -- Turmverhalten (ai_turrets.js) und
-// Fahrverhalten (ai_drives.js). Diese Trennung ist laut Spec zentral:
-// jeder Gegnertyp kombiniert unabhaengig ein TURRET- und ein
-// DRIVE-Verhalten (per Name aus data/tanks.json). Dazu kommt als
-// optionale dritte Achse das Minenlegen (miner-Eintrag im Typ).
+// Phase 8: Gegner-Rollen statt Gegner-Typen. Eine ROLLE (guardian/sapper/
+// hunter/sieger, siehe ai_drives.js) bestimmt das Fahrverhalten,
+// ai_turrets.js liefert dazu eine einzige, accuracy-parametrisierte
+// Turmfunktion -- beides datengetrieben ueber tank.cfg (aus
+// data/tanks.json), keine eigene Funktion mehr pro Gegnertyp. Panzerung
+// (armor.js) und Minenlegen (miner-Eintrag) bleiben orthogonal dazu.
 //
 // Aller Zufall laeuft ueber den Seed-RNG (state.rng).
 
 import { range } from '../core/rng.js';
-import { TURRETS } from './ai_turrets.js';
+import { roleTurret } from './ai_turrets.js';
 import { DRIVES } from './ai_drives.js';
 
 export function angleDiff(a, b) {
@@ -150,14 +151,35 @@ export function steer(tank, state, dt, targetAngle, cfg) {
   return { x: Math.cos(ai.driveAngle), y: Math.sin(ai.driveAngle) };
 }
 
+// Phasenwechsel (t_white): alterniert periodisch zwischen zwei Rollen
+// (Muster wie das fruehere white_phase-Fahrverhalten, inkl. Ton-Signal
+// beim Wechsel). Gibt die gerade aktive Rolle zurueck.
+function activeRole(tank, state, dt) {
+  const pt = tank.cfg.phaseToggle;
+  if (!pt) return tank.cfg.role;
+  const ai = tank.ai;
+  if (ai.phaseIdx === undefined) {
+    ai.phaseIdx = 0;
+    ai.phaseTimer = range(state.rng, pt.switchMinS, pt.switchMaxS);
+  }
+  ai.phaseTimer -= dt;
+  if (ai.phaseTimer <= 0) {
+    ai.phaseIdx = 1 - ai.phaseIdx;
+    ai.phaseTimer = range(state.rng, pt.switchMinS, pt.switchMaxS);
+    state.sounds.push(ai.phaseIdx === 1 ? 'tone_high' : 'tone_low');
+  }
+  return pt.roles[ai.phaseIdx];
+}
+
 // Ein KI-Schritt fuer einen Gegner. Gibt { move, fire, mine } zurueck;
 // die Anwendung (Bewegung, Schuss, Minenlegen) macht state.js.
 export function updateEnemy(tank, state, dt) {
-  const move = DRIVES[tank.cfg.drive](tank, state, dt);
+  const role = activeRole(tank, state, dt);
+  const move = DRIVES[role](tank, state, dt);
   // EMP-Mine (Phase 6): betaeubte Gegner drehen den Turm nicht und feuern
   // nicht -- eigenes Feld turretStunTimer, damit die bestehende Krallenfalle
   // (stunTimer allein) den Turm weiter benutzbar laesst (siehe PLAN.md).
-  const fire = tank.turretStunTimer > 0 ? false : TURRETS[tank.cfg.turret](tank, state, dt);
+  const fire = tank.turretStunTimer > 0 ? false : roleTurret(tank, state, dt);
 
   // Dritte Achse: Minenleger (t_yellow "ohne taktischen Grund" per
   // Zufallstimer -- das beabsichtigte Sich-selbst-Einsperren entsteht
