@@ -55,10 +55,7 @@
     }
   },
   "finalRoom": {
-    "fixed": [
-      "t_black",
-      "t_black"
-    ],
+    "bosses": ["boss_reactor", "boss_mirror", "boss_phalanx"],
     "supportBudget": 12
   },
   "doors": {

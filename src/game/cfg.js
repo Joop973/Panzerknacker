@@ -40,6 +40,13 @@ export function resolveCfg(data, type) {
     // Gerichtete Panzerung (Phase 4) -- reine Datenuebernahme.
     armor: t.armor || null,
     requiresRicochet: t.requiresRicochet || false,
+    // Boss-Sonderfaelle (Phase 14) -- reine Datenuebernahme, ebenso
+    // orthogonal wie armor/miner. bossInvincible gated killTank() (Reaktor);
+    // mirrorBoss/phalanx schalten in stepState() auf die Boss-Fahrfunktionen
+    // aus bossai.js statt der normalen Rolle um.
+    bossInvincible: t.bossInvincible || false,
+    mirrorBoss: t.mirrorBoss || false,
+    phalanx: t.phalanx || false,
   };
 }
 

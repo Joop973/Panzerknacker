@@ -13,9 +13,19 @@ import { rngFor, rngForRun, hashSeed } from '../core/rng.js';
 import { recordRun, loadStats, saveCurrentRun, clearCurrentRun } from '../core/storage.js';
 import { createState, stepState } from './state.js';
 import { rollOffers as rollFromPool, drawOne } from './upgradepool.js';
+import { arenaEnemySpawnCount } from './generator.js';
 
 const TRANSITION_S = 1.5;
 const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
+
+// Boss-Panzertypen je Arena (Phase 14) -- kommen IMMER zuerst in enemyTypes,
+// die restlichen Slots (bis zur Spawnzahl der Arena) fuellt buyEnemies() wie
+// bisher mit gekaufter Unterstuetzung.
+const BOSS_ENEMY_TYPES = {
+  boss_reactor: ['t_reactor'],
+  boss_mirror: ['t_mirror'],
+  boss_phalanx: ['t_phalanx', 't_phalanx', 't_phalanx', 't_phalanx', 't_phalanx'],
+};
 
 // Raumtyp -> Anzeige (Raumvorschau + Kartenscreen, Phase 12). Symbole sind
 // DOM-Emojis. War bis Phase 12 nur in der Vorschau sichtbar (der Raumtyp
@@ -267,13 +277,22 @@ function buildCombatRoom(run, type, isFinal) {
   let enemyTypes;
   let fixedRoom = null;
   let weights = null;
+  let bossRoomSpec = null;
   if (isFinal) {
-    // Handgebauter Finalraum: 2x t_black plus eingekaufte Unterstuetzung.
-    fixedRoom = run.tiles.finalRoom;
+    // Boss (Phase 14): 1 von 3 Arenen, deterministisch ueber den enemies-
+    // Strom dieses Raums gewuerfelt -- ein eigener RNG-Strom nur fuer diese
+    // eine Wahl waere ueberdimensioniert (Muster wie roomCharacter oben).
+    // Nutzt die Arena-Weiche aus Phase 0b (fixedLayout) statt des alten
+    // handgebauten run.tiles.finalRoom, das damit entfaellt.
+    const bosses = diff.finalRoom.bosses;
+    const bossName = bosses[Math.floor(run.rng.enemies() * bosses.length)];
+    run.bossName = bossName;
+    bossRoomSpec = { fixedLayout: bossName };
+    const spawnCount = arenaEnemySpawnCount(run.data.arenas, bossName);
     enemyTypes = [
-      ...diff.finalRoom.fixed,
+      ...BOSS_ENEMY_TYPES[bossName],
       ...buyEnemies(diff, run.rng.enemies, run.roomIndex, diff.finalRoom.supportBudget),
-    ].slice(0, run.tiles.finalRoom.enemySpawns.length);
+    ].slice(0, spawnCount);
     run.roomCharacter = 'Finale';
   } else {
     const eliteMult = type === 'elite' ? diff.elite.budgetMult : 1;
@@ -321,8 +340,10 @@ function buildCombatRoom(run, type, isFinal) {
     equippedSecondary: run.equippedSecondary,
     shieldCharges: run.shieldCharges, // raumuebergreifende Notschild-Ladungen
     // Weiche (Phase 0b): setzt das Raumspec `fixedLayout`, kommt das Layout
-    // aus data/arenas.json statt aus dem Kachelgenerator.
-    roomSpec: run.roomSpec,
+    // aus data/arenas.json statt aus dem Kachelgenerator. Der Finalraum
+    // (Phase 14) hat IMMER Vorrang vor einem evtl. gesetzten Test-Override
+    // (?arena=..., run.roomSpec) -- der Boss soll auch im Testmodus laufen.
+    roomSpec: isFinal ? bossRoomSpec : run.roomSpec,
     arenas: run.data.arenas,
     // Phase 5: aktive Transformations-Schalter (rein datengesteuert).
     transform: transformEffects(run),
@@ -547,6 +568,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     roomAffix: null, // Name(n) des Elite-Affix, "A + B" bei zweien (nur Eliteraeume)
     roomAffixes: [], // dieselben Affixe als Namensliste (Phase 9: 0-2 kombinierbar)
     roomModifier: null, // Raum-Modifikator-Objekt aus data/modifiers.json (Phase 10)
+    bossName: null, // Boss-Arena des Finalraums (Phase 14), erst dort gesetzt
     killsByType: {}, // Statistik fuer die Endscreens
     shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)
     combo: 0, // laufende Kill-Combo

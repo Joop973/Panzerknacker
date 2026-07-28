@@ -243,6 +243,51 @@
       "avoidMines": true,
       "label": "Schwarzer",
       "desc": "Sehr schnell. Zielt mit Vorhalt — Ausweichen hilft kaum. Flieht vor Beschuss, legt Minen."
+    },
+    "t_reactor": {
+      "speed": "fix",
+      "magazine": 2,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "rocket",
+      "role": "guardian",
+      "accuracy": 0.9,
+      "bossInvincible": true,
+      "label": "Reaktorkern",
+      "desc": "Unverwundbar, solange Generatoren stehen. Nur ein Bankshot bringt einen Generator zum Einsturz."
+    },
+    "t_mirror": {
+      "speed": "fix",
+      "magazine": 3,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "guardian",
+      "accuracy": 0.7,
+      "mirrorBoss": true,
+      "armor": {
+        "arc": 360,
+        "reflects": true
+      },
+      "requiresRicochet": true,
+      "label": "Der Spiegel",
+      "desc": "Kopiert deine Bewegungen gespiegelt durch die Raummitte. Nur eine an einer Wand abgeprallte Kugel tötet ihn."
+    },
+    "t_phalanx": {
+      "speed": "fix",
+      "magazine": 1,
+      "ricochets": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "guardian",
+      "accuracy": 0.6,
+      "phalanx": true,
+      "armor": {
+        "arc": 60,
+        "reflects": true
+      },
+      "label": "Phalanx-Wache",
+      "desc": "Fünf Panzer rotieren gemeinsam um die Raummitte. Nur der kurze Lücken-Moment beim Rotieren lässt einen Treffer durch."
     }
   }
 }

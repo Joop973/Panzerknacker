@@ -952,9 +952,9 @@ drei Aktionen erweitern oder zu `createShopScreen` umbenennen), `src/game/run.js
   `#workshop` bekommt `overflow-y: auto` + `justify-content: flex-start`
   (Muster wie der Kartenscreen aus Phase 12).
 
-## Phase 14 — Bosse
+## Phase 14 — Bosse  ✅ erledigt
 **Aufwand:** 2–3 Sessions
-Nutzt die Arena-Weiche aus Phase 0. Alle 5 Räume.
+Nutzt die Arena-Weiche aus Phase 0.
 
 - **Der Reaktor**: unverwundbarer Turm in der Mitte, stirbt nur, wenn vier
   Generatoren in den Ecken per Bankshot getroffen werden
@@ -963,10 +963,76 @@ Nutzt die Arena-Weiche aus Phase 0. Alle 5 Räume.
 - **Die Phalanx**: fünf `armored`-Panzer in Formation, drehen sich gemeinsam,
   Lücke nur für Sekundenbruchteile
 
-**Betroffene Dateien:** `data/arenas.json` (Boss-Layouts, `mirror`/`generator`
--Marker sind seit Phase 0b schon als `room.markers` verfügbar), `src/game/state.js`
-(Boss-HP/Trefferlogik je Typ), `src/game/ai_drives.js` (Spiegel-Bewegung,
-Phalanx-Formation), `src/render/renderer.js` (Boss-Darstellung).
+**Betroffene Dateien:** `data/arenas.json` (3 Boss-Layouts), `data/tanks.json`
+(3 Boss-Typen), `data/difficulty.json` (`finalRoom.bosses` statt `fixed`),
+`data/balance.json` (`boss`-Block), `src/game/generator.js` (Marker →
+Grid-Zeichen), `src/game/state.js` (Generator-Wandtyp, Invincibility-Gate,
+Boss-Dispatch), `src/game/bossai.js` (neu: Spiegel-Bewegung,
+Phalanx-Formation), `src/game/bullet.js`/`mine.js` (Bankshot-Regel),
+`src/game/cfg.js` (Boss-Flags durchreichen), `src/game/run.js`
+(Boss-Auswahl + Finalraum-Umbau), `src/render/renderer.js`/`sprites.js`
+(Generator-Optik, Alias-Sprites).
+
+**Umsetzungsfunde:**
+- **„Alle 5 Räume" war veraltete Formulierung** aus der Zeit vor Phase 12:
+  seit der Roguelike-Karte gibt es strukturell genau EINEN Boss-Knoten am
+  Ende des Runs (letzte Kartenreihe, immer `combat`-Typ), keine periodischen
+  Mini-Bosse alle 5 Räume. Umgesetzt wurde genau ein Bossraum, 1 von 3
+  Arenen wird dort deterministisch gewürfelt (`run.rng.enemies()`,
+  `diff.finalRoom.bosses`). `data/tiles.json`s alter, handgebauter
+  `finalRoom` (fixes Kachel-Layout) ist komplett entfernt — die
+  Arena-Weiche aus Phase 0b übernimmt seine Rolle vollständig.
+- **`resolveCfg()` ist eine explizite Whitelist**, kein Durchreichen aller
+  `tanks.json`-Felder (Fund während der Tests: `bossInvincible`/
+  `mirrorBoss`/`phalanx` kamen ohne expliziten Eintrag nie im aufgelösten
+  `cfg` an, alle drei Bosse verhielten sich wie stumpfe `guardian`-Panzer).
+  Jetzt wie `armor`/`requiresRicochet` als reine Datenübernahme ergänzt.
+- **Reaktor und Phalanx brauchen keine neue Turm-/Trefferlogik**: der
+  Reaktorkern nutzt die bestehende Rolle `guardian` unverändert (steht
+  fest, `roleTurret()` zielt/feuert normal) — nur seine Unverwundbarkeit
+  ist neu (`killTank()`-Gate auf `cfg.bossInvincible && state
+  .bossGeneratorsLeft > 0`, kein Verbrauch, kein Verfall). Der Spiegel
+  wiederverwendet `requiresRicochet`/`armor.reflects` 1:1 vom Prisma (Phase
+  4) — stirbt nur an einer Kugel mit `wallBounces > 0`. Die Phalanx
+  wiederverwendet `armor.arc`/`reflects` ebenfalls vom Prisma/Gepanzerten;
+  neu ist nur der Bogen-Wert (60°, enger als die 72° Formationsabstand,
+  damit die Lücke zwischen zwei Panzerungen kontinuierlich um die rotierende
+  Formation wandert statt fest zu stehen).
+- **Zwei echte Sonderbewegungen bypassen DRIVES/updateEnemy() komplett**
+  (neues `src/game/bossai.js`, `stepMirrorBoss`/`stepPhalanxBoss`): beides
+  ist reine Funktion von Zeit/Spielerposition, keine steer()-Physik. Turm-
+  /Feuerentscheidung bleibt trotzdem die normale `roleTurret()`-Logik — nur
+  die Fahrfunktion ist ersetzt. `state.js: stepState()` prüft
+  `t.cfg.mirrorBoss`/`t.cfg.phalanx` VOR dem normalen `updateEnemy()`-Aufruf.
+  `tank.phalanxIndex` (0–4) wird einmalig beim Erzeugen vergeben
+  (`createState()`), Formationsplatz und -winkel folgen aus
+  `state.time * rotationSpeedRad + phalanxIndex * 72°` um die feste
+  Raummitte (`WIDTH/2, HEIGHT/2`).
+- **`boss_mirror`-Arena ist bewusst punktsymmetrisch gebaut** (Wände UND
+  Layout spiegeln sich exakt durch die Raummitte) — dadurch spiegelt jede
+  erreichbare Spielerposition automatisch auf eine ebenso begehbare
+  Bodenzelle, ohne eigene Kollisionsprüfung für den Spiegel-Panzer.
+- **`mirror`-Marker wird zur bestehenden Spiegelwand** (`r`, Phase 5)
+  statt zu einer neuen Mechanik — „Der Spiegel"-Arena kann sie dekorativ
+  nutzen, ist aber nicht Pflicht. `generator`-Marker wird zu einem neuen,
+  eigenen Wandtyp (`g` → `state.js: WALL_TYPES.generator`), der wie
+  `destructible` (Phase 11) über `destroyWall()` läuft, aber nur zählt,
+  wenn die treffende Kugel bereits `wallBounces > 0` hat (`bullet.js:
+  moveAxis()`) — ein direkter Treffer prallt wirkungslos ab. Explosionen
+  (Minen, Kettenblitz) sind bewusst NICHT in der Lage, Generatoren zu
+  beschädigen (`mine.js: explodeAt()`), sonst wäre die Bankshot-Hürde
+  umgehbar — Muster wie „Explosionen ignorieren die Panzerung" (Phase 4).
+- **`arenaEnemySpawnCount()`** (neu, `generator.js`) lässt `run.js` VOR
+  `createState()` wissen, wie viele Panzer eine feste Arena aufnehmen kann,
+  ohne die Grid-Scan-Logik zu duplizieren — Boss-Typ(en) + gekaufte
+  Unterstützung (`diff.finalRoom.supportBudget`, wie vorher) werden darauf
+  gekürzt.
+- **Bestehende Gewinnbarkeits-Tests mit dem „alle Gegner sofort töten"-Muster
+  brauchten eine Ergänzung**: `killTank()` ist jetzt für den Reaktorkern ein
+  No-op, solange Generatoren stehen — 12 Testdateien (u. a. `phase4.mjs`,
+  `phase9elite.mjs`, `phase12map.mjs`) bekamen vor jedem Cheat-Kill eine
+  zusätzliche Zeile, die alle `generator`-Wände direkt über `destroyWall()`
+  abräumt (Muster wie der bestehende Kill-Cheat selbst).
 
 ---
 

@@ -14,6 +14,7 @@ import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
 import { createGhost, updateGhosts } from './ghost.js';
 import { updateEnemy } from './ai.js';
+import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
 import { resolveCfg, applyUpgrades, applyRoomModifier } from './cfg.js';
@@ -24,7 +25,11 @@ import { armorBlocks, reflectBullet, reflectFromAim, hasWallBounced, isLive } fr
 // laesst Geschosse dort abprallen, ohne einen Abpraller zu verbrauchen.
 // 'destructible' (Phase 11): physisch wie 'solid', bis sie durch
 // destructibleHits Treffer (Kugel ODER Explosion) abgebaut ist.
-const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole', r: 'reflect', d: 'destructible' };
+// 'generator' (Phase 14, Reaktor-Boss): physisch wie 'solid', nimmt aber
+// NUR von einem bereits abgeprallten Geschoss (Bankshot) Schaden -- ein
+// direkter Treffer prallt wirkungslos ab (siehe bullet.js: moveAxis()).
+// Explosionen (Minen etc.) ignorieren ihn bewusst (siehe mine.js).
+const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole', r: 'reflect', d: 'destructible', g: 'generator' };
 
 // Truemmerfarben fuer Partikel (Politur, Phase 10).
 const DEBRIS_COLORS = {
@@ -40,9 +45,12 @@ const DEBRIS_COLORS = {
   t_purple: '#8a5ad4',
   t_white: '#e8e8e8',
   t_black: '#33333c',
+  t_reactor: '#e0a83c',
+  t_mirror: '#8fd8ee',
+  t_phalanx: '#9aa6b4',
 };
 
-function buildWalls(grid, destructibleHits) {
+function buildWalls(grid, destructibleHits, generatorHits) {
   const walls = [];
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
@@ -52,6 +60,9 @@ function buildWalls(grid, destructibleHits) {
         // Phase 11: eigene Haltbarkeit statt state.transform.wallDurability --
         // dieselbe destroyWall()-Zaehllogik wie Sperrmauer/Baumeister.
         if (type === 'destructible') wall.destructibleHits = destructibleHits || 1;
+        // Phase 14: Reaktor-Generator -- eigene (meist kleinere) Haltbarkeit,
+        // zaehlt aber nur bei Bankshot-Treffern (siehe bullet.js).
+        if (type === 'generator') wall.destructibleHits = generatorHits || 1;
         walls.push(wall);
       }
     }
@@ -104,7 +115,7 @@ export function createState(data, tiles, opts) {
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
     : generateRoom(tiles, genRng, enemyTypes.length, weights, roomSpec, arenas, destructibleWalls);
   const grid = room.grid;
-  const walls = buildWalls(grid, destructibleWalls?.hits);
+  const walls = buildWalls(grid, destructibleWalls?.hits, data.balance?.boss?.generatorHits);
   // Raum-Modifikator "Spiegelsaal" (Phase 10): feste Waende werfen Kugeln
   // zurueck -- nur `solid`, durchschiessbare (`breakable`) Waende behalten
   // ihre eigene Mechanik, sonst waere die Wandzerstoerung im Raum entwertet.
@@ -132,6 +143,7 @@ export function createState(data, tiles, opts) {
   // schuetzt aber vor unbegrenztem Wachstum, falls ein kuenftiges System
   // (z. B. ein neuer Raumtyp) das jemals aushebeln wuerde.
   const enemyCap = data.limits?.enemiesAlive ?? Infinity;
+  let phalanxCounter = 0; // Phase 14: Formationsplatz (0..4) je t_phalanx
   enemyTypes.forEach((type, i) => {
     if (i >= firstWaveCount) return;
     if (tanks.length - 1 >= enemyCap) return;
@@ -139,6 +151,7 @@ export function createState(data, tiles, opts) {
     const t = createTank(type, applyRoomModifier(resolveCfg(data, type), modifier, false), s.x, s.y);
     t.spawnX = s.x;
     t.spawnY = s.y;
+    if (t.cfg.phalanx) t.phalanxIndex = phalanxCounter++;
     applyAffixByIndex(t, i, eliteAffixes);
     tanks.push(t);
   });
@@ -188,6 +201,11 @@ export function createState(data, tiles, opts) {
     pendingWave, // Phase 9: zurueckgehaltene zweite Welle (oder null)
     eliteAffixes: eliteAffixes || null, // Phase 9: fuer spaeter nachspawnende Welle
     modifier: modifier || null, // Phase 10: Raum-Modifikator (data/modifiers.json)
+    // Reaktor-Boss (Phase 14): Anzahl noch stehender Generatoren -- solange
+    // > 0, faengt killTank() jeden Treffer auf t.cfg.bossInvincible ab.
+    // Aus den Wandobjekten gezaehlt (nicht aus room.markers -- die Generator-
+    // Waende sind bereits normale, aus dem Grid gebaute WALL_TYPES-Eintraege).
+    bossGeneratorsLeft: walls.filter((w) => w.type === 'generator').length,
     walls,
     tanks,
     player,
@@ -209,12 +227,14 @@ export function createState(data, tiles, opts) {
     // 'r' (Spiegelwand, Phase 5) ist optisch/physisch eine normale Wand --
     // nur bullet.js behandelt sie beim Abprallen anders. 'd' (zerstoerbare
     // Wand, Phase 11) ist bis zur Zerstoerung ebenfalls physisch normal.
+    // 'g' (Reaktor-Generator, Phase 14) ebenso, bis alle Bankshot-Treffer
+    // sitzen.
     isSolid(px, py) {
       const col = Math.floor(px / CELL);
       const row = Math.floor(py / CELL);
       if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return true;
       const cell = grid[row][col];
-      return cell === '#' || cell === 'b' || cell === 'r' || cell === 'd';
+      return cell === '#' || cell === 'b' || cell === 'r' || cell === 'd' || cell === 'g';
     },
     // Sicht-Test fuer KI-Raycasts (Phase 6): zusaetzlich zu Waenden
     // blockieren aktive Rauchwolken die Sicht -- Geschossphysik/Bewegung
@@ -248,22 +268,57 @@ export function createState(data, tiles, opts) {
     destroyWall(wall) {
       // Transformation "Baumeister" (Phase 5): Waende halten wallDurability
       // Treffer statt einem -- der erste Treffer beschaedigt sie nur.
-      // Sperrmauer (Phase 6) und zerstoerbare Waende (Phase 11) bringen
-      // ihre eigene Haltbarkeit mit, die das ueberschreibt.
+      // Sperrmauer (Phase 6), zerstoerbare Waende (Phase 11) und Reaktor-
+      // Generatoren (Phase 14) bringen ihre eigene Haltbarkeit mit, die
+      // das ueberschreibt.
       const durability = wall.customDurability || wall.destructibleHits || state.transform.wallDurability || 1;
       if (durability > 1) {
         wall.hits = (wall.hits || 0) + 1;
         if (wall.hits < durability) {
-          state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 3, 60);
+          state.spawnParticles(
+            wall.x + wall.w / 2,
+            wall.y + wall.h / 2,
+            wall.type === 'generator' ? '#ffd23c' : '#8a7355',
+            3,
+            60,
+          );
           return; // beschaedigt, aber noch da
         }
       }
       const i = state.walls.indexOf(wall);
       if (i >= 0) state.walls.splice(i, 1);
       grid[wall.row][wall.col] = '.';
+      // Reaktor-Generator (Phase 14): eigener Zaehler + deutliches Feedback --
+      // sobald der letzte faellt, wird der Reaktorkern verwundbar.
+      if (wall.type === 'generator') {
+        state.bossGeneratorsLeft = Math.max(0, state.bossGeneratorsLeft - 1);
+        state.sounds.push('trickshot2');
+        state.addShake(5);
+        state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#ffd23c', 16, 200);
+        state.texts.push({
+          x: wall.x + wall.w / 2,
+          y: wall.y + wall.h / 2 - 10,
+          text:
+            state.bossGeneratorsLeft > 0
+              ? `Generator zerstört! (${state.bossGeneratorsLeft} übrig)`
+              : 'Reaktor entsichert!',
+          age: 0,
+          life: 1.2,
+          color: '#ffd23c',
+        });
+        return;
+      }
       state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 6, 90);
     },
     killTank(tank, cause, meta) {
+      // Reaktorkern (Phase 14): unverwundbar, solange mindestens ein
+      // Generator steht -- keine Ladung, kein Verbrauch, verfaellt nie von
+      // selbst. Reiner Feedback-Ablehner wie die Schildladungen unten.
+      if (tank.cfg.bossInvincible && state.bossGeneratorsLeft > 0) {
+        state.sounds.push('shield');
+        state.spawnParticles(tank.x, tank.y, '#ffd23c', 6, 80);
+        return;
+      }
       // Notschild-Ladung faengt genau einen Treffer ab (raumuebergreifend,
       // keine Regeneration). Kurzer Schutz verhindert Mehrfachverbrauch im
       // selben Explosions-Frame.
@@ -529,9 +584,20 @@ export function stepState(state, cmd, dt) {
   }
 
   // Gegner: getrennte Turm-/Fahr-KI liefert Bewegung, Schuss- und
-  // Minenwunsch.
+  // Minenwunsch. Zwei Boss-Sonderfaelle (Phase 14) haben KEINE physik-
+  // basierte Fahrfunktion (reine Funktion von Spielerposition bzw. Zeit) und
+  // umgehen deshalb DRIVES/updateEnemy() komplett -- Turm/Feuern bleibt
+  // trotzdem die normale roleTurret()-Logik, siehe bossai.js.
   for (const t of state.tanks) {
     if (t === state.player || !t.alive) continue;
+    if (t.cfg.mirrorBoss) {
+      stepMirrorBoss(t, state, dt);
+      continue;
+    }
+    if (t.cfg.phalanx) {
+      stepPhalanxBoss(t, state, dt);
+      continue;
+    }
     const { move, fire, mine } = updateEnemy(t, state, dt);
     moveTank(t, move, state, dt);
     if (fire) fireBullet(t, state);

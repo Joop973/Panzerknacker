@@ -61,6 +61,11 @@ export function explodeAt(state, x, y, R, spare, meta) {
   for (const wall of [...state.walls]) {
     // Zerstoerbare Waende (Phase 11) nehmen wie Kugeln einen Treffer --
     // dieselbe destroyWall()-Haltbarkeit, keine Extra-Regel fuer Explosionen.
+    // Reaktor-Generatoren (Phase 14) BEWUSST NICHT hier aufgenommen: die
+    // Bankshot-Huerde (siehe bullet.js) soll keine Explosion (Mine,
+    // Kettenblitz, Kamikaze) umgehen koennen, sonst waere das Raetsel
+    // trivial ausspielbar -- Muster wie "Explosionen ignorieren die
+    // Panzerung" in armor.js.
     if ((wall.type === 'breakable' || wall.type === 'destructible') && circleOverlapsAABB(x, y, R, wall)) {
       state.destroyWall(wall);
     }
