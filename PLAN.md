@@ -468,7 +468,7 @@ ergänzen), `src/game/state.js` (`killTank` — Todesursache statt pauschal
 
 # STUFE 2 — Wiederspielbarkeit
 
-## Phase 8 — Gegner-Rollen statt Gegner-Typen
+## Phase 8 — Gegner-Rollen statt Gegner-Typen  ✅ erledigt
 **Aufwand:** 2 Sessions
 
 Rolle plus Werte in `tanks.json`, nicht pro Gegner neu programmiert. Rolle und
@@ -493,6 +493,30 @@ Panzerung (`armor`/`requiresRicochet`) bleibt orthogonal dazu, wie schon bei
 **Betroffene Dateien:** `data/tanks.json` (Rolle statt `turret`+`drive` pro
 Typ), `src/game/ai_drives.js` + `ai_turrets.js` (auf Rollenparameter
 umstellen), `src/game/ai.js` (Dispatch).
+
+**Umsetzungsfunde:**
+- `bounce_solver` (Abpraller-Rechner) war in `ai_turrets.js` bereits gebaut,
+  aber von KEINEM Typ referenziert — die "sieger schießt ausschließlich
+  Bankshots"-Fähigkeit ist jetzt als orthogonales Sonderverhalten
+  `requiresBounceShot` erhalten (funktioniert, testweise geprüft), aber
+  bewusst keinem aktuellen Typ zugewiesen: t_teal/t_black (≈ sieger laut
+  v3-Review) schießen heute direkt bzw. mit Vorhalt, nicht ausschließlich per
+  Bankshot — das umzustellen wäre echtes neues Verhalten gewesen.
+- `accuracy` (0–1) ersetzt die vier diskreten Turm-Stufen
+  (`random_seek`/`weak_aim`/`aim`/`strong_aim`) durch einen Regler:
+  `accuracy 0` = rein zufälliger Schwenk ohne Spieler-Tracking (t_brown),
+  `< 0.3` = zielt mit grobem Fehler, feuert auch ohne Sichtlinie (frühere
+  `weak_aim`-Typen), `≥ 0.3` = präzise, braucht Sichtlinie (frühere
+  `aim`/`strong_aim`-Typen). `leadAim` (Vorhaltezielen, früher `predict`,
+  nur t_black) und `packFlank` (Rudel-Flankierung ohne Sichtlinie, früher
+  `purple_pack`, nur t_purple) bleiben als eigene, orthogonale
+  Sonderverhalten erhalten — echte Algorithmen, keine Regler-Werte.
+- t_white (`white_phase`) wechselt jetzt generisch zwischen zwei ganzen
+  ROLLEN (`phaseToggle: { roles: ["sieger","hunter"] }`) statt zwischen zwei
+  hartkodierten Fahrfunktionen — dieselbe Umschalt-/Ton-Logik, aber als
+  wiederverwendbarer Mechanismus für künftige Typen.
+- Validiert über die bestehende 40-Seed-Regressionssuite (`phase4.mjs`):
+  40/40 Siege, 0 Hänger — die Konsolidierung ändert die Gewinnbarkeit nicht.
 
 ## Phase 9 — Elite-Affixe, Wellen, Elite-Belohnung
 **Aufwand:** 2 Sessions

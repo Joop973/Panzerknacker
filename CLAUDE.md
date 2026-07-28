@@ -41,15 +41,16 @@ durch die gleichnamigen v1-Phasen abgedeckt (Abweichungen auf Nutzerwunsch:
 `eliteMult: 2` statt `eliteBonus: 3`). **Phase 4** (gerichtete Panzerung),
 **Phase 5** (Abprallen belohnen: Trickshot, Spiegelwände, Powershot),
 **Phase 6** (Sekundärslot: Mine wird zu einer von sechs austauschbaren
-Sekundärwaffen) und **Phase 7** (Geisterpanzer: getötete Gegner kämpfen kurz
-als durchscheinender Verbündeter weiter) sind gebaut. `PLAN.md` wurde auf
-**v3** konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte
-`beutepanzer`, doppelt gebautes Affix-System, falscher `eliteBonus`-
-Feldname) entfernt, jede offene Phase bekommt jetzt eine "Betroffene
-Dateien"-Zeile. **Nächste Phase: Phase 8 — Gegner-Rollen statt
-Gegner-Typen.** Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
-Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites + App-Icon,
-diese `CLAUDE.md`.
+Sekundärwaffen), **Phase 7** (Geisterpanzer: getötete Gegner kämpfen kurz
+als durchscheinender Verbündeter weiter) und **Phase 8** (Gegner-Rollen
+statt Gegner-Typen: vier datengetriebene Rollen statt neun eigener
+Fahr-/Turmfunktionen) sind gebaut. `PLAN.md` wurde auf **v3**
+konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`,
+doppelt gebautes Affix-System, falscher `eliteBonus`-Feldname) entfernt,
+jede offene Phase bekommt jetzt eine "Betroffene Dateien"-Zeile. **Nächste
+Phase: Phase 9 — Elite-Affixe, Wellen, Elite-Belohnung.** Frühere Merges
+(PRs #9–#12): Portrait-Auto-Pause-Fix, echtes Handy-Vollbild (`100dvh` +
+`viewport-fit=cover`), Grafik-Sprites + App-Icon, diese `CLAUDE.md`.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -239,7 +240,8 @@ Sekundärwaffen (Tag `secondary`, `maxStacks: 1`, Werte in `data/secondaries.jso
   Krallenfalle (`trap.js`) setzt bewusst nur `stunTimer` ("Turm bleibt
   nutzbar"); `stunTimer` generell die Turmdrehung sperren zu lassen hätte
   das gebrochen. Gate an der einzigen Stelle, die den Turm dreht:
-  `ai.js: updateEnemy()` → `TURRETS[...]` nur bei `turretStunTimer <= 0`.
+  `ai.js: updateEnemy()` → Turmfunktion nur bei `turretStunTimer <= 0`
+  (Phase 8: `TURRETS[...]`-Dispatch → direkter `roleTurret(...)`-Aufruf).
 - **`hook`**: Raymarch in Blickrichtung (`tank.js: fireHook()`), trifft er
   eine Wand, zieht `moveTank()` den Panzer über `tank.hookTimer`/
   `hookTarget` dorthin — Bewegungseingabe wird währenddessen komplett
@@ -314,6 +316,45 @@ legendary) als durchscheinender Verbündeter weiter, Werte in
   wird). Einfache rotierte Wanne+Rohr-Form in `TANK_COLORS[typ]` bei fester
   Transparenz, keine der tankspezifischen Overlays (Schild/Panzerung/
   Powershot).
+
+### Phase 8 (Gegner-Rollen statt Gegner-Typen) — gemergt
+Statt neun eigener Fahr-/Turmfunktionen (eine pro Gegnertyp) gibt es jetzt
+genau vier datengetriebene **Rollen** (`guardian`/`sapper`/`hunter`/
+`sieger`), parametrisiert über `aggression`/`preferredRange`/`fireRate`/
+`accuracy` in `data/tanks.json`. Rolle und Panzerung bleiben frei
+kombinierbar (unverändert seit Phase 4).
+- **`src/game/ai_drives.js`**: 4 statt 9 Funktionen. `guardian` bewegt sich
+  nie (t_brown/t_green). `sapper` wandert ziellos, flieht bei Unterschreiten
+  von `preferredRange` ("flieht vor dir" — aktuell von keinem Typ mit
+  `preferredRange > 0` genutzt, t_grey/t_yellow/t_prism bleiben bei reinem
+  Wandern wie bisher). `hunter` sucht Nähe + weicht Geschossen seitlich aus.
+  `sieger` hält `preferredRange` als Abstandsband (orbitiert dazwischen).
+  `aggression` (0–1) ersetzt die früheren, pro Verhalten fast identisch
+  duplizierten `turnSpeed`-Werte durch einen einzigen Regler.
+- **`src/game/ai_turrets.js`**: 1 statt 6 Funktionen (`roleTurret`).
+  `accuracy` (0–1) ersetzt die vier diskreten Stufen
+  `random_seek`/`weak_aim`/`aim`/`strong_aim`: `0` = rein zufälliger Schwenk
+  ohne Spieler-Tracking (t_brown), `< 0.3` = zielt mit grobem Fehler und
+  feuert auch ohne Sichtlinie, `≥ 0.3` = präzise, braucht Sichtlinie.
+  Zwei orthogonale Sonderverhalten bleiben als eigene Mechanismen (keine
+  Regler-Werte, echte Algorithmen): `leadAim` (Vorhaltezielen, früher
+  `predict`, nur t_black) und `requiresBounceShot` (Abpraller-Rechner,
+  früher `bounce_solver` — war in `ai_turrets.js` bereits gebaut, aber von
+  KEINEM Typ referenziert; bleibt als Mechanismus erhalten, aber bewusst
+  keinem aktuellen Typ zugewiesen, siehe `PLAN.md`-Umsetzungsfund).
+- **`packFlank`** (Rudel-Flankierung ohne Sichtlinie, früher `purple_pack`,
+  nur t_purple) lebt jetzt als Zweig direkt in `hunterDrive()`.
+- **`phaseToggle`** (früher `white_phase`, nur t_white) wechselt generisch
+  zwischen zwei ganzen ROLLEN (`{ roles: ["sieger","hunter"] }`) statt
+  zwischen zwei hartkodierten Fahrfunktionen — Umschalt-Logik + Ton-Signal
+  (`tone_high`/`tone_low`) unverändert, jetzt in `ai.js: activeRole()`.
+- **`data/tanks.json`**: `ai.turret.*`/`ai.drive.*` (pro Verhalten
+  dupliziert) → `ai.roles.*` (3 geteilte Konstanten-Blöcke) + `ai.escape`
+  (Blockade-Freikommen, jetzt für alle Rollen gleich) + `ai.bounceShot`.
+  Jeder Typ hat `role` + `aggression`/`preferredRange`/`accuracy` statt
+  `turret`+`drive`-Namen; `fireCooldownS`-Override in `fireRate` umbenannt.
+- Validiert über die bestehende 40-Seed-Regressionssuite: 40/40 Siege,
+  0 Hänger — die Konsolidierung ändert die Gewinnbarkeit nicht.
 
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
@@ -450,7 +491,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v41`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v42`.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`
