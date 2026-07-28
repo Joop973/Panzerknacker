@@ -73,11 +73,22 @@
   },
   "elite": {
     "budgetMult": 1.6,
+    "affixRules": {
+      "minRoomForOne": 8,
+      "minRoomForTwo": 14
+    },
     "affixes": [
       { "id": "gepanzert", "name": "Gepanzert", "shield": true },
       { "id": "rasend", "name": "Rasend", "speedMult": 1.35 },
-      { "id": "brandstifter", "name": "Brandstifter", "extraMines": 2 }
+      { "id": "brandstifter", "name": "Brandstifter", "extraMines": 2 },
+      { "id": "twinshot", "name": "Zwillingsschuss", "twinshot": true, "spreadRad": 0.09 },
+      { "id": "regenerating_shield", "name": "Regenerierschild", "regenerating": true, "regenS": 6 }
     ]
+  },
+  "waves": {
+    "minEnemiesForWaves": 6,
+    "secondWaveAtFraction": 0.5,
+    "warningS": 1.0
   },
   "treasure": {
     "lifeCost": 1

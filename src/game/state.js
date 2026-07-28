@@ -61,9 +61,37 @@ function buildWalls(grid) {
 //         weights     -- optionale Kachelgewichte (Raumcharakter)
 //         playerUpgrades -- Upgrade-Level {id: stufe}
 //         upgradesData -- Inhalt von upgrades.json (Stellwerte) }
+// Elite-Affixe (Phase 9) auf einen frisch erzeugten Panzer anwenden --
+// nutzt seinen INDEX in der urspruenglichen enemyTypes-Liste, damit
+// dieselbe Rezeptur (siehe run.js: rollEliteAffixes) unabhaengig davon
+// gilt, ob der Panzer sofort oder erst mit der zweiten Welle entsteht.
+function applyAffixByIndex(t, index, eliteAffixes) {
+  if (!eliteAffixes) return;
+  t.affixes = eliteAffixes.chosen.map((a) => a.id);
+  for (const affix of eliteAffixes.chosen) {
+    if (affix.regenerating) {
+      if (index === eliteAffixes.cheapestIdx || index === eliteAffixes.priciestIdx) {
+        t.shieldReady = true;
+        t.regenShieldS = affix.regenS;
+      }
+      continue;
+    }
+    if (affix.shield) t.shieldReady = true;
+    if (affix.speedMult) t.cfg.speed *= affix.speedMult;
+    if (affix.extraMines) t.cfg.mines += affix.extraMines;
+    if (affix.twinshot) {
+      t.cfg.twinShot = true;
+      t.cfg.twinSpreadRad = affix.spreadRad;
+      // Sonst waere das Magazin nach der ersten der beiden Kugeln schon
+      // voll -- "zwei Kugeln gleichzeitig" braucht Platz fuer 2.
+      t.cfg.magazine = Math.max(t.cfg.magazine, 2);
+    }
+  }
+}
+
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
-    roomSpec, arenas, transform, equippedSecondary } = opts;
+    roomSpec, arenas, transform, equippedSecondary, waveSplit, waveCfg, eliteAffixes } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
@@ -78,13 +106,32 @@ export function createState(data, tiles, opts) {
     room.playerSpawn.y,
   );
   const tanks = [player];
+  // Wellen (Phase 9): grosse Raeume spawnen nur die erste Haelfte sofort
+  // (waveSplit-Grenze); der Rest wartet an denselben, vom Generator schon
+  // erzeugten Spawnpunkten in state.pendingWave (siehe stepState()).
+  const firstWaveCount = waveSplit ?? enemyTypes.length;
   enemyTypes.forEach((type, i) => {
+    if (i >= firstWaveCount) return;
     const s = room.enemySpawns[i];
     const t = createTank(type, resolveCfg(data, type), s.x, s.y);
     t.spawnX = s.x;
     t.spawnY = s.y;
+    applyAffixByIndex(t, i, eliteAffixes);
     tanks.push(t);
   });
+  const pendingWave =
+    waveSplit != null
+      ? {
+          types: enemyTypes.slice(waveSplit),
+          spawns: room.enemySpawns.slice(waveSplit),
+          startIdx: waveSplit,
+          initialCount: waveSplit,
+          fraction: waveCfg.secondWaveAtFraction,
+          warningS: waveCfg.warningS,
+          spawning: false,
+          warningTimer: 0,
+        }
+      : null;
 
   const state = {
     data,
@@ -115,6 +162,8 @@ export function createState(data, tiles, opts) {
     shieldCharges: (shieldCharges || []).slice(),
     transform: transform || {}, // Phase 5: freigeschaltete Transformations-Effekte
     smokeClouds: [], // Phase 6: Rauchgranate -- blockiert nur KI-Sichtlinien
+    pendingWave, // Phase 9: zurueckgehaltene zweite Welle (oder null)
+    eliteAffixes: eliteAffixes || null, // Phase 9: fuer spaeter nachspawnende Welle
     walls,
     tanks,
     player,
@@ -199,10 +248,13 @@ export function createState(data, tiles, opts) {
         state.spawnParticles(tank.x, tank.y, '#8ecaf0', 12, 130);
         return;
       }
-      // Elite-Affix "gepanzert": Gegnerschild faengt genau einen Treffer ab.
+      // Elite-Affix "gepanzert"/"Regenerierschild": Gegnerschild faengt
+      // genau einen Treffer ab. Mit regenShieldS laedt sich die Ladung
+      // danach neu auf, statt fuer den Rest des Raums zu verfallen.
       if (tank !== state.player && tank.shieldReady) {
         tank.shieldReady = false;
         tank.protect = Math.max(tank.protect, 0.3);
+        if (tank.regenShieldS) tank.regenShieldTimer = tank.regenShieldS;
         state.sounds.push('shield');
         state.spawnParticles(tank.x, tank.y, '#8ecaf0', 8, 100);
         return;
@@ -350,6 +402,36 @@ function respawnPlayer(state) {
   state.respawnTimer = 0;
 }
 
+// Wellen (Phase 9): loest die zurueckgehaltene zweite Welle aus, sobald
+// nur noch fraction der ERSTEN Welle lebt -- danach 1s Vorwarnung an den
+// (schon vom Generator erzeugten) Spawnpunkten, bevor die Panzer
+// erscheinen. Erledigt sich nach einem Durchlauf selbst (state.pendingWave
+// wird null).
+function updateWave(state, dt) {
+  const w = state.pendingWave;
+  if (!w) return;
+  if (!w.spawning) {
+    const alive = state.tanks.filter((t) => t !== state.player && t.alive).length;
+    if (alive <= w.initialCount * w.fraction) {
+      w.spawning = true;
+      w.warningTimer = w.warningS;
+      state.sounds.push('wave');
+    }
+    return;
+  }
+  w.warningTimer -= dt;
+  if (w.warningTimer > 0) return;
+  w.types.forEach((type, i) => {
+    const s = w.spawns[i];
+    const t = createTank(type, resolveCfg(state.data, type), s.x, s.y);
+    t.spawnX = s.x;
+    t.spawnY = s.y;
+    applyAffixByIndex(t, w.startIdx + i, state.eliteAffixes);
+    state.tanks.push(t);
+  });
+  state.pendingWave = null;
+}
+
 // Ein fester Physikschritt.
 // cmd = { move: {x,y}, aim: {x,y}, fire: bool, mine: bool }.
 export function stepState(state, cmd, dt) {
@@ -380,6 +462,13 @@ export function stepState(state, cmd, dt) {
     if (t.deflectorTimer > 0) {
       t.deflectorTimer = Math.max(0, t.deflectorTimer - dt);
       if (t.deflectorTimer <= 0) t.deflectorCharges = 0;
+    }
+    // Elite-Affix "Regenerierschild" (Phase 9): die Ladung verfaellt NICHT,
+    // sie laedt sich nach regenShieldS neu auf -- das Gegenstueck zum
+    // Schild-Verfall des Spielers (E2).
+    if (t.regenShieldTimer > 0) {
+      t.regenShieldTimer -= dt;
+      if (t.regenShieldTimer <= 0) t.shieldReady = true;
     }
   }
 
@@ -528,6 +617,7 @@ export function stepState(state, cmd, dt) {
   updateMines(state, dt);
   updateTraps(state, dt);
   updateGhosts(state, dt);
+  updateWave(state, dt);
 
   // Sprengschuss-Upgrade: markierte Geschosse explodieren beim Tod
   // (Wandkontakt, Panzertreffer, Geschoss-gegen-Geschoss, Minenzuendung).

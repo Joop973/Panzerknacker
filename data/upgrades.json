@@ -458,6 +458,17 @@
       "magazineBonus": 2,
       "cooldownMult": 0.85
     },
+    "kriegsbeute": {
+      "id": "kriegsbeute",
+      "name": "Kriegsbeute",
+      "description": "Elite-Beute: sofort +5 Schrott",
+      "tag": "elite",
+      "rarity": "rare",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "scrapBonus": 5
+    },
     "mine": {
       "id": "mine",
       "name": "Mine",

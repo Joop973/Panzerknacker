@@ -121,6 +121,11 @@ export function createAudio() {
       else if (name === 'trickshot2' && ctx) {
         beepAt(760, ctx.currentTime, 0.08, 0.1, 'triangle');
         beepAt(1200, ctx.currentTime + 0.06, 0.12, 0.11, 'triangle');
+      } else if (name === 'wave' && ctx) {
+        // Zweite Welle (Phase 9): zwei kurze, drohende Toene -- bewusst
+        // kein Jingle wie 'clear', das waere hier das falsche Signal.
+        beepAt(200, ctx.currentTime, 0.1, 0.1, 'sawtooth');
+        beepAt(200, ctx.currentTime + 0.16, 0.14, 0.11, 'sawtooth');
       } else if (name === 'clear' && ctx) {
         // Raum geschafft: kurzes aufsteigendes Jingle.
         [392, 523, 659].forEach((f, i) => beepAt(f, ctx.currentTime + i * 0.09, 0.12, 0.1, 'triangle'));

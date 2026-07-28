@@ -518,7 +518,7 @@ umstellen), `src/game/ai.js` (Dispatch).
 - Validiert über die bestehende 40-Seed-Regressionssuite (`phase4.mjs`):
   40/40 Siege, 0 Hänger — die Konsolidierung ändert die Gewinnbarkeit nicht.
 
-## Phase 9 — Elite-Affixe, Wellen, Elite-Belohnung
+## Phase 9 — Elite-Affixe, Wellen, Elite-Belohnung  ✅ erledigt
 **Aufwand:** 2 Sessions
 
 **Baut auf einem bereits bestehenden System auf (Fund beim v3-Review) —
@@ -564,6 +564,42 @@ Restgegnern, Spawnpunkte mit 1 s Vorwarnung.
 Elite-Karte), `src/game/run.js` (`applyEliteAffix`, `rollReward` auf additiv
 umstellen), `src/game/tank.js` (Twinshot-Feuerlogik), `src/game/state.js`
 (Wellen-Spawn), `src/render/effects.js` (Farbring je Affix).
+
+**Umsetzungsfunde:**
+- `twinshot` braucht in `tank.js` **keine neue Feuerlogik** — die
+  bestehenden Felder `cfg.twinShot`/`cfg.twinSpreadRad` (Spieler-Upgrade
+  "Doppelrohr") werden in `fireBullet()` bereits generisch von `tank.cfg`
+  gelesen, ohne Spieler-Sonderfall. Für den Affix genügt es, dieselben
+  Felder auf dem betroffenen Gegner zu setzen; einzige echte Ergänzung war
+  ein Magazin-Mindestwert von 2 (sonst wäre nach der ersten der beiden
+  Kugeln schon kein Platz mehr für die zweite).
+- Farbring-Darstellung liegt bewusst in `renderer.js` (nicht
+  `effects.js`) — Muster wie `drawSmoke`/`drawGhosts` aus Phase 6/7: kleine
+  Farbpunkte im Bogen über dem Panzer, ein Punkt pro aktivem Affix (auch
+  bei zwei kombinierten ab Raum 14).
+- Die Affix-**Rezeptur** (gewürfelte Affixe + Index des günstigsten/
+  teuersten Gegners) wird in `run.js` **vor** `createState()` über die
+  Typliste bestimmt und unverändert an `state.js` durchgereicht
+  (`eliteAffixes`), statt sie direkt auf die erzeugten Tank-Objekte
+  anzuwenden — sonst hätte die per Welle (siehe unten) später
+  nachspawnende zweite Hälfte des Raums keinen Affix bekommen.
+- Wellen sind ebenfalls index-basiert gebaut: `generateRoom()` erzeugt
+  weiter die volle Spawnpunkt-Zahl, `createState()` instanziiert nur die
+  erste Hälfte (`waveSplit`) und hält den Rest in `state.pendingWave`
+  zurück (Typen + bereits vorhandene Spawnpunkte). `updateWave()` in
+  `state.js` löst bei ≤50 % lebender Welle-1-Gegner die 1-s-Vorwarnung aus
+  und spawnt danach die zweite Welle — mit derselben Affix-Rezeptur.
+- `regenerating_shield` lädt sich nach `regenS` Sekunden neu auf (neues
+  Feld `regenShieldTimer`, gestartet beim Verbrauch der Ladung in
+  `killTank()`, herunterzählend im bestehenden Tank-Tick-Loop) — echtes
+  Gegenstück zum Schild-Verfall des Spielers (E2), kein Neubau einer
+  zweiten Ladungs-Verwaltung.
+- Dritte Elite-Karte: `kriegsbeute` (sofort +5 Schrott) — bewusst eine rein
+  ökonomische Belohnung statt einer weiteren Kampfstat, um nicht mit
+  bestehenden harten Obergrenzen (z. B. Abpraller-Deckel 2) zu kollidieren.
+- Neuer Sound `'wave'` in `audio.js` (zwei kurze, drohende Töne) statt des
+  bestehenden `'clear'`-Jingles — Letzteres wäre am Ankunftspunkt einer
+  zweiten Welle das falsche Signal (klingt nach "Raum geschafft").
 
 ## Phase 10 — Raum-Modifikatoren
 **Aufwand:** 1 Session, höchster Ertrag pro Aufwand
