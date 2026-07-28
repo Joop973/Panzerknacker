@@ -625,6 +625,35 @@ export function createRenderer(ctx) {
     }
   }
 
+  // Geisterpanzer (Phase 7): einfache, durchscheinende Wanne+Rohr-Form in
+  // der Farbe des Ursprungstyps -- kein Sprite, keine der tankspezifischen
+  // Overlays (Schild/Panzerung/Powershot), nur konstante Transparenz statt
+  // Blinken wie bei t_white.
+  function drawGhosts(ctx, state, alpha) {
+    for (const g of state.ghosts) {
+      const x = lerp(g.prevX, g.x, alpha);
+      const y = lerp(g.prevY, g.y, alpha);
+      const r = g.cfg.radius;
+      ctx.globalAlpha = 0.4;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(g.heading);
+      ctx.fillStyle = TANK_COLORS[g.type] || '#ffffff';
+      ctx.fillRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
+      ctx.restore();
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(g.turret);
+      ctx.fillStyle = TANK_COLORS[g.type] || '#ffffff';
+      ctx.fillRect(4, -2.5, r + 4, 5); // Rohr
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    }
+  }
+
   return {
     render(state, alpha, tracks, minePreview) {
       renderState = state;
@@ -643,6 +672,7 @@ export function createRenderer(ctx) {
       if (renderOpts.aimLine) drawAimLine(ctx, state, traceTrajectory);
       if (minePreview) drawMinePreview(ctx, state, minePreview);
       drawWalls(state.walls);
+      drawGhosts(ctx, state, alpha);
       for (const t of state.tanks) drawTank(state, t, alpha);
       drawRadar(ctx, state);
       drawBullets(state.bullets, alpha);

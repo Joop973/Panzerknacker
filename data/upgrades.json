@@ -517,6 +517,16 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1
+    },
+    "ghost_crew": {
+      "id": "ghost_crew",
+      "name": "Geisterbesatzung",
+      "description": "Getötete Gegner kämpfen 3 s als durchscheinender Verbündeter weiter und zielen automatisch auf den nächsten Gegner — jeder Kill verlängert die Zeit",
+      "tag": "reactive",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1
     }
   },
   "fallback": {

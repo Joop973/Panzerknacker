@@ -50,5 +50,10 @@
       "fourthCard": 3,
       "shieldCharge": 4
     }
+  },
+  "ghost": {
+    "duration": 3.0,
+    "killBonus": 1.0,
+    "maxActive": 4
   }
 }

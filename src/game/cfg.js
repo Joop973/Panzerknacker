@@ -181,6 +181,8 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   // (mehrere Sekundärkarten koennen gleichzeitig Level > 0 haben, siehe
   // run.js: chooseUpgrade -- nur equippedSecondary bestimmt die aktive).
   cfg.secondary = equippedSecondary || 'mine';
+  // Geisterbesatzung (Phase 7): einfacher Ein/Aus-Schalter, kein Stufenwert.
+  cfg.ghostCrew = l('ghost_crew') > 0;
   return cfg;
 }
 

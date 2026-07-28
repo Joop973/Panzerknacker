@@ -391,7 +391,7 @@ Overlay). **Hinweis für Phase 4:** `deflector` reflektiert einen Treffer und
 soll gegen Prisma-Panzer als Abprallschuss zählen — dafür `b.wallBounces`
 erhöhen (nicht `b.reflected` setzen), sonst greift `requiresRicochet` nicht.
 
-## Phase 7 — Geisterpanzer
+## Phase 7 — Geisterpanzer  ✅ erledigt
 **Aufwand:** 1 Session
 (Rammen gestrichen, siehe E5.)
 
@@ -409,6 +409,16 @@ Upgrade `ghost_crew`, Tag `reactive`, legendary.
 Geistes auf den nächsten Gegner), `src/render/renderer.js` (durchscheinende
 Darstellung), `src/core/telemetry.js` (`ghostKills` ist als Feld schon
 vorbereitet).
+
+**Umsetzungsfund:** Geister sind bewusst KEINE Einträge in `state.tanks`,
+sondern ein eigenes `src/game/ghost.js`-Modul mit eigenem `state.ghosts`-
+Array (Muster wie `mine.js`/`trap.js`) — dadurch erfüllen sie "blockieren
+keine Kugeln, sind nicht tötbar" automatisch durch Konstruktion, ohne
+Sonderfälle in der bestehenden Treffer-Schleife. `ai_turrets.js`/
+`ai_drives.js` bleiben unangetastet (die zielen strukturell fest auf
+`state.player`); ein Geist zielt stattdessen über eine eigene, einfache
+"nächster lebender Gegner"-Suche in `ghost.js`, die `angleDiff`/`turnToward`/
+`clearLine` aus `ai.js` wiederverwendet.
 
 ## Phase 7b — Audio
 **Aufwand:** 1 Session
