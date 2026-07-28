@@ -9,7 +9,7 @@
 // Seed + Raumnummer reproduzierbar (Fortsetzen, geteilte Seeds, Replays),
 // und eine Aenderung an einem System verschiebt die anderen nicht.
 
-import { rngFor, hashSeed } from '../core/rng.js';
+import { rngFor, rngForRun, hashSeed } from '../core/rng.js';
 import { recordRun, loadStats, saveCurrentRun, clearCurrentRun } from '../core/storage.js';
 import { createState, stepState } from './state.js';
 import { rollOffers as rollFromPool, drawOne } from './upgradepool.js';
@@ -17,13 +17,17 @@ import { rollOffers as rollFromPool, drawOne } from './upgradepool.js';
 const TRANSITION_S = 1.5;
 const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
 
-// Raumtyp -> Anzeige (Raumvorschau). Symbole sind DOM-Emojis.
+// Raumtyp -> Anzeige (Raumvorschau + Kartenscreen, Phase 12). Symbole sind
+// DOM-Emojis. War bis Phase 12 nur in der Vorschau sichtbar (der Raumtyp
+// selbst wurde unsichtbar automatisch gewuerfelt) -- jetzt zusaetzlich fuer
+// die Knoten der Kartenanzeige wiederverwendet.
 export const ROOM_TYPE_INFO = {
   combat: { name: 'Kampf', symbol: '⚔️', desc: 'Ein normaler Gefechtsraum.' },
   elite: { name: 'Elite', symbol: '★', desc: 'Härtere Gegner mit Affix · doppelter Schrott · Elite-Belohnung.' },
   treasure: { name: 'Schatz', symbol: '💎', desc: 'Keine Gegner · 1 Legendär — kostet 1 Leben.' },
   workshop: { name: 'Werkstatt', symbol: '🔧', desc: 'Keine Gegner · Schrott ausgeben · Upgrade ablegen.' },
   event: { name: 'Ereignis', symbol: '❓', desc: 'Keine Gegner · eine Entscheidung.' },
+  cursed: { name: 'Verflucht', symbol: '☠️', desc: 'Gegner mit zusätzlichem Affix · garantiertes Legendär.' },
 };
 
 // Kauft Gegner vom Gefahrenbudget (nur freigeschaltete Typen, max. 8).
@@ -53,6 +57,117 @@ function totalRooms(diff) {
   return diff.roomsBeforeFinal + 1; // 15 + Finalraum
 }
 
+function weightedType(list, weights, rng) {
+  let total = 0;
+  for (const t of list) total += weights[t] || 0;
+  let r = rng() * total;
+  for (const t of list) {
+    r -= weights[t] || 0;
+    if (r < 0) return t;
+  }
+  return list[list.length - 1];
+}
+
+// Kanten zwischen zwei aufeinanderfolgenden Kartenreihen (Phase 12).
+// a===1 (z. B. Raum 1->2, 2->3): Faecher-AUS -- der einzelne Knoten
+// verbindet sich mit JEDEM Knoten der naechsten Reihe (echte erste Wahl).
+// b===1 (letzte Reihe -> Boss): Faecher-EIN -- Zusammenlauf, wie von
+// PLAN.md gefordert. Sonst: jeder Knoten bekommt eine proportionale
+// Hauptkante plus mit extraEdgeChance eine Nebenkante (Ueberkreuzungen),
+// danach werden Zielknoten OHNE eingehende Kante von der naechstgelegenen
+// Quelle nachverbunden -- kein Knoten bleibt isoliert.
+function connectLayers(prevNodes, nextNodes, rng, extraEdgeChance) {
+  const a = prevNodes.length;
+  const b = nextNodes.length;
+  if (a === 1) {
+    for (const n of nextNodes) prevNodes[0].next.push(n.id);
+    return;
+  }
+  if (b === 1) {
+    for (const n of prevNodes) n.next.push(nextNodes[0].id);
+    return;
+  }
+  for (let i = 0; i < a; i++) {
+    const primary = Math.floor((i * b) / a);
+    prevNodes[i].next.push(nextNodes[primary].id);
+    if (rng() < extraEdgeChance) {
+      const alt = (primary + 1) % b;
+      if (alt !== primary) prevNodes[i].next.push(nextNodes[alt].id);
+    }
+  }
+  for (let j = 0; j < b; j++) {
+    const covered = prevNodes.some((n) => n.next.includes(nextNodes[j].id));
+    if (!covered) {
+      const nearest = prevNodes[Math.min(a - 1, Math.round((j * (a - 1)) / Math.max(1, b - 1)))];
+      nearest.next.push(nextNodes[j].id);
+    }
+  }
+}
+
+// Kartengenerierung (Phase 12): einmalig deterministisch aus dem Seed
+// (eigener Run-weiter Strom statt eines pro-Raum-Stroms, siehe
+// core/rng.js: rngForRun) -- die Karte steht komplett fest, bevor der Run
+// beginnt ("vollstaendig vorab einsehbar", PLAN.md). Raum 1-2 sind je ein
+// einzelner Kampf-Knoten (data/difficulty.json: map.forcedCombatLayers),
+// danach 2-3 Knoten je Reihe mit Typ aus denselben Gewichten, die vorher
+// die unsichtbare Automatik gesteuert haben (doors.weights) -- die
+// Raumtyp-Logik selbst aendert sich durch die Karte nicht (Fund beim
+// v3-Review). Letzte Reihe ist immer der Finalraum (ein Boss-Knoten).
+function generateMap(seed, diff) {
+  const rng = rngForRun(seed, 'map');
+  const mapCfg = diff.map || {};
+  const weights = diff.doors.weights;
+  const types = Object.keys(weights);
+  const forcedLayers = mapCfg.forcedCombatLayers ?? 2;
+  const minN = mapCfg.minNodesPerLayer ?? 2;
+  const maxN = mapCfg.maxNodesPerLayer ?? 3;
+  const extraEdgeChance = mapCfg.extraEdgeChance ?? 0.4;
+  const finalIdx = diff.roomsBeforeFinal + 1;
+
+  const layers = [];
+  for (let layer = 1; layer <= diff.roomsBeforeFinal; layer++) {
+    const forced = layer <= forcedLayers;
+    const count = forced ? 1 : minN + Math.floor(rng() * (maxN - minN + 1));
+    const nodes = [];
+    for (let col = 0; col < count; col++) {
+      const type = forced ? 'combat' : weightedType(types, weights, rng);
+      nodes.push({ id: layer * 10 + col, layer, col, type, isBoss: false, next: [] });
+    }
+    layers.push(nodes);
+  }
+  layers.push([{ id: finalIdx * 10, layer: finalIdx, col: 0, type: 'combat', isBoss: true, next: [] }]);
+
+  for (let i = 0; i < layers.length - 1; i++) {
+    connectLayers(layers[i], layers[i + 1], rng, extraEdgeChance);
+  }
+
+  const byId = new Map();
+  for (const layer of layers) for (const n of layer) byId.set(n.id, n);
+
+  // Sicherheitsnetz: `treasure` ist bei zu wenig Leben nicht waehlbar
+  // (chooseMapNode()). Fuehren ALLE Kanten eines Knotens ausschliesslich zu
+  // Schatzkammern, waere der Weg dort bei 1 Leben eine Sackgasse -- die
+  // zufaellige Typwahl kann das (selten) erzeugen. Faerbt in diesem Fall
+  // die erste Alternative auf 'combat' um (immer waehlbar).
+  for (const layer of layers) {
+    for (const node of layer) {
+      if (node.next.length && node.next.every((id) => byId.get(id).type === 'treasure')) {
+        byId.get(node.next[0]).type = 'combat';
+      }
+    }
+  }
+  return { layers, byId };
+}
+
+// Bestwertes Fallback, falls ein aeltere Zwischenstand ohne mapCurrentId
+// fortgesetzt wird (kein harter Fehlerfall -- neue Karten-Daten fehlen nur
+// bei einem VOR Phase 12 gespeicherten Run).
+function findMapNodeFallback(run, roomIndex, roomType) {
+  const layer = run.map.layers[roomIndex - 1];
+  if (!layer) return null;
+  return (layer.find((n) => n.type === roomType) || layer[0])?.id ?? null;
+}
+
 // Benannte RNG-Stroeme fuer den aktuellen Raum neu ableiten. Getrennte
 // Labels sorgen dafuer, dass z. B. eine geaenderte Upgrade-Logik die
 // Raumlayouts nicht verschiebt.
@@ -64,7 +179,6 @@ function makeRoomStreams(run) {
     enemies: rngFor(s, i, 'enemies'), // Gegner-Einkauf + Elite-Affix
     upgrades: rngFor(s, i, 'upgrades'), // Upgrade-Angebote (inkl. Rerolls)
     scrap: rngFor(s, i, 'scrap'), // Schrottmenge
-    doors: rngFor(s, i, 'doors'), // Tuertypen
     events: rngFor(s, i, 'events'), // Ereignis-Auswahl
     modifiers: rngFor(s, i, 'modifiers'), // Raum-Modifikator (Phase 10)
   };
@@ -92,7 +206,7 @@ export function runSnapshot(run) {
     modeKey: run.modeKey,
     roomIndex: run.roomIndex,
     roomType: run.roomType,
-    prevRoomType: run.prevRoomType,
+    mapCurrentId: run.mapCurrentId, // Phase 12: Position auf der Karte (Wahl, nicht ableitbar)
     lives: run.lives,
     shieldCharges: run.shieldCharges.slice(), // mit Restlaufzeit je Ladung
     scrap: run.scrap,
@@ -126,8 +240,9 @@ function startRoom(run, type = 'combat') {
   const diff = run.difficulty;
   const finalIdx = diff.roomsBeforeFinal + 1;
   const isFinal = !run.endless && run.roomIndex === finalIdx;
-  // Raeume 1..(firstDoorRoom-1) und der Finalraum sind immer Kampf.
-  if (isFinal || run.roomIndex < diff.doors.firstDoorRoom) type = 'combat';
+  // Der Finalraum ist immer Kampf (Sicherheitsnetz -- die Karte markiert die
+  // letzte Reihe ohnehin schon als 'combat'-Boss-Knoten, siehe generateMap()).
+  if (isFinal) type = 'combat';
   run.roomType = type;
   run.roomAffix = null;
   run.roomAffixes = [];
@@ -135,7 +250,7 @@ function startRoom(run, type = 'combat') {
   makeRoomStreams(run); // frische, aus dem Seed abgeleitete Stroeme
   resetRoomCounters(run);
   saveCurrentRun(runSnapshot(run)); // nur am Raumanfang, nie im Kampf
-  if (type === 'combat' || type === 'elite') {
+  if (type === 'combat' || type === 'elite' || type === 'cursed') {
     buildCombatRoom(run, type, isFinal);
   } else {
     startNonCombatRoom(run, type);
@@ -180,7 +295,11 @@ function buildCombatRoom(run, type, isFinal) {
   // spaeter erzeugten Tank-Objekte) bestimmen -- so gilt dieselbe "Rezeptur"
   // (welche Affixe, welcher Index ist guenstigster/teuerster) unabhaengig
   // vom Wellen-Split auch fuer die spaeter nachspawnende zweite Welle.
-  const eliteAffixes = type === 'elite' ? rollEliteAffixes(run, enemyTypes) : null;
+  // Verflucht (Phase 12): erzwingt IMMER genau 1 Affix, unabhaengig von der
+  // sonstigen Raumnummer-Staffelung (affixRules) -- das ist ja gerade der
+  // sichtbare Preis, den der Kartenknoten schon vorher ankuendigt.
+  const eliteAffixes =
+    type === 'elite' ? rollEliteAffixes(run, enemyTypes) : type === 'cursed' ? rollEliteAffixes(run, enemyTypes, 1) : null;
   // Wellen (Phase 9): grosse Raeume spawnen nur die erste Haelfte sofort,
   // der Rest wartet an denselben (vom Generator ohnehin erzeugten)
   // Spawnpunkten -- deshalb bekommt generateRoom() weiter die VOLLE
@@ -230,10 +349,11 @@ function buildCombatRoom(run, type, isFinal) {
 // zurueck ({chosen, cheapestIdx, priciestIdx}) statt sie direkt auf Tanks
 // anzuwenden -- state.js wendet sie beim Erzeugen jedes Panzers an (auch
 // bei einer spaeter nachspawnenden zweiten Welle).
-function rollEliteAffixes(run, enemyTypes) {
+function rollEliteAffixes(run, enemyTypes, forceCount) {
   const diff = run.difficulty;
   const rules = diff.elite.affixRules;
-  const count = run.roomIndex >= rules.minRoomForTwo ? 2 : run.roomIndex >= rules.minRoomForOne ? 1 : 0;
+  const count =
+    forceCount ?? (run.roomIndex >= rules.minRoomForTwo ? 2 : run.roomIndex >= rules.minRoomForOne ? 1 : 0);
   run.roomAffixes = [];
   run.roomAffix = null;
   if (count === 0 || !enemyTypes.length) return null;
@@ -291,52 +411,50 @@ function startNonCombatRoom(run, type) {
   }
 }
 
+// Tatsaechlich zum Zielknoten wechseln: naechster Raum, Kartenposition
+// nachziehen.
+function advanceToMapNode(run, node) {
+  run.roomIndex = node.layer;
+  run.mapCurrentId = node.id;
+  startRoom(run, node.type);
+}
+
 // Nach einem erledigten Raum (Belohnung gewaehlt bzw. Interaktion beendet):
-// Tuerwahl oder erzwungener Kampf.
+// Kartennavigation (Phase 12) statt der fruehren unsichtbaren Automatik.
+// Endlos-Modus bleibt bewusst AUSSERHALB der Karte -- reiner Kampf-
+// Nachschub mit wachsendem Budget, wie schon vor Phase 12.
 function afterRoomDone(run) {
-  const diff = run.difficulty;
-  const finalIdx = diff.roomsBeforeFinal + 1;
-  const next = run.roomIndex + 1;
-  if (run.endless || next >= finalIdx || next < diff.doors.firstDoorRoom) {
-    // Erzwungener Kampf (Raeume 2-3, Finalraum, Endlos) -- keine Tuer.
-    run.prevRoomType = run.roomType;
-    run.roomIndex = next;
+  if (run.endless) {
+    run.roomIndex++;
     startRoom(run, 'combat');
     return;
   }
-  // PLAN.md v2 E5: Die Wahl aus zwei Tueren ist verworfen ("bot nur
-  // Vorteile, war keine Entscheidung") -- sie wird in Phase 12 durch die
-  // Karte ersetzt. Bis dahin bestimmt der Seed den naechsten Raumtyp.
-  run.prevRoomType = run.roomType;
-  run.roomIndex = next;
-  startRoom(run, rollNextType(run));
-}
-
-function weightedType(list, weights, rng) {
-  let total = 0;
-  for (const t of list) total += weights[t] || 0;
-  let r = rng() * total;
-  for (const t of list) {
-    r -= weights[t] || 0;
-    if (r < 0) return t;
+  const current = run.map.byId.get(run.mapCurrentId);
+  const nextIds = current?.next || [];
+  if (nextIds.length <= 1) {
+    // Kein echter Zweig (Raum 1->2, 2->3, letzte Reihe -> Boss) --
+    // automatisch weiterziehen, wie der bisherige "erzwungene Kampf".
+    const node = run.map.byId.get(nextIds[0]);
+    advanceToMapNode(run, node);
+    return;
   }
-  return list[list.length - 1];
+  // Echte Verzweigung: Kartenscreen zeigen (main.js), chooseMapNode() bei Klick.
+  run.phase = 'map';
 }
 
-// Naechster Raumtyp, geseedet. Regeln wie bisher: treasure gesperrt bei zu
-// wenig Leben; event/workshop nicht zweimal hintereinander. combat und elite
-// sind nie gesperrt -> es gibt immer einen gueltigen Typ.
-function rollNextType(run) {
-  const diff = run.difficulty;
-  const w = diff.doors.weights;
-  const cur = run.roomType;
-  const types = Object.keys(w).filter((t) => {
-    if (t === 'treasure' && run.lives <= diff.treasure.lifeCost) return false;
-    if (t === 'event' && cur === 'event') return false;
-    if (t === 'workshop' && cur === 'workshop') return false;
-    return true;
-  });
-  return weightedType(types, w, run.rng.doors);
+// Vom Kartenscreen aufgerufen. Gibt true zurueck, wenn der Zug gueltig war.
+// Ungueltig sind: kein Knoten in Reichweite von der aktuellen Position ODER
+// eine Schatzkammer bei zu wenig Leben (dieselbe Regel, die frueher schon
+// die unsichtbare Tuerwahl von `treasure` ausgeschlossen hat).
+export function chooseMapNode(run, nodeId) {
+  if (run.phase !== 'map') return false;
+  const current = run.map.byId.get(run.mapCurrentId);
+  if (!current || !current.next.includes(nodeId)) return false;
+  const node = run.map.byId.get(nodeId);
+  if (!node) return false;
+  if (node.type === 'treasure' && run.lives <= run.difficulty.treasure.lifeCost) return false;
+  advanceToMapNode(run, node);
+  return true;
 }
 
 // Werkstatt: ein bereits gewaehltes Upgrade gegen Schrott ablegen (eine Stufe).
@@ -412,9 +530,8 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     transformations: new Set(), // freigeschaltete Transformations-ids
     roomSpec: opts.roomSpec || null, // { fixedLayout } -> Arena-Weiche
     roomType: 'combat', // Typ des aktuellen Raums
-    prevRoomType: null, // Typ des Vorraums (Regel: event/workshop nicht 2x)
     currentEvent: null, // aktives Event waehrend phase 'event'
-    rewardKind: null, // 'normal' | 'elite' | 'treasure' fuer den Belohnungspool
+    rewardKind: null, // 'normal' | 'elite' | 'treasure' | 'cursed' fuer den Belohnungspool
     roomAffix: null, // Name(n) des Elite-Affix, "A + B" bei zweien (nur Eliteraeume)
     roomAffixes: [], // dieselben Affixe als Namensliste (Phase 9: 0-2 kombinierbar)
     roomModifier: null, // Raum-Modifikator-Objekt aus data/modifiers.json (Phase 10)
@@ -438,6 +555,11 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     state: null,
     finalStats: null,
   };
+  // Karte (Phase 12): einmalig deterministisch aus dem Seed erzeugt (eigener
+  // Run-weiter Strom statt eines pro-Raum-Stroms) und bleibt fuer den
+  // GANZEN Run unveraendert -- "vollstaendig vorab einsehbar" (PLAN.md).
+  run.map = generateMap(run.seed, difficulty);
+  run.mapCurrentId = run.map.layers[0][0].id; // Startknoten (Raum 1)
   // Fortsetzen: Zustand vor dem Raumbau einspielen, damit startRoom()
   // denselben Raum wie beim Abbruch erzeugt (Seed + Raumnummer genuegen).
   if (opts.resume) {
@@ -456,7 +578,9 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     run.kills = r.kills || 0;
     run.deaths = r.deaths || 0;
     run.roomsCleared = r.roomsCleared || 0;
-    run.prevRoomType = r.prevRoomType || null;
+    // Aeltere Zwischenstaende (vor Phase 12) kennen mapCurrentId noch
+    // nicht -- bestmoegliches Fallback statt eines harten Fehlers.
+    run.mapCurrentId = r.mapCurrentId ?? findMapNodeFallback(run, r.roomIndex, r.roomType) ?? run.mapCurrentId;
     startRoom(run, r.roomType || 'combat');
     return run;
   }
@@ -612,8 +736,9 @@ export function stepRun(run, cmd, dt) {
       finishRun(run, true);
       return;
     }
-    // Belohnung: Eliteraeume ziehen aus dem Elite-Pool, sonst normal.
-    run.rewardKind = run.roomType === 'elite' ? 'elite' : 'normal';
+    // Belohnung: Eliteraeume ziehen aus dem Elite-Pool, Verflucht (Phase 12)
+    // gibt ein garantiertes Legendaer wie eine Schatzkammer, sonst normal.
+    run.rewardKind = run.roomType === 'elite' ? 'elite' : run.roomType === 'cursed' ? 'cursed' : 'normal';
     run.pendingOffers = rollReward(run);
     run.phase = 'upgrade';
   }
@@ -640,9 +765,20 @@ function poolOpts(run) {
 //              Auswahl komplett -- bei nur 2-3 Elite-Karten die schlechtere
 //              Wahl als eine normale Runde)
 //   treasure = nur Legendaries (Tag-Regel aus, Raumgrenzen aus)
+//   cursed   = dieselbe Nur-Legendaries-Regel wie treasure (Phase 12) --
+//              der garantierte Fund ist der Ausgleich fuer den erzwungenen
+//              Affix, kostet aber (anders als treasure) kein Leben
 // Fehlende Slots fuellt der Pool mit "+1 Leben" auf.
 function rollReward(run) {
   const base = poolOpts(run);
+  if (run.rewardKind === 'treasure' || run.rewardKind === 'cursed') {
+    return rollFromPool(run.upgradesData, {
+      ...base,
+      onlyRarity: 'legendary',
+      bypassRoomGate: true,
+      ignoreTagRule: true,
+    });
+  }
   if (run.rewardKind === 'elite') {
     const offers = rollFromPool(run.upgradesData, base);
     const avoidTags = new Set(offers.filter((o) => !o.fallback).map((o) => o.tag));
@@ -657,14 +793,6 @@ function rollReward(run) {
     // 4. Karte statt eines redundanten zweiten Fallbacks.
     if (!eliteCard.fallback) offers.push(eliteCard);
     return offers;
-  }
-  if (run.rewardKind === 'treasure') {
-    return rollFromPool(run.upgradesData, {
-      ...base,
-      onlyRarity: 'legendary',
-      bypassRoomGate: true,
-      ignoreTagRule: true,
-    });
   }
   return rollFromPool(run.upgradesData, base);
 }
@@ -780,7 +908,6 @@ export function transformEffects(run) {
 export function continueEndless(run) {
   if (run.phase !== 'victory') return;
   run.endless = true;
-  run.prevRoomType = run.roomType;
   run.roomIndex++;
   startRoom(run, 'combat');
 }

@@ -716,3 +716,86 @@ body.touch-on #mineBtn {
   padding: 12px 60px;
   cursor: pointer;
 }
+
+/* --- Phase 12: Kartenscreen --- */
+#map {
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding: 24px 12px;
+}
+
+.mapwrap {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+}
+
+.mapedges {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.mapedge {
+  stroke: #3a4558;
+  stroke-width: 2;
+}
+
+.maprows {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+}
+
+.maprow {
+  display: flex;
+  gap: 28px;
+  justify-content: center;
+}
+
+.mapnode {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #1b1b22;
+  border: 2px solid #4a4a5a;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mapnode.unreachable {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.mapnode.locked {
+  border-color: #a04a4a;
+}
+
+.mapnode.reachable {
+  border-color: #c8b24a;
+  box-shadow: 0 0 10px rgba(200, 178, 74, 0.6);
+}
+
+.mapnode.reachable:hover {
+  background: #2a2818;
+}
+
+.mapnode.current {
+  border-color: #7ade6a;
+  box-shadow: 0 0 12px rgba(122, 222, 106, 0.7);
+}
+
+.maphint {
+  font-family: monospace;
+  font-size: 13px;
+  color: #9aa0a8;
+  text-align: center;
+}

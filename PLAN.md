@@ -795,7 +795,7 @@ Der Risikopunkt ist die Sichtlinien-KI aus Phase 16.
 
 # STUFE 3 — Struktur
 
-## Phase 12 — Roguelike-Karte
+## Phase 12 — Roguelike-Karte  ✅ erledigt
 **Aufwand:** 2–3 Sessions
 
 12–15 Knoten, 3 Pfade, sichtbare Symbole, Zusammenläufe, Boss am Ende. Seeded,
@@ -831,6 +831,71 @@ damit überwiegend in Kartenlayout/Generator/UI, nicht in neuer Spiellogik.
 durch Kartennavigation ersetzen, restliche Raumlogik unverändert lassen),
 neue `src/ui/mapscreen.js` (Kartenanzeige + Knotenwahl), `src/core/rng.js`
 (zusätzlicher `map`-Strom für die Kartengenerierung).
+
+**Umsetzungsfunde:**
+- **Karte ist ein DAG aus Reihen** (`generateMap()` in `run.js`): Reihe 1+2
+  je ein einzelner erzwungener `combat`-Knoten (`data/difficulty.json:
+  map.forcedCombatLayers`), Reihen 3–15 mit 2–3 Knoten (`map.minNodesPerLayer`
+  /`maxNodesPerLayer`), letzte Reihe ein einzelner Boss-Knoten
+  (`isBoss: true`, Typ trotzdem `combat` — der Finalraum-Sonderfall in
+  `buildCombatRoom()` bleibt unverändert). Kantenaufbau (`connectLayers()`):
+  1-Knoten-Reihen verbinden sich mit ALLEN Knoten der Nachbarreihe
+  (Fächer-aus/-ein, deckt Raum 1→2, 2→3 UND die geforderten "Zusammenläufe"
+  vor dem Boss ab); sonst je Knoten eine proportionale Hauptkante plus mit
+  `map.extraEdgeChance` (40 %) eine Nebenkante, danach ein Nachreich-Pass für
+  Zielknoten ohne eingehende Kante — kein Knoten bleibt je isoliert
+  (verifiziert über 20 Seeds in `phase12map.mjs`).
+- **Eigener Run-weiter RNG-Strom statt eines pro-Raum-Stroms**: neue
+  Funktion `rngForRun(seed, label)` in `core/rng.js` (Gegenstück zu
+  `rngFor(seed, roomIndex, label)`, aber ohne Raumnummer) — die Karte
+  entsteht EINMAL bei `createRun()` und bleibt für den ganzen Run fix,
+  anders als alle anderen, pro Raum neu abgeleiteten Ströme.
+- **Sicherheitsnetz gegen Schatzkammer-Sackgassen**: `treasure` ist bei
+  ≤ `treasure.lifeCost` Leben nicht wählbar (`chooseMapNode()`). Führen
+  ALLE Kanten eines Knotens zufällig ausschließlich zu `treasure`-Knoten,
+  waere der Pfad dort bei 1 Leben blockiert — `generateMap()` färbt in
+  diesem (seltenen) Fall die erste Alternative auf `combat` um (immer
+  wählbar). Ohne dieses Sicherheitsnetz schlug die 40-Seed-Gewinnbarkeits-
+  probe in `phase4.mjs` bei genau einem Seed fehl.
+- **Kartenscreen nur bei echter Verzweigung** (`current.next.length > 1`):
+  Reihen mit nur einem erreichbaren Ziel (Raum 1→2, 2→3, letzte Reihe→Boss)
+  ziehen automatisch weiter, kein zusätzlicher Klick — deckungsgleich mit
+  dem alten "erzwungenen Kampf" vor Phase 12.
+- **`cursed` bypasst die normale Elite-Affix-Raumstaffelung bewusst**:
+  `rollEliteAffixes(run, enemyTypes, forceCount)` bekommt einen neuen
+  optionalen dritten Parameter — `cursed` erzwingt IMMER genau 1 Affix,
+  auch weit vor `affixRules.minRoomForOne` (Raum 8), weil der Preis ja
+  schon auf der Karte sichtbar ist, nicht von der Raumnummer abhängt.
+  Belohnung teilt sich exakt den `treasure`-Zweig in `rollReward()`
+  (nur Legendaries), aber ohne dessen Lebenspreis — `cursed` ist ein
+  Kampfraum wie jeder andere, der Preis ist der Affix, nicht ein Leben.
+- **`prevRoomType` komplett entfernt**: dessen einziger Zweck war die alte
+  "kein `event`/`workshop` zweimal hintereinander"-Regel aus `rollNextType()`.
+  Diese Regel lässt sich auf einem verzweigten Kartengraphen nicht mehr
+  sauber durchsetzen (dieselbe Reihe kann von Vorgängern unterschiedlichen
+  Typs erreicht werden) und wird bewusst fallengelassen — dokumentiert statt
+  stillschweigend kaputt zu sein.
+- **`doors.firstDoorRoom` (4) ersetzt durch `map.forcedCombatLayers` (2)**:
+  PLAN.md nennt für die Karte explizit "Raum 1–2 immer combat" (nicht mehr
+  1–3 wie vorher) — das alte Feld ist ersatzlos entfernt, nichts referenziert
+  es mehr.
+- **Kartenanzeige ist SVG-Kanten + DOM-Knoten** (`mapscreen.js`): Knotenkreise
+  per Button (wiederverwendet `ROOM_TYPE_INFO` aus `run.js`, das seit dem
+  v2-Rückbau der Türwahl ungenutzt im Code lag), Kantenlinien per `<svg>`
+  nach dem Einblenden anhand `offsetLeft`/`offsetTop` gezeichnet (das
+  Overlay muss sichtbar sein, sonst liefert das Layout nur Nullen).
+  Erreichbare Knoten hell + klickbar, aktueller Knoten grün, gesperrte
+  Schatzkammern (zu wenig Leben) rot umrandet und deaktiviert, alles
+  andere sichtbar, aber gedimmt — "vollständig vorab einsehbar" gilt für
+  die GANZE Karte, nicht nur die nächste Wahl.
+- **Bestehende Regressionstests brauchten reihenweise einen neuen
+  `map`-Phasen-Zweig** (u. a. `phase4.mjs`, `phase9elite.mjs`,
+  `phase10modifiers.mjs`, `phase11walls.mjs`, `cleanup.mjs`, `phase0b.mjs`,
+  `phase4armor.mjs`): jede "spiel den Run automatisch durch"-Testschleife,
+  die vorher nie auf eine Zwischen-Phase warten musste, blieb sonst in
+  `run.phase === 'map'` hängen. Testet jetzt zusätzlich, dass eine
+  abgelehnte Wahl (Schatzkammer, zu wenig Leben) die nächste Option
+  probiert statt in einer Endlosschleife zu bleiben.
 
 ## Phase 13 — Shop
 **Aufwand:** 1 Session

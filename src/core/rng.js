@@ -58,3 +58,11 @@ export function hashSeed(...parts) {
 export function rngFor(seed, roomIndex, label) {
   return mulberry32(hashSeed(seed >>> 0, roomIndex >>> 0, label));
 }
+
+// Ein benannter Strom fuer den GANZEN Run statt fuer einen einzelnen Raum
+// (Phase 12: Kartengenerierung -- die Karte entsteht einmalig bei
+// createRun() und bleibt danach unveraendert, anders als die pro-Raum-
+// Stroeme aus makeRoomStreams()).
+export function rngForRun(seed, label) {
+  return mulberry32(hashSeed(seed >>> 0, label));
+}
