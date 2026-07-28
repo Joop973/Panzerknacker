@@ -407,6 +407,85 @@ html, body {
   color: #9aa0a8;
   margin-top: 6px;
 }
+
+/* --- Phase 13: Shop-Kartenregal --- */
+.shopcards {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 90vw;
+}
+
+.shopcards .shopcard {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 150px;
+  min-height: 92px;
+  padding: 10px;
+  background: #1b1b22;
+  border: 2px solid #c8b24a;
+  color: #e8e4d8;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+}
+
+.shopcards .shopcard strong {
+  color: #c8b24a;
+  font-size: 13px;
+}
+
+.shopcards .shopcard .price {
+  margin-top: auto;
+  color: #e0c860;
+  font-weight: bold;
+}
+
+.shopcards .shopcard:not(.sold):not(.tooexpensive):hover {
+  background: #2a2a33;
+}
+
+.shopcards .shopcard.tooexpensive {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.shopcards .shopcard.sold {
+  border-color: #4a4a5a;
+  border-style: dashed;
+  color: #6a6a78;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.shopcards .shopcard.sold strong {
+  color: #6a6a78;
+}
+
+/* Seltenheits-Rahmen: exakt dieselben Farben wie im Upgrade-Screen */
+.shopcards .shopcard[data-rarity='common'] {
+  border-color: #7a8a9a;
+}
+.shopcards .shopcard[data-rarity='rare'] {
+  border-color: #4a9ed8;
+}
+.shopcards .shopcard[data-rarity='legendary'] {
+  border-color: #d8a83a;
+  box-shadow: 0 0 10px rgba(216, 168, 58, 0.35);
+}
+
+/* Der Shop hat mehr Inhalt als die anderen Overlays -> scrollbar. */
+#workshop {
+  justify-content: flex-start;
+  overflow-y: auto;
+  padding: 20px 12px;
+  gap: 8px;
+}
 .droplist {
   display: flex;
   gap: 10px;

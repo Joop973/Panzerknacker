@@ -44,48 +44,118 @@ export function createEventScreen() {
   };
 }
 
-// ---- Werkstatt --------------------------------------------------------
-export function createWorkshopScreen() {
+// ---- Shop (Phase 13, vorher "Werkstatt") -------------------------------
+// Fuenf Schrott-Aktionen: Karte aus dem Regal kaufen, Schildladung, Leben
+// (einmal pro Besuch), Sekundaerwaffe tauschen, Upgrade ablegen. Der
+// Screen rendert nach JEDER Aktion neu; erst "Verlassen" schliesst ihn.
+// Die interne Raumtyp-/Phasen-Kennung bleibt `workshop` (siehe run.js).
+export function createShopScreen() {
   const el = makeOverlay('workshop');
   let ctx = null;
 
-  function render() {
-    if (!ctx) return;
-    const scrap = ctx.getScrap();
-    const upgrades = ctx.getUpgrades(); // { id: level }
-    const defs = ctx.upgradesData.upgrades;
-    el.innerHTML = '';
+  // Kleiner Abschnittstitel zwischen den Bereichen.
+  function sectionTitle(text) {
+    const p = document.createElement('p');
+    p.className = 'workshophint';
+    p.textContent = text;
+    return p;
+  }
 
-    const h = document.createElement('h1');
-    h.textContent = 'Werkstatt';
-    el.appendChild(h);
-    const line = document.createElement('p');
-    line.className = 'scrapline';
-    line.innerHTML = `Schrott: <strong>${scrap}</strong>`;
-    el.appendChild(line);
+  function renderCards(scrap) {
+    const offers = ctx.getOffers() || [];
+    if (!offers.length) return;
+    el.appendChild(sectionTitle(`Karte kaufen (${ctx.costs.shopCard}⚙ je Karte):`));
+    const shelf = document.createElement('div');
+    shelf.className = 'shopcards';
+    offers.forEach((o, i) => {
+      const card = document.createElement('div');
+      card.className = 'shopcard';
+      card.dataset.rarity = o.rarity || 'common';
+      if (o.sold) {
+        card.classList.add('sold');
+        card.innerHTML = '<strong>Verkauft</strong>';
+        shelf.appendChild(card);
+        return;
+      }
+      const lvl = o.fallback ? '' : ` (Stufe ${o.level}/${o.maxStacks})`;
+      card.innerHTML =
+        `<strong>${o.name}${lvl}</strong><span>${o.description}</span>` +
+        `<span class="price">${ctx.costs.shopCard}⚙</span>`;
+      if (scrap < ctx.costs.shopCard) {
+        card.classList.add('tooexpensive');
+      } else {
+        card.addEventListener('click', () => {
+          if (ctx.onBuyCard(i)) render();
+        });
+      }
+      shelf.appendChild(card);
+    });
+    el.appendChild(shelf);
+  }
 
-    // Aktionen: Schildladung kaufen.
+  function renderActions(scrap) {
     const actions = document.createElement('div');
     actions.className = 'scrapactions';
-    const buy = document.createElement('button');
-    buy.className = 'scrapbtn';
-    buy.innerHTML = `Schildladung <span class="price">${ctx.shieldCost}⚙</span>`;
-    buy.disabled = scrap < ctx.shieldCost;
-    buy.addEventListener('click', () => {
-      if (ctx.onBuyShield()) render();
-    });
-    actions.appendChild(buy);
+    const mk = (label, cost, enabled, fn) => {
+      const b = document.createElement('button');
+      b.className = 'scrapbtn';
+      b.innerHTML = `${label} <span class="price">${cost}⚙</span>`;
+      b.disabled = !enabled;
+      b.addEventListener('click', () => {
+        if (fn()) render();
+      });
+      return b;
+    };
+    actions.appendChild(
+      mk('Schildladung', ctx.costs.shieldCharge, scrap >= ctx.costs.shieldCharge, ctx.onBuyShield),
+    );
+    // Leben: teuer und nur einmal pro Shop -- danach dauerhaft ausgegraut.
+    actions.appendChild(
+      mk(
+        ctx.lifeBought() ? '+1 Leben (gekauft)' : '+1 Leben',
+        ctx.costs.shopLife,
+        !ctx.lifeBought() && scrap >= ctx.costs.shopLife,
+        ctx.onBuyLife,
+      ),
+    );
     el.appendChild(actions);
+  }
 
-    // Upgrades ablegen.
+  function renderSecondaries(scrap) {
+    const equipped = ctx.getEquippedSecondary();
+    const others = Object.keys(ctx.secondariesData).filter((id) => id !== equipped);
+    if (!others.length) return;
+    const cur = ctx.secondariesData[equipped]?.label || equipped;
+    el.appendChild(
+      sectionTitle(`Sekundärwaffe tauschen (${ctx.costs.shopSecondary}⚙, aktuell: ${cur}):`),
+    );
+    const list = document.createElement('div');
+    list.className = 'droplist';
+    for (const id of others) {
+      const b = document.createElement('button');
+      b.className = 'dropbtn';
+      b.innerHTML =
+        `${ctx.secondariesData[id]?.label || id} <span class="price">${ctx.costs.shopSecondary}⚙</span>`;
+      b.disabled = scrap < ctx.costs.shopSecondary;
+      b.addEventListener('click', () => {
+        if (ctx.onBuySecondary(id)) render();
+      });
+      list.appendChild(b);
+    }
+    el.appendChild(list);
+  }
+
+  function renderDrops() {
+    const upgrades = ctx.getUpgrades(); // { id: level }
+    const defs = ctx.upgradesData.upgrades;
     const owned = Object.entries(upgrades).filter(([, l]) => l > 0);
-    const dropTitle = document.createElement('p');
-    dropTitle.className = 'workshophint';
-    dropTitle.textContent = owned.length
-      ? `Upgrade ablegen (+${ctx.dropRefund}⚙ je Stufe):`
-      : 'Noch keine Upgrades zum Ablegen.';
-    el.appendChild(dropTitle);
-
+    el.appendChild(
+      sectionTitle(
+        owned.length
+          ? `Upgrade ablegen (+${ctx.dropRefund}⚙ je Stufe):`
+          : 'Noch keine Upgrades zum Ablegen.',
+      ),
+    );
     const list = document.createElement('div');
     list.className = 'droplist';
     for (const [id, lvl] of owned) {
@@ -98,6 +168,25 @@ export function createWorkshopScreen() {
       list.appendChild(b);
     }
     el.appendChild(list);
+  }
+
+  function render() {
+    if (!ctx) return;
+    const scrap = ctx.getScrap();
+    el.innerHTML = '';
+
+    const h = document.createElement('h1');
+    h.textContent = 'Shop';
+    el.appendChild(h);
+    const line = document.createElement('p');
+    line.className = 'scrapline';
+    line.innerHTML = `Schrott: <strong>${scrap}</strong>`;
+    el.appendChild(line);
+
+    renderCards(scrap);
+    renderActions(scrap);
+    renderSecondaries(scrap);
+    renderDrops();
 
     const leave = document.createElement('button');
     leave.className = 'leavebtn';

@@ -53,11 +53,12 @@ bevor sie fallen), **Phase 11b** (Performance-Budget: feste Obergrenzen
 aus `data/limits.json` + `balance.json`, im F1-Debug-Overlay sichtbar
 zusammen mit Logik-/Render-Frame-Zeit) und **Phase 12** (Roguelike-Karte:
 sichtbarer, wählbarer Kartengraph ersetzt die unsichtbare Raumtyp-Automatik,
-neuer Raumtyp `cursed`) sind gebaut. `PLAN.md` wurde auf **v3**
+neuer Raumtyp `cursed`) und **Phase 13** (Shop: fünf Schrott-Aktionen im
+früheren Werkstatt-Raum) sind gebaut. `PLAN.md` wurde auf **v3**
 konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`,
 doppelt gebautes Affix-System, falscher `eliteBonus`-Feldname) entfernt,
 jede offene Phase bekommt jetzt eine "Betroffene Dateien"-Zeile.
-**Nächste Phase: Phase 13 — Shop** (Stufe 3: Struktur). Frühere Merges
+**Nächste Phase: Phase 14 — Bosse** (Stufe 3: Struktur). Frühere Merges
 (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -560,6 +561,40 @@ nächste Raum bestimmt wird, ändert sich. Neuer Raumtyp: `cursed`.
 - `mapCurrentId` (nicht der ganze Graph) landet in `runSnapshot()` — der
   Graph selbst ist aus Seed + `createRun()` deterministisch reproduzierbar.
 
+### Phase 13 (Shop) — gemergt
+Der Werkstatt-Raum aus Phase 4 wird zum Shop mit **fünf** Schrott-Aktionen:
+Karte aus einem Fünferregal kaufen, Schildladung, Sekundärwaffe tauschen,
++1 Leben (einmal pro Besuch), Upgrade ablegen. Preise in
+`data/balance.json: scrap.cost` (`shopCard: 5`, `shopSecondary: 6`,
+`shopLife: 12`), Regalgröße in `balance.shop.cardChoices` (5).
+- **Nur die Oberfläche heißt "Shop"** — Raumtyp-Schlüssel, `run.phase` und
+  `leaveWorkshop()` bleiben `workshop`. Ein Durchbenennen hätte
+  `doors.weights`, gespeicherte Zwischenstände, den Telemetrie-`roomType`
+  (Bedeutungsänderung → `SCHEMA_VERSION`-Bump) und acht Regressionstests
+  berührt. Umbenannt wurden nur Screen-Titel, `ROOM_TYPE_INFO.workshop`
+  (jetzt „Shop" 🛒) und `createWorkshopScreen` → **`createShopScreen`**.
+- **`applyUpgradeChoice(run, offer)`** (neu, aus `chooseUpgrade()`
+  extrahiert) hält die Karten-Sonderfälle (Sekundärslot, Glaskanone,
+  Notschild, Trophäe, Kriegsbeute, `tagCounts`) an genau EINER Stelle;
+  Upgrade-Screen und `buyShopCard()` teilen sie sich. `chooseUpgrade()`
+  hängt nur noch `afterRoomDone()` an, `buyShopCard()` nur die Kosten —
+  **keine Shop-Aktion beendet den Raum**, erst „Verlassen".
+- **`run.shopOffers` wird einmalig in `startNonCombatRoom()` gezogen**
+  (nicht im Renderpfad — der Screen rendert nach jeder Aktion neu und
+  würde das Regal sonst jedes Mal neu mischen). Gekaufte Karten bekommen
+  `sold = true`, statt entfernt zu werden (stabile Slots); wer genug
+  Schrott hat, kann alle fünf kaufen.
+- **Nicht im `runSnapshot()`**: Seed + Raumnummer erzeugen denselben
+  `upgrades`-Strom, das Regal entsteht beim Fortsetzen identisch neu
+  (Muster wie `roomModifier` in Phase 10, per Test verifiziert).
+- `buyShopSecondary()` setzt zusätzlich `run.upgrades[id] = 1`, damit die
+  gekaufte Waffe nicht später nochmal als Karte im Pool auftaucht (gleiche
+  Wirkung wie der Kartenwechsel aus Phase 6). `buyShopLife()` ist die
+  einzige Aktion mit Besuchs-Gedächtnis (`run.shopLifeBought`).
+- Telemetrie: neue `recordScrapSpend`-Typen `shopCard`/`shopSecondary`/
+  `shopLife`; gekaufte Karten laufen zusätzlich durch `recordUpgrade()`
+  (ohne abgelehnte Alternativen — im Shop lehnt man nichts ab).
+
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
   `tag`, `rarity` (`common`/`rare`/`legendary`), `maxStacks`, `requires`,
@@ -687,7 +722,8 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/game/upgradepool.js` — Auswahl-Pool (Tag-Regel, Rarity, maxStacks,
   requires, minRoom; Phase 4: includeTag/onlyRarity/bypassRoomGate/
   ignoreTagRule für Elite-/Treasure-Belohnungen); von `run.js` genutzt.
-- `src/ui/roomscreens.js` — Event- und Werkstatt-Overlays.
+- `src/ui/roomscreens.js` — Event- und Shop-Overlay (`createShopScreen`,
+  Phase 13: Kartenregal, Schild, Sekundärtausch, Leben, Ablegen).
 - `src/ui/mapscreen.js` — Kartenscreen (Phase 12): zeigt den ganzen
   Kartengraphen, klickbar nur die von der aktuellen Position erreichbaren
   Knoten der nächsten Reihe.
