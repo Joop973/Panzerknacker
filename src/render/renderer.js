@@ -218,6 +218,41 @@ export function createRenderer(ctx) {
         }
         continue;
       }
+      // Zerstoerbare Wand (Phase 11): sieht aus wie eine normale Wand
+      // (Sprite/Farbe uebernommen), aber mit einem orangen Riss, der schon
+      // unbeschaedigt schwach sichtbar ist (sonst waere die ganze Mechanik
+      // unentdeckbar) und mit sinkender Resthaltbarkeit deutlicher wird.
+      if (wall.type === 'destructible') {
+        const dur = wall.destructibleHits || 1;
+        const rest = Math.max(0, dur - (wall.hits || 0));
+        const dmg = dur ? 1 - rest / dur : 0; // 0 = unbeschaedigt, 1 = letzter Treffer
+        const img = sprite('tile', 'wall');
+        if (img) {
+          for (let y = wall.y; y < wall.y + wall.h; y += CELL) {
+            for (let x = wall.x; x < wall.x + wall.w; x += CELL) {
+              ctx.drawImage(img, x, y, CELL, CELL);
+            }
+          }
+        } else {
+          ctx.fillStyle = COLORS.wall;
+          ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+        }
+        ctx.strokeStyle = `rgba(255,150,60,${(0.25 + dmg * 0.55).toFixed(3)})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(wall.x + 6, wall.y + 6);
+        ctx.lineTo(wall.x + wall.w - 8, wall.y + wall.h - 10);
+        if (dmg > 0.33) {
+          ctx.moveTo(wall.x + wall.w - 6, wall.y + 8);
+          ctx.lineTo(wall.x + 8, wall.y + wall.h - 6);
+        }
+        if (dmg > 0.66) {
+          ctx.moveTo(wall.x + wall.w / 2, wall.y + 4);
+          ctx.lineTo(wall.x + wall.w / 2, wall.y + wall.h - 4);
+        }
+        ctx.stroke();
+        continue;
+      }
       // Kachel-Sprite (falls geladen) über die ganze Wandfläche legen.
       const key = wall.type === 'hole' ? 'hole' : wall.type === 'breakable' ? 'breakable' : 'wall';
       const img = sprite('tile', key);

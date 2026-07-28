@@ -90,11 +90,12 @@ function moveAxis(b, state, axis, dt) {
       b.dead = true;
       return { hit: true, mirror: false };
     }
-    // Sekundärslot "Sperrmauer" (Phase 6): nimmt Schaden wie jede andere
-    // Wand-Haltbarkeit (destroyWall zaehlt wall.customDurability runter),
-    // prallt aber wie eine normale Wand ab, bis sie zerbricht -- daher
-    // KEIN return hier, faellt in die generische Bounce-Behandlung durch.
-    if (wall.type === 'trap') state.destroyWall(wall);
+    // Sekundärslot "Sperrmauer" (Phase 6) und zerstoerbare Waende (Phase 11):
+    // nehmen Schaden wie jede andere Wand-Haltbarkeit (destroyWall zaehlt
+    // wall.customDurability/destructibleHits runter), prallen aber wie eine
+    // normale Wand ab, bis sie zerbrechen -- daher KEIN return hier, faellt
+    // in die generische Bounce-Behandlung durch.
+    if (wall.type === 'trap' || wall.type === 'destructible') state.destroyWall(wall);
     hit = true;
     if (wall.type === 'reflect') mirror = true; // Spiegelwand (Phase 5)
     if (axis === 'x') {

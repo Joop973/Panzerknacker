@@ -22,7 +22,9 @@ import { armorBlocks, reflectBullet, reflectFromAim, hasWallBounced, isLive } fr
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
 // 'reflect' (Phase 5, Spiegelwand): physisch wie 'solid', aber bullet.js
 // laesst Geschosse dort abprallen, ohne einen Abpraller zu verbrauchen.
-const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole', r: 'reflect' };
+// 'destructible' (Phase 11): physisch wie 'solid', bis sie durch
+// destructibleHits Treffer (Kugel ODER Explosion) abgebaut ist.
+const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole', r: 'reflect', d: 'destructible' };
 
 // Truemmerfarben fuer Partikel (Politur, Phase 10).
 const DEBRIS_COLORS = {
@@ -40,13 +42,17 @@ const DEBRIS_COLORS = {
   t_black: '#33333c',
 };
 
-function buildWalls(grid) {
+function buildWalls(grid, destructibleHits) {
   const walls = [];
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       const type = WALL_TYPES[grid[row][col]];
       if (type) {
-        walls.push({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, type, col, row });
+        const wall = { x: col * CELL, y: row * CELL, w: CELL, h: CELL, type, col, row };
+        // Phase 11: eigene Haltbarkeit statt state.transform.wallDurability --
+        // dieselbe destroyWall()-Zaehllogik wie Sperrmauer/Baumeister.
+        if (type === 'destructible') wall.destructibleHits = destructibleHits || 1;
+        walls.push(wall);
       }
     }
   }
@@ -91,13 +97,14 @@ function applyAffixByIndex(t, index, eliteAffixes) {
 
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
-    roomSpec, arenas, transform, equippedSecondary, waveSplit, waveCfg, eliteAffixes, modifier } = opts;
+    roomSpec, arenas, transform, equippedSecondary, waveSplit, waveCfg, eliteAffixes, modifier,
+    destructibleWalls } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
-    : generateRoom(tiles, genRng, enemyTypes.length, weights, roomSpec, arenas);
+    : generateRoom(tiles, genRng, enemyTypes.length, weights, roomSpec, arenas, destructibleWalls);
   const grid = room.grid;
-  const walls = buildWalls(grid);
+  const walls = buildWalls(grid, destructibleWalls?.hits);
   // Raum-Modifikator "Spiegelsaal" (Phase 10): feste Waende werfen Kugeln
   // zurueck -- nur `solid`, durchschiessbare (`breakable`) Waende behalten
   // ihre eigene Mechanik, sonst waere die Wandzerstoerung im Raum entwertet.
@@ -194,13 +201,14 @@ export function createState(data, tiles, opts) {
     respawnTimer: 0,
     // Solid-Test fuer Geschosse/Sichtlinien: 'o' (hole) blockiert NICHT.
     // 'r' (Spiegelwand, Phase 5) ist optisch/physisch eine normale Wand --
-    // nur bullet.js behandelt sie beim Abprallen anders.
+    // nur bullet.js behandelt sie beim Abprallen anders. 'd' (zerstoerbare
+    // Wand, Phase 11) ist bis zur Zerstoerung ebenfalls physisch normal.
     isSolid(px, py) {
       const col = Math.floor(px / CELL);
       const row = Math.floor(py / CELL);
       if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return true;
       const cell = grid[row][col];
-      return cell === '#' || cell === 'b' || cell === 'r';
+      return cell === '#' || cell === 'b' || cell === 'r' || cell === 'd';
     },
     // Sicht-Test fuer KI-Raycasts (Phase 6): zusaetzlich zu Waenden
     // blockieren aktive Rauchwolken die Sicht -- Geschossphysik/Bewegung
@@ -234,8 +242,9 @@ export function createState(data, tiles, opts) {
     destroyWall(wall) {
       // Transformation "Baumeister" (Phase 5): Waende halten wallDurability
       // Treffer statt einem -- der erste Treffer beschaedigt sie nur.
-      // Sperrmauer (Phase 6): eigene Haltbarkeit ueberschreibt das.
-      const durability = wall.customDurability || state.transform.wallDurability || 1;
+      // Sperrmauer (Phase 6) und zerstoerbare Waende (Phase 11) bringen
+      // ihre eigene Haltbarkeit mit, die das ueberschreibt.
+      const durability = wall.customDurability || wall.destructibleHits || state.transform.wallDurability || 1;
       if (durability > 1) {
         wall.hits = (wall.hits || 0) + 1;
         if (wall.hits < durability) {

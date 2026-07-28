@@ -667,7 +667,7 @@ Kugeltempo/Aggression/Sichtfeld anwenden).
   `main.js` musste es tatsächlich befüllen (`teleModifier`, gleiches Muster
   wie `teleGhosts`/`teleSecondary`).
 
-## Phase 11 — Zerstörbare Wände
+## Phase 11 — Zerstörbare Wände  ✅ erledigt
 **Aufwand:** 1 Session
 
 `wall.destructible.hits: 3`. Die Arena verändert sich im Kampf. Anteil pro Raum
@@ -684,6 +684,48 @@ bauen.
 **Betroffene Dateien:** `data/difficulty.json` (Anteil zerstörbarer Wände pro
 Raum), `src/game/generator.js` (Flood-Fill-Check nach Zerstörung), `src/game/state.js`
 (`destroyWall` generalisieren).
+
+**Umsetzungsfunde:**
+- Kein separater "Wegfall macht unlösbar"-Check nötig: Zerstörbare Zellen
+  sind vor dem Zerstören exakt so blockierend wie eine normale `solid`-Wand
+  (gleiche `isSolid()`/`hasLos()`-Behandlung), die bestehende Flood-Fill-
+  Prüfung beim Raumbau (`placeSpawns()`) gilt also bereits FÜR den Zustand
+  "alle zerstörbaren Wände noch intakt". Da Zerstören eine Wandzelle immer
+  nur in Boden verwandelt (nie umgekehrt), kann Erreichbarkeit dadurch nur
+  gleich bleiben oder besser werden, nie schlechter — kein zweiter,
+  laufzeitgeprüfter Check nötig (per Test in `phase11walls.mjs` verifiziert:
+  Fläche nach dem Abbau ALLER zerstörbaren Wände eines Raums ist immer ≥
+  vorher, alle Gegner-Spawns bleiben erreichbar).
+- Neues Grid-Zeichen `'d'` (state.js: `WALL_TYPES` bekommt
+  `d: 'destructible'`) statt eines Flags auf `'#'` — physisch identisch zu
+  `solid` (`isSolid()`, `hasLos()` in `generator.js` behandeln `'d'` genauso
+  wie `'#'`), aber ein eigener `type`, damit `bullet.js`/`mine.js` sie gezielt
+  ansprechen können, ohne jede `solid`-Wand plötzlich beschießbar zu machen.
+- Platzierung lebt in `generator.js: placeDestructibleWalls()`, direkt neben
+  `placeReflectWalls()` in `buildGrid()` — reine Umetikettierung
+  vorhandener innerer `solid`-Zellen (Rand bleibt immer geschlossen), ändert
+  den Gesamt-Wandanteil (`wallShare()`-Prüfung 15–35 %) nicht.
+- `destroyWall()` (schon für Baumeister-Transformation/Sperrmauer gebaut)
+  liest die Haltbarkeit jetzt über eine dritte Quelle:
+  `wall.customDurability || wall.destructibleHits || state.transform
+  .wallDurability || 1` — kein Parallelsystem, exakt wie im Fund notiert.
+- **Explosionen zählen als EIN Treffer**, keine Sonderregel für mehr
+  Schaden: `mine.js: explodeAt()` ruft für `destructible`-Wände dieselbe
+  `destroyWall()` wie für einen einzelnen Kugeltreffer auf (genau wie
+  `breakable`-Wände es für Tungsten-Kugeln schon tun) — konsistent statt
+  eigens balanciert.
+- **Run.js musste zusätzlich angefasst werden** (im Plan nicht in
+  "Betroffene Dateien" gelistet): `buildCombatRoom()` reicht
+  `difficulty.destructibleWalls` als neuen `createState()`-Opt durch, exakt
+  nach demselben Muster wie `modifier`/`eliteAffixes`/`waveCfg` in Phase
+  9/10. Kein `isFinal`-Sonderfall nötig — `generateRoom()`s
+  `fixedLayout`-Zweig und der direkte `buildFixedRoom()`-Aufruf für den
+  Finalraum ignorieren den Parameter ohnehin (kein `buildGrid()`-Aufruf).
+- Darstellung: eigener Rissе-Overlay wie bei der Sperrmauer (Phase 6), aber
+  schon im unbeschädigten Zustand schwach sichtbar (kein `frac === 1`-
+  Unsichtbarkeits-Fall wie bei der Sperrmauer) — sonst wäre die ganze
+  Mechanik unentdeckbar, da zerstörbare Wände sonst wie normale Wände
+  aussehen.
 
 ## Phase 11b — Performance-Budget
 **Aufwand:** 1 Session
