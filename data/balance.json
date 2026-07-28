@@ -48,8 +48,14 @@
       "reroll": 2,
       "ban": 1,
       "fourthCard": 3,
-      "shieldCharge": 4
+      "shieldCharge": 4,
+      "shopCard": 5,
+      "shopSecondary": 6,
+      "shopLife": 12
     }
+  },
+  "shop": {
+    "cardChoices": 5
   },
   "ghost": {
     "duration": 3.0,

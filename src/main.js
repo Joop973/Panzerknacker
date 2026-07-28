@@ -23,10 +23,13 @@ import {
   leaveWorkshop,
   chooseEventOption,
   chooseMapNode,
+  buyShopCard,
+  buyShopSecondary,
+  buyShopLife,
   ROOM_TYPE_INFO,
 } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
-import { createEventScreen, createWorkshopScreen } from './ui/roomscreens.js';
+import { createEventScreen, createShopScreen } from './ui/roomscreens.js';
 import { createMapScreen } from './ui/mapscreen.js';
 import { validateArenas } from './game/generator.js';
 import { createPreview } from './ui/preview.js';
@@ -137,7 +140,7 @@ async function init() {
   const hud = createHud(ctx);
   const upgradeScreen = createUpgradeScreen();
   const eventScreen = createEventScreen();
-  const workshopScreen = createWorkshopScreen();
+  const workshopScreen = createShopScreen();
   const preview = createPreview();
   const mapScreen = createMapScreen();
   const pause = createPause();
@@ -553,20 +556,52 @@ async function init() {
       });
     }
 
-    // Werkstatt-Raum (Phase 4).
+    // Shop-Raum (Phase 4 als Werkstatt gebaut, Phase 13 zum Shop erweitert).
     if (run.phase === 'workshop' && !workshopShown) {
       workshopShown = true;
       const costs = run.data.balance.scrap.cost;
       const refund = run.data.balance.scrap.dropRefund;
       workshopScreen.show({
         upgradesData,
-        shieldCost: costs.shieldCharge,
+        secondariesData: tanksData.secondaries,
+        costs,
         dropRefund: refund,
         getScrap: () => run.scrap,
         getUpgrades: () => run.upgrades,
+        getOffers: () => run.shopOffers,
+        getEquippedSecondary: () => run.equippedSecondary,
+        lifeBought: () => run.shopLifeBought,
+        onBuyCard: (idx) => {
+          const offer = run.shopOffers[idx];
+          const ok = buyShopCard(run, idx);
+          if (ok) {
+            telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shopCard', amount: costs.shopCard });
+            // Gekaufte Karte wie eine gewaehlte protokollieren (ohne
+            // abgelehnte Alternativen -- im Shop lehnt man nichts ab).
+            telemetry.recordUpgrade({
+              chosen: { id: offer.fallback ? null : offer.id, name: offer.name, tag: offer.tag, rarity: offer.rarity },
+              rejected: [],
+            });
+            updateSecondaryLabel(); // Sekundärkarten wechseln die Waffe
+          }
+          return ok;
+        },
         onBuyShield: () => {
           const ok = buyShieldCharge(run);
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shieldCharge', amount: costs.shieldCharge });
+          return ok;
+        },
+        onBuySecondary: (id) => {
+          const ok = buyShopSecondary(run, id);
+          if (ok) {
+            telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shopSecondary', amount: costs.shopSecondary });
+            updateSecondaryLabel();
+          }
+          return ok;
+        },
+        onBuyLife: () => {
+          const ok = buyShopLife(run);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shopLife', amount: costs.shopLife });
           return ok;
         },
         onDrop: (id) => {

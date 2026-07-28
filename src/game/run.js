@@ -25,7 +25,7 @@ export const ROOM_TYPE_INFO = {
   combat: { name: 'Kampf', symbol: '⚔️', desc: 'Ein normaler Gefechtsraum.' },
   elite: { name: 'Elite', symbol: '★', desc: 'Härtere Gegner mit Affix · doppelter Schrott · Elite-Belohnung.' },
   treasure: { name: 'Schatz', symbol: '💎', desc: 'Keine Gegner · 1 Legendär — kostet 1 Leben.' },
-  workshop: { name: 'Werkstatt', symbol: '🔧', desc: 'Keine Gegner · Schrott ausgeben · Upgrade ablegen.' },
+  workshop: { name: 'Shop', symbol: '🛒', desc: 'Keine Gegner · Karten, Schild, Sekundärwaffe, Leben kaufen · Upgrade ablegen.' },
   event: { name: 'Ereignis', symbol: '❓', desc: 'Keine Gegner · eine Entscheidung.' },
   cursed: { name: 'Verflucht', symbol: '☠️', desc: 'Gegner mit zusätzlichem Affix · garantiertes Legendär.' },
 };
@@ -403,6 +403,16 @@ function startNonCombatRoom(run, type) {
     run.pendingOffers = rollReward(run);
     run.phase = 'upgrade';
   } else if (type === 'workshop') {
+    // Shop (Phase 13): Kartenregal EINMAL beim Betreten ziehen, damit es
+    // sich beim Neu-Rendern nach jeder Aktion nicht neu mischt. Beim
+    // Fortsetzen entsteht dasselbe Regal automatisch neu (gleicher Seed +
+    // gleiche Raumnummer -> gleicher `upgrades`-Strom), deshalb steht es
+    // NICHT im runSnapshot -- selbes Prinzip wie roomModifier in Phase 10.
+    run.shopOffers = rollFromPool(run.upgradesData, {
+      ...poolOpts(run),
+      count: run.data.balance.shop?.cardChoices ?? 5,
+    });
+    run.shopLifeBought = false; // "Leben: einmal pro Shop"
     run.phase = 'workshop';
   } else if (type === 'event') {
     const evs = run.data.events.events;
@@ -524,6 +534,8 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     scrapThisRoom: 0, // im aktuellen Raum verdienter Schrott (Telemetrie)
     bannedUpgrades: new Set(), // im Run verbannte Upgrade-ids (nicht persistent)
     pendingOffers: null,
+    shopOffers: null, // Phase 13: Kartenregal des aktuellen Shops
+    shopLifeBought: false, // Phase 13: Leben nur einmal pro Shop-Besuch
     // --- Phase 4: Raumtypen + Tuerwahl ---
     // --- Phase 5: Transformationen ---
     tagCounts: {}, // {tag: Anzahl gewaehlter Upgrades} -- Stacks zaehlen einzeln
@@ -852,11 +864,59 @@ export function buyShieldCharge(run) {
   return true;
 }
 
-// Auswahl anwenden und den Run fortsetzen.
-export function chooseUpgrade(run, index) {
-  if (run.phase !== 'upgrade' || !run.pendingOffers) return;
-  const offer = run.pendingOffers[index];
-  if (!offer) return;
+// --- Phase-13-Shop-Aktionen (nur waehrend phase 'workshop') --------------
+// Alle geben true zurueck, wenn tatsaechlich ausgefuehrt. Anders als der
+// Upgrade-Screen schliesst KEINE davon den Raum -- man bleibt im Shop, bis
+// leaveWorkshop() gedrueckt wird.
+
+// Karte aus dem Regal kaufen. Die Karte wirkt exakt wie eine im
+// Upgrade-Screen gewaehlte (gemeinsames applyUpgradeChoice), verschwindet
+// danach aber nur aus dem Regal, statt den Raum zu beenden.
+export function buyShopCard(run, index) {
+  if (run.phase !== 'workshop' || !run.shopOffers) return false;
+  const offer = run.shopOffers[index];
+  if (!offer || offer.sold) return false;
+  const cost = run.data.balance.scrap.cost.shopCard;
+  if (run.scrap < cost) return false;
+  run.scrap -= cost;
+  offer.sold = true;
+  applyUpgradeChoice(run, offer);
+  return true;
+}
+
+// Sekundaerwaffe tauschen (setzt Phase 6 voraus). Der Eintrag in
+// run.upgrades wird mitgesetzt, damit dieselbe Waffe spaeter nicht noch
+// einmal als Karte im Pool auftaucht -- genau wie beim Kartenwechsel.
+export function buyShopSecondary(run, id) {
+  if (run.phase !== 'workshop') return false;
+  if (!run.data.secondaries || !run.data.secondaries[id]) return false;
+  if (id === run.equippedSecondary) return false; // schon ausgeruestet
+  const cost = run.data.balance.scrap.cost.shopSecondary;
+  if (run.scrap < cost) return false;
+  run.scrap -= cost;
+  run.equippedSecondary = id;
+  run.upgrades[id] = Math.max(1, run.upgrades[id] || 0);
+  return true;
+}
+
+// Leben kaufen: teuer und nur EINMAL pro Shop-Besuch (run.shopLifeBought
+// wird beim Betreten des Raums zurueckgesetzt).
+export function buyShopLife(run) {
+  if (run.phase !== 'workshop' || run.shopLifeBought) return false;
+  const cost = run.data.balance.scrap.cost.shopLife;
+  if (run.scrap < cost) return false;
+  run.scrap -= cost;
+  run.lives++;
+  run.shopLifeBought = true;
+  return true;
+}
+
+// Effekte EINER angenommenen Karte anwenden (Upgrade-Screen wie Shop).
+// Bewusst ohne Raumfluss/Kosten -- die Aufrufer entscheiden, was danach
+// passiert: chooseUpgrade() zieht weiter, buyShopCard() (Phase 13) bleibt
+// im Shop. So gibt es die Sonderfaelle (Sekundärslot, Glaskanone,
+// Notschild, Trophäe, Kriegsbeute) nur EINMAL im Code.
+function applyUpgradeChoice(run, offer) {
   if (offer.fallback) {
     run.lives++;
   } else {
@@ -887,9 +947,17 @@ export function chooseUpgrade(run, index) {
   if (!offer.fallback && offer.tag) {
     run.tagCounts[offer.tag] = (run.tagCounts[offer.tag] || 0) + 1;
   }
+}
+
+// Auswahl anwenden und den Run fortsetzen.
+export function chooseUpgrade(run, index) {
+  if (run.phase !== 'upgrade' || !run.pendingOffers) return;
+  const offer = run.pendingOffers[index];
+  if (!offer) return;
+  applyUpgradeChoice(run, offer);
   run.pendingOffers = null;
   run.rewardKind = null;
-  afterRoomDone(run); // Tuerwahl oder erzwungener Kampf
+  afterRoomDone(run); // Kartenwahl oder automatischer Weiterzug
 }
 
 // Transformations-Schalter (Phase 17). Bis dahin bewusst leer -- die

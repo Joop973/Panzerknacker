@@ -897,7 +897,7 @@ neue `src/ui/mapscreen.js` (Kartenanzeige + Knotenwahl), `src/core/rng.js`
   abgelehnte Wahl (Schatzkammer, zu wenig Leben) die nächste Option
   probiert statt in einer Endlosschleife zu bleiben.
 
-## Phase 13 — Shop
+## Phase 13 — Shop  ✅ erledigt
 **Aufwand:** 1 Session
 
 Schrott ausgeben für: Karte aus fünf kaufen, gewähltes Upgrade ablegen,
@@ -913,6 +913,44 @@ voraus) und Lebenskauf.
 **Betroffene Dateien:** `src/ui/roomscreens.js` (`createWorkshopScreen` um
 drei Aktionen erweitern oder zu `createShopScreen` umbenennen), `src/game/run.js`
 (neue Aktionen neben `buyShieldCharge`/`dropUpgrade`).
+
+**Umsetzungsfunde:**
+- **Nur die Oberfläche heißt jetzt "Shop", die interne Kennung bleibt
+  `workshop`.** Umbenannt wurden Screen-Titel, `ROOM_TYPE_INFO.workshop`
+  (Name/Symbol/Beschreibung) und die UI-Fabrik (`createWorkshopScreen` →
+  `createShopScreen`, importiert nur von `main.js`). Der Raumtyp-Schlüssel,
+  die Run-Phase (`run.phase === 'workshop'`) und `leaveWorkshop()` behalten
+  ihren Namen — ein Durchbenennen hätte `doors.weights`, gespeicherte
+  Zwischenstände (`roomType` im `runSnapshot`), den Telemetrie-Wert
+  `roomType` (dessen Bedeutungsänderung laut `telemetry.js` einen
+  `SCHEMA_VERSION`-Bump nach sich zöge) und acht Regressionstests berührt —
+  viel Migrationsrisiko für reine Vokabelkosmetik.
+- **Kein zweiter Karteneffekt-Pfad**: die Sonderfälle beim Annehmen einer
+  Karte (Sekundärslot-Wechsel, Glaskanone, Notschild, Trophäe, Kriegsbeute,
+  `tagCounts`) standen bisher inline in `chooseUpgrade()`. Sie sind jetzt in
+  `applyUpgradeChoice(run, offer)` extrahiert, das sich Upgrade-Screen und
+  Shop teilen — sonst hätte der Kartenkauf eine zweite, driftende Kopie
+  gebraucht. `chooseUpgrade()` ergänzt danach nur noch Raumfluss
+  (`afterRoomDone`), `buyShopCard()` nur die Schrottkosten.
+- **Kartenregal wird EINMAL beim Betreten gezogen** (`startNonCombatRoom()`),
+  nicht bei jedem Rendern — der Screen rendert nach jeder Aktion neu, ein
+  Ziehen im Renderpfad würde das Regal jedes Mal neu mischen. Es steht
+  bewusst NICHT im `runSnapshot()`: Seed + Raumnummer erzeugen denselben
+  `upgrades`-Strom, das Regal entsteht beim Fortsetzen identisch neu
+  (gleiches Prinzip wie `roomModifier` in Phase 10, per Test verifiziert).
+- **Mehrfachkauf erlaubt**: gekaufte Karten werden als `sold` markiert
+  statt aus dem Regal entfernt (stabile Slot-Positionen beim Neu-Rendern);
+  wer genug Schrott hat, kann alle fünf kaufen. "Karte aus fünf kaufen"
+  ist damit ein Regal, kein Einmal-Angebot.
+- **`buyShopSecondary()` setzt zusätzlich `run.upgrades[id] = 1`**, damit
+  die gekaufte Waffe später nicht noch einmal als Karte aus dem Pool
+  gezogen wird — dieselbe Wirkung wie beim Kartenwechsel in Phase 6.
+- **Der Lebenskauf ist die einzige Shop-Aktion mit Besuchs-Gedächtnis**
+  (`run.shopLifeBought`, zurückgesetzt beim Betreten) — alle anderen
+  Aktionen sind allein durch den Schrottvorrat begrenzt.
+- Der Shop hat als einziges Overlay mehr Inhalt als eine Bildschirmhöhe:
+  `#workshop` bekommt `overflow-y: auto` + `justify-content: flex-start`
+  (Muster wie der Kartenscreen aus Phase 12).
 
 ## Phase 14 — Bosse
 **Aufwand:** 2–3 Sessions
