@@ -62,14 +62,20 @@
     "supportBudget": 12
   },
   "doors": {
-    "firstDoorRoom": 4,
     "weights": {
       "combat": 42,
       "elite": 16,
       "treasure": 12,
       "workshop": 14,
-      "event": 16
+      "event": 16,
+      "cursed": 10
     }
+  },
+  "map": {
+    "forcedCombatLayers": 2,
+    "minNodesPerLayer": 2,
+    "maxNodesPerLayer": 3,
+    "extraEdgeChance": 0.4
   },
   "elite": {
     "budgetMult": 1.6,

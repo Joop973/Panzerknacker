@@ -32,7 +32,8 @@ Der Nutzer schreibt Deutsch → **immer auf Deutsch antworten.**
 
 ## Aktueller Stand (Stand: 2026-07)
 Spielbar und deterministisch; PWA/Offline; Touch + Desktop + Gamepad;
-39 Upgrades, 5 Raumtypen, Schrott-Währung. Maßgeblich ist **`PLAN.md` v2**
+39 Upgrades, 6 Raumtypen, Schrott-Währung, sichtbare Roguelike-Karte statt
+unsichtbarer Raumtyp-Automatik. Maßgeblich ist **`PLAN.md` v2**
 (ersetzt v1 vollständig). Erledigt: **Phase 0** (Eingabe/Ziellinie/RNG/Arena-
 Weiche) und **Phase 1** (Telemetrie v2, Lesbarkeit, Run-Speicherung).
 v2-**Phase 2** (Upgrade-Schema) und **Phase 3** (Schrott) sind inhaltlich schon
@@ -48,14 +49,16 @@ Fahr-/Turmfunktionen), **Phase 9** (Elite-Affixe, Wellen, additive
 Elite-Belohnung), **Phase 10** (Raum-Modifikatoren: 9 Effekte aus
 `data/modifiers.json`, ab Raum 3 einer pro Kampf-/Eliteraum), **Phase 11**
 (Zerstörbare Wände: ein Anteil innerer Wände pro Raum hält 3 Treffer aus,
-bevor sie fallen) und **Phase 11b** (Performance-Budget: feste Obergrenzen
+bevor sie fallen), **Phase 11b** (Performance-Budget: feste Obergrenzen
 aus `data/limits.json` + `balance.json`, im F1-Debug-Overlay sichtbar
-zusammen mit Logik-/Render-Frame-Zeit) sind gebaut. `PLAN.md` wurde auf
-**v3** konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte
-`beutepanzer`, doppelt gebautes Affix-System, falscher `eliteBonus`-
-Feldname) entfernt, jede offene Phase bekommt jetzt eine "Betroffene
-Dateien"-Zeile. **Nächste Phase: Phase 12 — Roguelike-Karte** (Stufe 3:
-Struktur). Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
+zusammen mit Logik-/Render-Frame-Zeit) und **Phase 12** (Roguelike-Karte:
+sichtbarer, wählbarer Kartengraph ersetzt die unsichtbare Raumtyp-Automatik,
+neuer Raumtyp `cursed`) sind gebaut. `PLAN.md` wurde auf **v3**
+konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`,
+doppelt gebautes Affix-System, falscher `eliteBonus`-Feldname) entfernt,
+jede offene Phase bekommt jetzt eine "Betroffene Dateien"-Zeile.
+**Nächste Phase: Phase 13 — Shop** (Stufe 3: Struktur). Frühere Merges
+(PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
 
@@ -517,6 +520,46 @@ eine Quelle).
 - FPS-Zähler + `minFps` in der Telemetrie existierten schon seit Phase 1 —
   unverändert.
 
+### Phase 12 (Roguelike-Karte) — gemergt
+Ersetzt die unsichtbare Raumtyp-Automatik (`rollNextType()`) durch einen
+sichtbaren, wählbaren Kartengraphen. Die Raumlogik jedes Typs (`combat`/
+`elite`/`treasure`/`workshop`/`event`) ist unverändert — nur wie der
+nächste Raum bestimmt wird, ändert sich. Neuer Raumtyp: `cursed`.
+- **`run.js: generateMap(seed, diff)`** baut den Graphen EINMAL bei
+  `createRun()` (neuer Run-weiter RNG-Strom `rngForRun()` in `core/rng.js`,
+  Gegenstück zu `rngFor()` ohne Raumnummer) — Reihe 1+2 je ein erzwungener
+  `combat`-Knoten (`data/difficulty.json: map.forcedCombatLayers`), Reihen
+  3–15 mit 2–3 Knoten (Typ aus `doors.weights`, jetzt inkl. `cursed`),
+  letzte Reihe ein Boss-Knoten. `connectLayers()` verbindet 1-Knoten-Reihen
+  mit ALLEN Nachbarn (Fächer, deckt auch "Zusammenläufe" vor dem Boss ab),
+  sonst je Knoten eine Hauptkante + 40 % Chance auf eine Nebenkante, dann
+  ein Nachreich-Pass gegen isolierte Zielknoten.
+- **Sicherheitsnetz gegen Schatzkammer-Sackgassen**: führen alle Kanten
+  eines Knotens zufällig nur zu `treasure` (bei ≤1 Leben nicht wählbar),
+  färbt `generateMap()` die erste Alternative auf `combat` um — sonst wäre
+  der Pfad dort blockierbar (fiel bei der 40-Seed-Gewinnbarkeitsprobe auf).
+- **`chooseMapNode(run, nodeId)`** validiert Erreichbarkeit (`current.next`)
+  + die alte Lebenregel für `treasure`; `afterRoomDone()` zeigt den
+  Kartenscreen nur bei echter Verzweigung (`next.length > 1`), sonst
+  automatischer Weiterzug wie der alte "erzwungene Kampf".
+- **`cursed`** erzwingt über einen neuen dritten Parameter
+  `rollEliteAffixes(run, enemyTypes, forceCount)` IMMER genau 1 Affix
+  (bypasst `affixRules`s Raumstaffelung bewusst) und teilt sich sonst exakt
+  den `treasure`-Belohnungszweig (nur Legendaries) — aber ohne dessen
+  Lebenspreis.
+- **`prevRoomType`** komplett entfernt: seine einzige Aufgabe (kein
+  `event`/`workshop` zweimal hintereinander) lässt sich auf einem
+  verzweigten Graphen nicht mehr sauber durchsetzen und wurde bewusst
+  fallengelassen. `doors.firstDoorRoom` (4) ist durch `map
+  .forcedCombatLayers` (2, PLAN.md: "Raum 1–2 immer combat") ersetzt.
+- **`src/ui/mapscreen.js`** (neu): Knoten als Buttons (`ROOM_TYPE_INFO` aus
+  `run.js` wiederverwendet, lag seit dem Türwahl-Rückbau ungenutzt im
+  Code), Kanten als `<svg>`-Linien nach `offsetLeft`/`offsetTop` gezeichnet.
+  Erreichbare Knoten hell + klickbar, aktueller Knoten grün, gesperrte
+  Schatzkammern rot + deaktiviert, der Rest sichtbar, aber gedimmt.
+- `mapCurrentId` (nicht der ganze Graph) landet in `runSnapshot()` — der
+  Graph selbst ist aus Seed + `createRun()` deterministisch reproduzierbar.
+
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
   `tag`, `rarity` (`common`/`rare`/`legendary`), `maxStacks`, `requires`,
@@ -645,6 +688,9 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   requires, minRoom; Phase 4: includeTag/onlyRarity/bypassRoomGate/
   ignoreTagRule für Elite-/Treasure-Belohnungen); von `run.js` genutzt.
 - `src/ui/roomscreens.js` — Event- und Werkstatt-Overlays.
+- `src/ui/mapscreen.js` — Kartenscreen (Phase 12): zeigt den ganzen
+  Kartengraphen, klickbar nur die von der aktuellen Position erreichbaren
+  Knoten der nächsten Reihe.
 - `src/render/renderer.js` — zeichnet alles (interpoliert). Nutzt Sprites,
   fällt auf prozedurale Formen zurück, falls Grafik fehlt/lädt.
 - `src/render/sprites.js` — lädt die PNG-Sprites (async, mit Fallback).

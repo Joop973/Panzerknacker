@@ -22,9 +22,12 @@ import {
   dropUpgrade,
   leaveWorkshop,
   chooseEventOption,
+  chooseMapNode,
+  ROOM_TYPE_INFO,
 } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
 import { createEventScreen, createWorkshopScreen } from './ui/roomscreens.js';
+import { createMapScreen } from './ui/mapscreen.js';
 import { validateArenas } from './game/generator.js';
 import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
@@ -136,6 +139,7 @@ async function init() {
   const eventScreen = createEventScreen();
   const workshopScreen = createWorkshopScreen();
   const preview = createPreview();
+  const mapScreen = createMapScreen();
   const pause = createPause();
   const tutorial = createTutorial(getFlag('tutorial_seen'));
 
@@ -144,6 +148,7 @@ async function init() {
   let upgradeShown = false;
   let eventShown = false;
   let workshopShown = false;
+  let mapShown = false;
   let previewShown = false;
   let toast = null;
   let lastSeed = 0;
@@ -324,10 +329,12 @@ async function init() {
     preview.hide();
     eventScreen.hide();
     workshopScreen.hide();
+    mapScreen.hide();
     upgradeShown = false;
     previewShown = false;
     eventShown = false;
     workshopShown = false;
+    mapShown = false;
   }
 
   // Sekundärslot (Phase 6): Touch-Button-Beschriftung der aktiven
@@ -475,13 +482,22 @@ async function init() {
       upgradeScreen.show({
         costs,
         showActions: kind === 'normal' || kind == null,
-        title: kind === 'elite' ? 'Elite-Beute' : kind === 'treasure' ? 'Schatzkammer' : 'Upgrade wählen',
+        title:
+          kind === 'elite'
+            ? 'Elite-Beute'
+            : kind === 'treasure'
+              ? 'Schatzkammer'
+              : kind === 'cursed'
+                ? 'Verfluchte Beute'
+                : 'Upgrade wählen',
         subtitle:
           kind === 'elite'
             ? 'Wähle eine Elite-Karte.'
             : kind === 'treasure'
               ? 'Ein garantiertes Legendär (Betreten kostete 1 Leben).'
-              : null,
+              : kind === 'cursed'
+                ? 'Ein garantiertes Legendär (Gegner hatten einen zusätzlichen Affix).'
+                : null,
         getOffers: () => run.pendingOffers,
         getScrap: () => run.scrap,
         canFourth: () => run.pendingOffers.length < 4,
@@ -565,6 +581,23 @@ async function init() {
       });
     }
 
+    // Kartenscreen (Phase 12): nur bei echter Verzweigung; sonst zieht
+    // run.js automatisch weiter (kein Overlay dazwischen, wie der
+    // "erzwungene Kampf" vor Phase 12).
+    if (run.phase === 'map' && !mapShown) {
+      mapShown = true;
+      mapScreen.show({
+        map: run.map,
+        currentId: run.mapCurrentId,
+        lives: run.lives,
+        treasureLifeCost: run.difficulty.treasure.lifeCost,
+        typeInfo: ROOM_TYPE_INFO,
+        onChoose: (nodeId) => {
+          if (chooseMapNode(run, nodeId)) mapShown = false;
+        },
+      });
+    }
+
     // Raumvorschau: Gegnerliste + "Weiter"-Button.
     if (run.phase === 'preview' && !previewShown) {
       previewShown = true;
@@ -577,11 +610,12 @@ async function init() {
       const baseTitle = run.endless
         ? `Endlos-Raum ${run.roomIndex}`
         : `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`;
+      const affixSuffix = { elite: ' ★ ELITE', cursed: ' ☠️ VERFLUCHT' }[run.roomType];
       preview.show(
         {
-          title: run.roomType === 'elite' ? `${baseTitle} ★ ELITE` : baseTitle,
+          title: affixSuffix ? `${baseTitle}${affixSuffix}` : baseTitle,
           character:
-            run.roomType === 'elite' && run.roomAffix
+            (run.roomType === 'elite' || run.roomType === 'cursed') && run.roomAffix
               ? `${run.roomCharacter} · Affix: ${run.roomAffix}`
               : run.roomCharacter,
           upgradesLine: ups ? `Deine Upgrades: ${ups}` : null,
