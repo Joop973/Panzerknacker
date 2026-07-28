@@ -90,6 +90,10 @@
     "secondWaveAtFraction": 0.5,
     "warningS": 1.0
   },
+  "destructibleWalls": {
+    "hits": 3,
+    "share": 0.25
+  },
   "treasure": {
     "lifeCost": 1
   },

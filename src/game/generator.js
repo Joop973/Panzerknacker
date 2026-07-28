@@ -80,8 +80,34 @@ function placeReflectWalls(grid, rng, count) {
   }
 }
 
+// Zerstoerbare Waende (Phase 11): markiert einen Anteil der INNEREN
+// soliden Zellen (kein Aussenrand -- der bleibt immer geschlossen) als
+// eigenes Zeichen 'd'. Physisch identisch zu '#' (blockiert, keine
+// Sichtlinie), bis state.js sie ueber destroyWall() abbaut. Der
+// Gesamt-Wandanteil aendert sich dadurch NICHT (nur Umetikettierung
+// vorhandener solid-Zellen), die Reihenfolge relativ zu wallShare() ist
+// also egal.
+function placeDestructibleWalls(grid, rng, cfg) {
+  if (!cfg || !cfg.share) return;
+  const candidates = [];
+  for (let r = 1; r < ROWS - 1; r++) {
+    for (let c = 1; c < COLS - 1; c++) {
+      if (grid[r][c] === '#') candidates.push([c, r]);
+    }
+  }
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const n = Math.round(candidates.length * cfg.share);
+  for (let i = 0; i < n; i++) {
+    const [c, r] = candidates[i];
+    grid[r][c] = 'd';
+  }
+}
+
 // Baut das 24x16-Rohlayout aus 3x2 zufaelligen Kacheln.
-function buildGrid(tilesData, rng, weights) {
+function buildGrid(tilesData, rng, weights, destructibleWalls) {
   const grid = Array.from({ length: ROWS }, () => new Array(COLS).fill('.'));
   for (let ty = 0; ty < 2; ty++) {
     for (let tx = 0; tx < 3; tx++) {
@@ -109,6 +135,7 @@ function buildGrid(tilesData, rng, weights) {
   const span = mirrorCfg.maxPerRoom - mirrorCfg.minPerRoom;
   const count = mirrorCfg.minPerRoom + Math.floor(rng() * (span + 1));
   placeReflectWalls(grid, rng, count);
+  placeDestructibleWalls(grid, rng, destructibleWalls);
   return grid;
 }
 
@@ -142,9 +169,10 @@ function reachableCells(grid, startC, startR) {
   return seen;
 }
 
-// Sichtlinie zwischen zwei Zellzentren; '#', 'b' und 'r' (Spiegelwand,
-// Phase 5) blockieren (Geschosse fliegen ueber 'o' hinweg, also blockiert
-// 'o' NICHT).
+// Sichtlinie zwischen zwei Zellzentren; '#', 'b', 'r' (Spiegelwand,
+// Phase 5) und 'd' (zerstoerbare Wand, Phase 11 -- bis zur Zerstoerung
+// physisch eine normale Wand) blockieren (Geschosse fliegen ueber 'o'
+// hinweg, also blockiert 'o' NICHT).
 function hasLos(grid, c0, r0, c1, r1) {
   const x0 = c0 * CELL + CELL / 2;
   const y0 = r0 * CELL + CELL / 2;
@@ -156,7 +184,7 @@ function hasLos(grid, c0, r0, c1, r1) {
     const x = x0 + ((x1 - x0) * i) / steps;
     const y = y0 + ((y1 - y0) * i) / steps;
     const cell = grid[Math.floor(y / CELL)][Math.floor(x / CELL)];
-    if (cell === '#' || cell === 'b' || cell === 'r') return false;
+    if (cell === '#' || cell === 'b' || cell === 'r' || cell === 'd') return false;
   }
   return true;
 }
@@ -316,12 +344,12 @@ export function buildArenaRoom(arenasData, name, enemyCount) {
 
 // Hauptfunktion: generiert einen validierten Raum -- oder laedt ein festes
 // Layout, wenn das Raumspec `fixedLayout` setzt (Weiche, Phase 0b).
-export function generateRoom(tilesData, rng, enemyCount, weights, spec, arenasData) {
+export function generateRoom(tilesData, rng, enemyCount, weights, spec, arenasData, destructibleWalls) {
   if (spec && spec.fixedLayout) {
     return buildArenaRoom(arenasData, spec.fixedLayout, enemyCount);
   }
   for (let attempt = 0; attempt < MAX_TRIES; attempt++) {
-    const grid = buildGrid(tilesData, rng, weights);
+    const grid = buildGrid(tilesData, rng, weights, destructibleWalls);
     const share = wallShare(grid);
     if (share < WALL_MIN || share > WALL_MAX) continue;
     const spawns = placeSpawns(grid, rng, enemyCount);

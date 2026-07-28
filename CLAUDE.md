@@ -45,15 +45,16 @@ Sekundärwaffen), **Phase 7** (Geisterpanzer: getötete Gegner kämpfen kurz
 als durchscheinender Verbündeter weiter), **Phase 8** (Gegner-Rollen statt
 Gegner-Typen: vier datengetriebene Rollen statt neun eigener
 Fahr-/Turmfunktionen), **Phase 9** (Elite-Affixe, Wellen, additive
-Elite-Belohnung) und **Phase 10** (Raum-Modifikatoren: 9 Effekte aus
-`data/modifiers.json`, ab Raum 3 einer pro Kampf-/Eliteraum) sind gebaut.
-`PLAN.md` wurde auf **v3** konsistenzgeprüft: tote Verweise (u. a. gelöschte
-Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
-`eliteBonus`-Feldname) entfernt, jede offene Phase bekommt jetzt eine
-"Betroffene Dateien"-Zeile. **Nächste Phase: Phase 11 — Zerstörbare Wände.**
-Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes Handy-Vollbild
-(`100dvh` + `viewport-fit=cover`), Grafik-Sprites + App-Icon, diese
-`CLAUDE.md`.
+Elite-Belohnung), **Phase 10** (Raum-Modifikatoren: 9 Effekte aus
+`data/modifiers.json`, ab Raum 3 einer pro Kampf-/Eliteraum) und **Phase 11**
+(Zerstörbare Wände: ein Anteil innerer Wände pro Raum hält 3 Treffer aus,
+bevor sie fallen) sind gebaut. `PLAN.md` wurde auf **v3** konsistenzgeprüft:
+tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`, doppelt gebautes
+Affix-System, falscher `eliteBonus`-Feldname) entfernt, jede offene Phase
+bekommt jetzt eine "Betroffene Dateien"-Zeile. **Nächste Phase: Phase 11b —
+Performance-Budget.** Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix,
+echtes Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
+App-Icon, diese `CLAUDE.md`.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -444,6 +445,44 @@ Raumnummer erzeugen ihn beim Fortsetzen deterministisch neu.
 - Telemetrie-Feld `modifier` war seit Phase 3 als Platzhalter in
   `telemetry.js: recordRoom()` vorbereitet — `main.js` befüllt es jetzt
   (`teleModifier`, gleiches Muster wie `teleGhosts`).
+
+### Phase 11 (Zerstörbare Wände) — gemergt
+Neu: **`data/difficulty.json: destructibleWalls`** (`hits: 3`, `share:
+0.25`). `generator.js: placeDestructibleWalls()` markiert nach
+`placeReflectWalls()` in `buildGrid()` einen Anteil der INNEREN soliden
+Zellen mit einem neuen Grid-Zeichen `'d'` (Aussenrand bleibt immer `'#'`).
+- **`'d'` ist physisch identisch zu `solid`**: `state.js: isSolid()` und
+  `generator.js: hasLos()` behandeln es genauso wie `'#'` — nur `buildWalls()`
+  gibt dem Wandobjekt `type: 'destructible'` + `destructibleHits` mit, damit
+  `bullet.js`/`mine.js` es gezielt ansprechen können, ohne jede normale Wand
+  beschiessbar zu machen.
+- **Kein zweiter Flood-Fill-Check nötig**: Die bestehende Erreichbarkeits-
+  prüfung beim Raumbau (`placeSpawns()`) gilt bereits für den Zustand "alle
+  zerstörbaren Wände intakt" (das ist ja physisch eine normale Wand). Da
+  Zerstören eine Zelle immer nur in Boden verwandelt, kann die erreichbare
+  Fläche dadurch nur gleich bleiben oder wachsen, nie schrumpfen — verifiziert
+  in `phase11walls.mjs` (Fläche nach Abbau ALLER zerstörbaren Wände eines
+  Raums ist immer ≥ vorher).
+- **`state.destroyWall()` generalisiert** (schon für Baumeister-Transformation
+  und Sperrmauer gebaut): liest die Haltbarkeit jetzt über
+  `wall.customDurability || wall.destructibleHits || state.transform
+  .wallDurability || 1` — kein drittes Parallelsystem.
+- **Kugel UND Explosion zählen gleich** als ein Treffer: `bullet.js:
+  moveAxis()` ruft bei `type === 'destructible'` `destroyWall()` auf und
+  fällt (wie die Sperrmauer) in die generische Bounce-Behandlung durch —
+  die Wand steht also noch und reflektiert normal, bis der letzte Treffer
+  sie entfernt. `mine.js: explodeAt()` behandelt `destructible` genau wie
+  `breakable` (ein `destroyWall()`-Aufruf pro Explosion, keine Sonderregel
+  für mehr Schaden).
+- **`run.js: buildCombatRoom()`** reicht `difficulty.destructibleWalls` als
+  neuen `createState()`-Opt durch (Muster wie `modifier`/`eliteAffixes` aus
+  Phase 9/10) — kein `isFinal`-Sonderfall nötig, `generateRoom()`s
+  `fixedLayout`-Zweig und `buildFixedRoom()` für den Finalraum ignorieren
+  den Parameter ohnehin (kein `buildGrid()`-Aufruf, keine `'d'`-Zellen).
+- **Darstellung** (`renderer.js: drawWalls()`): eigener Riss-Overlay wie bei
+  der Sperrmauer, aber schon unbeschädigt schwach sichtbar (kein
+  `frac === 1`-Unsichtbarkeitsfall) — sonst wäre die Mechanik unentdeckbar,
+  weil zerstörbare Wände sonst aussehen wie normale.
 
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,

@@ -211,6 +211,10 @@ function buildCombatRoom(run, type, isFinal) {
     waveCfg: waveSplit != null ? wavesCfg : null,
     eliteAffixes,
     modifier,
+    // Zerstoerbare Waende (Phase 11): wird nur vom prozeduralen Generator
+    // ausgewertet (generateRoom()s fixedLayout-/buildFixedRoom()-Zweige
+    // ignorieren den Parameter einfach) -- daher ohne isFinal-Sonderfall.
+    destructibleWalls: diff.destructibleWalls,
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.

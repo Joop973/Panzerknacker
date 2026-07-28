@@ -59,7 +59,9 @@ export function explodeAt(state, x, y, R, spare, meta) {
   }
 
   for (const wall of [...state.walls]) {
-    if (wall.type === 'breakable' && circleOverlapsAABB(x, y, R, wall)) {
+    // Zerstoerbare Waende (Phase 11) nehmen wie Kugeln einen Treffer --
+    // dieselbe destroyWall()-Haltbarkeit, keine Extra-Regel fuer Explosionen.
+    if ((wall.type === 'breakable' || wall.type === 'destructible') && circleOverlapsAABB(x, y, R, wall)) {
       state.destroyWall(wall);
     }
   }
