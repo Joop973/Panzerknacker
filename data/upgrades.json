@@ -126,6 +126,29 @@
       "minRoom": 3,
       "spreadRad": 0.09
     },
+    "feuerleitzentrale": {
+      "id": "feuerleitzentrale",
+      "name": "Feuerleitzentrale",
+      "description": "Verengt den Spreizwinkel des Doppelrohrs — beide Kugeln treffen dichter beieinander",
+      "tag": "scaling",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": ["doppelrohr"],
+      "minRoom": 5,
+      "spreadMult": 0.65
+    },
+    "flak": {
+      "id": "flak",
+      "name": "Flak",
+      "description": "Jeder Schuss ist eine Flakgranate: platzt schon nach kurzer Reichweite in der Luft und beschädigt alles im Radius",
+      "tag": "weapon",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 3,
+      "burstRangePx": 220,
+      "radiusPx": 50
+    },
     "radar": {
       "id": "radar",
       "name": "Radar",
@@ -135,6 +158,28 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1
+    },
+    "ballistikrechner": {
+      "id": "ballistikrechner",
+      "name": "Ballistikrechner",
+      "description": "Ziellinie zeigt zwei Abpraller vorher statt nur einem",
+      "tag": "information",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "previewBounces": 2
+    },
+    "pluenderer": {
+      "id": "pluenderer",
+      "name": "Plünderer",
+      "description": "+1 Schrott pro geräumtem Raum",
+      "tag": "resource",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "scrapPerLevel": 1
     },
     "sprengmunition": {
       "id": "sprengmunition",

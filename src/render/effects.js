@@ -209,11 +209,21 @@ export function drawAimLine(ctx, state, trace) {
   const muzzle = p.cfg.radius + 8;
   const x = p.x + Math.cos(p.turret) * muzzle;
   const y = p.y + Math.sin(p.turret) * muzzle;
-  const pts = trace(state, x, y, p.turret, p.cfg);
+  // Ballistikrechner-Upgrade (Phase 18): zeigt zwei Abpraller vorher statt
+  // nur einem -- braucht neben dem groesseren Abpraller-Budget auch ein
+  // laengeres Vorschau-Fenster, sonst reicht das kurze Standard-Tail nie
+  // bis zum zweiten Wandkontakt.
+  const maxBounces = p.cfg.aimPreviewBounces || 1;
+  const pts = trace(state, x, y, p.turret, p.cfg, {
+    maxBounces,
+    tailSteps: maxBounces > 1 ? 90 : 45,
+  });
   if (pts.length < 2) return;
-  // Index des ersten Abprallers (danach duenner + blasser zeichnen).
-  let bounceAt = pts.findIndex((pt) => pt.bounce);
-  if (bounceAt < 0) bounceAt = pts.length - 1;
+  // Indizes ALLER Abpraller in der Vorschau (mit Ballistikrechner bis zu
+  // zwei) -- jeder bekommt einen eigenen Markerpunkt.
+  const bounces = [];
+  for (let i = 1; i < pts.length; i++) if (pts[i].bounce) bounces.push(i);
+  const firstBounceAt = bounces.length ? bounces[0] : pts.length - 1;
 
   ctx.save();
   ctx.lineCap = 'round';
@@ -222,22 +232,25 @@ export function drawAimLine(ctx, state, trace) {
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.moveTo(pts[0].x, pts[0].y);
-  for (let i = 1; i <= bounceAt; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  for (let i = 1; i <= firstBounceAt; i++) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.stroke();
-  // Vorschau des ersten Abprallers.
-  if (bounceAt < pts.length - 1) {
+  // Vorschau nach dem ersten Abpraller (bei Ballistikrechner inkl. eines
+  // zweiten) als ein durchgehendes gestricheltes Segment.
+  if (firstBounceAt < pts.length - 1) {
     ctx.strokeStyle = 'rgba(200,225,255,0.2)';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
-    ctx.moveTo(pts[bounceAt].x, pts[bounceAt].y);
-    for (let i = bounceAt + 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.moveTo(pts[firstBounceAt].x, pts[firstBounceAt].y);
+    for (let i = firstBounceAt + 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.stroke();
     ctx.setLineDash([]);
-    // Aufprallpunkt markieren.
-    ctx.fillStyle = 'rgba(200,225,255,0.5)';
+  }
+  // Jeden Aufprallpunkt markieren.
+  ctx.fillStyle = 'rgba(200,225,255,0.5)';
+  for (const i of bounces) {
     ctx.beginPath();
-    ctx.arc(pts[bounceAt].x, pts[bounceAt].y, 2.5, 0, Math.PI * 2);
+    ctx.arc(pts[i].x, pts[i].y, 2.5, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();

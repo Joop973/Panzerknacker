@@ -7,7 +7,8 @@
 //  - Seltenheitsgewichte aus balance.json (rarity.common/rare/legendary).
 //  - Legendaries erst ab balance.legendary.minRoom (global).
 //  - Erreichte maxStacks / unerfuellte requires / zu frueher Raum -> raus.
-//  - Tags `weapon` und `elite` sind hier ausgeschlossen (spaetere Phasen).
+//  - Tags `weapon` und `elite` sind hier ausgeschlossen, bis auf die Karten
+//    in WEAPON_ALLOWLIST (Phase 18: doppelrohr, flak).
 //  - Verbannte ids (Phase 3, Schrott-Aktion) werden uebersprungen.
 //  - Reichen die gueltigen Karten nicht fuer N, wird mit stat-Fallback
 //    ("+1 Leben") aufgefuellt, statt zu crashen.
@@ -16,6 +17,12 @@
 // (run.genRng), damit derselbe Seed denselben Verlauf ergibt.
 
 const EXCLUDED_TAGS = new Set(['weapon', 'elite']);
+
+// Phase 18: der Tag `weapon` bleibt grundsaetzlich ausgeschlossen (jede
+// weitere Waffenkarte bekommt ihr eigenes Physikverhalten und wird bewusst
+// einzeln freigegeben statt den ganzen Tag zu oeffnen) -- diese beiden
+// Karten sind fertig gebaut und duerfen trotzdem erscheinen.
+const WEAPON_ALLOWLIST = new Set(['doppelrohr', 'flak']);
 
 // Diese 7 Karten wirken nur auf die Minen-Legemechanik (mine/emp_mine
 // teilen sich Zuend-/Ausloeselogik in mine.js) -- bei jeder anderen
@@ -83,7 +90,7 @@ function buildCandidates(upgradesData, opts) {
     const def = defs[id];
     if (includeTag) {
       if (def.tag !== includeTag) continue; // nur dieser Tag (bypass EXCLUDED)
-    } else if (EXCLUDED_TAGS.has(def.tag)) continue;
+    } else if (EXCLUDED_TAGS.has(def.tag) && !(def.tag === 'weapon' && WEAPON_ALLOWLIST.has(id))) continue;
     if (onlyRarity && def.rarity !== onlyRarity) continue;
     if (bannedSet.has(id)) continue;
     // Phase 6: Minen-spezifische Karten nur anbieten, solange mine/emp_mine

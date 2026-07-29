@@ -30,6 +30,7 @@ export function createBullet(
     phaseWalls,
     homing,
     friendly,
+    burstDistance,
   },
 ) {
   return {
@@ -49,6 +50,7 @@ export function createBullet(
     phaseWalls: phaseWalls || false, // Durchschlag-Upgrade
     homing: homing || 0, // Zielsucher: rad/s Lenkrate (0 = aus)
     friendly: friendly || false, // trifft den eigenen Besitzer NIE (Drohne/Splitter)
+    burstDistance: burstDistance || 0, // Flak (Phase 18): zuendet nach kurzer Reichweite in der Luft, unabhaengig von Wand-/Zielkontakt
     detonated: false,
     ricochetsLeft: ricochets,
     ricochetsStart: ricochets, // fuer "Abpraller-Kill"-Feedback
@@ -163,6 +165,7 @@ export function traceTrajectory(state, x, y, angle, cfg, opts = {}) {
     owner: null,
     kind: 'bullet',
     phaseWalls: cfg.phaseWalls || false,
+    burstDistance: cfg.burstRangePx || 0,
   });
   const shadow = { walls: state.walls, laserWalls: state.laserWalls, data: state.data, tanks: [] };
   const tailSteps = opts.tailSteps ?? 45; // Laenge des Abpraller-Segments
@@ -204,6 +207,14 @@ export function updateBullet(b, state, dt) {
   // Wegbudget (PLAN.md v2 E4): WEG statt Zeit -- ein doppelt so schneller
   // Powershot fliegt dadurch schneller, nicht weiter.
   b.distance += Math.hypot(b.x - sx, b.y - sy);
+  // Flak (Phase 18): eigenes Physikverhalten -- zuendet in der Luft nach
+  // einer viel kuerzeren Reichweite als das normale Wegbudget, unabhaengig
+  // von Wandkontakt oder Treffer. Der Aufruf explodiert ueber das normale
+  // "explosive"-Sterbe-Handling in state.js (b.dead + b.explosive).
+  if (b.burstDistance && b.distance >= b.burstDistance) {
+    b.dead = true;
+    return;
+  }
   if (b.distance >= state.data.balance.bullet.maxDistance) {
     b.dead = true;
     return;

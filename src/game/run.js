@@ -777,6 +777,10 @@ export function stepRun(run, cmd, dt) {
     const sc = run.data.balance.scrap;
     let earned = sc.perRoom[0] + Math.floor(run.rng.scrap() * (sc.perRoom[1] - sc.perRoom[0] + 1));
     if (run.roomType === 'elite') earned *= sc.eliteMult;
+    // Pluenderer-Upgrade (Phase 18, Tag resource): flacher Bonus NACH dem
+    // Elite-Multiplikator, wie die einmalige Kriegsbeute-Belohnung auch
+    // kein Vielfaches ist.
+    earned += st.player.cfg.scrapBonusPerRoom || 0;
     run.scrap += earned;
     run.scrapThisRoom += earned;
     // E2: Schildladungen altern pro geraeumtem Raum -- Transformation

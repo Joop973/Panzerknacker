@@ -246,6 +246,7 @@ export function fireBullet(tank, state) {
         explosionRadius: tank.cfg.shotExplosionRadius,
         phaseWalls: tank.cfg.phaseWalls || false,
         homing: tank.cfg.homing || 0,
+        burstDistance: tank.cfg.burstRangePx || 0,
       }),
     );
     // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.
