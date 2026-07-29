@@ -458,6 +458,90 @@ function check(ok, msg) {
   }
 }
 
+// ---- 8. Overlays schliessen sich nach der Aktion -----------------------
+// Vom Nutzer gemeldeter Blocker: nach dem Anklicken eines Kartenknotens blieb
+// das #map-Overlay ueber dem Spielfeld liegen und fing jede weitere Eingabe
+// ab -- der Run war nicht mehr bedienbar. Ursache: mapscreen.js war der
+// einzige der fuenf Screens, der sich im Click-Handler NICHT selbst versteckt
+// hat. Blinder Fleck: kein Test hatte die UI-Schicht je beruehrt.
+{
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { createMapScreen } = await import('../src/ui/mapscreen.js');
+    const ms = createMapScreen();
+    const nodes = [
+      { id: 10, layer: 1, col: 0, type: 'combat', isBoss: false, next: [20, 21] },
+      { id: 20, layer: 2, col: 0, type: 'combat', isBoss: false, next: [] },
+      { id: 21, layer: 2, col: 1, type: 'treasure', isBoss: false, next: [] },
+    ];
+    const map = { layers: [[nodes[0]], [nodes[1], nodes[2]]], byId: new Map(nodes.map((n) => [n.id, n])) };
+    const typeInfo = {
+      combat: { name: 'Kampf', symbol: 'X', desc: '' },
+      treasure: { name: 'Schatz', symbol: 'D', desc: '' },
+    };
+    const overlay = document.getElementById('map');
+    check(!!overlay, 'Kartenscreen legt kein #map-Overlay an');
+
+    // (a) Gueltige Wahl -> Overlay muss zu sein.
+    let chosen = null;
+    ms.show({ map, currentId: 10, lives: 3, treasureLifeCost: 1, typeInfo, onChoose: (id) => { chosen = id; return true; } });
+    check(!overlay.classList.contains('hidden'), 'Kartenscreen wird nicht sichtbar');
+    const reachable = overlay.querySelectorAll('button.mapnode.reachable');
+    check(reachable.length === 2, `Erwartet 2 erreichbare Knoten, gefunden ${reachable.length}`);
+    reachable[0].click();
+    check(chosen === 20, `onChoose wurde nicht mit der Knoten-id aufgerufen (chosen=${chosen})`);
+    check(
+      overlay.classList.contains('hidden'),
+      'BLOCKER: Kartenscreen bleibt nach der Knotenwahl offen und blockiert jede Eingabe',
+    );
+
+    // (b) Abgelehnte Wahl -> Overlay bleibt offen (sonst haengt der Run ohne
+    //     sichtbare Karte fest).
+    ms.show({ map, currentId: 10, lives: 3, treasureLifeCost: 1, typeInfo, onChoose: () => false });
+    overlay.querySelectorAll('button.mapnode.reachable')[0].click();
+    check(
+      !overlay.classList.contains('hidden'),
+      'Kartenscreen schließt sich auch bei abgelehnter Wahl -- der Run wäre ohne Karte blockiert',
+    );
+
+    // (c) Schatzkammer bei zu wenig Leben ist gesperrt UND nicht klickbar.
+    let clickedLocked = false;
+    ms.show({ map, currentId: 10, lives: 1, treasureLifeCost: 1, typeInfo, onChoose: () => { clickedLocked = true; return true; } });
+    const locked = overlay.querySelectorAll('button.mapnode.locked');
+    check(locked.length === 1, `Schatzkammer bei 1 Leben nicht als gesperrt markiert (${locked.length})`);
+    locked[0]?.click();
+    check(!clickedLocked, 'Gesperrte Schatzkammer löst trotzdem eine Wahl aus');
+  } finally {
+    restore();
+  }
+}
+
+// ---- 8b. Kein Kartenknoten kann in eine Sackgasse fuehren ---------------
+// Zweiter Blocker-Pfad derselben Klasse: `treasure` ist bei zu wenig Leben
+// nicht waehlbar (chooseMapNode). Fuehren ALLE Kanten eines Knotens nur zu
+// Schatzkammern, waere der Run bei 1 Leben unbedienbar -- der Kartenscreen
+// zeigte dann nur gesperrte Knoten. generateMap() hat dafuer ein
+// Sicherheitsnetz; das wird hier ueber viele Seeds nachgeprueft.
+{
+  const bad = [];
+  for (let seed = 1; seed <= 200; seed++) {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
+    for (const layer of run.map.layers) {
+      for (const node of layer) {
+        if (!node.next.length) continue;
+        if (node.next.every((id) => run.map.byId.get(id).type === 'treasure')) {
+          bad.push(`Seed ${seed}, Knoten ${node.id}`);
+        }
+      }
+    }
+  }
+  check(
+    bad.length === 0,
+    `Kartensackgasse: ${bad.length} Knoten führen ausschließlich zu Schatzkammern (${bad.slice(0, 3).join('; ')})`,
+  );
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;

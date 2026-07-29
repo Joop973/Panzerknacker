@@ -684,8 +684,12 @@ async function init() {
         lives: run.lives,
         treasureLifeCost: run.difficulty.treasure.lifeCost,
         typeInfo: ROOM_TYPE_INFO,
+        // Gibt zurueck, ob der Zug gueltig war -- der Kartenscreen schliesst
+        // sich nur dann selbst (siehe mapscreen.js).
         onChoose: (nodeId) => {
-          if (chooseMapNode(run, nodeId)) mapShown = false;
+          const ok = chooseMapNode(run, nodeId);
+          if (ok) mapShown = false;
+          return ok;
         },
       });
     }

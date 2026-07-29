@@ -77,7 +77,15 @@ export function createMapScreen() {
           if (isCurrent) btn.classList.add('current');
           if (isReachable && !lockedByLives) {
             btn.classList.add('reachable');
-            btn.addEventListener('click', () => onChoose(node.id));
+            btn.addEventListener('click', () => {
+              // Der Screen schliesst sich SELBST (Muster wie preview.js,
+              // upgradescreen.js und roomscreens.js). Fehlte das hier, blieb
+              // das Overlay nach der Knotenwahl ueber dem Spielfeld liegen
+              // und fing jede weitere Eingabe ab -- der Run war nicht mehr
+              // bedienbar. Nur bei gueltiger Wahl schliessen (onChoose gibt
+              // false zurueck, wenn run.js den Zug ablehnt).
+              if (onChoose(node.id) !== false) el.classList.add('hidden');
+            });
           } else {
             btn.classList.add('unreachable');
             if (isReachable && lockedByLives) btn.classList.add('locked');

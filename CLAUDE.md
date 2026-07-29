@@ -1110,6 +1110,34 @@ Kein neues Feature, sondern die nie durchgeführte Abnahme des Kernversprechens.
   deterministisch nachgemessen; fällt sie unter 60 %, wird die Suite rot.
   Gegenprobe bestanden (Garantie abgeschaltet → 32,9 %, Suite rot).
 
+### Bugfix: Kartenscreen blockierte den Run (Nutzer-Meldung) — gemergt
+**Symptom:** Einen Raum auf der Karte anklicken → „funktioniert nicht und
+ich kann nichts mehr machen."
+**Ursache:** `src/ui/mapscreen.js` war der EINZIGE der fünf Overlay-Screens,
+der sich im Click-Handler nicht selbst versteckt hat. `hide()` existierte,
+wurde aber nur von `hideRoomScreens()` (Run-Start/Menü) aufgerufen. Die
+Knotenwahl selbst lief korrekt durch — der neue Raum wurde gebaut und die
+Vorschau darunter eingeblendet —, aber das `#map`-Overlay blieb darüber
+liegen und fing jeden weiteren Klick ab. Zu Fuß nicht mehr auflösbar.
+**Fix:** `if (onChoose(node.id) !== false) el.classList.add('hidden')` —
+dasselbe Muster wie `preview.js`, `upgradescreen.js`, `roomscreens.js`.
+`main.js` gibt dafür jetzt den Rückgabewert von `chooseMapNode()` durch,
+damit ein (theoretisch) abgelehnter Zug das Overlay offen lässt statt den
+Run ohne sichtbare Karte hängen zu lassen.
+- **Der eigentliche Befund ist der blinde Fleck:** kein Test hatte die
+  UI-Schicht je berührt (dieselbe Lücke wie beim Ziellinien-Crash, wo der
+  Renderpfad ungetestet war). Neu: **`tests/domstub.mjs`** — ein minimales
+  DOM (~150 Zeilen, keine npm-Abhängigkeit, passt zur „kein Build-Schritt"-
+  Regel) mit Elementbaum, `classList`, `dataset`, Attributen,
+  `addEventListener`/`click` und den Layout-Feldern, die `mapscreen.js` zum
+  Kantenzeichnen liest. Die Suite prüft damit: Overlay schließt bei gültiger
+  Wahl, bleibt bei abgelehnter Wahl offen, gesperrte Schatzkammer löst keine
+  Wahl aus. Gegenprobe bestanden (Fix ausgebaut → Test meldet den Blocker).
+- Zusätzlich abgesichert: über 200 Seeds führt **kein** Kartenknoten
+  ausschließlich zu Schatzkammern — sonst wäre der Run bei 1 Leben ebenfalls
+  unbedienbar (das Sicherheitsnetz in `generateMap()` greift, war aber nie
+  über viele Seeds nachgeprüft).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1190,7 +1218,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v59`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v60`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -1231,6 +1259,9 @@ node tests/uspcheck.mjs 40           # USP-Kennzahl 1 messen (PLAN.md-Pruefpunkt
 ```
 Playwright-Browser liegt unter `/opt/pw-browsers/chromium`
 (`executablePath` setzen; NICHT `playwright install`).
-Regressions-Standard: `tests/regression.mjs` muss grün sein — 5 Seeds über
-16 Räume deterministisch bis zum Sieg, Ziellinien-Trace crashfrei,
-Wellen-Freigabe-Guard, Determinismus-Probe.
+Regressions-Standard: `tests/regression.mjs` muss grün sein (~1 s). Enthält:
+5 Seeds über 16 Räume deterministisch bis zum Sieg, Ziellinien-Trace
+crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
+`sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
+Effekt-Renderpfad mit Fake-Canvas, **Overlay-Verhalten mit
+`tests/domstub.mjs`** und der USP-Bankshot-Quote (≥ 60 %).
