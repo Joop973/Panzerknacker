@@ -10,6 +10,38 @@ sie wirklich betrifft. Ändert v2 inhaltlich nicht, sondern macht die noch
 offenen Phasen (5–18) direkt umsetzbar, ohne dass der Programmierer zuerst
 selbst den Code-Stand gegenprüfen muss.
 
+**Code-Review-Pass (2026-07, nach Phase 18 Welle 2):** Vollständige
+Durchsicht des Spielcodes. Zwei echte, dabei gefundene und **behobene**
+Fehler:
+
+1. **Ziellinien-Crash an Spezialwänden** (Phasen-Wechselwirkung 0a×11×6×14):
+   `traceTrajectory()` traced mit einem Schatten-State ohne `destroyWall()`,
+   aber `moveAxis()` rief `state.destroyWall(wall)` für Sperrmauer- und
+   zerstörbare Wände (und Generator-Wände nach einem Abpraller) hart auf.
+   Zeigte die Ziellinie auf eine solche Wand — seit Phase 11 in praktisch
+   jedem Raum möglich (25 % der Innenwände) — warf jeder Frame einen
+   `TypeError`. Fix: Optional-Chaining in `bullet.js: moveAxis()`; die
+   Vorschau prallt jetzt einfach ab, ohne die Wand zu beschädigen. Die
+   session-lokalen Headless-Tests konnten das nie sehen, weil sie den
+   Renderpfad (und damit die Ziellinie) nicht ausführen.
+2. **Wellen-Freigabe-Race** (Phase 9): Starben die letzten Welle-1-Gegner
+   *während* der 1-s-Vorwarnung, wertete `stepRun()` den Raum als geräumt
+   und die zweite Welle wurde stillschweigend verschluckt (halber Raum
+   geschenkt). Fix: Raumfreigabe zusätzlich an `!st.pendingWave` gebunden.
+
+**Strukturfund desselben Passes:** Die in den Umsetzungsfunden erwähnten
+Regressionssuiten (`phase4.mjs`, `phase11walls.mjs`, `phase12map.mjs`, …)
+waren nur session-lokal und wurden nie ins Repo eingecheckt — sie sind mit
+den jeweiligen Containern verloren gegangen. Ersatz ist die **eingecheckte**
+`tests/regression.mjs` (`node tests/regression.mjs`): 5 Seeds deterministisch
+bis zum Sieg über alle 16 Räume (inkl. Karte/Shop/Event/Boss), Ziellinien-
+Trace gegen alle Wandtypen und in jedem echten Raum, Wellen-Freigabe-Guard,
+Determinismus-Probe (Karte + Raumlayout). Gegen den ungefixten Stand schlägt
+die Suite bei beiden Fehlern an.
+
+**Reihenfolge-Korrektur:** Die nächste Session ist **Phase 7b — Audio**
+(einzige ausgelassene Phase, siehe dort), erst danach Phase 18 Welle 3.
+
 ---
 
 ## Leitprinzip
@@ -428,6 +460,8 @@ Sonderfälle in der bestehenden Treffer-Schleife. `ai_turrets.js`/
 0…7, 8…18 ausgelassen, nicht vergessen zu bauen. Der unten beschriebene
 "Bekannte Fehler" (identischer Tod-Sound für Spieler und Gegner) ist zum
 Zeitpunkt dieses Reviews weiterhin unverändert im Code vorhanden.
+**→ Als NÄCHSTE Session eingeplant** (vor Phase 18 Welle 3, siehe
+Code-Review-Pass am Dateianfang) — nicht weiter aufschieben.
 
 **Korrektur (v3-Review):** Die Begründung "steht hier, weil Phase 5 auf einem
 Sound beruht" stimmt nicht — die prozedurale WebAudio-Synthese
@@ -1213,7 +1247,8 @@ Pluenderer, Feuerleitzentrale). **Welle 2 ✅ erledigt** (Beutejagd,
 Nachtsicht, Nachladeschild, Meisterschütze, Erschütterungsdash — gezielt
 gegen die duennsten Tags aus Welle 1: `resource`/`information`/`defense`/
 `synergy` hatten je nur 1–2 Karten) — weitere Wellen folgen in eigenen
-Sessions.
+Sessions. **Welle 3 kommt erst NACH der nachgeholten Phase 7b (Audio)**,
+siehe Code-Review-Pass am Dateianfang.
 
 Neue Upgrades in Wellen zu 5–8. **Jede Welle beginnt mit einer
 Telemetrie-Auswertung**: Welche Karten wurden angeboten und nie gewählt?

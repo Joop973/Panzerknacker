@@ -99,14 +99,16 @@ function moveAxis(b, state, axis, dt) {
     // nehmen Schaden wie jede andere Wand-Haltbarkeit (destroyWall zaehlt
     // wall.customDurability/destructibleHits runter), prallen aber wie eine
     // normale Wand ab, bis sie zerbrechen -- daher KEIN return hier, faellt
-    // in die generische Bounce-Behandlung durch.
-    if (wall.type === 'trap' || wall.type === 'destructible') state.destroyWall(wall);
+    // in die generische Bounce-Behandlung durch. Optional-Chaining, weil der
+    // Ziellinien-Schattenzustand (traceTrajectory) kein destroyWall traegt --
+    // die Vorschau prallt dann einfach ab, ohne die Wand zu beschaedigen.
+    if (wall.type === 'trap' || wall.type === 'destructible') state.destroyWall?.(wall);
     // Reaktor-Generator (Phase 14): nimmt NUR Schaden, wenn die Kugel schon
     // an einer WAND abgeprallt ist ("Bankshot") -- ein direkter Treffer
     // prallt wirkungslos ab wie an jeder anderen Wand. b.wallBounces zaehlt
     // hier noch den Stand VOR diesem Treffer (wird erst unten in
     // updateBullet() erhoeht), erfasst also genau "schon vorher abgeprallt".
-    else if (wall.type === 'generator' && b.wallBounces > 0) state.destroyWall(wall);
+    else if (wall.type === 'generator' && b.wallBounces > 0) state.destroyWall?.(wall);
     hit = true;
     if (wall.type === 'reflect') mirror = true; // Spiegelwand (Phase 5)
     if (axis === 'x') {

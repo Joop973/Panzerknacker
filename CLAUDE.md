@@ -76,9 +76,9 @@ zwischen Phase 7 und 8 einsortiert — die Phasen wurden bislang in der
 Reihenfolge 0…7, 8…18 gebaut und diese eine ausgelassen). Bekannter,
 noch offener Fehler daraus: `killTank()` in `src/game/state.js` spielt für
 JEDEN Tod denselben `'death'`-Sound — ein Gegner-Kill klingt identisch zum
-eigenen Tod. Nicht dringend genug für einen Zwischenfix, aber beim
-nächsten "Weiter" nach Phase 18 einplanen, statt sie weiter zu überspringen.
-**Nächste Phase: Phase 18, Welle 3 — weitere Kartenwellen** (Stufe 4: Kür).
+eigenen Tod.
+**Nächste Phase: Phase 7b — Audio (nachholen!), danach Phase 18, Welle 3**
+— so seit dem Code-Review-Pass 2 auch in `PLAN.md` festgeschrieben.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -950,6 +950,33 @@ Zurückgebaut wurde:
   wieder mit der echten Wirkung überein. Regressionstest ergänzt
   (`phase9elite.mjs`, Abschnitt 4).
 
+### Code-Review-Pass 2 + Plan-Überarbeitung — gemergt
+Vollständige Code-Durchsicht nach Phase 18 Welle 2. Zwei echte, behobene
+Fehler + eine strukturelle Lücke geschlossen:
+- **Ziellinien-Crash** (`bullet.js: moveAxis()`): `traceTrajectory()`s
+  Schatten-State hat kein `destroyWall()` — zeigte die Ziellinie auf eine
+  zerstörbare Wand (Phase 11, ~25 % der Innenwände!), Sperrmauer oder
+  Generator-Wand (nach Abpraller), warf jeder Frame einen `TypeError`.
+  Fix: `state.destroyWall?.(wall)` an beiden Aufrufstellen — die Vorschau
+  prallt jetzt ab, ohne die Wand zu beschädigen. Headless-Tests konnten das
+  nie sehen (kein Renderpfad).
+- **Wellen-Freigabe-Race** (`run.js: stepRun()`): Starben die letzten
+  Welle-1-Gegner während der 1-s-Vorwarnung, galt der Raum als geräumt und
+  die zweite Welle wurde verschluckt. Fix: Freigabe zusätzlich an
+  `!st.pendingWave` gebunden.
+- **`tests/regression.mjs` eingecheckt** (NEU, `node tests/regression.mjs`):
+  Die früheren Suiten (`phase4.mjs`, `phase11walls.mjs`, …) waren nur
+  session-lokal und sind mit den Containern verloren gegangen. Die neue
+  Suite: 5 Seeds deterministisch bis zum Sieg über alle 16 Räume (inkl.
+  Karte/Shop/Event/Boss), Ziellinien-Trace gegen alle Wandtypen + in jedem
+  echten Raum, Wellen-Freigabe-Guard, Determinismus-Probe. Schlägt gegen den
+  ungefixten Stand nachweislich bei beiden Fehlern an.
+- `telemetry.js: GAME_VERSION` war seit v39 eingefroren — jetzt an den
+  sw.js-Cache-Namen gekoppelt (v56) und bei jedem SW-Bump mitziehen.
+- `PLAN.md`: Review-Pass am Dateianfang dokumentiert (beide Bugs, Test-
+  Struktur), Phase 7b explizit als nächste Session festgeschrieben,
+  Phase-18-Welle-3-Reihenfolge entsprechend korrigiert.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Vor Phase 18**: 15–20 Runs spielen und die Debug-Ansicht (`?debug=1`)
       auswerten — sie rechnet jetzt selbst (Median-Todesraum, Abpraller-Anteil,
@@ -1021,7 +1048,8 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v43`.) So
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v56`; dabei
+  auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
   → kein „+1 Leben"-Bug), offline läuft alles aus dem Cache. `skipWaiting()`
@@ -1056,8 +1084,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 ```
 python3 -m http.server 8099        # dann http://localhost:8099/index.html
 node --check src/<datei>.js         # Syntax
+node tests/regression.mjs           # Regressionssuite (eingecheckt!)
 ```
 Playwright-Browser liegt unter `/opt/pw-browsers/chromium`
 (`executablePath` setzen; NICHT `playwright install`).
-Regressions-Standard: 5 Seeds sollen über 16 Räume deterministisch bis zum
-Sieg durchlaufen.
+Regressions-Standard: `tests/regression.mjs` muss grün sein — 5 Seeds über
+16 Räume deterministisch bis zum Sieg, Ziellinien-Trace crashfrei,
+Wellen-Freigabe-Guard, Determinismus-Probe.

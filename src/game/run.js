@@ -776,9 +776,12 @@ export function stepRun(run, cmd, dt) {
     }
   }
 
-  // Raum geschafft: alle Gegner tot, Spieler lebt.
+  // Raum geschafft: alle Gegner tot, Spieler lebt UND keine zweite Welle
+  // steht mehr aus. Ohne die pendingWave-Pruefung galt der Raum als
+  // geraeumt, wenn die letzten Welle-1-Gegner WAEHREND der 1-s-Vorwarnung
+  // starben -- die zweite Welle wurde dann stillschweigend verschluckt.
   const enemiesLeft = st.tanks.filter((t) => t !== st.player && t.alive).length;
-  if (enemiesLeft === 0 && st.player.alive) {
+  if (enemiesLeft === 0 && !st.pendingWave && st.player.alive) {
     run.roomsCleared++;
     st.sounds.push('clear');
     // Schrott fuer den geraeumten Raum (deterministisch ueber genRng);
