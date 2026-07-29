@@ -223,6 +223,11 @@ export function createState(data, tiles, opts) {
     // verlangsamter) dt herunter -- run.js liest ihn fuer den Zeitlupen-Scale.
     trickshotTimer: 0,
     trickshotScrap: 0,
+    // Beutejagd-Upgrade (Phase 18): eigener Raum-Zaehler fuer sonstige
+    // Schrott-Boni ausserhalb des Trickshot-Systems (Muster identisch zu
+    // trickshotScrap, damit run.js denselben Sync-Delta-Ansatz nutzen kann).
+    bonusScrap: 0,
+    firstKillGiven: false, // pro Raum einmalig, NICHT bei respawnPlayer() zuruecksetzen
     // Notschild-Ladungen als Liste: jede Ladung altert EINZELN (E2).
     // Eintrag = verbleibende geraeumte Raeume bis zum Verfall.
     shieldCharges: (shieldCharges || []).slice(),
@@ -419,6 +424,11 @@ export function createState(data, tiles, opts) {
         if (tank.cfg.counterShield) {
           spawnRadialBullets(state, tank, tank.x, tank.y, tank.cfg.counterShieldCount, 150);
         }
+        // Nachladeschild-Upgrade (Phase 18): laedt sich nach shieldRegenS
+        // von selbst neu -- wiederverwendet denselben regenShieldTimer/
+        // shieldReady-Tick, den das Regenerierschild-Elite-Affix (Phase 9)
+        // schon fuer Gegner nutzt (Tick-Schleife unten, kein neuer Code).
+        if (tank.cfg.shieldRegenS) tank.regenShieldTimer = tank.cfg.shieldRegenS;
         return;
       }
       tank.alive = false;
@@ -445,6 +455,14 @@ export function createState(data, tiles, opts) {
         state.enemyKills++;
         state.killLog.push(tank.type);
         const pc = state.player.cfg;
+        // Beutejagd-Upgrade (Phase 18): der ERSTE Kill in jedem Raum gibt
+        // sofort Bonus-Schrott -- eigener Raum-Zaehler (Muster wie
+        // trickshotScrap), nicht an killTank()s Aufrufart gebunden (zaehlt
+        // also auch bei einem Ghost-/Minen-/Kettenblitz-Kill als erster Kill).
+        if (!state.firstKillGiven && pc.firstKillScrap) {
+          state.firstKillGiven = true;
+          state.bonusScrap += pc.firstKillScrap;
+        }
         if (state.player.alive) {
           // Aasgeier: Abschuss laedt die Spielerwaffe sofort nach.
           if (pc.scavenger) state.player.cooldown = 0;
@@ -750,13 +768,18 @@ export function stepState(state, cmd, dt) {
           if (own) {
             const ts = state.data.balance.trickshot;
             const strong = b.wallBounces >= (ts.strongRicochets ?? 2);
-            state.trickshotScrap += strong ? ts.scrapStrong : ts.scrap;
+            // Meisterschuetze-Upgrade (Phase 18): verdoppelt die Trickshot-
+            // Belohnung -- reiner Multiplikator an der einzigen Stelle, an
+            // der Trickshot-Schrott entsteht.
+            const mult = b.owner.cfg.trickshotScrapMult || 1;
+            const gained = (strong ? ts.scrapStrong : ts.scrap) * mult;
+            state.trickshotScrap += gained;
             state.trickshotTimer = ts.slowMoS;
             state.sounds.push(strong ? 'trickshot2' : 'trickshot');
             state.texts.push({
               x: t.x,
               y: t.y - 18,
-              text: strong ? `Trickshot!! +${ts.scrapStrong} Schrott` : `Trickshot! +${ts.scrap} Schrott`,
+              text: strong ? `Trickshot!! +${gained} Schrott` : `Trickshot! +${gained} Schrott`,
               age: 0,
               life: 0.9,
               color: '#ffd23c',

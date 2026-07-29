@@ -110,6 +110,10 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   // Ballistikrechner (Phase 18): reiner Anzeige-Parameter fuer die
   // Ziellinie (effects.js: drawAimLine), keine echte Physik.
   if (l('ballistikrechner')) cfg.aimPreviewBounces = U.ballistikrechner.previewBounces;
+  // Nachtsicht (Phase 18): rein optischer Schalter -- hebt nur die
+  // Nebel-/Dunkelheit-Blende auf (renderer.js: drawFog), KI-Sichtlinien
+  // bleiben unveraendert.
+  cfg.ignoreFog = l('nachtsicht') > 0;
 
   // --- Neue Build-Upgrades ---
   if (l('glaskanone')) {
@@ -134,8 +138,20 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   cfg.scavenger = l('aasgeier') > 0;
   if (l('kamikaze')) cfg.kamikazeRadius = U.kamikaze.radiusPx;
   cfg.shield = l('schild') > 0;
+  // Nachladeschild (Phase 18): laedt das Schild nach shieldRegenS von selbst
+  // neu -- wiederverwendet den regenShieldTimer-Tick, den das Regenerier-
+  // schild-Elite-Affix (Phase 9) fuer Gegner schon nutzt (state.js).
+  if (l('nachladeschild')) cfg.shieldRegenS = U.nachladeschild.regenS;
   if (l('dash')) {
     cfg.dash = { dist: U.dash.distancePx, iframe: U.dash.iframeS, cooldown: U.dash.cooldownS };
+  }
+  // Erschuetterungsdash (Phase 18, requires dash): stoesst nahe Gegner beim
+  // Dash weg und betaeubt sie kurz -- unabhaengig von der Sekundaerwaffe
+  // (deshalb eigene Felder statt der Schockwelle-Minen-Karte).
+  if (l('erschuetterungsdash')) {
+    cfg.dashShockRadius = U.erschuetterungsdash.radiusPx;
+    cfg.dashShockPush = U.erschuetterungsdash.pushPx;
+    cfg.dashShockStun = U.erschuetterungsdash.stunS;
   }
   if (l('berserker')) {
     cfg.berserker = {
@@ -216,6 +232,12 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   // geraeumtem Raum, angewandt in run.js NACH dem Elite-Multiplikator
   // (wie die einmalige Kriegsbeute-Belohnung auch kein Vielfaches ist).
   if (l('pluenderer')) cfg.scrapBonusPerRoom = U.pluenderer.scrapPerLevel * l('pluenderer');
+  // Beutejagd (Phase 18, zweite Tag-resource-Karte): Bonus-Schrott fuer den
+  // ERSTEN Kill in jedem Raum (state.js: firstKillGiven-Zaehler).
+  if (l('beutejagd')) cfg.firstKillScrap = U.beutejagd.scrapPerLevel * l('beutejagd');
+  // Meisterschuetze (Phase 18, Tag synergy): verdoppelt die Trickshot-
+  // Belohnung (Phase 5) -- reiner Multiplikator, keine neue Mechanik.
+  if (l('meisterschuetze')) cfg.trickshotScrapMult = U.meisterschuetze.scrapMult;
   // Sekundärslot (Phase 6): explizit vom Run vorgegeben, kein Level-Scan
   // (mehrere Sekundärkarten koennen gleichzeitig Level > 0 haben, siehe
   // run.js: chooseUpgrade -- nur equippedSecondary bestimmt die aktive).

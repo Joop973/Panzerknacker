@@ -240,6 +240,7 @@ function resetRoomCounters(run) {
   run.seenKillLog = 0;
   run.seenRoomShots = 0;
   run.seenTrickshotScrap = 0;
+  run.seenBonusScrap = 0;
   run.combo = 0; // Combo gilt nur innerhalb eines Raums
   run.comboTimer = 0;
 }
@@ -747,6 +748,14 @@ export function stepRun(run, cmd, dt) {
   if (st.trickshotScrap > run.seenTrickshotScrap) {
     const gained = st.trickshotScrap - run.seenTrickshotScrap;
     run.seenTrickshotScrap = st.trickshotScrap;
+    run.scrap += gained;
+    run.scrapThisRoom += gained;
+  }
+  // Beutejagd-Upgrade (Phase 18): eigener Bonus-Schrott-Zaehler, gleiches
+  // Sync-Muster wie trickshotScrap (state.js kennt kein run-Objekt).
+  if (st.bonusScrap > run.seenBonusScrap) {
+    const gained = st.bonusScrap - run.seenBonusScrap;
+    run.seenBonusScrap = st.bonusScrap;
     run.scrap += gained;
     run.scrapThisRoom += gained;
   }

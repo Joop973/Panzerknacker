@@ -298,6 +298,26 @@ export function dashTank(tank, state, moveAxis) {
   tank.dashCd = cooldown;
   state.sounds.push('dash');
   state.spawnParticles?.(tank.x, tank.y, '#8ecaf0', 8, 90);
+  // Erschuetterungsdash-Upgrade (Phase 18): stoesst nahe Gegner weg und
+  // betaeubt sie kurz -- unabhaengig von der Sekundaerwaffe, deshalb hier
+  // statt an layMine()s Schockwelle gehaengt. Gleiches Muster (Push + Stun),
+  // eigene cfg-Felder, damit sich beide Karten nicht gegenseitig ueberschreiben.
+  if (tank.cfg.dashShockRadius) {
+    const R = tank.cfg.dashShockRadius;
+    for (const t of state.tanks) {
+      if (t === tank || !t.alive) continue;
+      const dx = t.x - tank.x;
+      const dy = t.y - tank.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0 && d < R) {
+        const push = tank.cfg.dashShockPush * (1 - d / R);
+        t.x += (dx / d) * push;
+        t.y += (dy / d) * push;
+        resolveCircleWalls(t, t.cfg.radius, state.walls);
+        if (tank.cfg.dashShockStun) t.stunTimer = Math.max(t.stunTimer, tank.cfg.dashShockStun);
+      }
+    }
+  }
   return true;
 }
 

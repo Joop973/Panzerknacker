@@ -181,6 +181,62 @@
       "minRoom": 1,
       "scrapPerLevel": 1
     },
+    "beutejagd": {
+      "id": "beutejagd",
+      "name": "Beutejagd",
+      "description": "Der erste Kill in jedem Raum gibt sofort zusätzlichen Schrott",
+      "tag": "resource",
+      "rarity": "common",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "scrapPerLevel": 2
+    },
+    "nachtsicht": {
+      "id": "nachtsicht",
+      "name": "Nachtsicht",
+      "description": "Nebel- und Dunkelheit-Raummodifikatoren schränken deine Sicht nicht mehr ein",
+      "tag": "information",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1
+    },
+    "nachladeschild": {
+      "id": "nachladeschild",
+      "name": "Nachladeschild",
+      "description": "Dein Schild lädt sich nach kurzer Zeit von selbst neu — auch ohne neues Leben",
+      "tag": "defense",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": ["schild"],
+      "minRoom": 1,
+      "regenS": 20
+    },
+    "meisterschuetze": {
+      "id": "meisterschuetze",
+      "name": "Meisterschütze",
+      "description": "Trickshot-Belohnung verdoppelt",
+      "tag": "synergy",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "scrapMult": 2
+    },
+    "erschuetterungsdash": {
+      "id": "erschuetterungsdash",
+      "name": "Erschütterungsdash",
+      "description": "Dein Dash stößt nahe Gegner weg und betäubt sie kurz — unabhängig von der Sekundärwaffe",
+      "tag": "control",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": ["dash"],
+      "minRoom": 3,
+      "radiusPx": 80,
+      "pushPx": 60,
+      "stunS": 0.5
+    },
     "sprengmunition": {
       "id": "sprengmunition",
       "name": "Sprengmunition",

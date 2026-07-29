@@ -64,12 +64,14 @@ Pro-Frame-Prüfung) und **Phase 17** (Transformationen: drei Karten desselben
 Tags schalten einen dauerhaften Bonus frei — Bollwerk/Kavallerie/Taktiker/
 Pionier/Saboteur) sind gebaut. **Phase 18 — Kartenwellen** läuft (laut Plan
 mehrere Wellen über mehrere Sessions): **Welle 1** (`doppelrohr`/`flak`
-freigegeben, Ballistikrechner, Plünderer, Feuerleitzentrale) ist gebaut.
+freigegeben, Ballistikrechner, Plünderer, Feuerleitzentrale) und **Welle 2**
+(Beutejagd, Nachtsicht, Nachladeschild, Meisterschütze, Erschütterungsdash —
+gezielt gegen die dünnsten Tags aus Welle 1) sind gebaut.
 `PLAN.md` wurde auf **v3** konsistenzgeprüft: tote Verweise (u. a. gelöschte
 Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
 `eliteBonus`-Feldname) entfernt, jede offene Phase bekommt jetzt eine
 "Betroffene Dateien"-Zeile.
-**Nächste Phase: Phase 18, Welle 2 — weitere Kartenwellen** (Stufe 4: Kür).
+**Nächste Phase: Phase 18, Welle 3 — weitere Kartenwellen** (Stufe 4: Kür).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -823,6 +825,40 @@ seiner Migration (Phase 2) nie erreichbar war.
   Schrott-Bonus pro geräumtem Raum, wirkt in `run.js` NACH dem
   Elite-Multiplikator — wie die einmalige Kriegsbeute-Belohnung auch kein
   Vielfaches ist.
+
+### Phase 18, Welle 2 (Kartenwellen) — gemergt
+Fünf neue Karten, gezielt gegen die nach Welle 1 dünnsten Tags
+(`resource`/`information`/`defense`/`synergy` hatten je nur 1–2 Karten) statt
+einer echten Nie-gewählt-Telemetrieauswertung (`localStorage.runs` ist in
+dieser Umgebung leer — Tag-Verteilung war der verfügbare Ersatz).
+- **`beutejagd`** (Tag `resource`): Bonus-Schrott für den ERSTEN Kill in
+  jedem Raum. Eigener Raum-Zähler `state.bonusScrap` + `state.firstKillGiven`
+  (Muster 1:1 wie `trickshotScrap`, Phase 5) — `run.js` synchronisiert beide
+  Zähler identisch per Delta, `state.js` kennt weiterhin kein `run`-Objekt.
+  `firstKillGiven` wird nur in `createState()` gesetzt (nicht in
+  `respawnPlayer()`): der Bonus gilt pro Raum, nicht pro Leben.
+- **`nachtsicht`** (Tag `information`): hebt die Nebel-/Dunkelheit-Sichtblende
+  des Raum-Modifikators (Phase 10) für den Spieler auf — ein zusätzliches
+  `return` in `renderer.js: drawFog()`, KI-Sichtlinien bleiben unverändert.
+- **`nachladeschild`** (Tag `defense`, `requires: ["schild"]`): Schild lädt
+  sich nach `regenS` von selbst neu. Wiederverwendet den
+  `regenShieldTimer`-Tick 1:1, den das Elite-Affix "Regenerierschild"
+  (Phase 9) in `stepState()`s Panzer-Schleife bereits generisch für JEDEN
+  Panzer (nicht nur Gegner) gebaut hatte — nur der Timer-Start beim
+  Schildverbrauch (`killTank()`s Spieler-Zweig) war neu.
+- **`meisterschuetze`** (Tag `synergy`): verdoppelt die Trickshot-Belohnung
+  (Phase 5) — reiner Multiplikator an der einzigen Stelle, an der
+  `trickshotScrap` entsteht (`state.js`), auch der Floating-Text zeigt den
+  bereits multiplizierten Wert.
+- **`erschuetterungsdash`** (Tag `control`, `requires: ["dash"]`): Dash stößt
+  nahe Gegner weg und betäubt sie kurz, unabhängig von der Sekundärwaffe.
+  Zweite echte `requires`-Karte (nach `feuerleitzentrale`) und schließt eine
+  echte Pool-Lücke: alle fünf bisherigen `control`-Karten sind über
+  `MINE_ONLY_IDS` an die Minen-Sekundärwaffe gebunden (Phase 6) — mit
+  Enterhaken/Sperrmauer/Rauch/Deflektor ausgerüstet gab es im Tag `control`
+  bislang gar keine Karte. Eigene `dashShock*`-cfg-Felder statt Wiederver-
+  wendung von `schockwelle`s Feldern, damit beide Karten gleichzeitig
+  ausrüstbar bleiben, ohne sich gegenseitig zu überschreiben.
 
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
