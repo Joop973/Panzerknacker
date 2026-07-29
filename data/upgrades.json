@@ -202,6 +202,72 @@
       "requires": [],
       "minRoom": 1
     },
+    "sappeur": {
+      "id": "sappeur",
+      "name": "Sappeur",
+      "description": "Rissige Wände halten pro Stufe einen Treffer weniger aus",
+      "tag": "terrain",
+      "rarity": "common",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "hitsPerLevel": 1
+    },
+    "steinbruch": {
+      "id": "steinbruch",
+      "name": "Steinbruch",
+      "description": "Jede eingerissene Wand lässt Schrott zurück",
+      "tag": "terrain",
+      "rarity": "common",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "scrapPerLevel": 1
+    },
+    "minenspuerer": {
+      "id": "minenspuerer",
+      "name": "Minenspürer",
+      "description": "Auch gegnerische Minen zeigen ihre Restzeit und ihren Explosionsradius",
+      "tag": "information",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1
+    },
+    "gefahrensinn": {
+      "id": "gefahrensinn",
+      "name": "Gefahrensinn",
+      "description": "Gegner, die dich gerade im Rohr haben, bekommen einen Warnring",
+      "tag": "information",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1
+    },
+    "abprallschock": {
+      "id": "abprallschock",
+      "name": "Abprallschock",
+      "description": "Deine Kugel betäubt beim Wandabpraller nahe Gegner kurz",
+      "tag": "control",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 2,
+      "radiusPxPerLevel": 46,
+      "stunS": 0.7
+    },
+    "doppelschlag": {
+      "id": "doppelschlag",
+      "name": "Doppelschlag",
+      "description": "Jeder Trickshot-Kill lädt einen verstärkten Schuss nach (doppelt so schnell, +2 Abpraller)",
+      "tag": "synergy",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 2,
+      "chargesPerTrickshot": 1,
+      "maxCharges": 3
+    },
     "nachladeschild": {
       "id": "nachladeschild",
       "name": "Nachladeschild",

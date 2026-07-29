@@ -84,7 +84,7 @@ function moveAxis(b, state, axis, dt) {
     if (wall.type === 'hole') continue; // Geschosse fliegen ueber Loecher
     if (!circleOverlapsAABB(b.x, b.y, b.radius, wall)) continue;
     if (b.tungsten && wall.type === 'breakable') {
-      state.destroyWall(wall);
+      state.destroyWall?.(wall);
       b.dead = true;
       return { hit: true, mirror: false };
     }
@@ -120,6 +120,29 @@ function moveAxis(b, state, axis, dt) {
     }
   }
   return { hit, mirror };
+}
+
+// Abprallschock-Upgrade (Phase 18, Welle 3): jeder WANDabpraller betaeubt
+// Gegner im Umkreis kurz. Bewusst nur die Bewegung (stunTimer), nicht der
+// Turm -- dieselbe Trennung wie bei Krallenfalle/Erschuetterungsdash; das
+// Turm-Einfrieren bleibt der EMP-Mine vorbehalten (turretStunTimer).
+// Im Ziellinien-Schattenzustand ist `tanks` leer und `owner` null -- die
+// Vorschau loest also nie eine Betaeubung aus.
+function applyBounceStun(b, state) {
+  const R = b.owner?.cfg?.bounceStunRadius;
+  if (!R) return;
+  const dur = b.owner.cfg.bounceStunS || 0.5;
+  let hit = false;
+  for (const t of state.tanks || []) {
+    if (!t.alive || t === b.owner) continue;
+    const dx = t.x - b.x;
+    const dy = t.y - b.y;
+    if (dx * dx + dy * dy <= R * R) {
+      t.stunTimer = Math.max(t.stunTimer, dur);
+      hit = true;
+    }
+  }
+  if (hit) state.spawnParticles?.(b.x, b.y, '#8ecaf0', 6, 90);
 }
 
 // Lenkt ein Zielsucher-Geschoss weich zum naechsten gegnerischen Panzer.
@@ -240,6 +263,7 @@ export function updateBullet(b, state, dt) {
       const firstBounce = b.wallBounces === 0;
       state.sounds?.push({ name: firstBounce ? 'tick' : 'bounce', x: b.x });
       b.wallBounces++;
+      applyBounceStun(b, state); // Abprallschock (Phase 18) -- auch an Spiegelwaenden
       b.trail.push({ x: b.x, y: b.y });
       if (b.trail.length > TRAIL_MAX) b.trail.shift();
       return;
@@ -258,6 +282,7 @@ export function updateBullet(b, state, dt) {
     state.sounds?.push({ name: firstBounce ? 'tick' : 'bounce', x: b.x });
     b.ricochetsLeft--;
     b.wallBounces++; // nur WAND-Abpraller (Phase 4: toeten das Prisma)
+    applyBounceStun(b, state); // Abprallschock (Phase 18)
   }
 
   b.trail.push({ x: b.x, y: b.y });

@@ -32,7 +32,7 @@ Der Nutzer schreibt Deutsch → **immer auf Deutsch antworten.**
 
 ## Aktueller Stand (Stand: 2026-07)
 Spielbar und deterministisch; PWA/Offline; Touch + Desktop + Gamepad;
-39 Upgrades, 6 Raumtypen, Schrott-Währung, sichtbare Roguelike-Karte statt
+63 Upgrades, 6 Raumtypen, Schrott-Währung, sichtbare Roguelike-Karte statt
 unsichtbarer Raumtyp-Automatik. Maßgeblich ist **`PLAN.md` v2**
 (ersetzt v1 vollständig). Erledigt: **Phase 0** (Eingabe/Ziellinie/RNG/Arena-
 Weiche) und **Phase 1** (Telemetrie v2, Lesbarkeit, Run-Speicherung).
@@ -73,8 +73,10 @@ Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
 "Betroffene Dateien"-Zeile.
 **Phase 7b — Audio** ist nachgeholt (war als einzige Phase vor 18
 übersprungen worden): `data/sounds.json`, Stereopanning, getrennte Sounds
-für eigenen Tod/Gegner-Kill/Schild.
-**Nächste Phase: Phase 18, Welle 3 — weitere Kartenwellen.**
+für eigenen Tod/Gegner-Kill/Schild. **Welle 3** ist gebaut (sechs Karten,
+die zwei tote Transformationen reparieren).
+**Nächste Phase: Phase 18, Welle 4 — bzw. zuerst die aufgeschobene
+Telemetrie-Auswertung, sobald 15–20 gespielte Runs vorliegen.**
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -1022,10 +1024,61 @@ Schrittdauer), der ebenfalls hartkodiert war.
   lautlos, ohne Fehler). Dazu Formprüfung jeder Meldung im echten Lauf,
   Warnpuls-Takttest und die Zusicherung, dass `'death'` nicht zurückkehrt.
 
+### Phase 18, Welle 3 (Kartenwellen) — gemergt
+Sechs neue Karten. **Der eigentliche Fund war ein Bug, keine Kartenidee:**
+`run.tagCounts` zählt Stacks, die Transformations-Schwelle ist 3 — der Tag
+`terrain` hatte aber nur zwei Karten mit je `maxStacks: 1`. **Pionier war
+mathematisch nie freischaltbar.** Dasselbe bei *Saboteur* (`control`):
+vier der sechs Karten hängen an `MINE_ONLY_IDS` (Phase 6), mit einer
+anderen Sekundärwaffe blieben ebenfalls nur 2 Punkte. *Taktiker*
+(`information`) lag mit exakt 3 von 3 auf der Kippe. Welle 3 legt deshalb
+gezielt auf diese drei Tags: `terrain` 2→6, `control` ohne Mine 2→4,
+`information` 3→5.
+- **`sappeur`** (terrain, `maxStacks 2`): rissige Wände (Phase 11) halten
+  pro Stufe einen Treffer weniger aus. Wirkt in `state.js: destroyWall()`
+  bewusst NUR auf `destructible` — nicht auf die eigene Sperrmauer
+  (`customDurability`) und nicht gegen die Pionier-Transformation.
+- **`steinbruch`** (terrain, `maxStacks 2`): eingerissene Wände lassen
+  Schrott zurück, über den `state.bonusScrap`-Zähler aus Welle 2 (kein
+  zweiter Sync-Mechanismus). Die eigene Sperrmauer ist ausgenommen — sonst
+  wäre „Wand legen, kaputtschießen, wiederholen" eine Schrott-Druckmaschine.
+- **`minenspuerer`** (information): Restzeit-/Radiusring auch für
+  gegnerische Minen (`effects.js: drawMines`, eine Bedingung erweitert).
+- **`gefahrensinn`** (information): Warnring um Gegner, die den Spieler im
+  Rohr haben. **Kostet keinen zusätzlichen Raycast** — `updateEnemy()`
+  berechnet die Feuerfreigabe ohnehin, `state.js` legt sie als
+  `t.aimingAtPlayer` ab (auch in `bossai.js`), der Renderer liest nur.
+  Phase 11b nennt die Sichtlinien-KI ausdrücklich als Frame-Budget-Risiko.
+- **`abprallschock`** (control, `maxStacks 2`): erste Karte, die den
+  Wandabpraller selbst zum Kontrollwerkzeug macht statt ihn nur zu
+  belohnen. Wirkt auch an Spiegelwänden; betäubt bewusst nur die Bewegung
+  (`stunTimer`), nicht den Turm — Turm-Einfrieren bleibt der EMP-Mine.
+- **`doppelschlag`** (synergy): ein Trickshot-Kill lädt eine
+  Powershot-Ladung nach (gedeckelt). **Brauchte einen NaN-Schutz:**
+  `tank.js: fireBullet()` multipliziert bei vorhandenen Ladungen ungeprüft
+  mit `cfg.powershotSpeedFactor` — ohne die Powershot-Karte wäre die
+  Kugelgeschwindigkeit `NaN` gewesen. `cfg.js` übernimmt die Werte aus der
+  `powershot`-Definition (eine Quelle).
+- **Drei neue Struktur-Tests** in `tests/regression.mjs`, jeder mit
+  bestandener Gegenprobe: (1) jede Transformation ist mit dem vorhandenen
+  Pool freischaltbar — mit UND ohne Minen-Sekundärwaffe; (2) jede Karte ist
+  überhaupt ziehbar (der `doppelrohr`-Fehler) plus die Prüfung, dass kein
+  `requires` auf eine nicht existierende id zeigt; (3) der komplette
+  Effekt-Renderpfad wird mit einem Fake-Canvas headless gezeichnet, alle
+  Anzeige-Upgrades aktiv — **bis dahin führte die Suite nie eine einzige
+  Zeichenfunktion aus**, genau der blinde Fleck hinter dem Ziellinien-Crash.
+- Auswahl weiterhin per Pool-Analyse statt Telemetrie (`localStorage.runs`
+  ist leer). Die Telemetrie-Auswertung ist im Plan als nachzuholende
+  Balance-Anpassung festgehalten, nicht als Voraussetzung.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Vor Phase 18**: 15–20 Runs spielen und die Debug-Ansicht (`?debug=1`)
-      auswerten — sie rechnet jetzt selbst (Median-Todesraum, Abpraller-Anteil,
-      minFps, nie gewählte + meistabgelehnte Karten). Siehe `PLAN.md`.
+- [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
+      und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
+      (Median-Todesraum, Abpraller-Anteil, minFps, nie gewählte +
+      meistabgelehnte Karten). Die Wellen 2 und 3 wurden mangels Daten per
+      Pool-Analyse geplant; die Auswertung wird danach eine reine
+      Balance-Anpassung an fertigen Karten (`data/upgrades.json`). Siehe
+      `PLAN.md`, Phase 18.
 - [ ] Sprite-Look für **feste Wand** (`tile_wall`) und **Loch** (`tile_hole`)
       im Spiel noch mit eigenem Auge prüfen — Code-Pfad identisch zu
       breakable (das rendert korrekt), aber nicht separat verifiziert.
@@ -1098,7 +1151,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v57`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v58`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

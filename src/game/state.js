@@ -325,7 +325,14 @@ export function createState(data, tiles, opts) {
       // Sperrmauer (Phase 6), zerstoerbare Waende (Phase 11) und Reaktor-
       // Generatoren (Phase 14) bringen ihre eigene Haltbarkeit mit, die
       // das ueberschreibt.
-      const durability = wall.customDurability || wall.destructibleHits || state.transform.wallDurability || 1;
+      let durability = wall.customDurability || wall.destructibleHits || state.transform.wallDurability || 1;
+      // Sappeur-Upgrade (Phase 18, Welle 3): rissige Waende (Phase 11)
+      // fallen frueher. Bewusst NUR fuer `destructible` -- die eigene
+      // Sperrmauer (customDurability) und die Pionier-Verstaerkung sollen
+      // nicht gegen den Spieler selbst wirken.
+      if (wall.type === 'destructible' && state.player?.cfg?.wallHitsReduction) {
+        durability = Math.max(1, durability - state.player.cfg.wallHitsReduction);
+      }
       if (durability > 1) {
         wall.hits = (wall.hits || 0) + 1;
         if (wall.hits < durability) {
@@ -342,6 +349,14 @@ export function createState(data, tiles, opts) {
       const i = state.walls.indexOf(wall);
       if (i >= 0) state.walls.splice(i, 1);
       grid[wall.row][wall.col] = '.';
+      // Steinbruch-Upgrade (Phase 18, Welle 3): eingerissene Waende lassen
+      // Schrott zurueck. Nur die beiden "Wand geht kaputt"-Typen -- die
+      // eigene Sperrmauer waere sonst eine Schrott-Druckmaschine (legen,
+      // kaputtschiessen, wiederholen), Boss-Generatoren ein Sonderfall.
+      const scrapPerWall = state.player?.cfg?.scrapPerWall || 0;
+      if (scrapPerWall && (wall.type === 'destructible' || wall.type === 'breakable')) {
+        state.bonusScrap += scrapPerWall;
+      }
       // Reaktor-Generator (Phase 14): eigener Zaehler + deutliches Feedback --
       // sobald der letzte faellt, wird der Reaktorkern verwundbar.
       if (wall.type === 'generator') {
@@ -710,6 +725,11 @@ export function stepState(state, cmd, dt) {
       continue;
     }
     const { move, fire, mine } = updateEnemy(t, state, dt);
+    // Gefahrensinn-Upgrade (Phase 18, Welle 3): reine Anzeige-Markierung.
+    // Nutzt die Feuerfreigabe, die die KI ohnehin schon berechnet hat --
+    // kein zweiter Sichtlinien-Raycast im Renderpfad (Phase 11b nennt die
+    // Sichtlinien-KI ausdruecklich als Risikopunkt fuer das Frame-Budget).
+    t.aimingAtPlayer = fire;
     moveTank(t, move, state, dt);
     if (fire) fireBullet(t, state);
     if (mine) layMine(t, state);
@@ -790,6 +810,16 @@ export function stepState(state, cmd, dt) {
             const gained = (strong ? ts.scrapStrong : ts.scrap) * mult;
             state.trickshotScrap += gained;
             state.trickshotTimer = ts.slowMoS;
+            // Doppelschlag-Upgrade (Phase 18, Welle 3): der Trickshot laedt
+            // eine Powershot-Ladung nach -- gedeckelt, damit sich Ladungen
+            // in einem Kettenraum nicht ins Unendliche stapeln.
+            const pc2 = b.owner.cfg;
+            if (pc2.trickshotPowershot) {
+              b.owner.powershotCharges = Math.min(
+                (b.owner.powershotCharges || 0) + pc2.trickshotPowershot,
+                pc2.trickshotPowershotMax,
+              );
+            }
             state.sounds.push({ name: strong ? 'trickshot2' : 'trickshot', x: t.x });
             state.texts.push({
               x: t.x,
