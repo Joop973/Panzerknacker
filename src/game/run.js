@@ -191,6 +191,7 @@ function makeRoomStreams(run) {
     scrap: rngFor(s, i, 'scrap'), // Schrottmenge
     events: rngFor(s, i, 'events'), // Ereignis-Auswahl
     modifiers: rngFor(s, i, 'modifiers'), // Raum-Modifikator (Phase 10)
+    hazards: rngFor(s, i, 'hazards'), // Raum-Gefahr (Phase 15)
   };
 }
 
@@ -274,6 +275,9 @@ function buildCombatRoom(run, type, isFinal) {
   // ausgenommen -- handgebaute Encounter sollen wie geplant bleiben, gleiches
   // Prinzip wie der Wellen-Ausschluss (`!isFinal`) in Phase 9.
   const modifier = isFinal ? null : rollRoomModifier(run);
+  // Raum-Gefahr (Phase 15): wie der Modifikator vom Finalraum ausgenommen
+  // (handgebauter Boss-Encounter soll wie geplant bleiben).
+  const hazardType = isFinal ? null : rollRoomHazard(run);
   let enemyTypes;
   let fixedRoom = null;
   let weights = null;
@@ -355,6 +359,9 @@ function buildCombatRoom(run, type, isFinal) {
     // ausgewertet (generateRoom()s fixedLayout-/buildFixedRoom()-Zweige
     // ignorieren den Parameter einfach) -- daher ohne isFinal-Sonderfall.
     destructibleWalls: diff.destructibleWalls,
+    // Raum-Gefahr (Phase 15): ebenso nur vom prozeduralen Generator
+    // ausgewertet, null im Finalraum.
+    hazardType,
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.
@@ -413,6 +420,23 @@ function rollRoomModifier(run) {
   const mod = list[Math.floor(run.rng.modifiers() * list.length)];
   run.roomModifier = mod;
   return mod;
+}
+
+// Raum-Gefahr (Phase 15): ab data/tiles.json: hazards.minRoom wird pro
+// Kampf-/Eliteraum GENAU EIN Typ geseedet gewuerfelt (eigener RNG-Strom,
+// siehe makeRoomStreams) und in run.roomHazard fuer die Vorschau abgelegt.
+// Die konkreten Zellen werden erst in generator.js: placeRoomHazard()
+// bestimmt (braucht das schon gebaute Grid) -- hier nur der Typ + Text.
+function rollRoomHazard(run) {
+  const cfg = run.tiles.hazards;
+  run.roomHazard = null;
+  if (!cfg || run.roomIndex < (cfg.minRoom ?? Infinity)) return null;
+  const types = cfg.types;
+  if (!types || !types.length) return null;
+  const type = types[Math.floor(run.rng.hazards() * types.length)];
+  const info = cfg[type] || {};
+  run.roomHazard = { type, name: info.name || type, desc: info.desc || '' };
+  return type;
 }
 
 // Nicht-Kampf-Raum: kein neuer Arena-Zustand -- der Vorraum bleibt Kulisse.
@@ -568,6 +592,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     roomAffix: null, // Name(n) des Elite-Affix, "A + B" bei zweien (nur Eliteraeume)
     roomAffixes: [], // dieselben Affixe als Namensliste (Phase 9: 0-2 kombinierbar)
     roomModifier: null, // Raum-Modifikator-Objekt aus data/modifiers.json (Phase 10)
+    roomHazard: null, // {type,name,desc} aus data/tiles.json: hazards (Phase 15)
     bossName: null, // Boss-Arena des Finalraums (Phase 14), erst dort gesetzt
     killsByType: {}, // Statistik fuer die Endscreens
     shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)

@@ -109,11 +109,11 @@ function applyAffixByIndex(t, index, eliteAffixes) {
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, waveSplit, waveCfg, eliteAffixes, modifier,
-    destructibleWalls } = opts;
+    destructibleWalls, hazardType } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
-    : generateRoom(tiles, genRng, enemyTypes.length, weights, roomSpec, arenas, destructibleWalls);
+    : generateRoom(tiles, genRng, enemyTypes.length, weights, roomSpec, arenas, destructibleWalls, hazardType);
   const grid = room.grid;
   const walls = buildWalls(grid, destructibleWalls?.hits, data.balance?.boss?.generatorHits);
   // Raum-Modifikator "Spiegelsaal" (Phase 10): feste Waende werfen Kugeln
@@ -122,6 +122,36 @@ export function createState(data, tiles, opts) {
   if (modifier?.mirrorHall) {
     for (const w of walls) if (w.type === 'solid') w.type = 'reflect';
   }
+
+  // Raum-Gefahr (Phase 15): genau EIN Element pro Raum (room.hazard kommt
+  // aus generator.js: placeRoomHazard()). Bewegliche Wand bleibt eine ganz
+  // normale 'solid'-Wand (kein neuer Grid-Char) -- state.tickMovingWalls()
+  // haengt sie nur periodisch aus state.walls aus/ein. Oel/Foerderband sind
+  // reine Positions-Sets (kein Wandobjekt noetig, blockieren nichts).
+  // Laserwaende bewusst NICHT in `walls`: sie sollen Kugeln, aber keine
+  // Panzer blockieren -- ein eigenes Array, das nur bullet.js abfragt.
+  const hazard = room.hazard || null;
+  const movingWalls =
+    hazard?.type === 'movingWall'
+      ? hazard.cells.map(({ col, row }) => ({
+          col,
+          row,
+          x: col * CELL,
+          y: row * CELL,
+          solid: true,
+          wallRef: walls.find((w) => w.col === col && w.row === row) || null,
+        }))
+      : [];
+  const oilCells =
+    hazard?.type === 'oil' ? new Set(hazard.cells.map(({ col, row }) => `${col},${row}`)) : null;
+  const conveyor =
+    hazard?.type === 'conveyor'
+      ? { cells: new Set(hazard.cells.map(({ col, row }) => `${col},${row}`)), dir: hazard.dir, pushPx: hazard.pushPx }
+      : null;
+  const laserWalls =
+    hazard?.type === 'laser'
+      ? hazard.cells.map(({ col, row }) => ({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'laser', col, row }))
+      : [];
 
   const player = createTank(
     'player',
@@ -206,6 +236,14 @@ export function createState(data, tiles, opts) {
     // Aus den Wandobjekten gezaehlt (nicht aus room.markers -- die Generator-
     // Waende sind bereits normale, aus dem Grid gebaute WALL_TYPES-Eintraege).
     bossGeneratorsLeft: walls.filter((w) => w.type === 'generator').length,
+    // Raum-Gefahr (Phase 15): hoechstens EINE davon ist je Raum aktiv, der
+    // Rest bleibt leer/null. `hazard` selbst nur fuer Vorschau/Rendering.
+    hazard,
+    movingWalls,
+    movingWallTimer: hazard?.type === 'movingWall' ? hazard.intervalS : 0,
+    oilCells, // Set<"col,row"> | null -- tank.js: Grip-Physik pro Kachel
+    conveyor, // {cells:Set<"col,row">, dir:{x,y}, pushPx} | null
+    laserWalls, // NIE in `walls`: blockt nur Geschosse (bullet.js), keine Panzer
     walls,
     tanks,
     player,
@@ -309,6 +347,33 @@ export function createState(data, tiles, opts) {
         return;
       }
       state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 6, 90);
+    },
+    // Bewegliche Wand (Phase 15): togglet alle `hazard.intervalS` Sekunden
+    // zwischen solid und offen -- reiner add/remove eines 'solid'-Wand-
+    // objekts, kein neuer Grid-Char noetig (isSolid()/hasLos() kennen '#'
+    // und '.' bereits). Reversibel, anders als destroyWall().
+    tickMovingWalls(dt) {
+      if (!state.movingWalls.length) return;
+      state.movingWallTimer -= dt;
+      if (state.movingWallTimer > 0) return;
+      state.movingWallTimer = state.hazard.intervalS;
+      for (const mw of state.movingWalls) {
+        if (mw.solid) {
+          const i = state.walls.indexOf(mw.wallRef);
+          if (i >= 0) state.walls.splice(i, 1);
+          grid[mw.row][mw.col] = '.';
+          mw.wallRef = null;
+          mw.solid = false;
+        } else {
+          const w = { x: mw.x, y: mw.y, w: CELL, h: CELL, type: 'solid', col: mw.col, row: mw.row };
+          state.walls.push(w);
+          grid[mw.row][mw.col] = '#';
+          mw.wallRef = w;
+          mw.solid = true;
+        }
+      }
+      state.sounds.push('mine'); // dumpfer Ton als Bewegungs-Cue
+      state.addShake(2);
     },
     killTank(tank, cause, meta) {
       // Reaktorkern (Phase 14): unverwundbar, solange mindestens ein
@@ -565,6 +630,10 @@ export function stepState(state, cmd, dt) {
   // Rauchwolken altern unabhaengig von Panzern (einmal pro Schritt).
   for (const c of state.smokeClouds) c.age += dt;
   state.smokeClouds = state.smokeClouds.filter((c) => c.age < c.life);
+
+  // Bewegliche Wand (Phase 15): eigener Bewegungstakt, unabhaengig davon,
+  // ob der Spieler gerade lebt/respawnt.
+  state.tickMovingWalls(dt);
 
   if (!p.alive) {
     state.respawnTimer -= dt;

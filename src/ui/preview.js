@@ -14,7 +14,7 @@ export function createPreview() {
   return {
     // opts: { title, character (Raumtyp-Text), upgradesLine (eigene Ausruestung) }
     show(opts, enemyTypes, tanksData, onGo) {
-      const { title, character, upgradesLine, dangerByType, modifierLine } = opts;
+      const { title, character, upgradesLine, dangerByType, modifierLine, hazardLine } = opts;
       // Typen gruppieren: ["t_brown","t_brown","t_grey"] -> Brauner x2 ...
       const counts = new Map();
       for (const t of enemyTypes) counts.set(t, (counts.get(t) || 0) + 1);
@@ -67,6 +67,16 @@ export function createPreview() {
         mod.className = 'pv-mod';
         mod.textContent = modifierLine;
         el.appendChild(mod);
+      }
+
+      // Raum-Gefahr (Phase 15): eigene Zeile, gleiches Muster wie der
+      // Raum-Modifikator -- auch hier vorher sichtbar, bevor der Raum
+      // betreten wird.
+      if (hazardLine) {
+        const haz = document.createElement('p');
+        haz.className = 'pv-mod';
+        haz.textContent = hazardLine;
+        el.appendChild(haz);
       }
 
       if (upgradesLine) {

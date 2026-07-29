@@ -90,6 +90,7 @@ export function recordRoom(r) {
     shieldCharges: r.shieldCharges || 0,
     scrapEarned: r.scrapEarned || 0,
     modifier: r.modifier || null, // Phase 10
+    hazard: r.hazard || null, // Phase 15
     enemies: r.enemies || [], // [{type, affix}]
     minFps: r.minFps ?? null,
     ricochetKills: r.ricochetKills || 0,

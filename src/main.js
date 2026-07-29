@@ -175,6 +175,7 @@ async function init() {
   let teleSecondary = 'mine';
   let teleGhosts = 0;
   let teleModifier = null;
+  let teleHazard = null;
   // Phase 11b: schlechtester Logik-/Render-Frame IM AKTUELLEN RAUM, nur fuer
   // die Debug-Anzeige -- bewusst nicht in der Telemetrie (die hat mit
   // minFps schon ihre eigene, persistierte Kennzahl seit Phase 1).
@@ -194,6 +195,7 @@ async function init() {
     worstRenderMs = 0;
     teleGhosts = 0;
     teleModifier = null;
+    teleHazard = null;
   }
 
   // Momentaufnahme des laufenden Raums (jeden Tick, sehr billig).
@@ -216,6 +218,7 @@ async function init() {
     telePowershots = st.powershotsFired;
     teleGhosts = st.ghostKills;
     teleModifier = st.modifier?.id || null;
+    teleHazard = st.hazard?.type || null;
   }
 
   function flushRoomTelemetry() {
@@ -235,6 +238,7 @@ async function init() {
       secondary: teleSecondary,
       ghostKills: teleGhosts,
       modifier: teleModifier,
+      hazard: teleHazard,
     });
     run.scrapThisRoom = 0;
   }
@@ -657,6 +661,9 @@ async function init() {
           dangerByType,
           modifierLine: run.roomModifier
             ? `Modifikator: ${run.roomModifier.name} — ${run.roomModifier.desc}`
+            : null,
+          hazardLine: run.roomHazard
+            ? `Gefahr: ${run.roomHazard.name} — ${run.roomHazard.desc}`
             : null,
         },
         run.state.tanks.slice(1).map((t) => t.type),
