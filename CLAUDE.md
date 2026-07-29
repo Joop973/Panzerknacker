@@ -71,14 +71,10 @@ gezielt gegen die dünnsten Tags aus Welle 1) sind gebaut.
 Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
 `eliteBonus`-Feldname) entfernt, jede offene Phase bekommt jetzt eine
 "Betroffene Dateien"-Zeile.
-**Phase 7b — Audio ist weiterhin NICHT gebaut** (in `PLAN.md` ohne ✅,
-zwischen Phase 7 und 8 einsortiert — die Phasen wurden bislang in der
-Reihenfolge 0…7, 8…18 gebaut und diese eine ausgelassen). Bekannter,
-noch offener Fehler daraus: `killTank()` in `src/game/state.js` spielt für
-JEDEN Tod denselben `'death'`-Sound — ein Gegner-Kill klingt identisch zum
-eigenen Tod.
-**Nächste Phase: Phase 7b — Audio (nachholen!), danach Phase 18, Welle 3**
-— so seit dem Code-Review-Pass 2 auch in `PLAN.md` festgeschrieben.
+**Phase 7b — Audio** ist nachgeholt (war als einzige Phase vor 18
+übersprungen worden): `data/sounds.json`, Stereopanning, getrennte Sounds
+für eigenen Tod/Gegner-Kill/Schild.
+**Nächste Phase: Phase 18, Welle 3 — weitere Kartenwellen.**
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -977,6 +973,55 @@ Fehler + eine strukturelle Lücke geschlossen:
   Struktur), Phase 7b explizit als nächste Session festgeschrieben,
   Phase-18-Welle-3-Reihenfolge entsprechend korrigiert.
 
+### Phase 7b (Audio) — gemergt
+Nachgeholt nach dem Code-Review-Pass 2. Alle Töne werden weiterhin
+prozedural synthetisiert (kein Sound-Asset), aber **jede Zahl** liegt jetzt
+in **`data/sounds.json`** statt in einer if/else-Kette in `audio.js`:
+Wellenform, Frequenzverlauf (`slideTo`), Dauer, Lautstärke, Filter,
+Mehrton-Folgen (`at`), Rauschanteil — plus der Musik-Loop (Bass/Lead-Noten,
+Schrittdauer), der ebenfalls hartkodiert war.
+- **Ortsgebundene Sounds werden gepannt**: `state.sounds` nimmt jetzt
+  **beides** an — einen reinen Namensstring für globale Ereignisse
+  (`clear`, `upgrade`, `fanfare`, `wave`, `combo`) und `{ name, x }` für
+  ortsgebundene (Schuss, Abpraller, Explosion, Mine, Tod, Trickshot).
+  `main.js` normalisiert beim Abspielen, `audio.setPanWidth(WIDTH)` liefert
+  die Arenabreite (strukturelle Konstante aus `config.js`, deshalb NICHT in
+  `sounds.json` — dort steht nur die Stereobreite `pan.maxAbs: 0.75`).
+  Vorteil des Doppelformats: kein Umbau aller ~30 Push-Stellen und
+  `bullet.js`s Schattenzustand (`traceTrajectory`, hat gar kein `sounds`)
+  bleibt über `state.sounds?.push(...)` unangetastet.
+- **`killTank()` trennt die Todesarten** (der offene Fehler aus PLAN.md):
+  `'player_death'` (lang, tief, Rauschanteil, Lowpass) vs. `'kill'` (kurz,
+  knackig) statt eines gemeinsamen `'death'`. Zusammen mit `'shield'` sind
+  Leben-, Schild- und Gegnerverlust hörbar unterscheidbar.
+- **`'reflect'` ist neu und löst eine Doppelbelegung auf**: Prisma-/
+  Panzerungs-Reflexion (`armor.js`) und Schildverlust (`state.js`) spielten
+  beide `'shield'` — genau die Verwechslung, die die Phase vermeiden soll.
+  Der unverwundbare Reaktorkern (Phase 14) nutzt jetzt ebenfalls
+  `'reflect'` (dort geht auch nichts verloren). Dazu ein **sichtbarer
+  Blitz** (`state.flashes`, wiederverwendeter Mündungsblitz) — Plan-Auflage
+  „jede Information per Ton braucht ein sichtbares Gegenstück".
+- **Minen-Warnpuls** (`mine_warn`, Takt `sounds.json: mine.warnPulseS`):
+  über einen Zähler `mine.warnPulses` statt eines Countdown-Timers
+  gerechnet, sonst hätte die Trickshot-Zeitlupe (Phase 5 skaliert `dt`) den
+  Takt hörbar verzogen. Sichtbares Gegenstück ist das bestehende schnelle
+  rote Blinken.
+- **`shoot_enemy`**: Gegnerschüsse klingen eine Oktave tiefer + Lowpass —
+  erst Klangfarbe *und* Ort zusammen beantworten „wer schießt woher?".
+  Geisterpanzer (Phase 7) benutzen bewusst den freundlichen `shoot`-Ton.
+- **`upgrade`**: eigener Bestätigungston für die Kartenwahl (Upgrade-Screen
+  wie Shop, über `applyUpgradeChoice()` — derselbe gemeinsame Hook wie
+  Transformationen).
+- **Stimmen-Deckel** `limits.maxVoicesPerName: 3` (20-ms-Fenster): eine
+  Kettenreaktion aus acht Minen hätte achtmal `boom` gleichzeitig gestartet.
+  Muster wie die Entitäten-Deckel aus Phase 11b; bewusst zeitfensterbasiert,
+  damit `main.js` keinen `beginFrame()`-Vertrag mit dem Audio-Modul braucht.
+- **Regressionstest gegen stumme Ereignisse**: `tests/regression.mjs`
+  scannt alle `sounds.push(...)`-Aufrufe im Quellcode und prüft, dass jeder
+  Name in `data/sounds.json` steht (ein Tippfehler macht ein Ereignis sonst
+  lautlos, ohne Fehler). Dazu Formprüfung jeder Meldung im echten Lauf,
+  Warnpuls-Takttest und die Zusicherung, dass `'death'` nicht zurückkehrt.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Vor Phase 18**: 15–20 Runs spielen und die Debug-Ansicht (`?debug=1`)
       auswerten — sie rechnet jetzt selbst (Median-Todesraum, Abpraller-Anteil,
@@ -1005,7 +1050,8 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
   `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`,
-  `transformations.json`, `secondaries.json`, `modifiers.json`).
+  `transformations.json`, `secondaries.json`, `modifiers.json`,
+  `limits.json`, `sounds.json`).
   `balance.json` enthält auch Rarity-Gewichte,
   `legendary.minRoom` + die `scrap`-Werte; `difficulty.json` die `doors`/
   `elite`/`treasure`-Konfiguration (Phase 4).
@@ -1044,11 +1090,15 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/render/sprites.js` — lädt die PNG-Sprites (async, mit Fallback).
 - `src/ui/touchcontrols.js` — Touch: schwebende Twin-Sticks (DOM) + Minen-
   **Wurfstick** (Pointer Events + `setPointerCapture`).
+- `src/core/audio.js` — prozedurale Synthese (Phase 7b): kennt nur noch
+  Oszillator/Rauschen/Filter/Panner, ALLE Werte kommen aus
+  `data/sounds.json`. `play(name, x)` — `x` optional, platziert den Ton im
+  Stereobild.
 - `src/core/telemetry.js` — Run-Telemetrie in `localStorage.runs` +
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v56`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v57`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

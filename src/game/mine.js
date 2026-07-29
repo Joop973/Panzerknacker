@@ -27,6 +27,7 @@ export function createMine(x, y, owner, radius, isEmp) {
     fuse: null, // != null: Restzeit bis Ketten-Explosion
     stuckTo: null, // Klebemine: Panzer, an dem die Mine haftet
     isEmp: !!isEmp, // Sekundärslot EMP-Mine (Phase 6): betaeubt statt zu toeten
+    warnPulses: 0, // Phase 7b: bereits gespielte Warntoene vor der Selbstzuendung
     dead: false,
   };
 }
@@ -43,7 +44,7 @@ export function isArmed(mine, mcfg) {
 export function explodeAt(state, x, y, R, spare, meta) {
   const mcfg = state.data.mine;
   state.explosions.push({ x, y, age: 0 });
-  state.sounds.push('boom');
+  state.sounds.push({ name: 'boom', x });
   state.addShake?.(6);
   state.spawnParticles?.(x, y, '#ffb347', 14, 160);
 
@@ -91,7 +92,7 @@ export function explodeAt(state, x, y, R, spare, meta) {
 function explodeEmpAt(state, x, y, R) {
   const scfg = state.data.secondaries?.emp_mine || {};
   const dur = scfg.stunDuration ?? 1.5;
-  state.sounds.push('shield');
+  state.sounds.push({ name: 'shield', x });
   state.spawnParticles?.(x, y, '#5ad4f0', 10, 130);
   for (const t of state.tanks) {
     if (!t.alive || t.protect > 0) continue;
@@ -166,6 +167,22 @@ export function updateMines(state, dt) {
     const remote = m.owner?.cfg?.remoteDetonate && !m.isSub;
     if (remote) continue;
 
+    // Warnpuls (Phase 7b): in den letzten warningTime Sekunden vor der
+    // Selbstzuendung tickt die Mine im Takt warnPulseS. Ueber einen Zaehler
+    // statt eines Timers gerechnet, damit der Takt unabhaengig von der
+    // Framerate und (Trickshot-)Zeitlupe derselbe bleibt. Sichtbares
+    // Gegenstueck ist das schnelle rote Blinken (effects.js: drawMines).
+    const bmine = state.data.balance.mine;
+    const remaining = bmine.fuse - m.age;
+    if (remaining <= bmine.warningTime) {
+      const pulseS = state.data.sounds?.mine?.warnPulseS ?? 0.16;
+      const due = Math.floor((bmine.warningTime - remaining) / pulseS) + 1;
+      if (m.warnPulses < due) {
+        m.warnPulses = due;
+        state.sounds.push({ name: 'mine_warn', x: m.x });
+      }
+    }
+
     // Selbstzuendung nach Ablauf der Lebenszeit (balance.mine.fuse).
     if (m.age >= state.data.balance.mine.fuse) {
       explode(m, state);
@@ -197,7 +214,7 @@ export function updateMines(state, dt) {
         if (sticky && t !== m.owner) {
           m.stuckTo = t;
           m.fuse = sticky;
-          state.sounds.push('mine');
+          state.sounds.push({ name: 'mine', x: m.x });
         } else {
           explode(m, state);
         }

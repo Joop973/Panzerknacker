@@ -316,7 +316,7 @@ export function createState(data, tiles, opts) {
       }
       state.walls.push({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'trap', col, row, customDurability: hits });
       grid[row][col] = '#';
-      state.sounds.push('mine');
+      state.sounds.push({ name: 'mine', x: cx });
       return true;
     },
     destroyWall(wall) {
@@ -346,7 +346,7 @@ export function createState(data, tiles, opts) {
       // sobald der letzte faellt, wird der Reaktorkern verwundbar.
       if (wall.type === 'generator') {
         state.bossGeneratorsLeft = Math.max(0, state.bossGeneratorsLeft - 1);
-        state.sounds.push('trickshot2');
+        state.sounds.push({ name: 'trickshot2', x: wall.x + wall.w / 2 });
         state.addShake(5);
         state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#ffd23c', 16, 200);
         state.texts.push({
@@ -388,7 +388,8 @@ export function createState(data, tiles, opts) {
           mw.solid = true;
         }
       }
-      state.sounds.push('mine'); // dumpfer Ton als Bewegungs-Cue
+      // Dumpfer Ton als Bewegungs-Cue, geortet an der ersten bewegten Wand.
+      state.sounds.push({ name: 'mine', x: state.movingWalls[0].x + CELL / 2 });
       state.addShake(2);
     },
     killTank(tank, cause, meta) {
@@ -396,7 +397,9 @@ export function createState(data, tiles, opts) {
       // Generator steht -- keine Ladung, kein Verbrauch, verfaellt nie von
       // selbst. Reiner Feedback-Ablehner wie die Schildladungen unten.
       if (tank.cfg.bossInvincible && state.bossGeneratorsLeft > 0) {
-        state.sounds.push('shield');
+        // Phase 7b: derselbe "Treffer wirkungslos abgewehrt"-Ton wie bei der
+        // Panzerung -- nicht der Schildverlust-Ton, hier geht ja nichts verloren.
+        state.sounds.push({ name: 'reflect', x: tank.x });
         state.spawnParticles(tank.x, tank.y, '#ffd23c', 6, 80);
         return;
       }
@@ -406,7 +409,7 @@ export function createState(data, tiles, opts) {
       if (tank === state.player && state.shieldCharges.length > 0) {
         state.shieldCharges.shift(); // aelteste Ladung zuerst
         tank.protect = Math.max(tank.protect, 0.6);
-        state.sounds.push('shield');
+        state.sounds.push({ name: 'shield', x: tank.x });
         state.spawnParticles(tank.x, tank.y, '#8ecaf0', 12, 130);
         return;
       }
@@ -417,7 +420,7 @@ export function createState(data, tiles, opts) {
         tank.shieldReady = false;
         tank.protect = Math.max(tank.protect, 0.3);
         if (tank.regenShieldS) tank.regenShieldTimer = tank.regenShieldS;
-        state.sounds.push('shield');
+        state.sounds.push({ name: 'shield', x: tank.x });
         state.spawnParticles(tank.x, tank.y, '#8ecaf0', 8, 100);
         return;
       }
@@ -425,7 +428,7 @@ export function createState(data, tiles, opts) {
       if (tank === state.player && tank.shieldReady) {
         tank.shieldReady = false;
         tank.protect = Math.max(tank.protect, 0.6);
-        state.sounds.push('shield');
+        state.sounds.push({ name: 'shield', x: tank.x });
         state.spawnParticles(tank.x, tank.y, '#8ecaf0', 12, 130);
         // Konterschild: feuert beim Bruch einen Kugelkranz.
         if (tank.cfg.counterShield) {
@@ -439,7 +442,12 @@ export function createState(data, tiles, opts) {
         return;
       }
       tank.alive = false;
-      state.sounds.push('death');
+      // Phase 7b (Abnahmekriterium aus PLAN.md): bis hierher spielte JEDER
+      // Tod denselben 'death'-Ton -- ein Gegner-Kill klang identisch zum
+      // eigenen Tod. Jetzt zwei klar getrennte Sounds; zusammen mit dem
+      // bereits eigenen 'shield' sind Leben-, Schild- und Gegnerverlust
+      // hoerbar unterscheidbar (Punkt 6 der Phasenliste).
+      state.sounds.push({ name: tank === state.player ? 'player_death' : 'kill', x: tank.x });
       state.addShake(4);
       state.spawnParticles(tank.x, tank.y, DEBRIS_COLORS[tank.type] || '#fff', 10, 120);
       if (tank === state.player) {
@@ -782,7 +790,7 @@ export function stepState(state, cmd, dt) {
             const gained = (strong ? ts.scrapStrong : ts.scrap) * mult;
             state.trickshotScrap += gained;
             state.trickshotTimer = ts.slowMoS;
-            state.sounds.push(strong ? 'trickshot2' : 'trickshot');
+            state.sounds.push({ name: strong ? 'trickshot2' : 'trickshot', x: t.x });
             state.texts.push({
               x: t.x,
               y: t.y - 18,

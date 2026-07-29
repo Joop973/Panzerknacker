@@ -4,7 +4,7 @@
 // Seed-Eingabe und verdrahtet Loop, Eingabe, Run-Controller, Renderer,
 // Reifenspuren, HUD und Debug-Overlay.
 
-import { STEP } from './config.js';
+import { STEP, WIDTH } from './config.js';
 import { createLoop } from './core/loop.js';
 import { createInput } from './core/input.js';
 import { createAudio } from './core/audio.js';
@@ -53,7 +53,7 @@ import { createHud } from './ui/hud.js';
 import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
-  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations', 'secondaries', 'modifiers', 'limits'];
+  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations', 'secondaries', 'modifiers', 'limits', 'sounds'];
   const out = [];
   for (const n of names) {
     let res;
@@ -77,7 +77,7 @@ async function loadData() {
 }
 
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData, secondariesData, modifiersData, limitsData] =
+  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData, secondariesData, modifiersData, limitsData, soundsData] =
     await loadData();
   // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
   // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
@@ -92,6 +92,9 @@ async function init() {
   // Spieler-Kugeln/Gegner-Kugeln/Geister haben ihre Obergrenze schon in
   // balance.json, die Debug-Ansicht liest die von dort (keine Duplikate).
   tanksData.limits = limitsData;
+  // Phase 7b: Minen-Warnpuls braucht seinen Takt in der Spiellogik
+  // (mine.js) -- der Rest von sounds.json geht direkt an das Audio-Modul.
+  tanksData.sounds = soundsData;
   // Feste Layouts EINMALIG beim Laden pruefen (Flood-Fill etc.). Ein
   // unloesbares Layout meldet sich hier mit klarer Meldung statt spaeter
   // im laufenden Spiel.
@@ -126,6 +129,10 @@ async function init() {
   const touch = createTouchControls(inputCfg);
   const input = createInput(window, canvas, { inputCfg, touch });
   const audio = createAudio();
+  // Phase 7b: alle Tondefinitionen kommen aus data/sounds.json, die
+  // Arenabreite dient der Stereo-Zuordnung ortsgebundener Ereignisse.
+  audio.setData(soundsData);
+  audio.setPanWidth(WIDTH);
   audio.setMuted(getPref('muted', false));
   const unlockAll = () => {
     audio.unlock();
@@ -459,14 +466,18 @@ async function init() {
       tracks.stamp(run.state.tanks);
       tracks.fade(dt);
     }
-    for (const name of run.state.sounds.splice(0)) {
-      audio.play(name);
+    // Sound-Ereignisse (Phase 7b): ortsgebundene melden sich als
+    // { name, x } und werden im Stereobild platziert, globale (Raum
+    // geraeumt, Upgrade, Fanfare) weiterhin als reiner Name.
+    for (const ev of run.state.sounds.splice(0)) {
+      const name = typeof ev === 'string' ? ev : ev.name;
+      audio.play(name, typeof ev === 'string' ? null : ev.x);
       // Haptik: Touch-Vibration (Android) und Gamepad-Rumble.
       if (isTouch && navigator.vibrate) {
         if (name === 'boom') navigator.vibrate(60);
-        else if (name === 'death') navigator.vibrate(40);
+        else if (name === 'player_death') navigator.vibrate(40);
       }
-      if (st.source === 'gamepad' && (name === 'boom' || name === 'death')) {
+      if (st.source === 'gamepad' && (name === 'boom' || name === 'player_death')) {
         for (const pad of navigator.getGamepads?.() || []) {
           pad?.vibrationActuator
             ?.playEffect?.('dual-rumble', {

@@ -238,7 +238,7 @@ export function updateBullet(b, state, dt) {
     // naechsten Wandkontakt" durch eine Spiegelwand ausgehebelt.
     if (mirror && b.ricochetsLeft > 0) {
       const firstBounce = b.wallBounces === 0;
-      state.sounds?.push(firstBounce ? 'tick' : 'bounce');
+      state.sounds?.push({ name: firstBounce ? 'tick' : 'bounce', x: b.x });
       b.wallBounces++;
       b.trail.push({ x: b.x, y: b.y });
       if (b.trail.length > TRAIL_MAX) b.trail.shift();
@@ -248,14 +248,14 @@ export function updateBullet(b, state, dt) {
     // auch im Eckenfall (hitX && hitY). Bei 0 verbleibenden
     // Abprallern verschwindet das Geschoss.
     if (b.ricochetsLeft <= 0) {
-      state.sounds?.push('bounce');
+      state.sounds?.push({ name: 'bounce', x: b.x });
       b.dead = true;
       return;
     }
     // Der erste Abpraller macht die Kugel gefaehrlich (auch fuer den
     // Schuetzen) -> eigener kurzer Tick-Sound zum Telegraphieren.
     const firstBounce = b.ricochetsLeft === b.ricochetsStart;
-    state.sounds?.push(firstBounce ? 'tick' : 'bounce');
+    state.sounds?.push({ name: firstBounce ? 'tick' : 'bounce', x: b.x });
     b.ricochetsLeft--;
     b.wallBounces++; // nur WAND-Abpraller (Phase 4: toeten das Prisma)
   }

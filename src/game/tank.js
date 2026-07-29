@@ -269,7 +269,9 @@ export function fireBullet(tank, state) {
     tank.y -= Math.sin(tank.turret) * tank.cfg.recoilPx;
     resolveCircleWalls(tank, tank.cfg.radius, state.walls);
   }
-  state.sounds.push('shoot');
+  // Phase 7b: Gegnerschuesse klingen tiefer als eigene und werden ueber ihre
+  // x-Position im Stereobild geortet -- "wer schiesst woher?" ohne Hinsehen.
+  state.sounds.push({ name: tank === state.player ? 'shoot' : 'shoot_enemy', x: tank.x });
   tank.cooldown = tank.cfg.fireCooldown * (tank.berserkerFire || 1);
   return true;
 }
@@ -296,7 +298,7 @@ export function dashTank(tank, state, moveAxis) {
   const iframe = cdMult < 1 ? cooldown : tank.cfg.dash.iframe;
   tank.protect = Math.max(tank.protect, iframe);
   tank.dashCd = cooldown;
-  state.sounds.push('dash');
+  state.sounds.push({ name: 'dash', x: tank.x });
   state.spawnParticles?.(tank.x, tank.y, '#8ecaf0', 8, 90);
   // Erschuetterungsdash-Upgrade (Phase 18): stoesst nahe Gegner weg und
   // betaeubt sie kurz -- unabhaengig von der Sekundaerwaffe, deshalb hier
@@ -366,7 +368,7 @@ export function layMine(tank, state, throwOverride) {
     isEmp = tank.secondaryMineCount % everyNth === 0;
   }
   state.mines.push(createMine(lx, ly, tank, state.data.mine.radiusPx, isEmp));
-  state.sounds.push('mine');
+  state.sounds.push({ name: 'mine', x: lx });
   // Schockwelle: nahe Gegner um die gelegte Mine wegstossen.
   if (tank.cfg.shockwaveRadius) {
     const R = tank.cfg.shockwaveRadius;
@@ -407,7 +409,7 @@ export function useSecondary(tank, state, throwOverride) {
   } else if (sec === 'deflector') {
     tank.deflectorTimer = scfg.activeS ?? 1.5;
     tank.deflectorCharges = 1;
-    state.sounds.push('shield');
+    state.sounds.push({ name: 'shield', x: tank.x });
     used = true;
   } else if (sec === 'smoke') {
     state.smokeClouds.push({
@@ -417,7 +419,7 @@ export function useSecondary(tank, state, throwOverride) {
       age: 0,
       life: scfg.durationS ?? 4,
     });
-    state.sounds.push('mine');
+    state.sounds.push({ name: 'mine', x: tank.x });
     state.spawnParticles?.(tank.x, tank.y, '#9aa0a8', 12, 70);
     used = true;
   } else if (sec === 'trap_wall') {
@@ -443,7 +445,7 @@ function fireHook(tank, state, scfg) {
     if (state.isSolid(nx, ny)) {
       tank.hookTarget = { x: nx - cos * tank.cfg.radius, y: ny - sin * tank.cfg.radius };
       tank.hookTimer = 1;
-      state.sounds.push('dash');
+      state.sounds.push({ name: 'dash', x: tank.x });
       return true;
     }
     x = nx;
