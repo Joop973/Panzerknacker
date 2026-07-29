@@ -84,15 +84,22 @@ function buildWalls(grid, destructibleHits, generatorHits) {
 // gilt, ob der Panzer sofort oder erst mit der zweiten Welle entsteht.
 function applyAffixByIndex(t, index, eliteAffixes) {
   if (!eliteAffixes) return;
-  t.affixes = eliteAffixes.chosen.map((a) => a.id);
+  // t.affixes ist die Anzeige-/Telemetrie-Quelle (Farbpunkte in renderer.js,
+  // main.js: teleEnemies) -- nur Affixe eintragen, die dieser Panzer auch
+  // TATSAECHLICH bekommt. Regenerierschild trifft nur cheapestIdx/priciestIdx
+  // (Bugfix: vorher stand hier pauschal die volle Rezeptur, wodurch jeder
+  // andere Gegner im Raum einen Schild-Punkt zeigte, den er gar nicht hatte).
+  t.affixes = [];
   for (const affix of eliteAffixes.chosen) {
     if (affix.regenerating) {
       if (index === eliteAffixes.cheapestIdx || index === eliteAffixes.priciestIdx) {
         t.shieldReady = true;
         t.regenShieldS = affix.regenS;
+        t.affixes.push(affix.id);
       }
       continue;
     }
+    t.affixes.push(affix.id);
     if (affix.shield) t.shieldReady = true;
     if (affix.speedMult) t.cfg.speed *= affix.speedMult;
     if (affix.extraMines) t.cfg.mines += affix.extraMines;

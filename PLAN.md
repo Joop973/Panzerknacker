@@ -423,6 +423,11 @@ Sonderfälle in der bestehenden Treffer-Schleife. `ai_turrets.js`/
 ## Phase 7b — Audio
 **Aufwand:** 1 Session
 **Neu in v2.**
+**Status (Fund beim Code-Review nach Phase 18 Welle 2):** einzige Phase vor
+18, die noch kein ✅ trägt — beim schrittweisen Bau in der Reihenfolge
+0…7, 8…18 ausgelassen, nicht vergessen zu bauen. Der unten beschriebene
+"Bekannte Fehler" (identischer Tod-Sound für Spieler und Gegner) ist zum
+Zeitpunkt dieses Reviews weiterhin unverändert im Code vorhanden.
 
 **Korrektur (v3-Review):** Die Begründung "steht hier, weil Phase 5 auf einem
 Sound beruht" stimmt nicht — die prozedurale WebAudio-Synthese
