@@ -1477,6 +1477,31 @@ ist dann eine Balance-Anpassung an fertigen Karten, kein Neubau):**
 1. **Erzwungene Bankshots** — Anteil der Räume ab Raum 5 mit mindestens einem
    nicht direkt tötbaren Gegner. Zielwert 60 %. Design-Kontrolle über den
    Generator, keine Messung.
+   **✅ gemessen und hergestellt.** Der Zusatz „keine Messung" stimmte nicht:
+   Gegnerauswahl und Raumfolge hängen allein am Seed, die Zahl ist also ohne
+   einen einzigen gespielten Run bestimmbar. **`tests/uspcheck.mjs`** (neu)
+   spielt N Runs durch und zählt nach. Ergebnis der ersten Messung:
+   **32,9 %** über 40 Runs / 328 Kampfräume — der Zielwert war um fast die
+   Hälfte verfehlt, ohne dass es jemandem aufgefallen wäre. Ursache:
+   `buyEnemies()` zieht rein zufällig, und ein Prisma ist mit 7 Punkten
+   teuer und nur einer von elf Typen.
+   Behoben über die vom Plan selbst geforderte Design-Kontrolle:
+   `data/difficulty.json: bankshotGuarantee` tauscht in `chance` der Räume ab
+   `minRoom` einen bereits gekauften Gegner gegen einen Bankshot-Typ —
+   **getauscht, nicht ergänzt**, das Gefahrenbudget des Raums bleibt also
+   unverändert. Stand jetzt: **61,9 %**.
+   Zwei Feststellungen aus der Messung, die im Plan so nicht standen:
+   - **Raum 5 kann die Quote strukturell nie erfüllen**, weil `t_prism` laut
+     Phase 4 erst ab Raum 6 freigeschaltet ist (gemessen: 0 von 26 Räumen).
+     Die Garantie-Chance ist entsprechend höher gewählt, damit der
+     Gesamtwert stimmt. Alternative wäre, die Kennzahl auf „ab Raum 6" zu
+     ändern — bewusst nicht getan, um den Zielwert nicht schönzurechnen.
+   - **Ein gepanzerter Gegner steht ohnehin in 66–82 % der Räume.** Er zählt
+     hier bewusst nicht mit: `armor.arc` erzwingt ein Flankiermanöver, aber
+     keinen Bankshot. Die Zahl wird nachrichtlich mit ausgewiesen.
+   Die Regressionssuite prüft die Quote jetzt bei jedem Lauf (deterministisch
+   über feste Seeds) — fällt sie unter 60 %, wird die Suite rot, statt dass
+   der USP still verwässert.
 2. **Prisma-Ersttrefferquote** — Anteil der Prisma-Panzer, die innerhalb der
    ersten drei auf sie gezielten Schüsse sterben. Zielbereich 40–70 %.
    Darunter unlesbar, darüber trivial.
@@ -1485,6 +1510,15 @@ ist dann eine Balance-Anpassung an fertigen Karten, kein Neubau):**
    USP trägt. Soll über die ersten zehn Runs eines Spielers **steigen**.
    Bleibt sie flach, ist der Bankshot nicht befriedigend genug — dann hilft
    kein weiterer Content.
+   **✅ messbar gemacht** (die Zahl braucht gespielte Runs, das Instrument
+   dafür gab es aber noch nicht): `state.js` zählt jetzt neben
+   `ricochetKills` auch `voluntaryRicochetKills` — dieselben Kills, aber nur
+   an Gegnern OHNE `requiresRicochet`. Ein Prisma zwingt zum Bankshot und
+   sagt deshalb nichts über die Vorliebe des Spielers aus; erst der
+   freiwillige Bankshot tut das. Frontpanzerung zählt bewusst als
+   „freiwillig", weil der Gepanzerte von der Flanke direkt tötbar ist.
+   Die Debug-Ansicht (`?debug=1`) zeigt Quote **und Verlauf über die Runs**,
+   weil der Plan nicht den Absolutwert verlangt, sondern dass er *steigt*.
 
 **Weitere Abbruchkriterien:**
 - Nach Stufe 2: Sind 20 aufeinanderfolgende Runs in der Telemetrie

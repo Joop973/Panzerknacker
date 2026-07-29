@@ -177,6 +177,7 @@ async function init() {
   let teleMinFps = Infinity;
   let teleRic = 0;
   let teleDir = 0;
+  let teleVol = 0; // USP-Kennzahl 3: freiwillige Abpraller-Kills
   let teleSec = 0;
   let telePowershots = 0;
   let teleSecondary = 'mine';
@@ -196,6 +197,7 @@ async function init() {
     teleMinFps = Infinity;
     teleRic = 0;
     teleDir = 0;
+    teleVol = 0;
     teleSec = 0;
     telePowershots = 0;
     worstLogicMs = 0;
@@ -221,6 +223,7 @@ async function init() {
     teleEnemies = st.tanks.slice(1).map((t) => ({ type: t.type, affixes: t.affixes || [] }));
     teleRic = st.ricochetKills;
     teleDir = st.directKills;
+    teleVol = st.voluntaryRicochetKills;
     teleSec = st.secondaryUses;
     telePowershots = st.powershotsFired;
     teleGhosts = st.ghostKills;
@@ -240,6 +243,7 @@ async function init() {
       minFps: teleMinFps === Infinity ? null : Math.round(teleMinFps),
       ricochetKills: teleRic,
       directKills: teleDir,
+      voluntaryRicochetKills: teleVol,
       secondaryUses: teleSec,
       powershotsFired: telePowershots,
       secondary: teleSecondary,

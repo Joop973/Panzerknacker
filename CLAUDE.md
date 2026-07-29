@@ -75,6 +75,11 @@ Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
 übersprungen worden): `data/sounds.json`, Stereopanning, getrennte Sounds
 für eigenen Tod/Gegner-Kill/Schild. **Welle 3** ist gebaut (sechs Karten,
 die zwei tote Transformationen reparieren).
+Danach wurden die **USP-Prüfpunkte** aus `PLAN.md` operationalisiert:
+Kennzahl 1 (erzwungene Bankshots) war mit 33 % statt 60 % deutlich
+verfehlt — behoben über `difficulty.json: bankshotGuarantee`, jetzt 61,9 %
+und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
+jetzt überhaupt messbar.
 **Nächste Phase: Phase 18, Welle 4 — bzw. zuerst die aufgeschobene
 Telemetrie-Auswertung, sobald 15–20 gespielte Runs vorliegen.**
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -1071,6 +1076,40 @@ gezielt auf diese drei Tags: `terrain` 2→6, `control` ohne Mine 2→4,
   ist leer). Die Telemetrie-Auswertung ist im Plan als nachzuholende
   Balance-Anpassung festgehalten, nicht als Voraussetzung.
 
+### USP-Prüfpunkte gemessen (PLAN.md „Prüfpunkte") — gemergt
+Kein neues Feature, sondern die nie durchgeführte Abnahme des Kernversprechens.
+- **Kennzahl 1 „Erzwungene Bankshots" war um fast die Hälfte verfehlt.**
+  Der Plan notierte „Design-Kontrolle über den Generator, keine Messung" —
+  tatsächlich hängt die Gegnerauswahl allein am Seed, die Zahl ist also ohne
+  gespielte Runs bestimmbar. Neues Werkzeug **`tests/uspcheck.mjs`**
+  (`node tests/uspcheck.mjs [seeds]`) spielt N Runs durch und zählt:
+  **32,9 %** statt der geforderten 60 % (40 Runs, 328 Kampfräume ab Raum 5).
+  Ursache: `buyEnemies()` zieht rein zufällig, ein Prisma kostet 7 Punkte
+  und ist einer von elf Typen.
+- **Behoben über `data/difficulty.json: bankshotGuarantee`** (`minRoom: 6`,
+  `chance: 0.58`, `types: ["t_prism"]`): `run.js: ensureBankshotEnemy()`
+  **tauscht** in einem Teil der Räume den teuersten gekauften Gegner gegen
+  einen Bankshot-Typ — bewusst tauschen statt ergänzen, damit das
+  Gefahrenbudget des Raums unverändert bleibt und der Raum nicht voller,
+  sondern nur anders zusammengesetzt wird. Jetzt **61,9 %**.
+  ⚠️ **Das macht das Spiel spürbar härter** (Prismen in ~62 % statt ~33 %
+  der Räume ab Raum 5). Zurückdrehen = `chance` senken, sonst nichts.
+- **Zwei Feststellungen aus der Messung:** (1) Raum 5 kann die Quote
+  strukturell nie erfüllen, weil `t_prism` laut Phase 4 erst ab Raum 6
+  freigeschaltet ist (0 von 26 Räumen) — die Chance ist entsprechend höher
+  gewählt, statt die Kennzahl auf „ab Raum 6" schönzurechnen. (2) Ein
+  gepanzerter Gegner steht ohnehin in 66–82 % der Räume, zählt hier aber
+  bewusst nicht mit: `armor.arc` erzwingt eine Flanke, keinen Bankshot.
+- **Kennzahl 3 „Freiwillige Bankshots" ist jetzt messbar** (der Plan nennt
+  sie „die einzige Zahl, die wirklich misst, ob der USP trägt", das
+  Instrument fehlte aber): `state.voluntaryRicochetKills` zählt Abpraller-
+  Kills nur an Gegnern OHNE `requiresRicochet`. Die Debug-Ansicht zeigt
+  Quote **und Verlauf über die Runs** — der Plan verlangt nicht einen
+  Absolutwert, sondern dass die Zahl *steigt*.
+- **Wächter in der Regressionssuite**: die Quote wird bei jedem Lauf
+  deterministisch nachgemessen; fällt sie unter 60 %, wird die Suite rot.
+  Gegenprobe bestanden (Garantie abgeschaltet → 32,9 %, Suite rot).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1151,7 +1190,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v58`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v59`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -1188,6 +1227,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 python3 -m http.server 8099        # dann http://localhost:8099/index.html
 node --check src/<datei>.js         # Syntax
 node tests/regression.mjs           # Regressionssuite (eingecheckt!)
+node tests/uspcheck.mjs 40           # USP-Kennzahl 1 messen (PLAN.md-Pruefpunkt)
 ```
 Playwright-Browser liegt unter `/opt/pw-browsers/chromium`
 (`executablePath` setzen; NICHT `playwright install`).
