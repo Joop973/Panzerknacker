@@ -71,6 +71,13 @@ gezielt gegen die dünnsten Tags aus Welle 1) sind gebaut.
 Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
 `eliteBonus`-Feldname) entfernt, jede offene Phase bekommt jetzt eine
 "Betroffene Dateien"-Zeile.
+**Phase 7b — Audio ist weiterhin NICHT gebaut** (in `PLAN.md` ohne ✅,
+zwischen Phase 7 und 8 einsortiert — die Phasen wurden bislang in der
+Reihenfolge 0…7, 8…18 gebaut und diese eine ausgelassen). Bekannter,
+noch offener Fehler daraus: `killTank()` in `src/game/state.js` spielt für
+JEDEN Tod denselben `'death'`-Sound — ein Gegner-Kill klingt identisch zum
+eigenen Tod. Nicht dringend genug für einen Zwischenfix, aber beim
+nächsten "Weiter" nach Phase 18 einplanen, statt sie weiter zu überspringen.
 **Nächste Phase: Phase 18, Welle 3 — weitere Kartenwellen** (Stufe 4: Kür).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -930,6 +937,18 @@ Zurückgebaut wurde:
 - **Radius-Prozente gesenkt**: Sprengkraft +40 %→+25 % pro Stufe (neues
   Datenfeld `sprengkraft.radiusMult`, statt hartkodierter 1.4 in `cfg.js`);
   Überladung +50 %→+30 % (`ueberladung.mult` 1.5→1.3).
+
+### Bugfixes (Code-Review nach Phase 18 Welle 2) — gemergt
+- **Regenerierschild-Affix zeigte sich auf dem falschen Gegner** (Phase 9):
+  `state.js: applyAffixByIndex()` trug `t.affixes` pauschal aus der ganzen
+  Rezeptur ein, obwohl `regenerating_shield` laut Design nur den billigsten
+  und teuersten Gegner trifft (`cheapestIdx`/`priciestIdx`). Dadurch zeigte
+  **jeder** Gegner im Raum den Schild-Farbpunkt (`renderer.js`) und landete
+  mit dem Affix in der Telemetrie (`main.js: teleEnemies`), auch wenn er gar
+  keine Ladung hatte. Jetzt wird `t.affixes` erst an der Stelle befüllt, an
+  der ein Affix tatsächlich angewendet wird — Anzeige und Telemetrie stimmen
+  wieder mit der echten Wirkung überein. Regressionstest ergänzt
+  (`phase9elite.mjs`, Abschnitt 4).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Vor Phase 18**: 15–20 Runs spielen und die Debug-Ansicht (`?debug=1`)
