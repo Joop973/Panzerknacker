@@ -1203,6 +1203,8 @@ Zähler existiert bereits in `run.tagCounts`; `ageShieldCharges` für Bollwerk),
 
 ## Phase 18 — Kartenwellen
 **Aufwand:** laufend, je 1 Session
+**Welle 1 ✅ erledigt** (doppelrohr/flak freigeben, Ballistikrechner,
+Pluenderer, Feuerleitzentrale) — weitere Wellen folgen in eigenen Sessions.
 
 Neue Upgrades in Wellen zu 5–8. **Jede Welle beginnt mit einer
 Telemetrie-Auswertung**: Welche Karten wurden angeboten und nie gewählt?
@@ -1230,6 +1232,35 @@ Phase.
 `src/game/upgradepool.js` (Tag-`weapon`-Ausschluss aufheben, sobald die erste
 Waffenkarte regulär gezogen werden soll), `src/render/effects.js`/`bullet.js`
 (Ballistikrechner-Anbindung an `traceTrajectory`).
+
+**Umsetzungsfunde (Welle 1):**
+- **`WEAPON_ALLOWLIST` statt Tag-Freigabe**: `upgradepool.js` oeffnet den Tag
+  `weapon` NICHT komplett, sondern nur fuer die beiden namentlich gelisteten
+  Karten (`doppelrohr`, `flak`) — genau wie im Plan gefordert ("jede weitere
+  Waffenkarte bekommt ihr eigenes Physikverhalten"). Eine dritte Waffenkarte
+  braucht denselben bewussten Freischalt-Schritt, nicht nur einen neuen
+  `upgrades.json`-Eintrag.
+- **Flak bekam eine eigene Physik statt eines weiteren `allExplosive`-Klons**:
+  neues Bullet-Feld `burstDistance` (`bullet.js`) laesst eine Kugel nach einer
+  kurzen, festen Reichweite in der Luft zuenden — unabhaengig von Wand- oder
+  Zielkontakt, ueber denselben `explosive`-Sterbe-Mechanismus wie
+  Sprengmunition/Glaskanone (`state.js`, unveraendert). Das ist der
+  Unterschied zu den bestehenden Explosiv-Karten, die immer bis zur Wand
+  oder zum vollen Wegbudget fliegen.
+  `traceTrajectory()` (Ziellinie) uebernimmt `cfg.burstRangePx` automatisch,
+  damit die Vorschau nicht laenger wirkt als der echte Schuss.
+- **Feuerleitzentrale ist die erste echte `requires`-Karte**: der Filter in
+  `upgradepool.js` (`def.requires.some(...)`) existierte seit Phase 2 bereits,
+  wurde aber nie von einer Karte genutzt. Tag `scaling` (nicht `weapon`),
+  damit sie unabhaengig von der Waffen-Allowlist normal im Pool erscheint,
+  sobald `doppelrohr` gewaehlt wurde.
+- **Ballistikrechner ist reine Anzeige**, keine neue Physik: `effects.js:
+  drawAimLine()` markiert jetzt ALLE Abpraller-Punkte in `pts` statt nur den
+  ersten und braucht dafuer ein laengeres `tailSteps`-Vorschaufenster (90 statt
+  45 Schritte), sonst reicht das kurze Standard-Tail nie bis zum zweiten
+  Wandkontakt.
+- **Pluenderer** wirkt NACH dem Elite-Multiplikator (`run.js`), als flacher
+  Bonus — wie die einmalige Kriegsbeute-Belohnung auch kein Vielfaches ist.
 
 ---
 

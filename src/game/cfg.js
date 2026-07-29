@@ -92,7 +92,24 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
     cfg.twinShot = true;
     cfg.twinSpreadRad = U.doppelrohr.spreadRad;
   }
+  // Feuerleitzentrale (Phase 18): erste echte requires-Karte -- verengt den
+  // Doppelrohr-Spreizwinkel, wirkt also nur, wenn twinSpreadRad schon gesetzt
+  // ist (Reihenfolge nach dem Doppelrohr-Block ist deshalb Absicht).
+  if (l('feuerleitzentrale')) {
+    cfg.twinSpreadRad *= Math.pow(U.feuerleitzentrale.spreadMult, l('feuerleitzentrale'));
+  }
+  // Flak (Phase 18): eigene Waffenphysik statt eines weiteren
+  // allExplosive-Sonderfalls -- jeder Schuss zuendet nach kurzer Reichweite
+  // in der Luft (burstRangePx in bullet.js), nicht nur an Wand/Ziel.
+  if (l('flak')) {
+    cfg.allExplosive = true;
+    cfg.shotExplosionRadius = cfg.shotExplosionRadius || U.flak.radiusPx;
+    cfg.burstRangePx = U.flak.burstRangePx;
+  }
   cfg.radar = l('radar') > 0;
+  // Ballistikrechner (Phase 18): reiner Anzeige-Parameter fuer die
+  // Ziellinie (effects.js: drawAimLine), keine echte Physik.
+  if (l('ballistikrechner')) cfg.aimPreviewBounces = U.ballistikrechner.previewBounces;
 
   // --- Neue Build-Upgrades ---
   if (l('glaskanone')) {
@@ -195,6 +212,10 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   if (l('zielsucher')) cfg.magazine = Math.min(cfg.magazine, 3);
   // Scharfschuetze: hartes Magazin 1 (schlaegt alles).
   if (cfg.singleShot) cfg.magazine = 1;
+  // Pluenderer (Phase 18, erste Tag-resource-Karte): flacher Bonus pro
+  // geraeumtem Raum, angewandt in run.js NACH dem Elite-Multiplikator
+  // (wie die einmalige Kriegsbeute-Belohnung auch kein Vielfaches ist).
+  if (l('pluenderer')) cfg.scrapBonusPerRoom = U.pluenderer.scrapPerLevel * l('pluenderer');
   // Sekundärslot (Phase 6): explizit vom Run vorgegeben, kein Level-Scan
   // (mehrere Sekundärkarten koennen gleichzeitig Level > 0 haben, siehe
   // run.js: chooseUpgrade -- nur equippedSecondary bestimmt die aktive).

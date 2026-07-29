@@ -62,11 +62,14 @@ handgebauten Finalraums), **Phase 15** (Raum-Gefahren: bewegliche Wand,
 Sichtlinie, wenn der Spieler zielt, 15-Hz-Reihum-Wahrnehmung statt
 Pro-Frame-Prüfung) und **Phase 17** (Transformationen: drei Karten desselben
 Tags schalten einen dauerhaften Bonus frei — Bollwerk/Kavallerie/Taktiker/
-Pionier/Saboteur) sind gebaut. `PLAN.md` wurde auf **v3**
-konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`,
-doppelt gebautes Affix-System, falscher `eliteBonus`-Feldname) entfernt,
-jede offene Phase bekommt jetzt eine "Betroffene Dateien"-Zeile.
-**Nächste Phase: Phase 18 — Kartenwellen** (Stufe 4: Kür).
+Pionier/Saboteur) sind gebaut. **Phase 18 — Kartenwellen** läuft (laut Plan
+mehrere Wellen über mehrere Sessions): **Welle 1** (`doppelrohr`/`flak`
+freigegeben, Ballistikrechner, Plünderer, Feuerleitzentrale) ist gebaut.
+`PLAN.md` wurde auf **v3** konsistenzgeprüft: tote Verweise (u. a. gelöschte
+Elite-Karte `beutepanzer`, doppelt gebautes Affix-System, falscher
+`eliteBonus`-Feldname) entfernt, jede offene Phase bekommt jetzt eine
+"Betroffene Dateien"-Zeile.
+**Nächste Phase: Phase 18, Welle 2 — weitere Kartenwellen** (Stufe 4: Kür).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -788,6 +791,38 @@ aber schon mit — reaktiviert statt neu gebaut).
   Tags mit mindestens einer gewählten Karte, aber noch nicht freigeschaltet)
   direkt unter der Schrott-/Untertitelzeile — ohne sichtbaren Fortschritt
   würde die Mechanik unbemerkt verpuffen.
+
+### Phase 18, Welle 1 (Kartenwellen) — gemergt
+Erste von mehreren geplanten Wellen (Phase 18 läuft über mehrere Sessions).
+Vier neue Karten in `data/upgrades.json` + Freigabe von `doppelrohr`, das seit
+seiner Migration (Phase 2) nie erreichbar war.
+- **`src/game/upgradepool.js: WEAPON_ALLOWLIST`**: der Tag `weapon` bleibt
+  grundsätzlich gesperrt (spätere Waffenkarten bekommen laut Plan bewusst
+  jeweils ihr eigenes Physikverhalten und werden einzeln freigeschaltet) —
+  nur `doppelrohr` und das neue `flak` sind namentlich erlaubt.
+- **`flak`** (Tag `weapon`, `rare`): eigene Physik statt eines weiteren
+  `allExplosive`-Klons von Sprengmunition/Glaskanone. Neues Bullet-Feld
+  `burstDistance` (`bullet.js`) lässt jeden Schuss nach einer kurzen, festen
+  Reichweite (`burstRangePx`) in der Luft zünden — unabhängig von Wand- oder
+  Zielkontakt, über denselben `explosive`-Sterbe-Mechanismus wie die
+  bestehenden Explosiv-Karten (`state.js`, unverändert). `traceTrajectory()`
+  übernimmt `cfg.burstRangePx` automatisch, damit die Ziellinie nicht länger
+  wirkt als der echte Schuss.
+- **`feuerleitzentrale`** (Tag `scaling`, `requires: ["doppelrohr"]`,
+  `maxStacks: 2`): erste Karte, die den seit Phase 2 ungenutzten
+  `requires`-Filter in `upgradepool.js` tatsächlich benutzt. Verengt den
+  Doppelrohr-Spreizwinkel; Reihenfolge in `cfg.js` bewusst nach dem
+  `doppelrohr`-Block, sonst wäre `twinSpreadRad` beim Verengen noch
+  ungesetzt.
+- **`ballistikrechner`** (Tag `information`): reine Anzeige, keine neue
+  Physik. `effects.js: drawAimLine()` markiert jetzt ALLE Abpraller-Punkte
+  der Vorschau statt nur den ersten und bekommt dafür ein längeres
+  `tailSteps`-Fenster (90 statt 45 Schritte) — sonst reicht das kurze
+  Standard-Tail nie bis zum zweiten Wandkontakt.
+- **`pluenderer`** (Tag `resource`, erste Karte dieses Tags): flacher
+  Schrott-Bonus pro geräumtem Raum, wirkt in `run.js` NACH dem
+  Elite-Multiplikator — wie die einmalige Kriegsbeute-Belohnung auch kein
+  Vielfaches ist.
 
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
