@@ -1204,7 +1204,11 @@ Zähler existiert bereits in `run.tagCounts`; `ageShieldCharges` für Bollwerk),
 ## Phase 18 — Kartenwellen
 **Aufwand:** laufend, je 1 Session
 **Welle 1 ✅ erledigt** (doppelrohr/flak freigeben, Ballistikrechner,
-Pluenderer, Feuerleitzentrale) — weitere Wellen folgen in eigenen Sessions.
+Pluenderer, Feuerleitzentrale). **Welle 2 ✅ erledigt** (Beutejagd,
+Nachtsicht, Nachladeschild, Meisterschütze, Erschütterungsdash — gezielt
+gegen die duennsten Tags aus Welle 1: `resource`/`information`/`defense`/
+`synergy` hatten je nur 1–2 Karten) — weitere Wellen folgen in eigenen
+Sessions.
 
 Neue Upgrades in Wellen zu 5–8. **Jede Welle beginnt mit einer
 Telemetrie-Auswertung**: Welche Karten wurden angeboten und nie gewählt?
@@ -1261,6 +1265,40 @@ Waffenkarte regulär gezogen werden soll), `src/render/effects.js`/`bullet.js`
   Wandkontakt.
 - **Pluenderer** wirkt NACH dem Elite-Multiplikator (`run.js`), als flacher
   Bonus — wie die einmalige Kriegsbeute-Belohnung auch kein Vielfaches ist.
+
+**Umsetzungsfunde (Welle 2 — ohne echte Spieler-Telemetrie in dieser Umgebung
+per Tag-Verteilung statt Nie-gewählt-Auswertung geplant, da `localStorage.runs`
+in dieser Session leer ist):**
+- **Kein einziges neues Statwerte-Upgrade in dieser Welle** (0/5 reine
+  `stat`-Karten) — alle fünf haben einen bedingten/reaktiven Mechanismus,
+  deutlich unter der "hoechstens ein Drittel"-Grenze.
+- **Nachladeschild wiederverwendet den Regenerierschild-Tick 1:1**: das
+  Elite-Affix "Regenerierschild" (Phase 9) hatte den `regenShieldTimer`-Tick
+  in `stepState()`s Panzer-Schleife bereits generisch fuer JEDEN Panzer (nicht
+  nur Gegner) gebaut — der Spieler brauchte deshalb keinen einzigen neuen
+  Tick-Codepfad, nur den Timer-Start beim Schildverbrauch
+  (`killTank()`s Spieler-Schild-Zweig).
+- **Beutejagd braucht keinen neuen Sync-Mechanismus**: `state.bonusScrap`
+  ist ein zweiter, unabhaengiger Zaehler nach demselben Muster wie
+  `trickshotScrap` (Phase 5) — `run.js` synchronisiert beide identisch per
+  Delta, damit `state.js` weiterhin kein `run`-Objekt kennen muss.
+  `firstKillGiven` wird NUR in `createState()` gesetzt (nicht in
+  `respawnPlayer()`) — der Bonus gilt pro Raum, nicht pro Leben.
+- **Erschütterungsdash ist die zweite echte `requires`-Karte** (nach
+  Feuerleitzentrale in Welle 1) und behebt eine echte Pool-Luecke: alle
+  fuenf bisherigen `control`-Karten waren ueber `MINE_ONLY_IDS` an die
+  Minen-Sekundärwaffe gebunden (Phase 6) — wer Enterhaken/Sperrmauer/Rauch/
+  Deflektor ausgeruestet hatte, sah im Tag `control` ueberhaupt keine Karte.
+  Dupliziert bewusst NICHT `schockwelle`s Push/Stun-Felder (eigene
+  `dashShock*`-cfg-Felder), damit beide Karten gleichzeitig ausruestbar
+  bleiben, ohne sich gegenseitig zu ueberschreiben.
+- **Nachtsicht ist rein optisch** (ein `return` mehr in `renderer.js:
+  drawFog()`) — KI-Sichtlinien (`state.blocksSight`/`clearLine`) bleiben
+  unveraendert, exakt wie beim Raum-Modifikator selbst (Phase 10).
+- **Meisterschuetze multipliziert an der einzigen Stelle, an der
+  Trickshot-Schrott entsteht** (`state.js`, direkt vor dem `trickshotScrap`-
+  Increment) — kein zweiter Berechnungspfad, auch der Floating-Text zeigt
+  den bereits multiplizierten Wert.
 
 ---
 

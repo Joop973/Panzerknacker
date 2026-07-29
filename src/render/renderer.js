@@ -870,6 +870,10 @@ export function createRenderer(ctx) {
     const mod = state.modifier;
     if (!mod || !mod.visionRadiusPx) return;
     const p = state.player;
+    // Nachtsicht-Upgrade (Phase 18): schraenkt die Sicht des Spielers nicht
+    // mehr ein -- die KI-Sichtlinien (state.blocksSight/clearLine) bleiben
+    // unveraendert, das ist bewusst nur eine Anzeige-Aufhebung.
+    if (p.cfg.ignoreFog) return;
     const x = lerp(p.prevX, p.x, alpha);
     const y = lerp(p.prevY, p.y, alpha);
     const r = mod.visionRadiusPx;
