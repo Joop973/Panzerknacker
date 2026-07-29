@@ -11,7 +11,7 @@
 
 import { range } from '../core/rng.js';
 import { roleTurret } from './ai_turrets.js';
-import { DRIVES } from './ai_drives.js';
+import { DRIVES, coverDrive } from './ai_drives.js';
 
 export function angleDiff(a, b) {
   // Kleinste Differenz b - a, gewrappt auf [-PI, PI].
@@ -171,11 +171,55 @@ function activeRole(tank, state, dt) {
   return pt.roles[ai.phaseIdx];
 }
 
+// Deckungs-KI (Phase 16): zielt der Spieler gerade auf diesen Panzer?
+// Enger Kegel um p.turret + Reichweite + freie Sichtlinie -- absichtlich
+// grob (kein exaktes Trefferbild), das reicht als Ausloeser zum Ducken.
+function isPlayerAiming(tank, state, cfg) {
+  const p = state.player;
+  if (!p.alive) return false;
+  const dx = tank.x - p.x;
+  const dy = tank.y - p.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist > (cfg.aimRangePx ?? 400)) return false;
+  const toTank = Math.atan2(dy, dx);
+  if (Math.abs(angleDiff(p.turret, toTank)) > (cfg.aimConeRad ?? 0.25)) return false;
+  return clearLine(state, p.x, p.y, tank.x, tank.y);
+}
+
+// Deckungswahrnehmung (Phase 16): "zielt der Spieler auf mich?" ist reine
+// Optik -- ein Aufblitzen von 1-2 Frames faellt nicht auf. Deshalb bewusst
+// mit 15 Hz UND einem Reihum-Verfahren (hoechstens `checksPerTick` Gegner
+// pro Aufruf) statt einer vollen Pruefung aller Gegner in jedem Frame.
+// Aktualisiert tank.ai.threatened; updateEnemy() liest es nur.
+export function updateCoverPerception(state, dt) {
+  const cfg = state.data.ai.cover;
+  if (!cfg) return;
+  state.coverTimer -= dt;
+  if (state.coverTimer > 0) return;
+  state.coverTimer = 1 / (cfg.checkHz ?? 15);
+  const enemies = state.tanks.filter((t) => t !== state.player && t.alive);
+  if (!enemies.length) return;
+  const n = Math.min(cfg.checksPerTick ?? 4, enemies.length);
+  for (let i = 0; i < n; i++) {
+    const t = enemies[(state.coverCursor + i) % enemies.length];
+    t.ai.threatened = t.cfg.aggression < cfg.aggressionThreshold && isPlayerAiming(t, state, cfg);
+  }
+  state.coverCursor = (state.coverCursor + n) % enemies.length;
+}
+
 // Ein KI-Schritt fuer einen Gegner. Gibt { move, fire, mine } zurueck;
 // die Anwendung (Bewegung, Schuss, Minenlegen) macht state.js.
 export function updateEnemy(tank, state, dt) {
   const role = activeRole(tank, state, dt);
-  const move = DRIVES[role](tank, state, dt);
+  const coverCfg = state.data.ai.cover;
+  // Deckungssuche (Phase 16): ersetzt fuer diesen Tick die normale
+  // Rollen-Fahrfunktion, wenn der Panzer als "im Ziel" erkannt wurde --
+  // guardian bleibt aussen vor (verlaesst seine Zone laut Spec nie).
+  // findet coverDrive() keinen Punkt, faellt es auf DRIVES[role] zurueck,
+  // damit der Panzer nie einfach stehen bleibt.
+  const seekCover =
+    coverCfg && role !== 'guardian' && tank.cfg.aggression < coverCfg.aggressionThreshold && tank.ai.threatened;
+  const move = (seekCover && coverDrive(tank, state, dt)) || DRIVES[role](tank, state, dt);
   // EMP-Mine (Phase 6): betaeubte Gegner drehen den Turm nicht und feuern
   // nicht -- eigenes Feld turretStunTimer, damit die bestehende Krallenfalle
   // (stunTimer allein) den Turm weiter benutzbar laesst (siehe PLAN.md).

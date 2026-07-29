@@ -1091,14 +1091,50 @@ Foerderband-Schub), `src/game/bullet.js` (Laser-Bankshot), `src/game/run.js`
   explizitem Whitelist-Eintrag ergaenzt, um denselben Fehler nicht zu
   wiederholen.
 
-## Phase 16 — Deckungs-KI
+## Phase 16 — Deckungs-KI  ✅ erledigt
 **Aufwand:** 1–2 Sessions
 Gegner mit niedriger `aggression` brechen die Sichtlinie, wenn du zielst.
 **Performance-Auflage:** Sichtlinien mit 15 Hz statt pro Frame, höchstens vier
 Gegner pro Frame im Reihum-Verfahren. Für Deckungsverhalten reicht das.
 
-**Betroffene Dateien:** `src/game/ai.js` (Sichtlinien-Takt + Reihum-Auswahl),
-`src/game/ai_drives.js` (Deckungs-Zielpunkt suchen).
+**Betroffene Dateien:** `data/tanks.json` (neuer `ai.cover`-Block),
+`src/game/ai.js` (Sichtlinien-Takt + Reihum-Auswahl), `src/game/ai_drives.js`
+(Deckungs-Zielpunkt suchen), `src/game/state.js` (Verdrahtung).
+
+**Umsetzungsfunde:**
+- **Kein neuer Grid-/Rollen-Mechanismus, sondern ein Dispatch-Override**:
+  `ai.js: updateEnemy()` ruft bei niedriger `aggression` UND erkanntem
+  "im Ziel" (`tank.ai.threatened`) statt `DRIVES[role]` die neue
+  `ai_drives.js: coverDrive()` auf — Rolle, Panzerung, Minenlegen bleiben
+  komplett unangetastet, es wird nur EIN Tick lang die Fahrfunktion
+  ersetzt. Findet `coverDrive()` keinen Punkt, fällt es auf `DRIVES[role]`
+  zurück, damit ein Panzer nie stehen bleibt.
+- **"Im Ziel" ist bewusst grob**: `ai.js: isPlayerAiming()` prüft nur engen
+  Kegel (`aimConeRad`) + Reichweite (`aimRangePx`) + freie Sichtlinie zum
+  Spielerturm — kein exaktes Trefferbild, das reicht als Auslöser zum
+  Ducken, spart aber die teure Berechnung.
+- **15 Hz + Reihum-Verfahren wie im Plan gefordert**: `updateCoverPerception()`
+  läuft mit einem eigenen Timer (`state.coverTimer`, zurückgesetzt auf
+  `1/checkHz`) und prüft pro Aufruf höchstens `checksPerTick` (4) Gegner,
+  ausgehend von einem wandernden `state.coverCursor` — bei mehr Gegnern
+  dauert es also mehrere Aufrufe, bis alle einmal geprüft wurden. Das
+  Ergebnis (`tank.ai.threatened`) bleibt bis zum nächsten Check stehen
+  (max. ~67 ms alt) — für ein Ausweichverhalten unmerklich.
+- **`findCoverPoint()` ist bewusst kein Pathfinding**: samplet 8 Punkte im
+  Ring (`searchRadiusPx`) um den Panzer und wählt den nächsten begehbaren,
+  der die Sichtlinie zum Spieler bricht — "für Deckungsverhalten reicht
+  das" (PLAN.md). Kein Kandidat gefunden → `null`, Aufrufer fährt normal
+  weiter.
+- **`guardian` bleibt explizit ausgenommen** (verlässt seine Zone laut
+  Spec nie, Phase 8) — `aggression` ist für Guardian-Typen ohnehin nicht
+  gesetzt und fällt in `cfg.js: resolveCfg()` auf den Standardwert 0.5
+  zurück (über der Schwelle), der Rollen-Ausschluss dokumentiert die
+  Absicht aber explizit statt sich nur auf den Default zu verlassen.
+  `aggressionThreshold: 0.3` trifft aktuell `t_grey`/`t_yellow`/`t_prism`
+  (Sapper, 0.17) und `t_armored` (Hunter, 0) — Sapper hatte laut Phase 8
+  ohnehin schon ein dormantes Flucht-Feld (`preferredRange`, bisher von
+  keinem Typ genutzt); die Deckungssuche ist ihr erstes echtes defensives
+  Verhalten.
 
 ## Phase 17 — Transformationen
 **Aufwand:** 1 Session

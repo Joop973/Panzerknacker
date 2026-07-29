@@ -138,6 +138,45 @@ function siegerDrive(tank, state, dt) {
   return steer(tank, state, dt, target, driveCfg(state, tank, cfg));
 }
 
+// Deckungssuche (Phase 16): samplet Punkte im Ring um den Panzer (kein
+// Pathfinding -- "fuer Deckungsverhalten reicht das", PLAN.md) und waehlt
+// den naechsten, der begehbar ist UND die Sichtlinie zum Spieler bricht.
+// Gibt null zurueck, wenn keiner der Kandidaten Deckung bietet (z. B. der
+// Panzer steht schon frei in der Raummitte) -- der Aufrufer faellt dann auf
+// das normale Rollen-Verhalten zurueck.
+function findCoverPoint(tank, state, cfg) {
+  const p = state.player;
+  const n = cfg.searchAngles ?? 8;
+  let best = null;
+  let bestD = Infinity;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const cx = tank.x + Math.cos(a) * cfg.searchRadiusPx;
+    const cy = tank.y + Math.sin(a) * cfg.searchRadiusPx;
+    if (state.isSolid(cx, cy)) continue;
+    if (clearLine(state, cx, cy, p.x, p.y)) continue; // von dort noch sichtbar
+    const d = (cx - tank.x) ** 2 + (cy - tank.y) ** 2;
+    if (d < bestD) {
+      bestD = d;
+      best = { x: cx, y: cy };
+    }
+  }
+  return best;
+}
+
+// Deckungsfahrt (Phase 16): ersetzt die normale Rollen-Fahrfunktion fuer
+// EINEN Tick, wenn ai.js (updateCoverPerception) den Panzer als "im Ziel
+// des Spielers" erkannt hat. Gibt null zurueck, wenn kein Deckungspunkt
+// gefunden wurde -- der Aufrufer (ai.js: updateEnemy) ruft dann die normale
+// DRIVES[role]-Funktion auf, damit der Panzer nie einfach stehen bleibt.
+export function coverDrive(tank, state, dt) {
+  const cfg = state.data.ai.cover;
+  const cover = findCoverPoint(tank, state, cfg);
+  if (!cover) return null;
+  const target = Math.atan2(cover.y - tank.y, cover.x - tank.x);
+  return steer(tank, state, dt, target, driveCfg(state, tank, {}));
+}
+
 export const DRIVES = {
   guardian: guardianDrive,
   sapper: sapperDrive,
