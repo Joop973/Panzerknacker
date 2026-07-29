@@ -1136,7 +1136,7 @@ Gegner pro Frame im Reihum-Verfahren. Für Deckungsverhalten reicht das.
   keinem Typ genutzt); die Deckungssuche ist ihr erstes echtes defensives
   Verhalten.
 
-## Phase 17 — Transformationen
+## Phase 17 — Transformationen ✅ erledigt
 **Aufwand:** 1 Session
 
 Drei Upgrades desselben Tags schalten einen Bonus frei. Fortschritt als Zähler
@@ -1169,6 +1169,37 @@ aber schon mit):**
 Zähler existiert bereits in `run.tagCounts`; `ageShieldCharges` für Bollwerk),
 `src/game/cfg.js`/`tank.js` (Kavallerie-Dash-Interaktion), `src/ui/upgradescreen.js`
 (Fortschrittsanzeige "2/3" reaktivieren).
+
+**Umsetzungsfunde:**
+- **`cfg.js` musste am Ende NICHT angefasst werden**, obwohl es in der
+  "Betroffene Dateien"-Zeile stand: Kavallerie liest ihren Effekt (wie alle
+  anderen Transformationen auch) live aus `state.transform` an der einzigen
+  Stelle, die ihn braucht (`tank.js: dashTank()`), statt ihn als weiteren
+  aufgelösten `cfg`-Wert zu führen — konsistent mit `slowMoScale`
+  (Taktiker) und `wallDurability`/`ownMinesHarmless` (Pionier), die genauso
+  nie über `cfg.js` laufen.
+- **`applyUpgradeChoice()` ist der einzige Freischalt-Hook** (nicht
+  `chooseUpgrade()` direkt) — er wird bereits sowohl vom Upgrade-Screen als
+  auch von `buyShopCard()` (Phase 13) aufgerufen, ein neuer
+  `unlockTransformation(run, tag)`-Aufruf an dieser einen Stelle deckt damit
+  automatisch auch im Shop gekaufte Karten ab.
+- **Transformationseffekte werden einmal pro Raum in `state.transform`
+  gebacken** (`buildCombatRoom()` → `transform: transformEffects(run)`),
+  nicht live pro Tick neu gelesen — eine mitten im Raum frisch
+  freigeschaltete Transformation wirkt daher erst ab dem nächsten
+  Raumaufbau. Dasselbe Verhalten wie Raum-Modifikatoren (Phase 10) und
+  Raum-Gefahren (Phase 15), hier nur erstmals für den laufenden Raum selbst
+  relevant (Auswahl passiert im selben Raum, in dem gezählt wird).
+- **`run.shieldCharges` ist zur Laufzeit nicht die Quelle der Wahrheit**:
+  `stepRun()` synchronisiert jeden Tick `run.shieldCharges = st.shieldCharges`
+  (Raum-Zustand → Run-Objekt, nicht umgekehrt) — Bollwerks
+  `ageShieldCharges()`-Sperre muss also am Zustand hängen, der tatsächlich
+  gealtert wird (`state.shieldCharges`), sonst würde jeder Tick den
+  gewünschten Testzustand sofort wieder überschreiben.
+- **Kavallerie-Hinweistext** ("nur mit Dash-Karte") erscheint im
+  Upgrade-Screen sowohl bei "Fortschritt" als auch bei "Aktiv", solange
+  `run.upgrades.dash` noch 0 ist — sonst wäre eine freigeschaltete, aber
+  wirkungslose Transformation für den Spieler unsichtbar unklar.
 
 ## Phase 18 — Kartenwellen
 **Aufwand:** laufend, je 1 Session

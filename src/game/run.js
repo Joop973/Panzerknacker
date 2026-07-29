@@ -585,6 +585,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     // --- Phase 5: Transformationen ---
     tagCounts: {}, // {tag: Anzahl gewaehlter Upgrades} -- Stacks zaehlen einzeln
     transformations: new Set(), // freigeschaltete Transformations-ids
+    newTransformation: null, // Phase 17: zuletzt freigeschaltete (fuer Text-Einblendung)
     roomSpec: opts.roomSpec || null, // { fixedLayout } -> Arena-Weiche
     roomType: 'combat', // Typ des aktuellen Raums
     currentEvent: null, // aktives Event waehrend phase 'event'
@@ -778,7 +779,9 @@ export function stepRun(run, cmd, dt) {
     if (run.roomType === 'elite') earned *= sc.eliteMult;
     run.scrap += earned;
     run.scrapThisRoom += earned;
-    ageShieldCharges(run); // E2: Schildladungen altern pro geraeumtem Raum
+    // E2: Schildladungen altern pro geraeumtem Raum -- Transformation
+    // "Bollwerk" (Phase 17, Tag defense) setzt das komplett aus.
+    if (!transformEffects(run).shieldNeverDecays) ageShieldCharges(run);
     st.texts.push({
       x: st.player.x,
       y: st.player.y - 30,
@@ -989,11 +992,25 @@ function applyUpgradeChoice(run, offer) {
     }
   }
   run.upgradeChoices++;
-  // Tags weiter zaehlen (Telemetrie + spaeter Phase 17). Die Freischaltung
-  // selbst ist nach PLAN.md v2 auf Phase 17 verschoben und hier stillgelegt.
+  // Tags weiter zaehlen (Telemetrie + Transformationen, Phase 17).
   if (!offer.fallback && offer.tag) {
     run.tagCounts[offer.tag] = (run.tagCounts[offer.tag] || 0) + 1;
+    unlockTransformation(run, offer.tag);
   }
+}
+
+// Transformationen (Phase 17): drei Karten desselben Tags schalten einen
+// dauerhaften Bonus frei (nur die 5 Tags, die tatsaechlich 3x stapelbar
+// sind -- data/transformations.json). run.newTransformation haelt die
+// zuletzt freigeschaltete fuer eine kurze Text-Einblendung (main.js).
+function unlockTransformation(run, tag) {
+  const threshold = run.data.transformations?.threshold ?? 3;
+  if (run.tagCounts[tag] < threshold) return;
+  const defs = run.data.transformations?.transformations || {};
+  const entry = Object.values(defs).find((t) => t.tag === tag);
+  if (!entry || run.transformations.has(entry.id)) return;
+  run.transformations.add(entry.id);
+  run.newTransformation = entry;
 }
 
 // Auswahl anwenden und den Run fortsetzen.

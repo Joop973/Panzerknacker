@@ -286,8 +286,15 @@ export function dashTank(tank, state, moveAxis) {
   resolveCircleWalls(tank, tank.cfg.radius, state.walls);
   resolveTankBlocking(tank, state.tanks);
   resolveCircleWalls(tank, tank.cfg.radius, state.walls);
-  tank.protect = Math.max(tank.protect, tank.cfg.dash.iframe);
-  tank.dashCd = tank.cfg.dash.cooldown;
+  // Transformation "Kavallerie" (Phase 17, Tag mobility): halbierter
+  // Cooldown, dafuer Unverwundbarkeit fuer die GESAMTE (schon halbierte)
+  // Cooldown-Dauer statt nur des kurzen Basis-iframe -- der Dash wird
+  // dadurch zu einem quasi-durchgehenden Ausweichmanoever.
+  const cdMult = state.transform?.dashCooldownMult ?? 1;
+  const cooldown = tank.cfg.dash.cooldown * cdMult;
+  const iframe = cdMult < 1 ? cooldown : tank.cfg.dash.iframe;
+  tank.protect = Math.max(tank.protect, iframe);
+  tank.dashCd = cooldown;
   state.sounds.push('dash');
   state.spawnParticles?.(tank.x, tank.y, '#8ecaf0', 8, 90);
   return true;

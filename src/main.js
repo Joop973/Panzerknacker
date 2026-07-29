@@ -508,6 +508,12 @@ async function init() {
         getOffers: () => run.pendingOffers,
         getScrap: () => run.scrap,
         canFourth: () => run.pendingOffers.length < 4,
+        // Transformationen (Phase 17): Fortschrittsanzeige im Screen.
+        transformDefs: run.data.transformations?.transformations,
+        tagCounts: run.tagCounts,
+        unlocked: run.transformations,
+        threshold: run.data.transformations?.threshold,
+        hasDash: (run.upgrades.dash || 0) > 0,
         onPick: (idx) => {
           // Telemetrie: gewaehlte Karte + abgelehnte Alternativen (id + tag).
           const offers = run.pendingOffers;
@@ -516,6 +522,22 @@ async function init() {
             rejected: offers.filter((_, i) => i !== idx).map(cardOf),
           });
           chooseUpgrade(run, idx);
+          // Frisch freigeschaltete Transformation (Phase 17) kurz einblenden --
+          // sonst verpufft die Mechanik unbemerkt.
+          if (run.newTransformation) {
+            const t = run.newTransformation;
+            if (run.state) {
+              run.state.texts.push({
+                x: run.state.player.x,
+                y: run.state.player.y - 40,
+                text: `${t.symbol} ${t.name} freigeschaltet!`,
+                age: 0,
+                life: 2.0,
+                color: '#ffd23c',
+              });
+            }
+            run.newTransformation = null;
+          }
           updateSecondaryLabel();
           upgradeShown = false;
         },
@@ -587,6 +609,22 @@ async function init() {
               rejected: [],
             });
             updateSecondaryLabel(); // Sekundärkarten wechseln die Waffe
+            // Transformationen (Phase 17): auch ein Kartenkauf im Shop
+            // zaehlt gegen den Tag-Fortschritt, siehe onPick oben.
+            if (run.newTransformation) {
+              const t = run.newTransformation;
+              if (run.state) {
+                run.state.texts.push({
+                  x: run.state.player.x,
+                  y: run.state.player.y - 40,
+                  text: `${t.symbol} ${t.name} freigeschaltet!`,
+                  age: 0,
+                  life: 2.0,
+                  color: '#ffd23c',
+                });
+              }
+              run.newTransformation = null;
+            }
           }
           return ok;
         },
