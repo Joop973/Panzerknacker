@@ -1008,6 +1008,9 @@ function applyUpgradeChoice(run, offer) {
     }
   }
   run.upgradeChoices++;
+  // Phase 7b: eigene Bestaetigung fuer die Kartenwahl -- bis dahin war der
+  // Upgrade-Screen der einzige Belohnungsmoment ganz ohne Ton.
+  run.state?.sounds.push('upgrade');
   // Tags weiter zaehlen (Telemetrie + Transformationen, Phase 17).
   if (!offer.fallback && offer.tag) {
     run.tagCounts[offer.tag] = (run.tagCounts[offer.tag] || 0) + 1;

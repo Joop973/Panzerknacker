@@ -12,14 +12,18 @@
 //  3. Ein Raum gilt NIE als geraeumt, solange eine zweite Welle aussteht
 //     (Bugfix: Kill der letzten Welle-1-Gegner waehrend der Vorwarnung).
 //  4. Determinismus: gleicher Seed -> gleiche Karte und gleiches Raumlayout.
+//  5. Audio (Phase 7b): jeder im Code gemeldete Sound-Name hat einen Eintrag
+//     in data/sounds.json (sonst ist das Ereignis stumm), jede Meldung ist
+//     wohlgeformt, und der Minen-Warnpuls tickt im vorgesehenen Takt.
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption } from '../src/game/run.js';
 import { traceTrajectory } from '../src/game/bullet.js';
 import { validateArenas } from '../src/game/generator.js';
+import { createMine, updateMines } from '../src/game/mine.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const load = (n) => JSON.parse(readFileSync(join(root, 'data', n + '.json'), 'utf8'));
@@ -35,6 +39,7 @@ tanksData.transformations = load('transformations');
 tanksData.secondaries = load('secondaries');
 tanksData.modifiers = load('modifiers');
 tanksData.limits = load('limits');
+tanksData.sounds = load('sounds');
 
 let failures = 0;
 function check(ok, msg) {
@@ -60,6 +65,78 @@ function check(ok, msg) {
       check(false, `Ziellinie crasht an ${type}-Wand: ${e.message}`);
     }
   }
+}
+
+// ---- 5a. Sound-Namen im Code haben einen Eintrag in sounds.json ---------
+// Statischer Scan aller sounds.push(...)-Aufrufe: ein Tippfehler oder ein
+// vergessener sounds.json-Eintrag macht das Ereignis sonst lautlos, ohne
+// dass irgendwo ein Fehler auftaucht.
+{
+  const defined = new Set(Object.keys(tanksData.sounds.sounds || {}));
+  const srcFiles = [];
+  (function walk(dir) {
+    for (const e of readdirSync(dir)) {
+      const p = join(dir, e);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (p.endsWith('.js')) srcFiles.push(p);
+    }
+  })(join(root, 'src'));
+
+  for (const file of srcFiles) {
+    const text = readFileSync(file, 'utf8');
+    // Erfasst 'name' und { name: 'a' } sowie cond ? 'a' : 'b' innerhalb
+    // eines sounds.push(...)-Aufrufs.
+    for (const m of text.matchAll(/sounds\??\.push\(([^;]*?)\)\s*;/gs)) {
+      for (const lit of m[1].matchAll(/'([a-z_0-9]+)'/g)) {
+        check(
+          defined.has(lit[1]),
+          `${file.slice(root.length + 1)}: Sound "${lit[1]}" fehlt in data/sounds.json`,
+        );
+      }
+    }
+  }
+
+  // Wohlgeformtheit der Definitionen (audio.js liest genau diese Felder).
+  for (const [name, def] of Object.entries(tanksData.sounds.sounds || {})) {
+    const steps = def.steps || [];
+    check(steps.length > 0 || def.noise, `sounds.json: "${name}" hat weder steps noch noise`);
+    for (const s of steps) {
+      check(
+        typeof s.freq === 'number' && typeof s.dur === 'number' && typeof s.vol === 'number',
+        `sounds.json: "${name}" hat einen Step ohne freq/dur/vol`,
+      );
+    }
+  }
+}
+
+// ---- 5b. Minen-Warnpuls tickt im vorgesehenen Takt -----------------------
+{
+  const bmine = tanksData.balance.mine;
+  const pulseS = tanksData.sounds.mine.warnPulseS;
+  const st = {
+    data: tanksData,
+    mines: [createMine(100, 100, null, tanksData.mine.radiusPx, false)],
+    bullets: [],
+    tanks: [],
+    sounds: [],
+    explosions: [],
+    addShake() {},
+    spawnParticles() {},
+    walls: [],
+    killTank() {},
+  };
+  // Bis kurz vor die Selbstzuendung altern lassen, dabei Toene zaehlen.
+  let pulses = 0;
+  for (let t = 0; t < bmine.fuse - 1e-6; t += 1 / 60) {
+    st.sounds.length = 0;
+    updateMines(st, 1 / 60);
+    pulses += st.sounds.filter((s) => s.name === 'mine_warn').length;
+  }
+  const expected = Math.floor(bmine.warningTime / pulseS) + 1;
+  check(
+    pulses === expected,
+    `Minen-Warnpuls: ${pulses} Toene, erwartet ${expected} (warningTime ${bmine.warningTime}s / Takt ${pulseS}s)`,
+  );
 }
 
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
@@ -89,6 +166,8 @@ function pickMapNode(run) {
 // ---- 2.-4. Fuenf Seeds bis zum Sieg + Wellen-/Trace-Pruefungen -----------
 validateArenas(tanksData.arenas);
 const SEEDS = [1, 7, 42, 1337, 20260729];
+
+const soundNamesSeen = new Set();
 
 for (const seed of SEEDS) {
   const run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
@@ -121,6 +200,16 @@ for (const seed of SEEDS) {
       cheatKillAll(st);
       const hadWave = !!st.pendingWave;
       stepRun(run, CMD, STEP);
+      // Phase 7b: jede Meldung ist entweder ein reiner Name (globales
+      // Ereignis) oder { name, x } (ortsgebunden, wird gepannt).
+      for (const ev of st.sounds.splice(0)) {
+        const name = typeof ev === 'string' ? ev : ev?.name;
+        check(typeof name === 'string', `Seed ${seed}: unförmige Sound-Meldung ${JSON.stringify(ev)}`);
+        if (typeof ev === 'object') {
+          check(typeof ev.x === 'number' && Number.isFinite(ev.x), `Seed ${seed}: Sound "${name}" ohne gültige x-Position`);
+        }
+        soundNamesSeen.add(name);
+      }
       // Regression 3: solange eine Welle aussteht, darf der Raum nicht enden.
       if (hadWave && run.state === st && st.pendingWave) {
         check(run.phase === 'playing', `Seed ${seed}, Raum ${run.roomIndex}: Raum endete trotz ausstehender Welle (${run.phase})`);
@@ -144,6 +233,16 @@ for (const seed of SEEDS) {
   if (run.phase === 'victory') {
     console.log(`Seed ${seed}: Sieg nach ${run.roomsCleared} geraeumten Raeumen (${waveRoomsSeen} Wellen-Raeume gesehen)`);
   }
+}
+
+// ---- 5c. Im echten Lauf beobachtete Sound-Namen -------------------------
+{
+  const defined = new Set(Object.keys(tanksData.sounds.sounds || {}));
+  for (const name of soundNamesSeen) {
+    check(defined.has(name), `Im Lauf gemeldeter Sound "${name}" fehlt in data/sounds.json`);
+  }
+  check(soundNamesSeen.has('kill'), 'Gegner-Kill meldet keinen "kill"-Sound');
+  check(!soundNamesSeen.has('death'), 'Alter Sammel-Sound "death" wird noch gemeldet (Phase 7b trennt player_death/kill)');
 }
 
 // ---- 4. Determinismus: gleiche Karte + gleicher Raum bei gleichem Seed ---

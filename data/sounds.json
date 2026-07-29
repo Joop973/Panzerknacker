@@ -1,0 +1,133 @@
+{
+  "_comment": "Phase 7b: Sound-Definitionen, vorher als if/else-Kette in src/core/audio.js. Jeder Eintrag ist eine Liste von Toenen (steps) und optional ein Rauschanteil (noise) plus ein Filter. Felder je step: freq (Hz), slideTo (exponentieller Frequenzverlauf bis Tonende), dur (s), vol (0..1), wave (sine|square|sawtooth|triangle), at (Startverzoegerung in s, fuer Mehrtonfolgen). Ortsgebundene Ereignisse werden von der Spiellogik mit einer x-Koordinate gemeldet und automatisch im Stereobild platziert -- hier ist dafuer nichts einzustellen.",
+
+  "pan": {
+    "_comment": "Stereobreite: 1.0 waere hart links/rechts. Darunter bleibt die Mitte ortbar, ohne dass ein Rand-Ereignis auf einem Ohr verschwindet.",
+    "maxAbs": 0.75
+  },
+
+  "limits": {
+    "_comment": "Gegen Krach bei Kettenreaktionen: derselbe Sound-Name wird pro Frame hoechstens so oft angespielt (Muster wie die Entitaeten-Deckel aus Phase 11b).",
+    "maxVoicesPerName": 3
+  },
+
+  "mine": {
+    "_comment": "Warnpuls vor der Selbstzuendung (Phase 7b, Punkt 4 der Liste). Sichtbares Gegenstueck ist das schnelle rote Blinken der Mine (effects.js).",
+    "warnPulseS": 0.16
+  },
+
+  "music": {
+    "_comment": "Prozeduraler 16-Step-Loop in a-Moll (Bass + sparsames Arpeggio), bis Phase 7b als Konstanten in audio.js hartkodiert. 0 = Pause.",
+    "stepS": 0.22,
+    "bass": { "notes": [55, 0, 55, 0, 65.4, 0, 82.4, 0, 55, 0, 55, 0, 98, 0, 82.4, 0], "dur": 0.2, "vol": 0.05, "wave": "sawtooth" },
+    "lead": { "notes": [220, 0, 262, 0, 330, 0, 0, 392, 0, 330, 0, 262, 0, 0, 440, 0], "dur": 0.12, "vol": 0.028, "wave": "triangle" }
+  },
+
+  "sounds": {
+    "shoot": {
+      "steps": [{ "freq": 480, "slideTo": 220, "dur": 0.07, "vol": 0.06, "wave": "square" }]
+    },
+    "shoot_enemy": {
+      "_comment": "Gegnerschuss: dieselbe Form, eine Oktave tiefer und dumpfer -- zusammen mit dem Panning beantwortet der Ton 'wer schiesst woher?'.",
+      "filter": { "type": "lowpass", "freq": 1200 },
+      "steps": [{ "freq": 240, "slideTo": 130, "dur": 0.08, "vol": 0.055, "wave": "square" }]
+    },
+    "bounce": {
+      "steps": [{ "freq": 300, "dur": 0.05, "vol": 0.05, "wave": "triangle" }]
+    },
+    "tick": {
+      "_comment": "Erster Abpraller -- ab hier ist die eigene Kugel auch fuer den Spieler gefaehrlich. Hoechster Informationswert im ganzen Spiel.",
+      "steps": [{ "freq": 1200, "dur": 0.03, "vol": 0.05, "wave": "square" }]
+    },
+    "reflect": {
+      "_comment": "Panzerung/Prisma wirft die Kugel zurueck. Bis Phase 7b teilte sich das den 'shield'-Ton mit dem Schildverlust -- zwei voellig verschiedene Ereignisse. Jetzt metallisch aufsteigend statt weich.",
+      "steps": [
+        { "freq": 900, "slideTo": 1500, "dur": 0.09, "vol": 0.09, "wave": "square" },
+        { "freq": 1800, "dur": 0.05, "vol": 0.05, "wave": "triangle", "at": 0.04 }
+      ]
+    },
+    "boom": {
+      "filter": { "type": "lowpass", "freq": 900 },
+      "noise": { "dur": 0.35, "vol": 0.22 },
+      "steps": [{ "freq": 90, "slideTo": 40, "dur": 0.3, "vol": 0.15, "wave": "sawtooth" }]
+    },
+    "kill": {
+      "_comment": "Gegner zerstoert: kurz und knackig. Bis Phase 7b klang das identisch zum eigenen Tod (beides 'death') -- der Fehler, der in PLAN.md als Abnahmekriterium stand.",
+      "steps": [{ "freq": 620, "slideTo": 240, "dur": 0.12, "vol": 0.1, "wave": "square" }]
+    },
+    "player_death": {
+      "_comment": "Eigenes Leben verloren: lang, tief, mit Rauschanteil -- muss sich hoerbar vom Gegner-Kill UND vom Schildverlust unterscheiden (Punkt 6 der Liste).",
+      "filter": { "type": "lowpass", "freq": 1400 },
+      "noise": { "dur": 0.4, "vol": 0.12 },
+      "steps": [
+        { "freq": 400, "slideTo": 55, "dur": 0.45, "vol": 0.14, "wave": "sawtooth" },
+        { "freq": 200, "slideTo": 45, "dur": 0.4, "vol": 0.1, "wave": "triangle", "at": 0.06 }
+      ]
+    },
+    "shield": {
+      "_comment": "Schildladung verbraucht: weich und aufsteigend, klar getrennt von 'player_death' (Leben) und 'reflect' (zurueckgeworfene Kugel).",
+      "steps": [{ "freq": 300, "slideTo": 520, "dur": 0.18, "vol": 0.1, "wave": "triangle" }]
+    },
+    "mine": {
+      "steps": [{ "freq": 700, "dur": 0.06, "vol": 0.08, "wave": "square" }]
+    },
+    "mine_warn": {
+      "_comment": "Wiederholter Puls in den letzten balance.mine.warningTime Sekunden vor der Selbstzuendung.",
+      "steps": [{ "freq": 1500, "dur": 0.025, "vol": 0.06, "wave": "square" }]
+    },
+    "trap": {
+      "steps": [{ "freq": 160, "dur": 0.25, "vol": 0.12, "wave": "sawtooth" }]
+    },
+    "dash": {
+      "steps": [{ "freq": 420, "slideTo": 720, "dur": 0.12, "vol": 0.07, "wave": "sine" }]
+    },
+    "combo": {
+      "steps": [{ "freq": 660, "slideTo": 990, "dur": 0.1, "vol": 0.08, "wave": "square" }]
+    },
+    "trickshot": {
+      "steps": [{ "freq": 760, "slideTo": 1200, "dur": 0.09, "vol": 0.1, "wave": "triangle" }]
+    },
+    "trickshot2": {
+      "steps": [
+        { "freq": 760, "dur": 0.08, "vol": 0.1, "wave": "triangle" },
+        { "freq": 1200, "dur": 0.12, "vol": 0.11, "wave": "triangle", "at": 0.06 }
+      ]
+    },
+    "wave": {
+      "_comment": "Zweite Welle spawnt: zwei kurze, drohende Toene -- bewusst kein Jingle wie 'clear'.",
+      "steps": [
+        { "freq": 200, "dur": 0.1, "vol": 0.1, "wave": "sawtooth" },
+        { "freq": 200, "dur": 0.14, "vol": 0.11, "wave": "sawtooth", "at": 0.16 }
+      ]
+    },
+    "clear": {
+      "steps": [
+        { "freq": 392, "dur": 0.12, "vol": 0.1, "wave": "triangle" },
+        { "freq": 523, "dur": 0.12, "vol": 0.1, "wave": "triangle", "at": 0.09 },
+        { "freq": 659, "dur": 0.12, "vol": 0.1, "wave": "triangle", "at": 0.18 }
+      ]
+    },
+    "upgrade": {
+      "_comment": "Karte angenommen (Upgrade-Screen wie Shop) -- kurzes Bestaetigungs-Intervall, kuerzer als 'clear'.",
+      "steps": [
+        { "freq": 587, "dur": 0.09, "vol": 0.09, "wave": "triangle" },
+        { "freq": 880, "dur": 0.14, "vol": 0.09, "wave": "triangle", "at": 0.07 }
+      ]
+    },
+    "fanfare": {
+      "steps": [
+        { "freq": 523, "dur": 0.22, "vol": 0.12, "wave": "square" },
+        { "freq": 659, "dur": 0.22, "vol": 0.12, "wave": "square", "at": 0.13 },
+        { "freq": 784, "dur": 0.22, "vol": 0.12, "wave": "square", "at": 0.26 },
+        { "freq": 1047, "dur": 0.22, "vol": 0.12, "wave": "square", "at": 0.39 }
+      ]
+    },
+    "tone_high": {
+      "_comment": "t_white wechselt in die offensive Rolle (Phase 8: phaseToggle).",
+      "steps": [{ "freq": 880, "dur": 0.12, "vol": 0.12, "wave": "square" }]
+    },
+    "tone_low": {
+      "steps": [{ "freq": 220, "dur": 0.16, "vol": 0.12, "wave": "square" }]
+    }
+  }
+}

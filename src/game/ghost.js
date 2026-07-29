@@ -93,7 +93,8 @@ export function updateGhosts(state, dt) {
         }),
       );
       g.cooldown = g.cfg.fireCooldown;
-      state.sounds.push('shoot');
+      // Geister kaempfen auf Spielerseite -> der freundliche Schuss-Ton.
+      state.sounds.push({ name: 'shoot', x: g.x });
     }
   }
   state.ghosts = state.ghosts.filter((g) => !g.dead);

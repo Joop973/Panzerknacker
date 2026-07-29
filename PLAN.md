@@ -41,6 +41,8 @@ die Suite bei beiden Fehlern an.
 
 **Reihenfolge-Korrektur:** Die nächste Session ist **Phase 7b — Audio**
 (einzige ausgelassene Phase, siehe dort), erst danach Phase 18 Welle 3.
+→ **Phase 7b ist inzwischen gebaut** (siehe dort); nächste Session ist
+damit Phase 18, Welle 3.
 
 ---
 
@@ -452,16 +454,14 @@ Sonderfälle in der bestehenden Treffer-Schleife. `ai_turrets.js`/
 "nächster lebender Gegner"-Suche in `ghost.js`, die `angleDiff`/`turnToward`/
 `clearLine` aus `ai.js` wiederverwendet.
 
-## Phase 7b — Audio
+## Phase 7b — Audio  ✅ erledigt
 **Aufwand:** 1 Session
 **Neu in v2.**
-**Status (Fund beim Code-Review nach Phase 18 Welle 2):** einzige Phase vor
-18, die noch kein ✅ trägt — beim schrittweisen Bau in der Reihenfolge
-0…7, 8…18 ausgelassen, nicht vergessen zu bauen. Der unten beschriebene
-"Bekannte Fehler" (identischer Tod-Sound für Spieler und Gegner) ist zum
-Zeitpunkt dieses Reviews weiterhin unverändert im Code vorhanden.
-**→ Als NÄCHSTE Session eingeplant** (vor Phase 18 Welle 3, siehe
-Code-Review-Pass am Dateianfang) — nicht weiter aufschieben.
+**Vorgeschichte:** War lange die einzige Phase vor 18 ohne ✅ — beim
+schrittweisen Bau in der Reihenfolge 0…7, 8…18 ausgelassen und im
+Code-Review-Pass nach Welle 2 als nächste Session festgeschrieben. Der
+"Bekannte Fehler" (identischer Tod-Sound für Spieler und Gegner) ist mit
+dieser Phase behoben.
 
 **Korrektur (v3-Review):** Die Begründung "steht hier, weil Phase 5 auf einem
 Sound beruht" stimmt nicht — die prozedurale WebAudio-Synthese
@@ -474,24 +474,25 @@ genauso ergänzen. Diese Phase ist der Zeitpunkt, an dem der gewachsene
 `if/else`-Switch in eine echte `data/sounds.json` überführt wird (Wellenform,
 Frequenzverlauf, Dauer, Filter — vom Handy tunbar), keine Blockade davor.
 
-Reihenfolge nach Informationswert:
-1. Eigener Abpraller-Tick — ab hier ist die Kugel gefährlich (schon da: `'tick'`)
-2. Prisma-Reflexion (schon da: reflectBullet() spielt `'shield'`)
-3. Gegnerschuss mit Stereopanning nach Position (neu — aktuell nur ein
-   Mono-Kanal über `master`)
-4. Minen-Warnpuls (neu — aktuell nur ein `'mine'`-Sound beim Legen, kein
-   wiederholter Puls vor der Zündung)
-5. Trickshot-Kill, deutlich anders als normaler Kill (neu, siehe Phase 5)
-6. Leben verloren und Schild verloren — zwingend zwei verschiedene Sounds
-7. Raum geräumt, Upgrade gewählt (schon da: `'clear'`, kein eigener
-   Upgrade-Sound)
+Reihenfolge nach Informationswert (Stand nach dem Bau):
+1. ✅ Eigener Abpraller-Tick — ab hier ist die Kugel gefährlich (`'tick'`,
+   jetzt zusätzlich am Abprallort gepannt)
+2. ✅ Prisma-Reflexion — eigener `'reflect'`-Ton statt des geteilten
+   `'shield'` **plus** sichtbarer Blitz
+3. ✅ Gegnerschuss: eigener, tieferer Ton (`shoot_enemy`) mit Stereopanning
+   nach Position
+4. ✅ Minen-Warnpuls (`mine_warn`, Takt aus `sounds.json: mine.warnPulseS`)
+5. ✅ Trickshot-Kill, deutlich anders als normaler Kill (seit Phase 5)
+6. ✅ Leben verloren (`player_death`) und Schild verloren (`shield`) —
+   zwei verschiedene Sounds, dazu `kill` für den Gegnertod
+7. ✅ Raum geräumt (`clear`) und Upgrade gewählt (`upgrade`, neu)
 
-**Bekannter Fehler, der hier als Abnahmekriterium gehört:** `killTank()` in
-`src/game/state.js` spielt aktuell für JEDEN Tod denselben `'death'`-Sound —
-ein Gegner-Kill klingt identisch zum eigenen Tod. Schild-Verlust hat schon
-einen eigenen Sound (`'shield'`, die drei frühen `return`-Zweige in
-`killTank`), Leben-Verlust vs. Gegner-Kill aber nicht. Erst wenn diese beiden
-unterscheidbar sind, gilt Punkt 6 der Liste als erledigt.
+**Bekannter Fehler, der hier als Abnahmekriterium galt — behoben:**
+`killTank()` in `src/game/state.js` spielte für JEDEN Tod denselben
+`'death'`-Sound; ein Gegner-Kill klang identisch zum eigenen Tod. Jetzt
+`'player_death'` (lang, tief, mit Rauschanteil) vs. `'kill'` (kurz,
+knackig), beide getrennt vom bestehenden `'shield'`. Der Regressionstest
+sichert ab, dass der alte Sammelname nicht zurückkehrt.
 
 WebAudio-Unlock nach erster Berührung nicht vergessen (schon vorhanden).
 **Jede Information per Ton braucht ein sichtbares Gegenstück** — viele spielen
@@ -502,6 +503,62 @@ Blitz.
 (`play()`-Switch durch datengetriebenen Aufruf ersetzen, `StereoPannerNode`
 ergänzen), `src/game/state.js` (`killTank` — Todesursache statt pauschal
 `'death'` an den Sound-Namen übergeben).
+
+**Umsetzungsfunde:**
+- **Sound-Ereignisse tragen jetzt optional einen Ort**: `state.sounds`
+  enthielt bisher reine Namensstrings. Für das Panning musste die Position
+  mitkommen — statt eines Umbaus aller ~30 Push-Stellen auf ein neues
+  Objekt-Schema nimmt die Liste jetzt **beides** an: ein reiner String für
+  globale Ereignisse (`clear`, `upgrade`, `fanfare`, `wave`, `combo`), ein
+  `{ name, x }`-Objekt für ortsgebundene. `main.js` normalisiert beim
+  Abspielen. Dadurch bleiben UI-nahe Ereignisse ohne künstliche Koordinate,
+  und `bullet.js`s Schattenzustand (`traceTrajectory`, hat gar kein
+  `sounds`) funktioniert unverändert über `state.sounds?.push(...)`.
+- **Panning-Breite kommt aus `config.js`, nicht aus `sounds.json`**: die
+  Arenabreite (768 px) ist eine strukturelle Konstante, kein Balancing-Wert
+  — `main.js` reicht sie einmalig über `audio.setPanWidth(WIDTH)` durch.
+  Tunbar ist in `sounds.json` nur die Stereo**breite** (`pan.maxAbs: 0.75`),
+  bewusst unter 1.0, damit ein Ereignis am Arenarand nicht komplett auf
+  einem Ohr verschwindet.
+- **Stimmen-Deckel statt Übersteuern** (nicht im Plan, aber dieselbe Logik
+  wie die Entitäten-Deckel aus Phase 11b): eine Ketten­reaktion aus acht
+  Minen hätte achtmal `boom` im selben Frame gestartet. `sounds.json:
+  limits.maxVoicesPerName` (3) deckelt gleiche Namen innerhalb eines
+  20-ms-Fensters. Bewusst zeitfensterbasiert statt frame-basiert, damit
+  `main.js` keinen zusätzlichen `beginFrame()`-Vertrag mit dem Audio-Modul
+  braucht.
+- **Zwei Ereignisse teilten sich fälschlich den `'shield'`-Ton**: die
+  Prisma-/Panzerungs-Reflexion (`armor.js`) und der Schildverlust
+  (`state.js`). Das ist genau die Verwechslung, die Punkt 6 der Liste
+  vermeiden will ("meine Kugel kam zurück" vs. "meine Ladung ist weg"), also
+  hat die Reflexion einen eigenen, metallisch aufsteigenden `'reflect'`-Ton
+  bekommen. Denselben nutzt jetzt auch der unverwundbare Reaktorkern
+  (Phase 14) statt `'shield'` — dort geht ebenfalls nichts verloren.
+- **Sichtbares Gegenstück zur Reflexion** (Plan-Auflage "viele spielen
+  stumm"): `reflectBullet()`/`reflectFromAim()` setzen jetzt zusätzlich
+  einen `state.flashes`-Eintrag — wiederverwendeter Mündungsblitz-
+  Mechanismus, kein neues Renderer-Konstrukt.
+- **Minen-Warnpuls über einen Zähler statt eines Timers**: `mine.warnPulses`
+  zählt die bereits gespielten Töne und wird gegen
+  `floor((warningTime - remaining) / warnPulseS) + 1` abgeglichen. Ein
+  simpler Countdown-Timer hätte in der Trickshot-Zeitlupe (Phase 5, `dt`
+  wird skaliert) einen hörbar anderen Takt ergeben. Sichtbares Gegenstück
+  ist das bereits vorhandene schnelle rote Blinken (`effects.js`).
+- **Der Musik-Loop ist mitgewandert**: Bass-/Lead-Noten und Schrittdauer
+  standen als Konstanten in `audio.js` — nach der Grundregel "niemals eine
+  tunbare Zahl im Code" liegen sie jetzt unter `sounds.json: music`.
+- **Gegnerschüsse klingen anders als eigene** (`shoot_enemy`, eine Oktave
+  tiefer + Lowpass): Punkt 3 der Liste nennt nur das Panning, aber ein
+  gepannter, sonst identischer Ton beantwortet "wer schiesst?" nicht — erst
+  die Kombination aus Klangfarbe und Ort macht die Information nutzbar.
+  Geisterpanzer (Phase 7) benutzen bewusst den freundlichen `shoot`-Ton.
+- **Neuer Regressionstest gegen stumme Ereignisse**: `tests/regression.mjs`
+  scannt alle `sounds.push(...)`-Aufrufe im Quellcode und prüft, dass jeder
+  dort genannte Name einen Eintrag in `data/sounds.json` hat. Ein Tippfehler
+  oder ein vergessener Eintrag macht ein Ereignis sonst lautlos, ohne
+  irgendwo einen Fehler zu erzeugen. Dazu: Formprüfung jeder Meldung im
+  echten Durchlauf, ein gezielter Warnpuls-Takttest und die Zusicherung,
+  dass der alte Sammelname `'death'` nirgends mehr auftaucht.
 
 ---
 
@@ -1247,8 +1304,8 @@ Pluenderer, Feuerleitzentrale). **Welle 2 ✅ erledigt** (Beutejagd,
 Nachtsicht, Nachladeschild, Meisterschütze, Erschütterungsdash — gezielt
 gegen die duennsten Tags aus Welle 1: `resource`/`information`/`defense`/
 `synergy` hatten je nur 1–2 Karten) — weitere Wellen folgen in eigenen
-Sessions. **Welle 3 kommt erst NACH der nachgeholten Phase 7b (Audio)**,
-siehe Code-Review-Pass am Dateianfang.
+Sessions. Phase 7b (Audio) ist inzwischen nachgeholt — **Welle 3 ist damit
+die nächste Session**.
 
 Neue Upgrades in Wellen zu 5–8. **Jede Welle beginnt mit einer
 Telemetrie-Auswertung**: Welche Karten wurden angeboten und nie gewählt?

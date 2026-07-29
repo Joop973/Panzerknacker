@@ -78,7 +78,13 @@ export function reflectBullet(b, tank, state) {
   b.reflected = true;
   b.reflectImmune = tank;
   b.reflectImmuneT = rc.graceS ?? 0.15;
-  state.sounds.push('shield');
+  // Phase 7b: eigener 'reflect'-Ton statt des Schild-Tons -- "meine Kugel
+  // kam zurueck" und "meine Schildladung ist weg" sind zwei voellig
+  // verschiedene Ereignisse und klangen bis hierher identisch.
+  state.sounds.push({ name: 'reflect', x: b.x });
+  // Sichtbares Gegenstueck zum Ton (PLAN.md: "viele spielen stumm") --
+  // wiederverwendet den bestehenden Muendungsblitz-Mechanismus.
+  state.flashes?.push({ x: b.x, y: b.y, age: 0 });
   state.spawnParticles?.(b.x, b.y, '#b6f0ff', 5, 90);
 }
 
@@ -101,6 +107,7 @@ export function reflectFromAim(b, tank, state) {
   b.prevY = b.y;
   b.wallBounces++;
   b.homing = 0;
-  state.sounds.push('shield');
+  state.sounds.push({ name: 'reflect', x: b.x });
+  state.flashes?.push({ x: b.x, y: b.y, age: 0 });
   state.spawnParticles?.(b.x, b.y, '#ffd23c', 6, 110);
 }

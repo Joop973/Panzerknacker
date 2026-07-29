@@ -29,7 +29,7 @@ export function updateTraps(state, dt) {
         age: 0,
         dead: false,
       });
-      state.sounds.push('mine');
+      state.sounds.push({ name: 'mine', x: p.x });
       // Obergrenze: aelteste Falle verfaellt (kein Fallen-Teppich).
       const live = state.traps.filter((t) => !t.dead);
       if (live.length > (cfg.trapMaxActive || 3)) live[0].dead = true;
@@ -45,7 +45,7 @@ export function updateTraps(state, dt) {
       if (circlesOverlap(tr.x, tr.y, tr.radius, t.x, t.y, t.cfg.radius)) {
         t.stunTimer = tr.stunS;
         tr.dead = true;
-        state.sounds.push('trap');
+        state.sounds.push({ name: 'trap', x: tr.x });
         state.spawnParticles?.(tr.x, tr.y, '#c25a4a', 6, 70);
         break;
       }
