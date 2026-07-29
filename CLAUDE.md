@@ -60,11 +60,13 @@ handgebauten Finalraums), **Phase 15** (Raum-Gefahren: bewegliche Wand,
 Ölpfütze, Laserbarriere, Förderband — genau eine pro Raum ab Raum 3) und
 **Phase 16** (Deckungs-KI: Gegner mit niedriger `aggression` brechen die
 Sichtlinie, wenn der Spieler zielt, 15-Hz-Reihum-Wahrnehmung statt
-Pro-Frame-Prüfung) sind gebaut. `PLAN.md` wurde auf **v3**
+Pro-Frame-Prüfung) und **Phase 17** (Transformationen: drei Karten desselben
+Tags schalten einen dauerhaften Bonus frei — Bollwerk/Kavallerie/Taktiker/
+Pionier/Saboteur) sind gebaut. `PLAN.md` wurde auf **v3**
 konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`,
 doppelt gebautes Affix-System, falscher `eliteBonus`-Feldname) entfernt,
 jede offene Phase bekommt jetzt eine "Betroffene Dateien"-Zeile.
-**Nächste Phase: Phase 17 — Transformationen** (Stufe 4: Kür).
+**Nächste Phase: Phase 18 — Kartenwellen** (Stufe 4: Kür).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -734,6 +736,59 @@ brechen, sobald sie erkennen, dass gerade auf sie gezielt wird. Neuer Block
   ohnehin schon ein dormantes Flucht-Feld (`preferredRange`), die
   Deckungssuche ist ihr erstes echtes defensives Verhalten.
 
+### Phase 17 (Transformationen) — gemergt
+Drei Karten desselben Tags schalten einen dauerhaften, immer aktiven Bonus
+frei (`run.tagCounts[tag] >= TF.threshold`, `data/transformations.json`,
+Freischaltung war seit dem v2-Rückbau E5 stillgelegt, `tagCounts` zählte
+aber schon mit — reaktiviert statt neu gebaut).
+- **`run.js: unlockTransformation(run, tag)`** wird ausschließlich aus
+  `applyUpgradeChoice()` aufgerufen (dem gemeinsamen Kartenwahl-Hook aus
+  Phase 13) — deckt damit automatisch sowohl den normalen Upgrade-Screen als
+  auch im Shop gekaufte Karten ab, ohne einen zweiten Aufrufort zu brauchen.
+  `run.newTransformation` trägt für genau einen Frame die ID der frisch
+  freigeschalteten Transformation (Grundlage für den Freischalt-Text im
+  Upgrade-Screen), danach wieder `null`.
+- **Fünf Tags → fünf Transformationen**: `defense`→**Bollwerk**
+  (Schildladungen altern nicht mehr, `ageShieldCharges(run)` in `run.js`
+  bei aktiver Transformation übersprungen), `mobility`→**Kavallerie**
+  (Dash-Cooldown halbiert + Unverwundbarkeit für die gesamte, halbierte
+  Cooldown-Dauer statt nur des kurzen Basis-Iframes), `information`→
+  **Taktiker** (Zeitlupe bei naher Kugel, unverändert seit E5),
+  `terrain`→**Pionier** (Wände doppelt haltbar + eigene Sekundärwaffe
+  schadet nicht mehr, unverändert seit E5), `control`→**Saboteur**
+  (betäubte Gegner explodieren beim Aufwachen, unverändert seit E5).
+- **Migration `baumeister`+`pionier` → `pionier`**: die beiden getrennten
+  Alteinträge (`baumeister` mit gültigem Tag `terrain`, `pionier` mit dem
+  seit dem v2-Umbau toten Tag `mine` — keine Karte trägt ihn mehr, der
+  Eintrag war dadurch nie freischaltbar) sind zu einem Eintrag
+  zusammengeführt: Tag `terrain`, beide Effekte (`wallDurability`,
+  `ownMinesHarmless`) gleichzeitig.
+- **Kavallerie komplett neu geschrieben**: der alte Effekt
+  (`ramKillsNonElite`/`ramProtectS`) basierte auf der in E5 gestrichenen
+  Rammmechanik und war seitdem tot. Neuer Effekt `dashCooldownMult: 0.5`,
+  verdrahtet in `tank.js: dashTank()` gegen das bestehende
+  `cfg.dash = {dist, iframe, cooldown}` — **kein neues `cfg.js`-Feld
+  nötig**: wie alle anderen Transformationen liest `dashTank()` den Wert
+  live aus `state.transform` an der einzigen Stelle, die ihn braucht.
+  Wirkt nur mit der `dash`-Upgrade-Karte — der Upgrade-Screen zeigt dafür
+  den Hinweis „(nur mit Dash-Karte)" an, solange `run.upgrades.dash` noch 0
+  ist (sonst wäre eine freigeschaltete, aber wirkungslose Transformation
+  unbemerkt nutzlos).
+- **Effekte werden einmal pro Raumaufbau gebacken** (`state.transform` aus
+  `transformEffects(run)`, `buildCombatRoom()`s `createState()`-Opt) —
+  dasselbe Muster wie Raum-Modifikatoren (Phase 10) und Raum-Gefahren
+  (Phase 15). Eine mitten im Raum frisch freigeschaltete Transformation
+  wirkt daher erst im nächsten Raum.
+- **`run.shieldCharges` ist zur Laufzeit nicht die Quelle der Wahrheit**:
+  `stepRun()` synchronisiert jeden Tick `run.shieldCharges = st.shieldCharges`
+  (Raum-Zustand → Run-Objekt) — Bollwerks Sperre für `ageShieldCharges()`
+  muss deshalb am tatsächlich alternden `state.shieldCharges` ansetzen.
+- **`src/ui/upgradescreen.js`**: neuer Block zeigt „Aktiv: …" (freigeschaltete
+  Transformationen) und „Fortschritt: …" (`tagCounts[tag]/threshold` für
+  Tags mit mindestens einer gewählten Karte, aber noch nicht freigeschaltet)
+  direkt unter der Schrott-/Untertitelzeile — ohne sichtbaren Fortschritt
+  würde die Mechanik unbemerkt verpuffen.
+
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
   `tag`, `rarity` (`common`/`rare`/`legendary`), `maxStacks`, `requires`,
@@ -809,9 +864,6 @@ Zurückgebaut wurde:
 - [ ] **Vor Phase 18**: 15–20 Runs spielen und die Debug-Ansicht (`?debug=1`)
       auswerten — sie rechnet jetzt selbst (Median-Todesraum, Abpraller-Anteil,
       minFps, nie gewählte + meistabgelehnte Karten). Siehe `PLAN.md`.
-- [ ] `data/transformations.json` braucht vor Phase 17 eine Migration
-      (`kavallerie` basiert noch auf Rammen, `pionier` trägt den toten Tag
-      `mine`) — konkrete Tabelle dazu jetzt in `PLAN.md` Phase 17.
 - [ ] Sprite-Look für **feste Wand** (`tile_wall`) und **Loch** (`tile_hole`)
       im Spiel noch mit eigenem Auge prüfen — Code-Pfad identisch zu
       breakable (das rendert korrekt), aber nicht separat verifiziert.

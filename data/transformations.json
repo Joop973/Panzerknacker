@@ -3,19 +3,19 @@
   "transformations": {
     "pionier": {
       "id": "pionier",
-      "tag": "mine",
+      "tag": "terrain",
       "name": "Pionier",
-      "description": "Deine eigenen Minen verletzen dich nicht mehr.",
+      "description": "Eigene Wände halten doppelt so lange. Deine eigenen Minen verletzen dich nicht mehr.",
       "symbol": "⚒",
-      "effects": { "ownMinesHarmless": true }
+      "effects": { "wallDurability": 2, "ownMinesHarmless": true }
     },
     "kavallerie": {
       "id": "kavallerie",
       "tag": "mobility",
       "name": "Kavallerie",
-      "description": "Rammen tötet Gegner ohne Elite-Affix.",
+      "description": "Dash-Cooldown halbiert. Solange der Dash auflädt, bist du unverwundbar.",
       "symbol": "🐎",
-      "effects": { "ramKillsNonElite": true, "ramProtectS": 0.3 }
+      "effects": { "dashCooldownMult": 0.5 }
     },
     "taktiker": {
       "id": "taktiker",
@@ -25,13 +25,13 @@
       "symbol": "⏳",
       "effects": { "slowMoScale": 0.4, "slowMoRadiusPx": 64 }
     },
-    "baumeister": {
-      "id": "baumeister",
-      "tag": "terrain",
-      "name": "Baumeister",
-      "description": "Wände halten doppelt so lange — sie überstehen eine Sprengung mehr.",
-      "symbol": "🧱",
-      "effects": { "wallDurability": 2 }
+    "bollwerk": {
+      "id": "bollwerk",
+      "tag": "defense",
+      "name": "Bollwerk",
+      "description": "Notschild-Ladungen verfallen nicht mehr.",
+      "symbol": "🛡",
+      "effects": { "shieldNeverDecays": true }
     },
     "saboteur": {
       "id": "saboteur",

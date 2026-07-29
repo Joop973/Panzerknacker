@@ -41,6 +41,41 @@ export function createUpgradeScreen() {
       el.appendChild(scrapLine);
     }
 
+    // Transformationen (Phase 17): "X/3"-Fortschritt fuer Tags mit
+    // mindestens einer gewaehlten Karte, die noch nicht freigeschaltet
+    // sind, plus eine kurze Liste bereits aktiver Transformationen --
+    // ohne sichtbaren Fortschritt verpufft die Mechanik unbemerkt.
+    if (ctx.transformDefs) {
+      const active = [];
+      const progress = [];
+      const seenTags = new Set();
+      for (const t of Object.values(ctx.transformDefs)) {
+        if (seenTags.has(t.tag)) continue;
+        seenTags.add(t.tag);
+        // Kavallerie wirkt nur mit der Dash-Karte -- ohne sie waere die
+        // Freischaltung stumm wirkungslos, deshalb der Hinweis direkt hier.
+        const dashHint = t.id === 'kavallerie' && !ctx.hasDash ? ' (nur mit Dash-Karte)' : '';
+        if (ctx.unlocked?.has(t.id)) {
+          active.push(`${t.symbol} ${t.name}${dashHint}`);
+        } else {
+          const count = ctx.tagCounts?.[t.tag] || 0;
+          if (count > 0) progress.push(`${t.symbol} ${t.name} ${count}/${ctx.threshold ?? 3}${dashHint}`);
+        }
+      }
+      if (active.length) {
+        const p = document.createElement('p');
+        p.className = 'pv-mod';
+        p.textContent = `Aktiv: ${active.join(' · ')}`;
+        el.appendChild(p);
+      }
+      if (progress.length) {
+        const p = document.createElement('p');
+        p.className = 'pv-mod';
+        p.textContent = `Fortschritt: ${progress.join(' · ')}`;
+        el.appendChild(p);
+      }
+    }
+
     const row = document.createElement('div');
     row.className = 'cards';
     offers.forEach((o, i) => {
