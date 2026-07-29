@@ -1304,12 +1304,26 @@ Pluenderer, Feuerleitzentrale). **Welle 2 ✅ erledigt** (Beutejagd,
 Nachtsicht, Nachladeschild, Meisterschütze, Erschütterungsdash — gezielt
 gegen die duennsten Tags aus Welle 1: `resource`/`information`/`defense`/
 `synergy` hatten je nur 1–2 Karten) — weitere Wellen folgen in eigenen
-Sessions. Phase 7b (Audio) ist inzwischen nachgeholt — **Welle 3 ist damit
-die nächste Session**.
+Sessions. Phase 7b (Audio) ist inzwischen nachgeholt. **Welle 3 ✅ erledigt**
+(Sappeur, Steinbruch, Minenspürer, Gefahrensinn, Abprallschock,
+Doppelschlag — gezielt gegen tote bzw. unerreichbare Transformationen,
+siehe Umsetzungsfunde unten).
 
 Neue Upgrades in Wellen zu 5–8. **Jede Welle beginnt mit einer
 Telemetrie-Auswertung**: Welche Karten wurden angeboten und nie gewählt?
 Höchstens ein Drittel reine Statwerte im Pool.
+
+**Offen und bewusst aufgeschoben:** Welle 2 und 3 wurden ohne echte
+Telemetrie geplant (`localStorage.runs` ist in der Entwicklungsumgebung
+leer, es gibt bisher keine gespielten Runs). Ersatzkriterium war die
+Pool-Struktur — bei Welle 3 hat das sogar zwei tote Transformationen
+aufgedeckt, die eine Nie-gewählt-Auswertung gar nicht gefunden hätte.
+Sobald 15–20 gespielte Runs vorliegen (Debug-Ansicht `?debug=1`, siehe
+Prüfpunkte), ist die Auswertung **nachzuholen**: nie gewählte und am
+häufigsten abgelehnte Karten aus den bestehenden Wellen anpassen. Das ist
+dann eine Balance-Änderung an fertigen Karten (Zahlen in
+`data/upgrades.json`), kein Neubau — die Kartenwellen müssen darauf nicht
+warten.
 
 **Korrektur (v3-Review):** `doppelrohr` (Tag `weapon`, `minRoom: 3`) steht
 bereits in `data/upgrades.json`, ist aber vom Pool ausgeschlossen
@@ -1396,6 +1410,63 @@ in dieser Session leer ist):**
   Trickshot-Schrott entsteht** (`state.js`, direkt vor dem `trickshotScrap`-
   Increment) — kein zweiter Berechnungspfad, auch der Floating-Text zeigt
   den bereits multiplizierten Wert.
+
+**Umsetzungsfunde (Welle 3 — Auswahl weiterhin per Pool-Analyse statt
+Telemetrie, `localStorage.runs` ist in dieser Umgebung leer; die
+Telemetrie-Auswertung wird nachgezogen, sobald echte Runs vorliegen, und
+ist dann eine Balance-Anpassung an fertigen Karten, kein Neubau):**
+- **Der eigentliche Fund dieser Welle war ein Bug, keine Kartenidee: zwei
+  der fünf Transformationen aus Phase 17 waren mathematisch tot.**
+  `run.tagCounts` zählt STACKS, und die Schwelle ist 3 — der Tag `terrain`
+  hatte aber nur zwei Karten mit je `maxStacks: 1`, also **maximal 2 von 3
+  erreichbaren Punkten**. *Pionier* konnte in keinem einzigen Run
+  freigeschaltet werden. Dasselbe traf *Saboteur* (`control`): vier der
+  sechs Karten dieses Tags hängen an `MINE_ONLY_IDS` (Phase 6) — mit
+  Enterhaken/Sperrmauer/Rauch/Deflektor ausgerüstet blieben ebenfalls nur
+  2 Punkte. `information`/*Taktiker* lag mit exakt 3 von 3 auf der Kippe
+  (nur freischaltbar, wenn man wirklich alle drei Informationskarten zieht
+  UND nimmt — bei der Tag-Regel praktisch nie).
+  Welle 3 ist deshalb gezielt auf diese drei Tags gelegt:
+  `terrain` 2 → 6, `control` ohne Mine 2 → 4, `information` 3 → 5.
+- **Neuer Regressionstest gegen genau diese Klasse von Toterei**: die Suite
+  prüft jetzt für JEDE Transformation, ob im Pool überhaupt genug Stacks
+  existieren — einmal mit und einmal ohne Minen-Sekundärwaffe. Gegen den
+  Stand vor dieser Welle schlägt er bei Pionier und Saboteur an.
+- **Zweiter neuer Struktur-Test: „jede Karte ist ziehbar"** — genau der
+  Fehler, der `doppelrohr` zwei Phasen lang unerreichbar im Pool liegen
+  ließ. Dazu die Prüfung, dass kein `requires` auf eine nicht existierende
+  id zeigt (das würde eine Karte ebenso still töten).
+- **Dritter neuer Test schließt den blinden Fleck, der den Ziellinien-Crash
+  ermöglicht hat**: `effects.js` importiert nichts aus `render/` und lässt
+  sich daher mit einem Fake-Canvas headless aufrufen. Die Suite zeichnet
+  jetzt einmal den kompletten Effekt-Renderpfad mit ALLEN Anzeige-Upgrades
+  aktiv — bis dahin führten die Tests nie eine einzige Zeichenfunktion aus.
+- **Doppelschlag brauchte einen NaN-Schutz**: `tank.js: fireBullet()`
+  multipliziert bei vorhandenen Powershot-Ladungen ungeprüft mit
+  `cfg.powershotSpeedFactor`. Vergibt eine Karte Ladungen, ohne dass die
+  Powershot-Karte selbst gewählt wurde, wäre die Kugelgeschwindigkeit
+  `NaN` gewesen. `cfg.js` übernimmt die Werte deshalb aus der
+  `powershot`-Definition (eine Quelle) statt sie zu duplizieren; ein
+  eigener Test prüft für jede Karte und jede Stufe, dass die numerischen
+  cfg-Felder endlich bleiben.
+- **Steinbruch nutzt den `state.bonusScrap`-Zähler aus Welle 2 mit** —
+  kein zweiter Sync-Mechanismus nötig. Bewusst ausgenommen ist die eigene
+  Sperrmauer (`trap`): sonst wäre "Wand legen, kaputtschießen, wiederholen"
+  eine Schrott-Druckmaschine. Boss-Generatoren ebenfalls ausgenommen.
+- **Gefahrensinn kostet keinen einzigen zusätzlichen Raycast**: die Frage
+  "hat dieser Gegner mich im Rohr?" beantwortet die KI in `updateEnemy()`
+  ohnehin schon (Rückgabewert `fire`). `state.js` legt ihn als
+  `t.aimingAtPlayer` ab, der Renderer liest ihn nur. Phase 11b nennt die
+  Sichtlinien-KI ausdrücklich als Risikopunkt fürs Frame-Budget — ein
+  eigener Raycast pro Gegner im Renderpfad wäre genau dagegen gelaufen.
+- **Abprallschock ist die erste Karte, die den Wandabpraller selbst zum
+  Kontrollwerkzeug macht** (statt ihn nur zu belohnen wie Trickshot/
+  Meisterschütze) und wirkt auch an Spiegelwänden (Phase 5). Betäubt
+  bewusst nur die Bewegung, nicht den Turm — dieselbe Trennung wie
+  Krallenfalle/Erschütterungsdash; das Turm-Einfrieren bleibt der
+  EMP-Mine vorbehalten.
+- **Kein einziges reines Statwert-Upgrade in dieser Welle** (0 von 6),
+  deutlich unter der „höchstens ein Drittel"-Grenze.
 
 ---
 

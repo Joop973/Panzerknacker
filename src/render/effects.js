@@ -17,8 +17,10 @@ export function drawMines(ctx, state) {
     if (!armed) continue;
     const remaining = bmine.fuse - m.age; // s bis Selbstzuendung
     // Eigene Minen: duenner Ring zeigt die Restzeit bis zur
-    // Selbstzuendung (laeuft im Uhrzeigersinn ab).
-    if (m.owner === state.player) {
+    // Selbstzuendung (laeuft im Uhrzeigersinn ab). Minenspuerer-Upgrade
+    // (Phase 18, Welle 3): dieselbe Anzeige auch fuer gegnerische Minen --
+    // rein optisch, die Minen selbst verhalten sich unveraendert.
+    if (m.owner === state.player || state.player.cfg.mineSense) {
       const frac = Math.max(0, remaining / bmine.fuse);
       ctx.strokeStyle = 'rgba(140,200,255,0.7)';
       ctx.lineWidth = 1.5;
@@ -88,6 +90,24 @@ export function drawRadar(ctx, state) {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
+}
+
+// Gefahrensinn-Upgrade (Phase 18, Welle 3): pulsierender Warnring um jeden
+// Gegner, der den Spieler gerade im Rohr hat. Liest NUR das Flag, das die
+// KI in stepState() ohnehin schon gesetzt hat (state.js: t.aimingAtPlayer)
+// -- kein eigener Sichtlinien-Raycast im Renderpfad.
+export function drawThreatRings(ctx, state) {
+  const p = state.player;
+  if (!p.cfg.threatSense || !p.alive) return;
+  const pulse = 0.5 + 0.5 * Math.sin(state.time * 9);
+  ctx.lineWidth = 2;
+  for (const t of state.tanks) {
+    if (t === p || !t.alive || !t.aimingAtPlayer) continue;
+    ctx.strokeStyle = `rgba(255,90,60,${(0.35 + 0.45 * pulse).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, t.cfg.radius + 9, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
 
 export function drawFlashes(ctx, state) {

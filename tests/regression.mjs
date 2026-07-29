@@ -15,6 +15,9 @@
 //  5. Audio (Phase 7b): jeder im Code gemeldete Sound-Name hat einen Eintrag
 //     in data/sounds.json (sonst ist das Ereignis stumm), jede Meldung ist
 //     wohlgeformt, und der Minen-Warnpuls tickt im vorgesehenen Takt.
+//  6. Kartenpool (Phase 17/18): jede Transformation ist mit den vorhandenen
+//     Karten ueberhaupt freischaltbar, und jede einzelne Karte laesst sich
+//     ohne NaN/undefined in ein Spieler-cfg aufloesen.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -24,6 +27,7 @@ import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorks
 import { traceTrajectory } from '../src/game/bullet.js';
 import { validateArenas } from '../src/game/generator.js';
 import { createMine, updateMines } from '../src/game/mine.js';
+import { resolveCfg, applyUpgrades } from '../src/game/cfg.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const load = (n) => JSON.parse(readFileSync(join(root, 'data', n + '.json'), 'utf8'));
@@ -137,6 +141,290 @@ function check(ok, msg) {
     pulses === expected,
     `Minen-Warnpuls: ${pulses} Toene, erwartet ${expected} (warningTime ${bmine.warningTime}s / Takt ${pulseS}s)`,
   );
+}
+
+// ---- 6a. Jede Transformation ist ueberhaupt freischaltbar ---------------
+// Phase 17 schaltet einen Bonus frei, sobald tagCounts[tag] die Schwelle
+// erreicht -- und tagCounts zaehlt STACKS, nicht Karten. Gibt es im Pool
+// eines Tags weniger Stacks als die Schwelle, ist die Transformation
+// mathematisch tot (so war `terrain`/Pionier mit 2 von 3 nach Welle 2).
+// Die Minen-Karten zaehlen dabei nur mit, solange mine/emp_mine ausgeruestet
+// ist (upgradepool.js: MINE_ONLY_IDS) -- deshalb beide Faelle pruefen.
+{
+  const MINE_ONLY = new Set([
+    'kettenglied', 'sprengkraft', 'fernzuender', 'schockwelle',
+    'annaeherungsmine', 'klebemine', 'streumine',
+  ]);
+  const T = tanksData.transformations;
+  const threshold = T.threshold ?? 3;
+  const defs = Object.values(upgradesData.upgrades);
+  for (const tf of Object.values(T.transformations)) {
+    const cards = defs.filter((c) => c.tag === tf.tag);
+    const all = cards.reduce((s, c) => s + c.maxStacks, 0);
+    const noMine = cards
+      .filter((c) => !MINE_ONLY.has(c.id))
+      .reduce((s, c) => s + c.maxStacks, 0);
+    check(
+      all >= threshold,
+      `Transformation "${tf.name}" (${tf.tag}) ist nicht freischaltbar: nur ${all} Stacks im Pool, ${threshold} nötig`,
+    );
+    check(
+      noMine >= threshold,
+      `Transformation "${tf.name}" (${tf.tag}) ist ohne Minen-Sekundärwaffe nicht freischaltbar: nur ${noMine} Stacks, ${threshold} nötig`,
+    );
+  }
+}
+
+// ---- 6b. Jede Karte loest sauber in ein Spieler-cfg auf -----------------
+// Fängt Karten, die ein Feld benutzen, das eine ANDERE Karte setzt (z. B.
+// Doppelschlag ohne Powershot -> bulletSpeed * undefined = NaN).
+{
+  const numericFields = [
+    'speed', 'bulletSpeed', 'fireCooldown', 'magazine', 'ricochets', 'mines',
+    'radius', 'bulletRadius',
+  ];
+  for (const id of Object.keys(upgradesData.upgrades)) {
+    const def = upgradesData.upgrades[id];
+    for (let lvl = 1; lvl <= def.maxStacks; lvl++) {
+      const cfg = applyUpgrades(
+        resolveCfg(tanksData, 'player'),
+        { [id]: lvl },
+        upgradesData,
+        'mine',
+      );
+      for (const f of numericFields) {
+        check(
+          Number.isFinite(cfg[f]),
+          `Karte "${id}" Stufe ${lvl}: cfg.${f} ist ${cfg[f]} (erwartet endliche Zahl)`,
+        );
+      }
+      // Powershot-Verstaerker duerfen nie halb gesetzt sein -- sonst rechnet
+      // tank.js: fireBullet() mit undefined weiter.
+      const boostable = cfg.powershotPerRoom || cfg.trickshotPowershot;
+      if (boostable) {
+        check(
+          Number.isFinite(cfg.powershotSpeedFactor) && Number.isFinite(cfg.powershotBonusRicochets),
+          `Karte "${id}" Stufe ${lvl}: vergibt Powershot-Ladungen ohne speedFactor/bonusRicochets`,
+        );
+      }
+    }
+  }
+}
+
+// ---- 6b2. Jede Karte ist ueberhaupt ziehbar ----------------------------
+// `doppelrohr` stand zwei Phasen lang in upgrades.json, war aber vom Pool
+// ausgeschlossen und damit unerreichbar. Dieser Test faengt genau das:
+// jede Karte muss -- unter fuer sie guenstigen Bedingungen -- im Pool
+// auftauchen. Ausnahmen sind nur Tag `elite` (kommt ausschliesslich ueber
+// die Elite-Belohnung) und Waffenkarten ausserhalb der Allowlist.
+{
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const defs = upgradesData.upgrades;
+  // Alle requires-Ziele einmal auf Stufe 1 -- damit sind Karten wie
+  // feuerleitzentrale/nachladeschild/erschuetterungsdash ueberhaupt gueltig.
+  const reqTargets = {};
+  for (const id in defs) {
+    for (const r of defs[id].requires || []) {
+      // Ein requires auf eine nicht existierende id macht die Karte tot:
+      // chosen[r] bleibt fuer immer 0, der Pool filtert sie immer weg.
+      check(!!defs[r], `Karte "${id}" verlangt "${r}" -- diese Karte gibt es nicht`);
+      reqTargets[r] = 1;
+    }
+  }
+
+  const drawAll = (chosen) =>
+    rollOffers(upgradesData, {
+      chosen,
+      roomIndex: 99, // alle minRoom-Gates offen
+      rng: mulberry32(12345),
+      balance: tanksData.balance,
+      count: 300, // zieht den Pool leer, danach Fallback
+      ignoreTagRule: true,
+      equippedSecondary: 'mine',
+      banned: new Set(),
+    }).filter((o) => !o.fallback).map((o) => o.id);
+
+  // Tag `weapon` ist grundsaetzlich gesperrt; Welle 1 hat genau diese zwei
+  // namentlich freigegeben (upgradepool.js: WEAPON_ALLOWLIST). Sie hier
+  // explizit einzufordern ist der Sinn des Tests -- eine pauschale
+  // "weapon darf fehlen"-Ausnahme haette ihn fuer genau die Fehlerklasse
+  // wirkungslos gemacht, gegen die er gebaut ist.
+  const WEAPON_FREIGEGEBEN = new Set(['doppelrohr', 'flak']);
+  const reachable = new Set([...drawAll({}), ...drawAll(reqTargets)]);
+  for (const id in defs) {
+    if (defs[id].tag === 'elite') continue; // nur ueber Elite-Belohnung
+    if (defs[id].tag === 'weapon' && !WEAPON_FREIGEGEBEN.has(id)) continue;
+    check(reachable.has(id), `Karte "${id}" (${defs[id].tag}) ist im normalen Pool nicht ziehbar`);
+  }
+  // Die sechs Karten dieser Welle namentlich, damit ein Tippfehler in der
+  // id auffaellt statt still zu einer nie gezogenen Karte zu werden.
+  for (const id of ['sappeur', 'steinbruch', 'minenspuerer', 'gefahrensinn', 'abprallschock', 'doppelschlag']) {
+    check(reachable.has(id), `Welle-3-Karte "${id}" erscheint nicht im Pool`);
+  }
+}
+
+// ---- 6c. Die Effekte der Welle-3-Karten wirken tatsaechlich -------------
+// "Karte gebaut, aber wirkungslos" war in diesem Projekt die haeufigste
+// Fehlerklasse (doppelrohr nie im Pool, pionier mit totem Tag) -- deshalb
+// fuer jede mechanische Karte ein direkter Wirkungsnachweis.
+{
+  const mkState = (playerCfgExtra, walls = []) => {
+    const player = {
+      x: 100, y: 100, alive: true, stunTimer: 0, powershotCharges: 0,
+      cfg: { radius: 12, ...playerCfgExtra },
+    };
+    return {
+      data: tanksData,
+      player,
+      tanks: [player],
+      walls,
+      bullets: [],
+      bonusScrap: 0,
+      transform: {},
+      spawnParticles() {},
+      addShake() {},
+      sounds: [],
+      texts: [],
+      explosions: [],
+    };
+  };
+
+  // Sappeur: rissige Wand (3 Treffer) faellt mit Stufe 1 schon nach zweien.
+  {
+    const { createState } = await import('../src/game/state.js');
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const wall = st.walls.find((w) => w.type === 'destructible');
+    check(!!wall, 'Kein destructible-Wandtyp im Testraum gefunden');
+    if (wall) {
+      const hits = wall.destructibleHits;
+      st.player.cfg.wallHitsReduction = 1;
+      for (let i = 0; i < hits - 1; i++) st.destroyWall(wall);
+      check(
+        !st.walls.includes(wall),
+        `Sappeur wirkt nicht: Wand mit ${hits} Treffern steht nach ${hits - 1} Treffern noch`,
+      );
+      // Steinbruch: dieselbe Zerstoerung fuellt den Bonus-Schrott-Zaehler.
+      const wall2 = st.walls.find((w) => w.type === 'destructible');
+      if (wall2) {
+        st.player.cfg.scrapPerWall = 2;
+        const before = st.bonusScrap;
+        for (let i = 0; i < 5; i++) if (st.walls.includes(wall2)) st.destroyWall(wall2);
+        check(st.bonusScrap === before + 2, `Steinbruch wirkt nicht: bonusScrap ${before} -> ${st.bonusScrap}`);
+      }
+      // ... aber NICHT fuer die eigene Sperrmauer (waere eine Schrottquelle).
+      const st2 = createRun(tanksData, tilesData, diffData, upgradesData, 7).state;
+      st2.player.cfg.scrapPerWall = 2;
+      st2.placeTrapWall(st2.player.x + 40, st2.player.y, 1);
+      const trapWall = st2.walls.find((w) => w.type === 'trap');
+      if (trapWall) {
+        const before = st2.bonusScrap;
+        st2.destroyWall(trapWall);
+        check(st2.bonusScrap === before, 'Steinbruch gibt Schrott für die eigene Sperrmauer (Exploit)');
+      }
+    }
+  }
+
+  // Abprallschock: Kugel prallt an einer Wand ab -> Gegner daneben betaeubt.
+  {
+    const { updateBullet, createBullet } = await import('../src/game/bullet.js');
+    const st = mkState({ bounceStunRadius: 60, bounceStunS: 0.7 }, [
+      { x: 200, y: 0, w: 32, h: 400, type: 'solid', col: 6, row: 0 },
+    ]);
+    const enemy = { x: 180, y: 100, alive: true, stunTimer: 0, cfg: { radius: 12 } };
+    st.tanks.push(enemy);
+    const b = createBullet(150, 100, 0, {
+      speed: 400, radius: 3, ricochets: 2, owner: st.player, kind: 'bullet',
+    });
+    st.bullets.push(b);
+    for (let i = 0; i < 30 && b.wallBounces === 0; i++) updateBullet(b, st, 1 / 60);
+    check(b.wallBounces > 0, 'Abprallschock-Test: Kugel ist gar nicht abgeprallt');
+    check(enemy.stunTimer > 0, 'Abprallschock wirkt nicht: Gegner neben dem Abprallpunkt ist nicht betäubt');
+  }
+
+  // Doppelschlag: ein Trickshot-Kill laedt eine Powershot-Ladung nach.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1337);
+    const st = run.state;
+    const enemy = st.tanks.find((t) => t !== st.player && t.alive);
+    check(!!enemy, 'Doppelschlag-Test: kein Gegner im Raum');
+    if (enemy) {
+      Object.assign(st.player.cfg, {
+        trickshotPowershot: 1, trickshotPowershotMax: 3,
+        powershotSpeedFactor: 2, powershotBonusRicochets: 2,
+      });
+      st.player.powershotCharges = 0;
+      run.phase = 'playing'; // frischer Run steht auf 'preview' -- stepRun stiege sonst sofort aus
+      enemy.cfg.armor = null;
+      enemy.cfg.requiresRicochet = false;
+      enemy.protect = 0;
+      // Kugel des Spielers, bereits abgeprallt, direkt auf dem Gegner.
+      st.bullets.push({
+        x: enemy.x, y: enemy.y, prevX: enemy.x, prevY: enemy.y, vx: 10, vy: 0,
+        radius: 3, owner: st.player, kind: 'bullet', age: 5, distance: 10,
+        wallBounces: 2, ricochetsLeft: 0, ricochetsStart: 2, dead: false,
+        reflected: false, reflectImmune: null, reflectImmuneT: 0, trail: [],
+      });
+      // CMD/STEP stehen erst weiter unten (const) -- hier lokal.
+      stepRun(run, { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false }, 1 / 60);
+      check(
+        st.player.powershotCharges === 1,
+        `Doppelschlag wirkt nicht: powershotCharges = ${st.player.powershotCharges} (erwartet 1)`,
+      );
+    }
+  }
+}
+
+// ---- 6d. Der Effekt-Renderpfad crasht nicht ----------------------------
+// Blinder Fleck der bisherigen Suite: Headless-Tests fuehren den Renderer
+// nie aus -- genau deshalb blieb der Ziellinien-Crash (destroyWall im
+// Schattenzustand) so lange unentdeckt. `effects.js` importiert nichts aus
+// render/ und laesst sich daher mit einem Fake-Canvas direkt aufrufen.
+// Alle Anzeige-Upgrades werden dabei eingeschaltet.
+{
+  const effects = await import('../src/render/effects.js');
+  const fakeCtx = new Proxy(
+    { canvas: { width: 768, height: 512 } },
+    {
+      get: (t, k) => (k in t ? t[k] : () => {}),
+      set: () => true,
+    },
+  );
+  const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+  const st = run.state;
+  // Alle Anzeige-Schalter der Informations-Karten aktiv.
+  Object.assign(st.player.cfg, {
+    radar: true, mineSense: true, threatSense: true, aimPreviewBounces: 2, ignoreFog: false,
+  });
+  // Je eine eigene und eine gegnerische Mine, kurz vor der Zuendung.
+  const enemy = st.tanks.find((t) => t !== st.player);
+  for (const owner of [st.player, enemy]) {
+    const m = createMine(st.player.x + 40, st.player.y, owner, tanksData.mine.radiusPx, false);
+    m.age = tanksData.balance.mine.fuse - 0.2; // im Warnfenster
+    st.mines.push(m);
+  }
+  if (enemy) enemy.aimingAtPlayer = true;
+  const { traceTrajectory: trace } = await import('../src/game/bullet.js');
+  for (const [name, fn, args] of [
+    ['drawMines', effects.drawMines, [fakeCtx, st]],
+    ['drawTraps', effects.drawTraps, [fakeCtx, st]],
+    ['drawRadar', effects.drawRadar, [fakeCtx, st]],
+    ['drawThreatRings', effects.drawThreatRings, [fakeCtx, st]],
+    ['drawThreatLines', effects.drawThreatLines, [fakeCtx, st]],
+    ['drawFlashes', effects.drawFlashes, [fakeCtx, st]],
+    ['drawParticles', effects.drawParticles, [fakeCtx, st]],
+    ['drawExplosions', effects.drawExplosions, [fakeCtx, st]],
+    ['drawTexts', effects.drawTexts, [fakeCtx, st]],
+    ['drawMinePreview', effects.drawMinePreview, [fakeCtx, st, { angle: 0.5, dist: 70 }]],
+    ['drawAimLine', effects.drawAimLine, [fakeCtx, st, trace]],
+  ]) {
+    try {
+      fn(...args);
+    } catch (e) {
+      check(false, `Renderpfad: ${name}() wirft (${e.message})`);
+    }
+  }
 }
 
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------

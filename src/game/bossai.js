@@ -35,6 +35,7 @@ export function stepMirrorBoss(tank, state, dt) {
   // Turm/Feuerentscheidung bleibt die normale, accuracy-gesteuerte Logik
   // (data/tanks.json: t_mirror.accuracy) -- nur die Fahrfunktion ist ersetzt.
   const fire = tank.turretStunTimer > 0 ? false : roleTurret(tank, state, dt);
+  tank.aimingAtPlayer = fire; // Gefahrensinn-Anzeige (Phase 18), wie in state.js
   if (fire) fireBullet(tank, state);
 }
 
@@ -63,5 +64,6 @@ export function stepPhalanxBoss(tank, state, dt) {
   tank.vy = dt > 0 ? (tank.y - tank.prevY) / dt : 0;
 
   const fire = tank.turretStunTimer > 0 ? false : roleTurret(tank, state, dt);
+  tank.aimingAtPlayer = fire; // Gefahrensinn-Anzeige (Phase 18), wie in state.js
   if (fire) fireBullet(tank, state);
 }

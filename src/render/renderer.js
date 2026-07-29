@@ -17,6 +17,7 @@ import {
   drawThreatLines,
   drawMinePreview,
   drawAimLine,
+  drawThreatRings,
 } from './effects.js';
 import { traceTrajectory } from '../game/bullet.js';
 
@@ -907,6 +908,7 @@ export function createRenderer(ctx) {
       drawGhosts(ctx, state, alpha);
       for (const t of state.tanks) drawTank(state, t, alpha);
       drawRadar(ctx, state);
+      drawThreatRings(ctx, state); // Gefahrensinn (Phase 18, Welle 3)
       drawBullets(state.bullets, alpha);
       drawFlashes(ctx, state);
       drawParticles(ctx, state);

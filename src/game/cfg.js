@@ -114,6 +114,23 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   // Nebel-/Dunkelheit-Blende auf (renderer.js: drawFog), KI-Sichtlinien
   // bleiben unveraendert.
   cfg.ignoreFog = l('nachtsicht') > 0;
+  // Minenspuerer + Gefahrensinn (Phase 18, Welle 3): ebenfalls reine
+  // Anzeige-Schalter (effects.js), keine Physik und keine KI-Aenderung.
+  cfg.mineSense = l('minenspuerer') > 0;
+  cfg.threatSense = l('gefahrensinn') > 0;
+  // Sappeur (Phase 18, Welle 3): rissige Waende (Phase 11) fallen frueher.
+  // Wirkt NUR auf `destructible` -- nicht auf die eigene Sperrmauer und
+  // nicht gegen die Pionier-Transformation (state.js: destroyWall).
+  if (l('sappeur')) cfg.wallHitsReduction = U.sappeur.hitsPerLevel * l('sappeur');
+  // Steinbruch (Phase 18, Welle 3): Schrott fuer eingerissene Waende --
+  // laeuft ueber denselben state.bonusScrap-Zaehler wie Beutejagd (Welle 2).
+  if (l('steinbruch')) cfg.scrapPerWall = U.steinbruch.scrapPerLevel * l('steinbruch');
+  // Abprallschock (Phase 18, Welle 3): erste control-Karte, die den
+  // Wandabpraller selbst zum Kontrollwerkzeug macht (bullet.js).
+  if (l('abprallschock')) {
+    cfg.bounceStunRadius = U.abprallschock.radiusPxPerLevel * l('abprallschock');
+    cfg.bounceStunS = U.abprallschock.stunS;
+  }
 
   // --- Neue Build-Upgrades ---
   if (l('glaskanone')) {
@@ -221,6 +238,18 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
     cfg.powershotPerRoom = l('powershot') * U.powershot.perRoom;
     cfg.powershotBonusRicochets = U.powershot.bonusRicochets;
     cfg.powershotSpeedFactor = U.powershot.speedFactor;
+  }
+  // Doppelschlag (Phase 18, Welle 3): ein Trickshot-Kill laedt eine
+  // Powershot-Ladung nach (state.js). Die Verstaerkungswerte kommen aus der
+  // powershot-Definition -- sonst waere die Kugelgeschwindigkeit NaN, wenn
+  // Doppelschlag OHNE die Powershot-Karte gewaehlt wird (tank.js multipliziert
+  // ungeprueft mit cfg.powershotSpeedFactor). Nach dem powershot-Block, damit
+  // dessen eigene Werte Vorrang behalten.
+  if (l('doppelschlag')) {
+    cfg.trickshotPowershot = U.doppelschlag.chargesPerTrickshot;
+    cfg.trickshotPowershotMax = U.doppelschlag.maxCharges;
+    cfg.powershotSpeedFactor = cfg.powershotSpeedFactor || U.powershot.speedFactor;
+    cfg.powershotBonusRicochets = cfg.powershotBonusRicochets ?? U.powershot.bonusRicochets;
   }
 
   // Zielsucher: hartes Magazin-Limit 3 (ueberschreibt alle anderen
