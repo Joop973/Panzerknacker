@@ -97,6 +97,12 @@
     "hits": 3,
     "share": 0.25
   },
+  "_bankshotGuarantee": "USP-Kennzahl 1 aus PLAN.md: Anteil der Kampfraeume ab Raum 5 mit mindestens einem nicht direkt toetbaren Gegner, Zielwert 60 %. Die reine Zufallsauswahl in buyEnemies() erreichte nur 33 % (gemessen mit tests/uspcheck.mjs) -- deshalb hier die vom Plan geforderte 'Design-Kontrolle ueber den Generator': in `chance` der Raeume ab `minRoom` wird ein Gegner gegen einen Bankshot-Typ GETAUSCHT (nicht ergaenzt, das Gefahrenbudget bleibt also unveraendert). Raum 5 selbst kann die Quote nicht erfuellen, weil t_prism laut Phase 4 erst ab Raum 6 freigeschaltet ist -- chance ist entsprechend hoeher gewaehlt, damit der Gesamtwert stimmt.",
+  "bankshotGuarantee": {
+    "minRoom": 6,
+    "chance": 0.58,
+    "types": ["t_prism"]
+  },
   "treasure": {
     "lifeCost": 1
   },

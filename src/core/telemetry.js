@@ -15,7 +15,7 @@ const MAX_RUNS = 100;
 // Bei jeder Bedeutungsaenderung der Felder hochzaehlen -- sonst werden
 // spaeter Runs verglichen, die gar nicht vergleichbar sind.
 const SCHEMA_VERSION = 2;
-const GAME_VERSION = 'v58'; // an den sw.js-Cache-Namen gekoppelt halten
+const GAME_VERSION = 'v59'; // an den sw.js-Cache-Namen gekoppelt halten
 
 let current = null; // Sammelpuffer des laufenden Runs (null = keiner aktiv)
 
@@ -95,6 +95,9 @@ export function recordRoom(r) {
     minFps: r.minFps ?? null,
     ricochetKills: r.ricochetKills || 0,
     directKills: r.directKills || 0,
+    // USP-Kennzahl 3 (PLAN.md): Teilmenge der Abpraller-Kills an Gegnern,
+    // die auch direkt toetbar gewesen waeren.
+    voluntaryRicochetKills: r.voluntaryRicochetKills || 0,
     ghostKills: r.ghostKills || 0, // Phase 7
     powershotsFired: r.powershotsFired || 0, // Phase 5
     secondaryUses: r.secondaryUses || 0,
@@ -265,12 +268,25 @@ export function computeMetrics(runs) {
     : null;
   const causes = {};
   for (const r of runs) if (!r.won && r.deathCause) causes[r.deathCause] = (causes[r.deathCause] || 0) + 1;
-  let ric = 0, dir = 0, minFps = Infinity;
+  let ric = 0, dir = 0, vol = 0, minFps = Infinity;
   for (const r of runs) for (const room of r.rooms || []) {
     ric += room.ricochetKills || 0;
     dir += room.directKills || 0;
+    vol += room.voluntaryRicochetKills || 0;
     if (room.minFps != null) minFps = Math.min(minFps, room.minFps);
   }
+  // USP-Kennzahl 3 (PLAN.md): Anteil der FREIWILLIGEN Abpraller-Kills an
+  // allen Kills an direkt toetbaren Gegnern. Soll ueber die ersten zehn
+  // Runs STEIGEN -- deshalb zusaetzlich als Verlauf ueber die Runs.
+  const voluntaryShare = vol + dir ? Math.round((100 * vol) / (vol + dir)) : null;
+  const trend = runs.map((r) => {
+    let v = 0, d = 0;
+    for (const room of r.rooms || []) {
+      v += room.voluntaryRicochetKills || 0;
+      d += room.directKills || 0;
+    }
+    return v + d ? Math.round((100 * v) / (v + d)) : null;
+  });
   // Angebotene, aber nie gewaehlte Karten (Grundlage fuer Phase 18).
   const offered = {}, chosen = {};
   for (const r of runs) for (const u of r.upgrades || []) {
@@ -286,6 +302,7 @@ export function computeMetrics(runs) {
     medianDeathRoom: median, causes,
     ricochetKills: ric, directKills: dir,
     ricochetShare: ric + dir ? Math.round((100 * ric) / (ric + dir)) : null,
+    voluntaryRicochetKills: vol, voluntaryShare, voluntaryTrend: trend,
     minFps: minFps === Infinity ? null : minFps,
     neverChosen, mostRejected,
   };
@@ -303,7 +320,13 @@ function refreshSummary() {
     `Median-Todesraum <b>${m.medianDeathRoom ?? '–'}</b> (Ziel 8–14) · ` +
     `Abpraller-Kills ${m.ricochetKills}/${m.ricochetKills + m.directKills}` +
     `${m.ricochetShare != null ? ` (<b>${m.ricochetShare} %</b>)` : ''} · ` +
-    `minFps ${m.minFps ?? '–'} (Ziel &ge; 50)<br>Todesursachen: ${causes}<br>` +
+    `minFps ${m.minFps ?? '–'} (Ziel &ge; 50)<br>` +
+    // USP-Kennzahl 3 (PLAN.md): die eigentliche Frage -- greift der Spieler
+    // freiwillig zum Bankshot, obwohl der direkte Schuss moeglich waere?
+    `<b>Freiwillige Bankshots</b> ${m.voluntaryRicochetKills}/${m.voluntaryRicochetKills + m.directKills}` +
+    `${m.voluntaryShare != null ? ` (<b>${m.voluntaryShare} %</b>)` : ''} · ` +
+    `Verlauf ${m.voluntaryTrend.map((v) => (v == null ? '–' : v)).join(' → ')} (soll STEIGEN)<br>` +
+    `Todesursachen: ${causes}<br>` +
     `Nie gewaehlt: ${m.neverChosen.join(', ') || '–'}<br>` +
     `Am haeufigsten abgelehnt: ${m.mostRejected.map(([id, c]) => `${id} (${c})`).join(', ') || '–'}`;
 }

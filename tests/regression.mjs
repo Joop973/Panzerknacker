@@ -372,6 +372,37 @@ function check(ok, msg) {
         st.player.powershotCharges === 1,
         `Doppelschlag wirkt nicht: powershotCharges = ${st.player.powershotCharges} (erwartet 1)`,
       );
+      // USP-Kennzahl 3 (PLAN.md): derselbe Kill zaehlt als FREIWILLIGER
+      // Bankshot -- der Gegner war ja auch direkt toetbar.
+      check(
+        st.voluntaryRicochetKills === 1 && st.ricochetKills === 1,
+        `Kennzahl 3: freiwilliger Abpraller-Kill nicht gezählt (voluntary=${st.voluntaryRicochetKills}, ricochet=${st.ricochetKills})`,
+      );
+    }
+  }
+
+  // Gegenprobe zu Kennzahl 3: an einem Prisma ist der Bankshot ERZWUNGEN
+  // und darf die Freiwilligen-Quote nicht aufblaehen.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1337);
+    const st = run.state;
+    const enemy = st.tanks.find((t) => t !== st.player && t.alive);
+    if (enemy) {
+      run.phase = 'playing';
+      enemy.cfg.armor = null;
+      enemy.cfg.requiresRicochet = true; // Prisma-Verhalten erzwingen
+      enemy.protect = 0;
+      st.bullets.push({
+        x: enemy.x, y: enemy.y, prevX: enemy.x, prevY: enemy.y, vx: 10, vy: 0,
+        radius: 3, owner: st.player, kind: 'bullet', age: 5, distance: 10,
+        wallBounces: 2, ricochetsLeft: 0, ricochetsStart: 2, dead: false,
+        reflected: false, reflectImmune: null, reflectImmuneT: 0, trail: [],
+      });
+      stepRun(run, { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false }, 1 / 60);
+      check(
+        st.ricochetKills === 1 && st.voluntaryRicochetKills === 0,
+        `Kennzahl 3: Bankshot auf ein Prisma wurde als freiwillig gezählt (voluntary=${st.voluntaryRicochetKills})`,
+      );
     }
   }
 }
@@ -531,6 +562,24 @@ for (const seed of SEEDS) {
   }
   check(soundNamesSeen.has('kill'), 'Gegner-Kill meldet keinen "kill"-Sound');
   check(!soundNamesSeen.has('death'), 'Alter Sammel-Sound "death" wird noch gemeldet (Phase 7b trennt player_death/kill)');
+}
+
+// ---- 7. USP-Kennzahl 1 aus PLAN.md haelt den Zielwert -------------------
+// "Erzwungene Bankshots -- Anteil der Raeume ab Raum 5 mit mindestens einem
+// nicht direkt toetbaren Gegner. Zielwert 60 %." Die Messung ist ueber feste
+// Seeds deterministisch, also ein echter Waechter: faellt der Wert (z. B.
+// weil jemand difficulty.json: bankshotGuarantee anfasst oder t_prism
+// teurer macht), wird die Suite rot statt dass der USP still verwaessert.
+{
+  const { measure } = await import('./uspcheck.mjs');
+  const s = measure(40);
+  const share = s.withBankshot / s.rooms;
+  check(
+    share >= 0.6,
+    `USP-Kennzahl 1 verfehlt: nur ${(100 * share).toFixed(1)} % der Kampfräume ab Raum 5 ` +
+      `erzwingen einen Bankshot (Zielwert 60 %, siehe PLAN.md Prüfpunkte / tests/uspcheck.mjs)`,
+  );
+  console.log(`USP-Kennzahl 1: ${(100 * share).toFixed(1)} % erzwungene Bankshots (Ziel 60 %)`);
 }
 
 // ---- 4. Determinismus: gleiche Karte + gleicher Raum bei gleichem Seed ---

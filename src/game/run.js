@@ -67,6 +67,41 @@ function totalRooms(diff) {
   return diff.roomsBeforeFinal + 1; // 15 + Finalraum
 }
 
+// USP-Garantie (PLAN.md, Pruefpunkt 1 "Erzwungene Bankshots"): Der Plan
+// verlangt, dass in 60 % der Kampfraeume ab Raum 5 mindestens ein nicht
+// direkt toetbarer Gegner steht, und nennt dafuer ausdruecklich
+// "Design-Kontrolle ueber den Generator". Die reine Zufallsauswahl in
+// buyEnemies() kam nur auf 33 % (tests/uspcheck.mjs) -- ein Prisma ist teuer
+// und nur einer von elf Typen.
+//
+// Deshalb wird hier in `chance` der Raeume ab `minRoom` ein bereits
+// gekaufter Gegner GETAUSCHT statt einer ergaenzt: das Gefahrenbudget des
+// Raums bleibt damit unveraendert, der Raum wird nicht voller, nur anders
+// zusammengesetzt. Getauscht wird der teuerste Gegner -- er kommt dem
+// Prisma (7 Punkte) am naechsten, die Budget-Verschiebung bleibt klein.
+// Ist ohnehin schon ein Bankshot-Gegner dabei, passiert nichts.
+function ensureBankshotEnemy(run, types) {
+  const g = run.difficulty.bankshotGuarantee;
+  if (!g || !g.types?.length || run.roomIndex < g.minRoom) return types;
+  if (!types.length) return types;
+  const defs = run.data.types;
+  if (types.some((ty) => defs[ty]?.requiresRicochet)) return types;
+  if (run.rng.enemies() >= g.chance) return types;
+  // Nur freigeschaltete Bankshot-Typen (unlockRoom respektieren -- sonst
+  // stuende ein Prisma vor seiner eigenen Freischaltung im Raum).
+  const danger = run.difficulty.danger;
+  const usable = g.types.filter((ty) => run.roomIndex >= (danger[ty]?.unlockRoom ?? Infinity));
+  if (!usable.length) return types;
+  const pick = usable[Math.floor(run.rng.enemies() * usable.length)];
+  let worstIdx = 0;
+  types.forEach((ty, i) => {
+    if ((danger[ty]?.points ?? 0) > (danger[types[worstIdx]]?.points ?? 0)) worstIdx = i;
+  });
+  const out = types.slice();
+  out[worstIdx] = pick;
+  return out;
+}
+
 function weightedType(list, weights, rng) {
   let total = 0;
   for (const t of list) total += weights[t] || 0;
@@ -307,6 +342,11 @@ function buildCombatRoom(run, type, isFinal) {
     const budget =
       (diff.budget.base + run.roomIndex * diff.budget.perRoom) * run.budgetMult * eliteMult * crowdedMult;
     enemyTypes = buyEnemies(diff, run.rng.enemies, run.roomIndex, budget);
+    // USP-Garantie (PLAN.md Pruefpunkt 1) -- tauscht ggf. einen Gegner gegen
+    // einen Bankshot-Typ, ohne das Gefahrenbudget zu erhoehen. Bewusst NACH
+    // buyEnemies und nur fuer normale Kampfraeume (der Finalraum hat seine
+    // eigene Boss-Besetzung, siehe isFinal-Zweig oben).
+    enemyTypes = ensureBankshotEnemy(run, enemyTypes);
     // Raumcharakter: Kachelgewichte alternieren (Spec Abschnitt 7B).
     const chars = diff.roomCharacters;
     if (chars && chars.length) {

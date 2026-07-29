@@ -222,6 +222,12 @@ export function createState(data, tiles, opts) {
     // Kills mit abgeprallter vs. direkter Spielerkugel + Zweitwaffen-Einsatz.
     ricochetKills: 0,
     directKills: 0,
+    // USP-Kennzahl 3 aus PLAN.md ("Freiwillige Bankshots -- die einzige
+    // Zahl, die wirklich misst, ob der USP traegt"): von den Abpraller-Kills
+    // die Teilmenge an Gegnern, die AUCH direkt toetbar gewesen waeren. Ein
+    // Prisma zwingt zum Bankshot und sagt daher nichts ueber die Vorliebe
+    // des Spielers aus -- nur der freiwillige Bankshot tut das.
+    voluntaryRicochetKills: 0,
     secondaryUses: 0,
     powershotsFired: 0,
     ghostKills: 0, // Phase 7: Kills durch Geister-Kugeln (nicht dem Spieler zugerechnet)
@@ -853,8 +859,14 @@ export function stepState(state, cmd, dt) {
         // Telemetrie: zaehlt nur Kills des Spielers an Gegnern (Kernfrage
         // der USP -- wie oft toetet wirklich ein Abpraller?).
         if (own && t !== state.player && !t.alive) {
-          if (bounced) state.ricochetKills++;
-          else state.directKills++;
+          if (bounced) {
+            state.ricochetKills++;
+            // Freiwillig = das Ziel haette auch direkt getoetet werden
+            // koennen (kein requiresRicochet). Frontpanzerung zaehlt hier
+            // NICHT als Zwang: der Gepanzerte ist von der Flanke direkt
+            // toetbar, ein Bankshot auf ihn bleibt eine echte Wahl.
+            if (!t.cfg.requiresRicochet) state.voluntaryRicochetKills++;
+          } else state.directKills++;
         }
         break;
       }
