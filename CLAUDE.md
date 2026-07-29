@@ -54,13 +54,15 @@ aus `data/limits.json` + `balance.json`, im F1-Debug-Overlay sichtbar
 zusammen mit Logik-/Render-Frame-Zeit), **Phase 12** (Roguelike-Karte:
 sichtbarer, wählbarer Kartengraph ersetzt die unsichtbare Raumtyp-Automatik,
 neuer Raumtyp `cursed`), **Phase 13** (Shop: fünf Schrott-Aktionen im
-früheren Werkstatt-Raum) und **Phase 14** (Bosse: Reaktor/Spiegel/Phalanx,
+früheren Werkstatt-Raum), **Phase 14** (Bosse: Reaktor/Spiegel/Phalanx,
 1 von 3 Arenen deterministisch am Ende des Runs statt des alten
-handgebauten Finalraums) sind gebaut. `PLAN.md` wurde auf **v3**
+handgebauten Finalraums) und **Phase 15** (Raum-Gefahren: bewegliche Wand,
+Ölpfütze, Laserbarriere, Förderband — genau eine pro Raum ab Raum 3) sind
+gebaut. `PLAN.md` wurde auf **v3**
 konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`,
 doppelt gebautes Affix-System, falscher `eliteBonus`-Feldname) entfernt,
 jede offene Phase bekommt jetzt eine "Betroffene Dateien"-Zeile.
-**Nächste Phase: Phase 15 — Bewegliche Wände und Gefahren** (Stufe 4: Kür).
+**Nächste Phase: Phase 16 — Deckungs-KI** (Stufe 4: Kür).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -656,6 +658,45 @@ Phase 12, siehe Umsetzungsfund dort.
   wie beim Prisma/Gepanzerten). Neu ist nur der Generator-Wand-Look
   (pulsierender Kern, Muster wie die Phase-11-Riss-Optik) und ein
   Warnring um den Reaktorkern, solange er unverwundbar ist.
+
+### Phase 15 (Bewegliche Wände und Gefahren) — gemergt
+Genau EIN Element pro Kampf-/Eliteraum ab Raum 3 (`data/tiles.json:
+hazards.minRoom`), gewürfelt über einen eigenen RNG-Strom
+(`run.rng.hazards`, Muster wie der Raum-Modifikator aus Phase 10).
+- **Nachträglich aufgesetzt statt in den Generator eingewoben**:
+  `generator.js: placeRoomHazard()` läuft NACH der schon validierten
+  `buildGrid()`/`placeSpawns()`-Runde, deshalb ohne zweite
+  Flood-Fill-Prüfung — Öl/Förderband/Laser etikettieren nur vorhandene
+  Boden-Zellen um (keine Wandänderung), eine bewegliche Wand macht nur
+  eine vorhandene solide Zelle reversibel (ihr offener Zustand kann die
+  erreichbare Fläche nur vergrößern, derselbe Beweis wie bei zerstörbaren
+  Wänden, Phase 11). Spieler-/Gegner-Spawns bleiben beim Würfeln
+  ausgenommen.
+- **Bewegliche Wand** (`state.js: tickMovingWalls()`): togglet alle
+  `intervalS` Sekunden zwischen solid/offen — bleibt dabei eine ganz
+  normale `'solid'`-Wand (kein neuer Grid-Charakter nötig), nur
+  `state.walls` + das Grid-Zeichen werden periodisch aus-/eingehängt.
+- **Ölpfütze**: teilt sich die Grip-Physik mit dem raumweiten
+  Glatteis-Modifikator (Phase 10) — `tank.js: moveTank()` prüft jetzt
+  `mod?.slippery || onOil` statt einer zweiten Implementierung.
+- **Laserbarriere**: eigenes Array `state.laserWalls`, bewusst NICHT in
+  `state.walls` — nur `bullet.js: moveAxis()` (und die Ziellinien-Vorschau)
+  fragt es zusätzlich ab, `tank.js: resolveCircleWalls()` sieht es nie.
+  So blockt sie Kugeln, aber keine Panzer, ohne Sonderfall in der
+  Kollisionsroutine.
+- **Förderband**: schiebt in `tank.js: moveTank()` nach der normalen
+  Kollisionsauflösung unabhängig von der Eingabe, solange der Panzer auf
+  einer Förderband-Kachel steht.
+- **Zwei Whitelist-Fallen aus Phase 14 vorsorglich mitgeprüft**:
+  `cfg.js: resolveCfg()` und `telemetry.js: recordRoom()` sind explizite
+  Feld-Whitelists — das neue Telemetrie-Feld `hazard` (Muster `modifier`)
+  wurde gleich mit explizitem Eintrag ergänzt.
+- **Darstellung** (`renderer.js: drawHazards()`): Öl als dunkler
+  glänzender Fleck, Förderband als scrollende Chevron-Pfeile in
+  Schubrichtung, Laser als durchscheinender roter Streifen (Muster:
+  Spiegelwand-Diagonalstreifen, aber halbtransparent — sonst wirkt "blockt
+  nur Kugeln" wie ein Rendering-Bug), bewegliche Wand als Schienen-Rahmen,
+  der auch geschlossen sichtbar bleibt.
 
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,

@@ -718,6 +718,90 @@ export function createRenderer(ctx) {
     }
   }
 
+  // Raum-Gefahren (Phase 15): hoechstens EINE davon ist je Raum aktiv.
+  // Oel/Foerderband sind reine Bodendekoration; Laser bewusst KEIN
+  // solider Wandblock, sondern ein durchscheinender Strahl (Muster:
+  // Spiegelwand-Streifen, aber rot + halbtransparent) -- sonst wirkt
+  // "blockt nur Kugeln, keine Panzer" wie ein Rendering-Bug. Bewegliche
+  // Wand bekommt eine Schienen-Markierung, die auch geschlossen sichtbar
+  // bleibt, sonst ist die Mechanik nie zu erkennen.
+  function drawHazards(ctx, state) {
+    if (state.oilCells?.size) {
+      for (const key of state.oilCells) {
+        const [c, r] = key.split(',').map(Number);
+        const x = c * CELL + CELL / 2;
+        const y = r * CELL + CELL / 2;
+        ctx.fillStyle = 'rgba(35,25,50,0.55)';
+        ctx.beginPath();
+        ctx.ellipse(x, y, CELL * 0.42, CELL * 0.32, 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(160,130,210,0.4)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+    if (state.conveyor) {
+      const { dir, cells } = state.conveyor;
+      const angle = Math.atan2(dir.y, dir.x);
+      const scroll = (state.time * 70) % CELL;
+      for (const key of cells) {
+        const [c, r] = key.split(',').map(Number);
+        const x = c * CELL;
+        const y = r * CELL;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x, y, CELL, CELL);
+        ctx.clip();
+        ctx.fillStyle = 'rgba(60,68,48,0.5)';
+        ctx.fillRect(x, y, CELL, CELL);
+        ctx.strokeStyle = 'rgba(196,224,120,0.75)';
+        ctx.lineWidth = 2;
+        for (let d = -CELL; d < CELL * 2; d += 12) {
+          const bx = x + CELL / 2 + Math.cos(angle) * (d - scroll);
+          const by = y + CELL / 2 + Math.sin(angle) * (d - scroll);
+          ctx.beginPath();
+          ctx.moveTo(bx - Math.cos(angle + 0.6) * 5, by - Math.sin(angle + 0.6) * 5);
+          ctx.lineTo(bx, by);
+          ctx.lineTo(bx - Math.cos(angle - 0.6) * 5, by - Math.sin(angle - 0.6) * 5);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+    if (state.laserWalls?.length) {
+      const pulse = 0.5 + 0.35 * Math.sin(state.time * 6);
+      for (const w of state.laserWalls) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(w.x, w.y, w.w, w.h);
+        ctx.clip();
+        ctx.strokeStyle = `rgba(255,70,70,${pulse.toFixed(3)})`;
+        ctx.lineWidth = 3;
+        for (let d = -w.h; d < w.w + w.h; d += 8) {
+          ctx.beginPath();
+          ctx.moveTo(w.x + d, w.y);
+          ctx.lineTo(w.x + d + w.h, w.y + w.h);
+          ctx.stroke();
+        }
+        ctx.restore();
+        ctx.strokeStyle = `rgba(255,70,70,${(pulse * 0.6).toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(w.x + 1, w.y + 1, w.w - 2, w.h - 2);
+      }
+    }
+    if (state.movingWalls?.length) {
+      for (const mw of state.movingWalls) {
+        ctx.strokeStyle = 'rgba(255,180,60,0.85)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(mw.x + 3, mw.y + 3, CELL - 6, CELL - 6);
+        if (!mw.solid) {
+          ctx.fillStyle = 'rgba(255,180,60,0.15)';
+          ctx.fillRect(mw.x, mw.y, CELL, CELL);
+        }
+      }
+    }
+  }
+
   // Rauchgranate (Phase 6, Sekundärslot): halbtransparente Wolken, die mit
   // ihrem Alter ausblenden. Blockiert nur die KI-Sicht (state.blocksSight),
   // rein optisch hier ueber allem gezeichnet.
@@ -814,6 +898,7 @@ export function createRenderer(ctx) {
       if (renderOpts.aimLine) drawAimLine(ctx, state, traceTrajectory);
       if (minePreview) drawMinePreview(ctx, state, minePreview);
       drawWalls(state.walls, state.time);
+      drawHazards(ctx, state);
       drawWaveWarning(ctx, state);
       drawGhosts(ctx, state, alpha);
       for (const t of state.tanks) drawTank(state, t, alpha);

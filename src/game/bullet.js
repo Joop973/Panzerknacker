@@ -75,7 +75,10 @@ function moveAxis(b, state, axis, dt) {
   if (b.phaseWalls) return { hit: false, mirror: false }; // Durchschlag: ignoriert alle Waende
   let hit = false;
   let mirror = false;
-  for (const wall of [...state.walls]) {
+  // Laserbarriere (Phase 15): blockt NUR Geschosse, nie Panzer -- deshalb
+  // ein eigenes Array statt eines Eintrags in state.walls (das wuerde auch
+  // die Panzerkollision (tank.js: resolveCircleWalls) treffen).
+  for (const wall of [...state.walls, ...(state.laserWalls || [])]) {
     if (wall.type === 'hole') continue; // Geschosse fliegen ueber Loecher
     if (!circleOverlapsAABB(b.x, b.y, b.radius, wall)) continue;
     if (b.tungsten && wall.type === 'breakable') {
@@ -161,7 +164,7 @@ export function traceTrajectory(state, x, y, angle, cfg, opts = {}) {
     kind: 'bullet',
     phaseWalls: cfg.phaseWalls || false,
   });
-  const shadow = { walls: state.walls, data: state.data, tanks: [] };
+  const shadow = { walls: state.walls, laserWalls: state.laserWalls, data: state.data, tanks: [] };
   const tailSteps = opts.tailSteps ?? 45; // Laenge des Abpraller-Segments
   const pts = [{ x, y, bounce: false }];
   // Ueber wallBounces statt ricochetsLeft erkennen (Phase 5: eine

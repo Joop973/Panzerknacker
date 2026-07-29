@@ -358,9 +358,73 @@ export function buildArenaRoom(arenasData, name, enemyCount) {
   };
 }
 
+function pickCells(grid, matchChar) {
+  const cells = [];
+  for (let r = 1; r < ROWS - 1; r++) {
+    for (let c = 1; c < COLS - 1; c++) {
+      if (grid[r][c] === matchChar) cells.push([c, r]);
+    }
+  }
+  return cells;
+}
+
+function sampleN(rng, list, n) {
+  const pool = [...list];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, n);
+}
+
+// Raum-Gefahren (Phase 15): GENAU EIN Element pro Raum (ab
+// tilesData.hazards.minRoom, Wahl + Raumnummer-Gate laufen in run.js --
+// hier kommt nur der bereits gewuerfelte `type`). Wird NACHTRAEGLICH auf
+// das schon validierte Layout aufgesetzt -- braucht deshalb KEINE zweite
+// Flood-Fill-Pruefung:
+//  - Oel/Foerderband/Laser etikettieren nur vorhandene BODEN-Zellen um
+//    (keine Wandaenderung, Erreichbarkeit unveraendert).
+//  - Eine bewegliche Wand macht eine vorhandene SOLIDE Zelle reversibel;
+//    ihr geschlossener Ausgangszustand ist identisch zum validierten
+//    Layout, ihr offener Zustand kann die erreichbare Flaeche nur
+//    VERGROESSERN (derselbe Beweis wie bei zerstoerbaren Waenden, Phase 11).
+// `exclude` (Set von "col,row") haelt Spieler-/Gegner-Spawns frei, damit
+// niemand mitten in einer Gefahr startet.
+export function placeRoomHazard(grid, rng, hazardsCfg, type, exclude) {
+  if (!hazardsCfg || !type) return null;
+  const skip = exclude || new Set();
+  if (type === 'movingWall') {
+    const cfg = hazardsCfg.movingWall || {};
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    // Nur solide Zellen mit mind. einem Boden-Nachbarn -- sonst aendert
+    // das Oeffnen nichts (mitten in einem massiven Block).
+    const candidates = pickCells(grid, '#').filter(
+      ([c, r]) => !skip.has(`${c},${r}`) && dirs.some(([dc, dr]) => grid[r + dr][c + dc] === '.'),
+    );
+    const picked = sampleN(rng, candidates, cfg.count ?? 1);
+    if (!picked.length) return null;
+    return { type, cells: picked.map(([c, r]) => ({ col: c, row: r })), intervalS: cfg.intervalS ?? 8 };
+  }
+  if (type === 'oil' || type === 'conveyor' || type === 'laser') {
+    const cfg = hazardsCfg[type] || {};
+    const candidates = pickCells(grid, '.').filter(([c, r]) => !skip.has(`${c},${r}`));
+    const picked = sampleN(rng, candidates, cfg.count ?? 2);
+    if (!picked.length) return null;
+    const cells = picked.map(([c, r]) => ({ col: c, row: r }));
+    if (type === 'conveyor') {
+      const dirs = [{ x: 1, y: 0 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 0, y: -1 }];
+      const dir = dirs[Math.floor(rng() * dirs.length)];
+      return { type, cells, dir, pushPx: cfg.pushPx ?? 90 };
+    }
+    if (type === 'oil') return { type, cells, gripPerSec: cfg.gripPerSec ?? 1.5 };
+    return { type, cells }; // laser
+  }
+  return null;
+}
+
 // Hauptfunktion: generiert einen validierten Raum -- oder laedt ein festes
 // Layout, wenn das Raumspec `fixedLayout` setzt (Weiche, Phase 0b).
-export function generateRoom(tilesData, rng, enemyCount, weights, spec, arenasData, destructibleWalls) {
+export function generateRoom(tilesData, rng, enemyCount, weights, spec, arenasData, destructibleWalls, hazardType) {
   if (spec && spec.fixedLayout) {
     return buildArenaRoom(arenasData, spec.fixedLayout, enemyCount);
   }
@@ -370,11 +434,16 @@ export function generateRoom(tilesData, rng, enemyCount, weights, spec, arenasDa
     if (share < WALL_MIN || share > WALL_MAX) continue;
     const spawns = placeSpawns(grid, rng, enemyCount);
     if (!spawns) continue;
+    const exclude = new Set(
+      [spawns.player, ...spawns.enemies].map(([c, r]) => `${c},${r}`),
+    );
+    const hazard = placeRoomHazard(grid, rng, tilesData.hazards, hazardType, exclude);
     return {
       grid,
       playerSpawn: toSpawn(spawns.player),
       enemySpawns: spawns.enemies.map(toSpawn),
       emergency: false,
+      hazard,
     };
   }
   // Notfall-Layout: darf nie fehlen und nie haengen.

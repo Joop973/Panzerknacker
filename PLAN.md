@@ -1038,14 +1038,58 @@ Phalanx-Formation), `src/game/bullet.js`/`mine.js` (Bankshot-Regel),
 
 # STUFE 4 — Kür
 
-## Phase 15 — Bewegliche Wände und Gefahren
+## Phase 15 — Bewegliche Wände und Gefahren  ✅ erledigt
 **Aufwand:** 1–2 Sessions
 Wandsegmente verschieben sich alle 8 s. Ölpfützen, Laserbarrieren (blocken
 Kugeln, nicht Panzer), Förderbänder. **Ein** Element pro Raum.
 
-**Betroffene Dateien:** `data/tiles.json` (neue Gefahren-Kacheltypen),
-`src/game/generator.js` (Platzierung + Flood-Fill über die Zeit), `src/game/state.js`
-(Bewegungstakt, Kontaktschaden/-blockade), `src/render/renderer.js`.
+**Betroffene Dateien:** `data/tiles.json` (neuer `hazards`-Block),
+`src/game/generator.js` (`placeRoomHazard()`), `src/game/state.js`
+(Laufzeit-Verdrahtung + `tickMovingWalls()`), `src/game/tank.js` (Oel-Grip +
+Foerderband-Schub), `src/game/bullet.js` (Laser-Bankshot), `src/game/run.js`
+(`rollRoomHazard()` + Vorschau), `src/ui/preview.js`, `src/core/telemetry.js`,
+`src/render/renderer.js` (`drawHazards()`).
+
+**Umsetzungsfunde:**
+- **Nachtraeglich statt in den Generator eingewoben** (Fund waehrend des
+  Designs): alle vier Gefahren werden ERST nach der normalen, bereits
+  validierten Raumgenerierung (`buildGrid()`/`placeSpawns()`) aufgesetzt,
+  statt in `buildGrid()` mitzulaufen wie Spiegelwaende/zerstoerbare Waende.
+  Das macht eine zweite Flood-Fill-Pruefung ("Platzierung + Flood-Fill
+  ueber die Zeit" laut PLAN) unnoetig: Oel/Foerderband/Laser etikettieren
+  nur vorhandene BODEN-Zellen um (keine Wandaenderung), und eine bewegliche
+  Wand macht nur eine vorhandene SOLIDE Zelle reversibel -- ihr offener
+  Zustand kann die erreichbare Flaeche nur VERGROESSERN, nie verkleinern
+  (derselbe Beweis wie bei zerstoerbaren Waenden, Phase 11; im Test
+  `phase15hazards.mjs` empirisch verifiziert: reachable(offen) ⊇
+  reachable(zu)). Spieler-/Gegner-Spawns werden beim Wuerfeln der Zellen
+  bewusst ausgeschlossen.
+- **Bewegliche Wand braucht KEINEN neuen Grid-Charakter**: sie bleibt eine
+  ganz normale `'solid'`-Wand (aus einer bereits vorhandenen `#`-Zelle
+  ausgewaehlt) -- `state.tickMovingWalls()` haengt das Wandobjekt nur
+  periodisch aus/in `state.walls` + Grid-Zeichen `'#'`/`'.'` aus. `isSolid()`
+  kennt beide Zeichen schon, keine Aenderung dort noetig.
+- **Laserbarriere ist bewusst NICHT in `state.walls`**: ein eigenes Array
+  `state.laserWalls`, das NUR `bullet.js: moveAxis()` (und die
+  Ziellinien-Vorschau `traceTrajectory()`) zusaetzlich abfragt --
+  `tank.js: resolveCircleWalls()` bekommt nur `state.walls` und sieht sie
+  nie. So "blockt Kugeln, nicht Panzer" ohne Sonderfall in der
+  Kollisionsroutine selbst.
+- **Oelpfuetze teilt sich die Grip-Physik mit dem raumweiten Glatteis-
+  Modifikator** (Phase 10) statt einer zweiten Implementierung: `tank.js:
+  moveTank()` prueft jetzt `mod?.slippery || onOil` und liest
+  `mod?.gripPerSec ?? state.hazard?.gripPerSec`. Modifikator (Phase 10) und
+  Gefahr (Phase 15) sind unabhaengige Systeme mit je eigenem RNG-Strom und
+  koennen daher theoretisch im selben Raum aktiv sein, ohne sich zu
+  behindern.
+- **Zwei Whitelist-Fallen aus Phase 14 vorsorglich mitgeprueft**: sowohl
+  `cfg.js: resolveCfg()` (Phase-14-Fund) als auch `telemetry.js:
+  recordRoom()` sind explizite Feld-Whitelists. Fuer Phase 15 war das
+  Kern-Feature nicht betroffen (Oel/Foerderband/Laser haengen an
+  `state`/`tank.cfg`, nicht an neuen `tanks.json`-Feldern) -- ein neues
+  Telemetrie-Feld `hazard` (Muster `modifier`) wurde trotzdem gleich mit
+  explizitem Whitelist-Eintrag ergaenzt, um denselben Fehler nicht zu
+  wiederholen.
 
 ## Phase 16 — Deckungs-KI
 **Aufwand:** 1–2 Sessions

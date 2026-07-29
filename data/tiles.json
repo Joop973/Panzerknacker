@@ -3,6 +3,33 @@
   "minPerRoom": 2,
   "maxPerRoom": 4
  },
+ "hazards": {
+  "minRoom": 3,
+  "types": ["movingWall", "oil", "laser", "conveyor"],
+  "movingWall": {
+   "count": 1,
+   "intervalS": 8,
+   "name": "Bewegliche Wand",
+   "desc": "Ein Wandstueck oeffnet und schliesst sich alle 8 Sekunden."
+  },
+  "oil": {
+   "count": 3,
+   "gripPerSec": 1.5,
+   "name": "Ölpfützen",
+   "desc": "Auf den glaenzenden Kacheln reagiert der Panzer traege auf Lenkbefehle."
+  },
+  "laser": {
+   "count": 2,
+   "name": "Laserbarrieren",
+   "desc": "Blocken Geschosse, aber keine Panzer."
+  },
+  "conveyor": {
+   "count": 3,
+   "pushPx": 90,
+   "name": "Förderband",
+   "desc": "Schiebt jeden Panzer auf den Kacheln in eine feste Richtung."
+  }
+ },
  "tiles": {
   "open_a": {
    "category": "open",

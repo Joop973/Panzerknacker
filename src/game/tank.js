@@ -8,6 +8,7 @@
 import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
 import { createMine } from './mine.js';
+import { CELL } from '../config.js';
 
 let nextTankId = 1;
 
@@ -124,12 +125,17 @@ export function moveTank(tank, axis, state, dt) {
   const blood = tank.bloodTimer > 0 ? tank.cfg.bloodlustSpeed || 1 : 1;
   const spd = tank.cfg.speed * (tank.berserkerSpeed || 1) * boost * blood;
   const mod = state.modifier;
-  if (mod?.slippery) {
-    // Glatteis (Phase 10): die tatsaechliche Geschwindigkeit naehert sich der
-    // Eingabe nur allmaehlich an (Grip statt Sofort-Stopp/-Start) -- betrifft
-    // ALLE Panzer gleich, gilt daher generisch in moveTank() statt in einem
-    // der vier KI-Verhalten.
-    const grip = mod.gripPerSec ?? 3;
+  // Oelpfuetze (Phase 15): dieselbe Grip-Physik wie das raumweite Glatteis
+  // (Phase 10), nur ausgeloest durch die aktuelle Kachel statt durch einen
+  // Raum-Modifikator -- deshalb hier zusammengefasst statt verdoppelt.
+  const onOil = !!state.oilCells?.has(`${Math.floor(tank.x / CELL)},${Math.floor(tank.y / CELL)}`);
+  if (mod?.slippery || onOil) {
+    // Die tatsaechliche Geschwindigkeit naehert sich der Eingabe nur
+    // allmaehlich an (Grip statt Sofort-Stopp/-Start) -- betrifft ALLE
+    // Panzer gleich, gilt daher generisch in moveTank() statt in einem der
+    // vier KI-Verhalten. Modifikator hat Vorrang, falls (theoretisch)
+    // beides gleichzeitig aktiv waere.
+    const grip = mod?.gripPerSec ?? state.hazard?.gripPerSec ?? 3;
     const t = Math.min(1, grip * dt);
     tank.iceVx += (dx * spd - tank.iceVx) * t;
     tank.iceVy += (dy * spd - tank.iceVy) * t;
@@ -147,6 +153,15 @@ export function moveTank(tank, axis, state, dt) {
   resolveCircleWalls(tank, tank.cfg.radius, state.walls);
   resolveTankBlocking(tank, state.tanks);
   resolveCircleWalls(tank, tank.cfg.radius, state.walls);
+
+  // Foerderband (Phase 15): schiebt unabhaengig von der Eingabe, solange
+  // der Panzer auf einer Foerderband-Kachel steht -- danach noch einmal an
+  // Waenden aufloesen, damit der Schub nicht hindurchtraegt.
+  if (state.conveyor?.cells.has(`${Math.floor(tank.x / CELL)},${Math.floor(tank.y / CELL)}`)) {
+    tank.x += state.conveyor.dir.x * state.conveyor.pushPx * dt;
+    tank.y += state.conveyor.dir.y * state.conveyor.pushPx * dt;
+    resolveCircleWalls(tank, tank.cfg.radius, state.walls);
+  }
 
   // Tatsaechliche Geschwindigkeit nach allen Kollisionen.
   tank.vx = (tank.x - tank.prevX) / dt;
