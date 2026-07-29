@@ -13,7 +13,7 @@ import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
 import { createGhost, updateGhosts } from './ghost.js';
-import { updateEnemy } from './ai.js';
+import { updateEnemy, updateCoverPerception } from './ai.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
@@ -231,6 +231,10 @@ export function createState(data, tiles, opts) {
     pendingWave, // Phase 9: zurueckgehaltene zweite Welle (oder null)
     eliteAffixes: eliteAffixes || null, // Phase 9: fuer spaeter nachspawnende Welle
     modifier: modifier || null, // Phase 10: Raum-Modifikator (data/modifiers.json)
+    // Deckungs-KI (Phase 16): 15-Hz-Takt + Reihum-Cursor fuer
+    // updateCoverPerception() -- siehe ai.js.
+    coverTimer: 0,
+    coverCursor: 0,
     // Reaktor-Boss (Phase 14): Anzahl noch stehender Generatoren -- solange
     // > 0, faengt killTank() jeden Treffer auf t.cfg.bossInvincible ab.
     // Aus den Wandobjekten gezaehlt (nicht aus room.markers -- die Generator-
@@ -651,6 +655,11 @@ export function stepState(state, cmd, dt) {
     if (cmd.fire) fireBullet(p, state);
     if (cmd.mine && useSecondary(p, state, cmd.mineThrow)) state.secondaryUses++;
   }
+
+  // Deckungs-KI (Phase 16): throttled (15 Hz, Reihum-Verfahren) VOR der
+  // Gegner-Schleife, damit updateEnemy() bereits mit dem frischen
+  // tank.ai.threatened dieses Ticks entscheidet.
+  updateCoverPerception(state, dt);
 
   // Gegner: getrennte Turm-/Fahr-KI liefert Bewegung, Schuss- und
   // Minenwunsch. Zwei Boss-Sonderfaelle (Phase 14) haben KEINE physik-

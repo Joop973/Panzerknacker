@@ -56,13 +56,15 @@ sichtbarer, wählbarer Kartengraph ersetzt die unsichtbare Raumtyp-Automatik,
 neuer Raumtyp `cursed`), **Phase 13** (Shop: fünf Schrott-Aktionen im
 früheren Werkstatt-Raum), **Phase 14** (Bosse: Reaktor/Spiegel/Phalanx,
 1 von 3 Arenen deterministisch am Ende des Runs statt des alten
-handgebauten Finalraums) und **Phase 15** (Raum-Gefahren: bewegliche Wand,
-Ölpfütze, Laserbarriere, Förderband — genau eine pro Raum ab Raum 3) sind
-gebaut. `PLAN.md` wurde auf **v3**
+handgebauten Finalraums), **Phase 15** (Raum-Gefahren: bewegliche Wand,
+Ölpfütze, Laserbarriere, Förderband — genau eine pro Raum ab Raum 3) und
+**Phase 16** (Deckungs-KI: Gegner mit niedriger `aggression` brechen die
+Sichtlinie, wenn der Spieler zielt, 15-Hz-Reihum-Wahrnehmung statt
+Pro-Frame-Prüfung) sind gebaut. `PLAN.md` wurde auf **v3**
 konsistenzgeprüft: tote Verweise (u. a. gelöschte Elite-Karte `beutepanzer`,
 doppelt gebautes Affix-System, falscher `eliteBonus`-Feldname) entfernt,
 jede offene Phase bekommt jetzt eine "Betroffene Dateien"-Zeile.
-**Nächste Phase: Phase 16 — Deckungs-KI** (Stufe 4: Kür).
+**Nächste Phase: Phase 17 — Transformationen** (Stufe 4: Kür).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -697,6 +699,40 @@ hazards.minRoom`), gewürfelt über einen eigenen RNG-Strom
   Spiegelwand-Diagonalstreifen, aber halbtransparent — sonst wirkt "blockt
   nur Kugeln" wie ein Rendering-Bug), bewegliche Wand als Schienen-Rahmen,
   der auch geschlossen sichtbar bleibt.
+
+### Phase 16 (Deckungs-KI) — gemergt
+Gegner mit niedriger `aggression` versuchen, die Sichtlinie zum Spieler zu
+brechen, sobald sie erkennen, dass gerade auf sie gezielt wird. Neuer Block
+`data/tanks.json: ai.cover` (`aggressionThreshold: 0.3`, `checkHz: 15`,
+`checksPerTick: 4`, `aimConeRad`, `aimRangePx`, `searchRadiusPx`,
+`searchAngles`).
+- **Dispatch-Override statt neuer Rolle**: `ai.js: updateEnemy()` ruft bei
+  niedriger `aggression` UND erkanntem `tank.ai.threatened` statt
+  `DRIVES[role]` die neue `ai_drives.js: coverDrive()` auf — Rolle,
+  Panzerung, Minenlegen bleiben unangetastet, nur EIN Tick lang wird die
+  Fahrfunktion ersetzt. Findet `coverDrive()` keinen Punkt, fällt es auf
+  `DRIVES[role]` zurück (nie stehen bleiben).
+- **"Im Ziel" bewusst grob**: `ai.js: isPlayerAiming()` prüft nur engen
+  Kegel (`aimConeRad`) + Reichweite (`aimRangePx`) + freie Sichtlinie zum
+  Spielerturm, kein exaktes Trefferbild — reicht als Auslöser zum Ducken.
+- **15 Hz + Reihum-Verfahren wie im Plan gefordert**:
+  `ai.js: updateCoverPerception()` läuft mit eigenem Timer
+  (`state.coverTimer`, reset auf `1/checkHz`) und prüft pro Aufruf
+  höchstens `checksPerTick` (4) Gegner ab einem wandernden
+  `state.coverCursor` — bei mehr Gegnern dauert es mehrere Aufrufe, bis
+  alle einmal geprüft wurden. `tank.ai.threatened` bleibt bis zum nächsten
+  Check stehen (max. ~67 ms alt), für das Ausweichverhalten unmerklich.
+- **`ai_drives.js: findCoverPoint()` ist bewusst kein Pathfinding**:
+  samplet 8 Punkte im Ring (`searchRadiusPx`) um den Panzer, wählt den
+  nächsten begehbaren, der die Sichtlinie zum Spieler bricht.
+- **`guardian` bleibt explizit ausgenommen** (verlässt seine Zone laut
+  Spec nie, Phase 8) — `aggression` ist für Guardian-Typen ohnehin nicht
+  gesetzt und fällt in `cfg.js: resolveCfg()` auf 0.5 zurück (über der
+  Schwelle), der Rollen-Ausschluss dokumentiert die Absicht aber explizit.
+  `aggressionThreshold: 0.3` trifft aktuell `t_grey`/`t_yellow`/`t_prism`
+  (Sapper, 0.17) und `t_armored` (Hunter, 0) — Sapper hatte laut Phase 8
+  ohnehin schon ein dormantes Flucht-Feld (`preferredRange`), die
+  Deckungssuche ist ihr erstes echtes defensives Verhalten.
 
 ### Phase 2 (Upgrade-Schema) — gemergt
 - **Neues Upgrade-Schema** in `data/upgrades.json`: jeder Eintrag hat `id`,
