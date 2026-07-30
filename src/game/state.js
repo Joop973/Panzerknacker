@@ -729,6 +729,10 @@ export function stepState(state, cmd, dt) {
   // Gegner-Schleife, damit updateEnemy() bereits mit dem frischen
   // tank.ai.threatened dieses Ticks entscheidet.
   updateCoverPerception(state, dt);
+  // Frame-Budget fuer den Abpraller-Rechner (ai_turrets.js: bounceShot):
+  // hoechstens so viele Solver-Laeufe pro Frame, egal wie viele
+  // Bankshot-Gegner im Raum stehen.
+  state.bounceSolveBudget = state.data.ai.bounceShot?.solvesPerTick ?? 1;
 
   // Gegner: getrennte Turm-/Fahr-KI liefert Bewegung, Schuss- und
   // Minenwunsch. Zwei Boss-Sonderfaelle (Phase 14) haben KEINE physik-

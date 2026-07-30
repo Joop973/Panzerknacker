@@ -533,6 +533,61 @@ function check(ok, msg) {
   }
 }
 
+// ---- 7c. Bankshot-Gegner: feuert er, und haelt er das Frame-Budget? ----
+// Der Gruene (t_green) nutzt seit der Nutzer-Balancerunde den
+// Abpraller-Rechner (ai_turrets.js: solveBounce). Der marched angleSamples
+// Strahlen ueber die halbe Arena und ist damit die teuerste KI im Spiel:
+// EIN Solver-Lauf kostete mit den urspruenglichen 180 Samples bis zu
+// 4,8 ms von 6 ms Frame-Budget (PLAN.md Phase 11b). Gegengemessen wurde
+// deshalb 120 Samples -- gleiche Loesungsquote (15/18), rund halbe Zeit.
+// `solvesPerTick` ist zusaetzlich ein Sicherheitsnetz: die Solver-Timer
+// staffeln sich zwar von selbst (gemessen: 260 Laeufe in 260 verschiedenen
+// Ticks), aber bei vielen Bankshot-Gegnern koennten sie zusammenfallen.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+  check(!!tanksData.types.t_green.requiresBounceShot, 'Der Grüne nutzt den Abpraller-Rechner nicht mehr');
+  let shots = 0;
+  let worstMs = 0;
+  let maxSolvesInOneTick = 0;
+  const budget = tanksData.ai.bounceShot.solvesPerTick ?? 1;
+  for (let seed = 1; seed <= 6; seed++) {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(seed, 3, 'rooms'),
+      enemyTypes: ['t_green', 't_green', 't_green'],
+      aiSeed: hashSeed(seed, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+    });
+    for (let i = 0; i < 60 * 6; i++) {
+      const t0 = process.hrtime.bigint();
+      stepState(
+        st,
+        { move: { x: Math.sin(i / 40), y: Math.cos(i / 55) }, aim: { x: st.player.x + 50, y: st.player.y }, fire: false, mine: false, dash: false },
+        1 / 60,
+      );
+      worstMs = Math.max(worstMs, Number(process.hrtime.bigint() - t0) / 1e6);
+      // Budget-Buchhaltung: stepState() setzt es am Anfang, bounceShot()
+      // zaehlt herunter -- es darf nie unter 0 rutschen.
+      maxSolvesInOneTick = Math.max(maxSolvesInOneTick, budget - st.bounceSolveBudget);
+      for (const ev of st.sounds.splice(0)) {
+        if ((typeof ev === 'string' ? ev : ev.name) === 'shoot_enemy') shots++;
+      }
+      st.player.protect = 1; // Spieler am Leben halten
+      for (const t of st.tanks) if (t !== st.player) t.alive = true;
+    }
+  }
+  check(shots > 40, `Bankshot-Gegner feuert kaum (${shots} Schüsse in 6 Räumen à 6 s mit je 3 Grünen)`);
+  check(
+    maxSolvesInOneTick <= budget,
+    `Abpraller-Rechner überschreitet sein Frame-Budget (${maxSolvesInOneTick} Läufe in einem Tick, erlaubt ${budget})`,
+  );
+  check(worstMs < 6, `Logikschritt mit 3 Bankshot-Gegnern zu teuer: ${worstMs.toFixed(2)} ms (Budget 6 ms)`);
+  console.log(`Bankshot-Gegner: ${shots} Schüsse, schlechtester Logikschritt ${worstMs.toFixed(2)} ms`);
+}
+
 // ---- 8. Overlays schliessen sich nach der Aktion -----------------------
 // Vom Nutzer gemeldeter Blocker: nach dem Anklicken eines Kartenknotens blieb
 // das #map-Overlay ueber dem Spielfeld liegen und fing jede weitere Eingabe

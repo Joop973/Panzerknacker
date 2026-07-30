@@ -593,11 +593,16 @@ umstellen), `src/game/ai.js` (Dispatch).
 **Umsetzungsfunde:**
 - `bounce_solver` (Abpraller-Rechner) war in `ai_turrets.js` bereits gebaut,
   aber von KEINEM Typ referenziert — die "sieger schießt ausschließlich
-  Bankshots"-Fähigkeit ist jetzt als orthogonales Sonderverhalten
-  `requiresBounceShot` erhalten (funktioniert, testweise geprüft), aber
-  bewusst keinem aktuellen Typ zugewiesen: t_teal/t_black (≈ sieger laut
-  v3-Review) schießen heute direkt bzw. mit Vorhalt, nicht ausschließlich per
-  Bankshot — das umzustellen wäre echtes neues Verhalten gewesen.
+  Bankshots"-Fähigkeit ist als orthogonales Sonderverhalten
+  `requiresBounceShot` erhalten geblieben, in Phase 8 aber bewusst keinem Typ
+  zugewiesen (das wäre echtes neues Verhalten gewesen).
+  **Nachtrag (Nutzer-Balancerunde):** `t_green` nutzt ihn jetzt — der Grüne
+  steht fest, rechnet Abprallwinkel und schießt fast nur Bankshots. Dabei
+  gemessen: EIN Solver-Lauf kostete mit `angleSamples: 180` bis zu 4,8 ms
+  von 6 ms Frame-Budget; mit 120 Samples bleibt die Lösungsquote gleich und
+  die Kosten halbieren sich (~2,2 ms). Zusätzlich deckelt `solvesPerTick`
+  die Läufe pro Frame — Sicherheitsnetz, denn die Timer staffeln sich schon
+  von selbst.
 - `accuracy` (0–1) ersetzt die vier diskreten Turm-Stufen
   (`random_seek`/`weak_aim`/`aim`/`strong_aim`) durch einen Regler:
   `accuracy 0` = rein zufälliger Schwenk ohne Spieler-Tracking (t_brown),

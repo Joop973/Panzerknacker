@@ -55,9 +55,10 @@
       "turnSpeed": 2.2,
       "fireConeRad": 0.06,
       "solveIntervalS": 0.4,
-      "angleSamples": 180,
+      "angleSamples": 120,
       "hitTolerancePx": 14,
-      "maxTravelPx": 1200
+      "maxTravelPx": 1200,
+      "solvesPerTick": 1
     },
     "white": {
       "invisibleAfterS": 1.5,
@@ -157,9 +158,9 @@
       "role": "guardian",
       "accuracy": 0.9,
       "label": "Grüner",
-      "desc": "Steht fest und zielt mit Vorhalt sehr präzise. Feuert schnelle Raketen mit 2 Abprallern — lädt 2 s pro Schuss nach.",
+      "desc": "Steht fest und rechnet Abprallwinkel aus: schießt fast nur Bankshots mit 2 Abprallern — lädt 2 s pro Schuss nach.",
       "fireRate": 2,
-      "leadAim": true
+      "requiresBounceShot": true
     },
     "t_purple": {
       "speed": "fast",
