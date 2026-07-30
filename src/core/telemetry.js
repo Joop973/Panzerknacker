@@ -7,15 +7,16 @@
 // (main.js) angebunden. Die Spiellogik liest niemals Telemetriedaten
 // zurueck -- der Datenfluss ist strikt einseitig (nur schreiben).
 //
-// Debug-Ansicht: nur bei ?debug=1 in der URL. Ohne diesen Parameter
-// ist nichts davon sichtbar oder aktiv.
+// Debug-ANSICHT: nur bei ?debug=1 in der URL. Die AUFZEICHNUNG laeuft
+// dagegen immer -- man kann also ohne den Parameter spielen und die Daten
+// spaeter mit ?debug=1 ansehen/exportieren.
 
 const KEY = 'runs';
 const MAX_RUNS = 100;
 // Bei jeder Bedeutungsaenderung der Felder hochzaehlen -- sonst werden
 // spaeter Runs verglichen, die gar nicht vergleichbar sind.
 const SCHEMA_VERSION = 2;
-const GAME_VERSION = 'v61'; // an den sw.js-Cache-Namen gekoppelt halten
+const GAME_VERSION = 'v62'; // an den sw.js-Cache-Namen gekoppelt halten
 
 let current = null; // Sammelpuffer des laufenden Runs (null = keiner aktiv)
 
@@ -385,7 +386,7 @@ export function mountDebugView() {
   const panel = document.createElement('div');
   panel.id = 'telemetryDebug';
   panel.style.cssText =
-    'position:fixed;left:0;bottom:0;max-height:45vh;width:100%;overflow:auto;z-index:9999;' +
+    'position:fixed;left:0;bottom:0;width:100%;overflow:auto;z-index:9999;' +
     'background:rgba(10,10,14,0.94);color:#e8e4d8;font:11px/1.4 monospace;' +
     'border-top:2px solid #4a5a7a;box-shadow:0 -4px 16px rgba(0,0,0,0.6);';
 
@@ -394,7 +395,11 @@ export function mountDebugView() {
     'position:sticky;top:0;display:flex;gap:8px;align-items:center;padding:6px 8px;' +
     'background:#1a1e28;border-bottom:1px solid #333;';
   const title = document.createElement('strong');
-  title.textContent = 'TELEMETRIE (?debug=1)';
+  // Hinweis, dass die Aufzeichnung NICHT an ?debug=1 haengt -- man kann also
+  // ohne den Parameter (und ohne dieses Panel) spielen und die Daten spaeter
+  // ansehen. Nur die ANZEIGE haengt am Parameter.
+  title.textContent = 'TELEMETRIE';
+  title.title = 'Die Aufzeichnung läuft immer, auch ohne ?debug=1 — dieser Parameter blendet nur diese Ansicht ein.';
 
   const mkBtn = (label, fn) => {
     const b = document.createElement('button');
@@ -407,8 +412,16 @@ export function mountDebugView() {
   };
   const exportBtn = mkBtn('Als JSON exportieren', exportJson);
   const refreshBtn = mkBtn('Aktualisieren', refreshDebugView);
-  const toggleBtn = mkBtn('Ein-/Ausklappen', () => {
-    tableWrap.style.display = tableWrap.style.display === 'none' ? '' : 'none';
+  // Das Panel startet EINGEKLAPPT: aufgeklappt nimmt es fast die halbe
+  // Bildschirmhoehe und verdeckt beim Spielen die untere Arenahaelfte.
+  // Nur die schmale Leiste bleibt sichtbar, ein Klick zeigt die Daten.
+  let collapsed = true;
+  const toggleBtn = mkBtn('▲ Daten zeigen', () => {
+    collapsed = !collapsed;
+    tableWrap.style.display = collapsed ? 'none' : '';
+    debugSummary.style.display = collapsed ? 'none' : '';
+    toggleBtn.textContent = collapsed ? '▲ Daten zeigen' : '▼ Einklappen';
+    panel.style.maxHeight = collapsed ? '' : '45vh';
   });
 
   bar.append(title, exportBtn, refreshBtn, toggleBtn);
@@ -452,6 +465,10 @@ export function mountDebugView() {
   tableWrap.appendChild(table);
 
   panel.append(bar, debugSummary, tableWrap);
+  // Eingeklappt starten (siehe toggleBtn): beim Spielen soll nur die schmale
+  // Leiste am unteren Rand stehen, nicht die halbe Arena verdeckt sein.
+  tableWrap.style.display = 'none';
+  debugSummary.style.display = 'none';
   document.body.appendChild(panel);
   refreshDebugView();
 }

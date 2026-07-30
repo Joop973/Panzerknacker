@@ -1179,6 +1179,37 @@ Datenänderungen sind hier nur kurz genannt, Code-Änderungen ausführlich.
 - Drei neue Wirkungstests (Aasgeier, Konterschild-Gating, Wolframkern),
   jeder mit bestandener Gegenprobe.
 
+### Grüner wird Bankshot-Gegner + Debug-Panel entschärft — gemergt
+- **`t_green` nutzt jetzt `requiresBounceShot`** (`leadAim` entfernt, wird
+  von `roleTurret()` ohnehin übersteuert). Damit ist der seit Phase 8
+  gebaute, aber nie zugewiesene Abpraller-Rechner (`ai_turrets.js:
+  solveBounce`) endlich im Spiel: der Grüne steht fest, rechnet Winkel und
+  schießt fast nur Bankshots — passend zu seinen 2 Abprallern.
+- **Der Solver ist die teuerste KI im Spiel** und wurde deshalb vermessen
+  statt geschätzt: EIN Lauf kostete mit den ursprünglichen
+  `angleSamples: 180` bis zu **4,8 ms** von 6 ms Frame-Budget (Phase 11b).
+  Mit **120 Samples**: gleiche Lösungsquote (15/18 Gegner haben eine
+  Lösung), aber nur noch ~2,2 ms. `solvesPerTick: 1` kam zusätzlich dazu,
+  ist aber ehrlicherweise nur ein **Sicherheitsnetz** — die Solver-Timer
+  staffeln sich von selbst (gemessen: 260 Läufe in 260 verschiedenen Ticks),
+  er greift erst bei vielen Bankshot-Gegnern.
+  ⚠️ Beim Messen zuerst falsch abgebogen: eine kaputte Schuss-Zählung
+  (`st.bullets` wird jeden Tick von toten Kugeln bereinigt) ließ den Grünen
+  wie einen Nicht-Schützen aussehen. Über die `shoot_enemy`-Sound-Ereignisse
+  gezählt sind es 173 statt 34 Schüsse — die daraufhin geänderten Werte
+  `fireConeRad`/`turnSpeed` wurden wieder zurückgenommen (enger Kegel =
+  präziser Bankshot, Unterschied lag im Rauschen: 173 vs. 180 Schüsse).
+- **Telemetrie sammelt IMMER, auch ohne `?debug=1`** — der Parameter
+  schaltet nur die Anzeige ein (einzige `isDebugEnabled()`-Prüfung sitzt in
+  `mountDebugView()`). Man kann also normal spielen und die Daten später
+  ansehen/exportieren.
+- **Das Debug-Panel startet jetzt eingeklappt** (34 px statt ~45 % der
+  Bildschirmhöhe) — aufgeklappt verdeckte es beim Spielen die untere
+  Arenahälfte. Ein Klick auf „▲ Daten zeigen" öffnet es.
+- Neuer Regressionstest: der Bankshot-Gegner muss feuern UND das
+  6-ms-Frame-Budget halten (misst den schlechtesten Logikschritt mit drei
+  Grünen im Raum).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1256,10 +1287,12 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `data/sounds.json`. `play(name, x)` — `x` optional, platziert den Ton im
   Stereobild.
 - `src/core/telemetry.js` — Run-Telemetrie in `localStorage.runs` +
-  Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
+  Debug-Ansicht. **Die Aufzeichnung läuft IMMER**, `?debug=1` blendet nur
+  die Ansicht ein (dort eingeklappt, aufklappbar). Reine Beobachtung,
+  keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v61`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v62`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

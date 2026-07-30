@@ -78,8 +78,17 @@ function bounceShot(tank, state, dt) {
   if (ai.solveTimer === undefined) ai.solveTimer = range(state.rng, 0, cfg.solveIntervalS);
   ai.solveTimer -= dt;
   if (ai.solveTimer <= 0) {
-    ai.solution = solveBounce(tank, state, cfg);
-    ai.solveTimer = cfg.solveIntervalS;
+    // Frame-Budget (Phase 11b): solveBounce() marched angleSamples Strahlen
+    // ueber die halbe Arena -- mit drei Bankshot-Gegnern im selben Frame lag
+    // der schlechteste Logikschritt gemessen bei 5,7 ms (Budget 6 ms).
+    // Deshalb loest hoechstens `solvesPerTick` Panzer pro Frame; die
+    // uebrigen behalten ihre alte Loesung und versuchen es im naechsten
+    // Frame erneut (Muster wie die Reihum-Deckungswahrnehmung aus Phase 16).
+    if (state.bounceSolveBudget > 0) {
+      state.bounceSolveBudget--;
+      ai.solution = solveBounce(tank, state, cfg);
+      ai.solveTimer = cfg.solveIntervalS;
+    }
   }
   if (ai.solution == null) {
     const p = state.player;
