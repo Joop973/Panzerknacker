@@ -458,6 +458,81 @@ function check(ok, msg) {
   }
 }
 
+// ---- 7b. Wirkungsnachweise der Nutzer-Balancerunde ---------------------
+{
+  // Aasgeier: nach einem Kill zaehlen die schon fliegenden Kugeln nicht mehr
+  // gegen das Magazin -- der Spieler kann sofort wieder voll feuern, die
+  // alten Kugeln fliegen und toeten weiter.
+  {
+    const { createBullet } = await import('../src/game/bullet.js');
+    const { fireBullet } = await import('../src/game/tank.js');
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const p = st.player;
+    p.cfg.magazine = 3;
+    p.cfg.magazineCap = 8;
+    p.cfg.scavenger = true;
+    p.cooldown = 0;
+    // Magazin vollschiessen.
+    for (let i = 0; i < 3; i++) {
+      st.bullets.push(createBullet(p.x, p.y, i, { speed: 100, radius: 3, ricochets: 1, owner: p, kind: 'bullet' }));
+    }
+    check(fireBullet(p, st) === false, 'Aasgeier-Test: Magazin war nicht voll (Vorbedingung)');
+    const enemy = st.tanks.find((t) => t !== p && t.alive);
+    check(!!enemy, 'Aasgeier-Test: kein Gegner im Raum');
+    if (enemy) {
+      st.killTank(enemy, 'test');
+      check(
+        st.bullets.every((b) => b.magFreed),
+        'Aasgeier: fliegende Kugeln wurden nach dem Kill nicht vom Magazin freigegeben',
+      );
+      p.cooldown = 0;
+      check(fireBullet(p, st) === true, 'Aasgeier: Feuern nach dem Kill immer noch gesperrt');
+      check(
+        st.bullets.filter((b) => !b.dead).length === 4,
+        'Aasgeier: die alten Kugeln sind verschwunden statt weiterzufliegen',
+      );
+    }
+  }
+
+  // Konterschild: nur in Elite-/Verflucht-/Bossraeumen aktiv.
+  {
+    const { resolveCfg, applyUpgrades, applyRoomContext } = await import('../src/game/cfg.js');
+    const mk = (ctx) =>
+      applyRoomContext(
+        applyUpgrades(resolveCfg(tanksData, 'player'), { konterschild: 1 }, upgradesData, 'mine'),
+        ctx,
+      );
+    check(mk({ elite: false, boss: false }).counterShield === false, 'Konterschild ist im normalen Kampfraum aktiv (soll aus sein)');
+    check(mk({ elite: true, boss: false }).counterShield === true, 'Konterschild ist im Eliteraum nicht aktiv');
+    check(mk({ elite: false, boss: true }).counterShield === true, 'Konterschild ist im Bossraum nicht aktiv');
+  }
+
+  // Wolframkern: reisst die Wand ein UND fliegt weiter.
+  {
+    const { createBullet, updateBullet } = await import('../src/game/bullet.js');
+    let destroyed = 0;
+    const wall = { x: 200, y: 88, w: 32, h: 32, type: 'breakable', col: 6, row: 2 };
+    const st = {
+      walls: [wall],
+      laserWalls: [],
+      data: tanksData,
+      tanks: [],
+      sounds: [],
+      destroyWall(w) {
+        destroyed++;
+        st.walls.splice(st.walls.indexOf(w), 1);
+      },
+    };
+    const b = createBullet(150, 104, 0, { speed: 300, radius: 3, ricochets: 1, owner: null, kind: 'bullet', tungsten: true });
+    for (let i = 0; i < 40 && !b.dead; i++) updateBullet(b, st, 1 / 60);
+    check(destroyed === 1, `Wolframkern: Wand nicht eingerissen (${destroyed})`);
+    check(!b.dead, 'Wolframkern: Geschoss ist an der Wand verschwunden statt weiterzufliegen');
+    check(b.x > 232, `Wolframkern: Geschoss ist nicht hinter der Wand angekommen (x=${b.x.toFixed(0)})`);
+    check(b.wallBounces === 0, 'Wolframkern: Einreissen hat einen Abpraller verbraucht');
+  }
+}
+
 // ---- 8. Overlays schliessen sich nach der Aktion -----------------------
 // Vom Nutzer gemeldeter Blocker: nach dem Anklicken eines Kartenknotens blieb
 // das #map-Overlay ueber dem Spielfeld liegen und fing jede weitere Eingabe

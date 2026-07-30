@@ -403,6 +403,9 @@ function buildCombatRoom(run, type, isFinal) {
     // Raum-Gefahr (Phase 15): ebenso nur vom prozeduralen Generator
     // ausgewertet, null im Finalraum.
     hazardType,
+    // Raumkontext (Nutzer-Balancerunde): manche Karten wirken nur in
+    // bestimmten Raumarten -- aktuell der Konterschild (nur Elite/Boss).
+    roomContext: { elite: type === 'elite' || type === 'cursed', boss: !!isFinal },
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.

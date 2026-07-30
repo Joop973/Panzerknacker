@@ -52,6 +52,9 @@ export function createBullet(
     friendly: friendly || false, // trifft den eigenen Besitzer NIE (Drohne/Splitter)
     burstDistance: burstDistance || 0, // Flak (Phase 18): zuendet nach kurzer Reichweite in der Luft, unabhaengig von Wand-/Zielkontakt
     detonated: false,
+    // Aasgeier (state.js: killTank): true = zaehlt nicht mehr gegen das
+    // Magazin des Schuetzen, fliegt und toetet aber normal weiter.
+    magFreed: false,
     ricochetsLeft: ricochets,
     ricochetsStart: ricochets, // fuer "Abpraller-Kill"-Feedback
     owner, // Referenz auf den Schuetzen (fuer den 80-ms-Schutz)
@@ -83,10 +86,15 @@ function moveAxis(b, state, axis, dt) {
   for (const wall of [...state.walls, ...(state.laserWalls || [])]) {
     if (wall.type === 'hole') continue; // Geschosse fliegen ueber Loecher
     if (!circleOverlapsAABB(b.x, b.y, b.radius, wall)) continue;
-    if (b.tungsten && wall.type === 'breakable') {
+    // Wolframkern: reisst zerstoerbare Waende ein und fliegt WEITER (bis zur
+    // Nutzer-Balancerunde verschwand das Geschoss dabei). Kein b.dead und
+    // kein Abpraller -- die Zelle ist nach dem Treffer ja offen. `continue`
+    // statt `return`, damit im selben Schritt auch eine zweite Wand fallen
+    // kann. `destructible` (Phase 11) zaehlt hier mit: beides sind Waende,
+    // die eingerissen werden koennen.
+    if (b.tungsten && (wall.type === 'breakable' || wall.type === 'destructible')) {
       state.destroyWall?.(wall);
-      b.dead = true;
-      return { hit: true, mirror: false };
+      continue;
     }
     // Sprengmunition/Glaskanone: zuenden am Wandkontakt (statt
     // abzuprallen) -- so toetet die Explosion durch die Wand. Die

@@ -12,9 +12,10 @@ export function createPreview() {
   document.body.appendChild(el);
 
   return {
-    // opts: { title, character (Raumtyp-Text), upgradesLine (eigene Ausruestung) }
+    // opts: { title, character (Raumtyp-Text),
+    //         upgrades: [{ name, level, description }] (eigene Ausruestung) }
     show(opts, enemyTypes, tanksData, onGo) {
-      const { title, character, upgradesLine, dangerByType, modifierLine, hazardLine } = opts;
+      const { title, character, upgrades, dangerByType, modifierLine, hazardLine } = opts;
       // Typen gruppieren: ["t_brown","t_brown","t_grey"] -> Brauner x2 ...
       const counts = new Map();
       for (const t of enemyTypes) counts.set(t, (counts.get(t) || 0) + 1);
@@ -79,11 +80,33 @@ export function createPreview() {
         el.appendChild(haz);
       }
 
-      if (upgradesLine) {
+      // Eigene Ausruestung: dieselben antippbaren Chips wie bei den Gegnern
+      // oben -- Hover bzw. Tipp zeigt, WAS die Karte tut. Vorher stand hier
+      // nur eine Namensliste ohne Wirkung (Nutzerwunsch).
+      if (upgrades && upgrades.length) {
         const own = document.createElement('p');
         own.className = 'pv-own';
-        own.textContent = upgradesLine;
+        own.textContent = 'Deine Upgrades:';
         el.appendChild(own);
+
+        const upRow = document.createElement('div');
+        upRow.className = 'pv-chips';
+        const upDesc = document.createElement('p');
+        upDesc.className = 'pv-desc';
+        upDesc.textContent = 'Tippe ein Upgrade für Details.';
+        for (const u of upgrades) {
+          const chip = document.createElement('button');
+          chip.className = 'pv-chip pv-chip-up';
+          chip.textContent = u.level > 1 ? `${u.name} ×${u.level}` : u.name;
+          const show = () => {
+            upDesc.textContent = `${u.name}${u.level > 1 ? ` (Stufe ${u.level})` : ''}: ${u.description || ''}`;
+          };
+          chip.addEventListener('mouseenter', show);
+          chip.addEventListener('click', show);
+          upRow.appendChild(chip);
+        }
+        el.appendChild(upRow);
+        el.appendChild(upDesc);
       }
 
       const go = document.createElement('button');

@@ -697,10 +697,14 @@ async function init() {
     // Raumvorschau: Gegnerliste + "Weiter"-Button.
     if (run.phase === 'preview' && !previewShown) {
       previewShown = true;
+      // Eigene Ausruestung mit Wirkungstext -- die Vorschau zeigt sie als
+      // antippbare Chips (preview.js), wie die Gegner darueber.
       const ups = Object.entries(run.upgrades)
         .filter(([, l]) => l > 0)
-        .map(([id, l]) => `${upgradesData.upgrades[id]?.name || id} ${l}`)
-        .join(' · ');
+        .map(([id, l]) => {
+          const def = upgradesData.upgrades[id];
+          return { name: def?.name || id, level: l, description: def?.description || '' };
+        });
       const dangerByType = {};
       for (const [ty, d] of Object.entries(diffData.danger)) dangerByType[ty] = d.points;
       const baseTitle = run.endless
@@ -714,7 +718,7 @@ async function init() {
             (run.roomType === 'elite' || run.roomType === 'cursed') && run.roomAffix
               ? `${run.roomCharacter} · Affix: ${run.roomAffix}`
               : run.roomCharacter,
-          upgradesLine: ups ? `Deine Upgrades: ${ups}` : null,
+          upgrades: ups,
           dangerByType,
           modifierLine: run.roomModifier
             ? `Modifikator: ${run.roomModifier.name} — ${run.roomModifier.desc}`

@@ -15,7 +15,7 @@
   },
   "reflect": {
     "ricochetsLeft": 0,
-    "speedMult": 1.0,
+    "speedMult": 1,
     "pushPx": 2,
     "graceS": 0.15
   },
@@ -27,8 +27,8 @@
     "slowMoScale": 0.35
   },
   "mine": {
-    "fuse": 3.0,
-    "radius": 64,
+    "fuse": 3,
+    "radius": 51,
     "chainDelay": 0.15,
     "warningTime": 0.5
   },
@@ -41,7 +41,10 @@
     "minRoom": 5
   },
   "scrap": {
-    "perRoom": [1, 3],
+    "perRoom": [
+      1,
+      3
+    ],
     "eliteMult": 2,
     "dropRefund": 2,
     "cost": {
@@ -58,15 +61,15 @@
     "cardChoices": 5
   },
   "ghost": {
-    "duration": 3.0,
-    "killBonus": 1.0,
+    "duration": 3,
+    "killBonus": 1,
     "maxActive": 4
   },
   "boss": {
     "generatorHits": 2,
     "phalanx": {
       "radiusPx": 150,
-      "rotationSpeedRad": 1.0
+      "rotationSpeedRad": 1
     }
   }
 }

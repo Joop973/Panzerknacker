@@ -204,8 +204,12 @@ export function updateMines(state, dt) {
 
     // Kontakt mit einem beliebigen Panzer (auch dem Leger). Die
     // Annaeherungsmine loest schon aus groesserer Entfernung aus.
-    const trig = m.owner?.cfg?.mineTriggerRadius ?? m.radius;
     const sticky = m.owner?.cfg?.stickyMine;
+    // Klebemine: eigener, deutlich groesserer Haft-Radius. Vorher galt der
+    // Minenradius (7 px) -- ein Gegner musste die Mine praktisch beruehren,
+    // die Karte griff dadurch fast nie.
+    const stickR = sticky ? m.owner?.cfg?.stickyRadius || 0 : 0;
+    const trig = Math.max(m.owner?.cfg?.mineTriggerRadius ?? m.radius, stickR);
     for (const t of state.tanks) {
       if (!t.alive) continue;
       if (circlesOverlap(m.x, m.y, trig, t.x, t.y, t.cfg.radius)) {

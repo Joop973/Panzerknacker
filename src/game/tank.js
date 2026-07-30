@@ -168,10 +168,14 @@ export function moveTank(tank, axis, state, dt) {
   tank.vy = (tank.y - tank.prevY) / dt;
 }
 
+// Zaehlt die Geschosse, die gegen das Magazin des Schuetzen zaehlen.
+// `magFreed` (Aasgeier-Upgrade, siehe state.js: killTank) nimmt eine bereits
+// fliegende Kugel aus dieser Rechnung heraus -- sie fliegt weiter und toetet
+// weiter, blockiert aber keinen Magazinplatz mehr.
 function liveBulletsOf(state, owner) {
   let n = 0;
   for (const b of state.bullets) {
-    if (!b.dead && b.owner === owner) n++;
+    if (!b.dead && b.owner === owner && !b.magFreed) n++;
   }
   return n;
 }
