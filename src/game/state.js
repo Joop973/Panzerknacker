@@ -17,7 +17,7 @@ import { updateEnemy, updateCoverPerception } from './ai.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
-import { resolveCfg, applyUpgrades, applyRoomModifier } from './cfg.js';
+import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext } from './cfg.js';
 import { armorBlocks, reflectBullet, reflectFromAim, hasWallBounced, isLive } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
@@ -116,7 +116,7 @@ function applyAffixByIndex(t, index, eliteAffixes) {
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, waveSplit, waveCfg, eliteAffixes, modifier,
-    destructibleWalls, hazardType } = opts;
+    destructibleWalls, hazardType, roomContext } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
@@ -162,10 +162,13 @@ export function createState(data, tiles, opts) {
 
   const player = createTank(
     'player',
-    applyRoomModifier(
-      applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData, equippedSecondary),
-      modifier,
-      true,
+    applyRoomContext(
+      applyRoomModifier(
+        applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData, equippedSecondary),
+        modifier,
+        true,
+      ),
+      roomContext,
     ),
     room.playerSpawn.x,
     room.playerSpawn.y,
@@ -212,6 +215,7 @@ export function createState(data, tiles, opts) {
     playerUpgrades,
     upgradesData,
     equippedSecondary: equippedSecondary || 'mine', // Phase 6: fuer respawnPlayer()
+    roomContext: roomContext || null, // { elite, boss } -- raumabhaengige Karten
     rng: mulberry32((aiSeed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
     playerSpawn: room.playerSpawn,
     emergencyRoom: room.emergency,
@@ -500,8 +504,16 @@ export function createState(data, tiles, opts) {
           state.bonusScrap += pc.firstKillScrap;
         }
         if (state.player.alive) {
-          // Aasgeier: Abschuss laedt die Spielerwaffe sofort nach.
-          if (pc.scavenger) state.player.cooldown = 0;
+          // Aasgeier: Abschuss gibt das VOLLE Magazin zurueck -- Cooldown weg
+          // und alle eigenen, gerade fliegenden Kugeln zaehlen nicht mehr
+          // dagegen (tank.js: liveBulletsOf). Sie fliegen weiter und toeten
+          // weiter, blockieren aber keinen Magazinplatz mehr.
+          if (pc.scavenger) {
+            state.player.cooldown = 0;
+            for (const b of state.bullets) {
+              if (!b.dead && b.owner === state.player) b.magFreed = true;
+            }
+          }
           // Blutrausch: kurzer Tempo-Schub (bloodlust) + nur ein kurzer
           // Unverwundbarkeits-Moment (bloodlustIframe), damit sich Kills
           // nicht zu dauerhafter Unverwundbarkeit stapeln.
@@ -578,10 +590,13 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
 function respawnPlayer(state) {
   const fresh = createTank(
     'player',
-    applyRoomModifier(
-      applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades, state.upgradesData, state.equippedSecondary),
-      state.modifier,
-      true,
+    applyRoomContext(
+      applyRoomModifier(
+        applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades, state.upgradesData, state.equippedSecondary),
+        state.modifier,
+        true,
+      ),
+      state.roomContext,
     ),
     state.playerSpawn.x,
     state.playerSpawn.y,
@@ -698,7 +713,7 @@ export function stepState(state, cmd, dt) {
     if (state.respawnTimer <= 0) respawnPlayer(state);
   } else {
     // Uebermacht: Magazin waechst mit lebenden Gegnern (dynamisch).
-    if (p.cfg.magazinePerEnemy && !p.cfg.singleShot) {
+    if (p.cfg.magazinePerEnemy && !p.cfg.magazineFixed) {
       let live = 0;
       for (const t of state.tanks) if (t !== p && t.alive) live++;
       p.magazineBonus = p.cfg.magazinePerEnemy * live;

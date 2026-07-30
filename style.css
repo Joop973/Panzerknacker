@@ -768,6 +768,19 @@ body.touch-on #mineBtn {
   border-color: #c8b24a;
 }
 
+/* Eigene Upgrades in der Raumvorschau: dieselben Chips wie bei den Gegnern,
+   nur schmaler und in der Ausruestungs-Farbe (blau statt Panzer-Punkt). */
+.pv-chip-up {
+  font-size: 12px;
+  padding: 5px 10px;
+  border-color: #2f5a70;
+  color: #8ecae6;
+}
+
+.pv-chip-up:hover {
+  border-color: #8ecae6;
+}
+
 .pv-dot {
   width: 14px;
   height: 14px;

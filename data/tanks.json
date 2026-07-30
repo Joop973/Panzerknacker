@@ -9,7 +9,7 @@
   "mine": {
     "radiusPx": 7,
     "armDelayS": 0.7,
-    "throwPx": 72
+    "throwPx": 58
   },
   "speeds": {
     "fix": 0,
@@ -30,13 +30,13 @@
     "muzzleClearPx": 48,
     "escape": {
       "blockedRetargetS": 0.25,
-      "escapeSpreadRad": 1.0,
+      "escapeSpreadRad": 1,
       "escapeHoldS": 0.8
     },
     "roles": {
       "sapper": {
         "retargetMinS": 1.5,
-        "retargetMaxS": 3.0
+        "retargetMaxS": 3
       },
       "hunter": {
         "bulletDangerPx": 130,
@@ -47,8 +47,8 @@
         "bulletDangerPx": 140,
         "rangeTolerancePx": 60,
         "defaultRangePx": 220,
-        "orbitFlipMinS": 2.0,
-        "orbitFlipMaxS": 5.0
+        "orbitFlipMinS": 2,
+        "orbitFlipMaxS": 5
       }
     },
     "bounceShot": {
@@ -61,7 +61,7 @@
     },
     "white": {
       "invisibleAfterS": 1.5,
-      "shimmerIntervalS": 2.0,
+      "shimmerIntervalS": 2,
       "shimmerDurationS": 0.15
     },
     "cover": {
@@ -126,12 +126,12 @@
       "mines": 4,
       "weapon": "bullet",
       "role": "sapper",
-      "aggression": 0.17,
+      "aggression": 0.08,
       "accuracy": 0.2,
       "avoidMines": true,
       "miner": {
         "intervalMinS": 2.5,
-        "intervalMaxS": 6.0
+        "intervalMaxS": 6
       },
       "label": "Gelber",
       "desc": "Schnell. Legt wahllos Minen und meidet sie — sperrt sich manchmal selbst ein."
@@ -144,21 +144,22 @@
       "weapon": "bullet",
       "role": "hunter",
       "aggression": 0.63,
-      "accuracy": 0.5,
+      "accuracy": 0.72,
       "label": "Pinker",
-      "desc": "Jagt dich und weicht dabei deinen Kugeln aus. Bis zu 3 Geschosse."
+      "desc": "Jagt dich, zielt präzise und weicht dabei deinen Kugeln aus. Bis zu 3 Geschosse."
     },
     "t_green": {
       "speed": "fix",
       "magazine": 2,
-      "ricochets": 0,
+      "ricochets": 2,
       "mines": 0,
       "weapon": "rocket",
       "role": "guardian",
-      "accuracy": 0.8,
+      "accuracy": 0.9,
       "label": "Grüner",
-      "desc": "Steht fest und zielt sehr präzise. Feuert schnelle Raketen — lädt 2 s pro Schuss nach.",
-      "fireRate": 2.0
+      "desc": "Steht fest und zielt mit Vorhalt sehr präzise. Feuert schnelle Raketen mit 2 Abprallern — lädt 2 s pro Schuss nach.",
+      "fireRate": 2,
+      "leadAim": true
     },
     "t_purple": {
       "speed": "fast",
@@ -171,8 +172,8 @@
       "accuracy": 0.5,
       "packFlank": true,
       "miner": {
-        "intervalMinS": 6.0,
-        "intervalMaxS": 10.0
+        "intervalMinS": 6,
+        "intervalMaxS": 10
       },
       "avoidMines": true,
       "label": "Lila",
@@ -188,14 +189,17 @@
       "aggression": 0.5,
       "accuracy": 0.5,
       "phaseToggle": {
-        "roles": ["sieger", "hunter"],
-        "switchMinS": 4.0,
-        "switchMaxS": 8.0
+        "roles": [
+          "sieger",
+          "hunter"
+        ],
+        "switchMinS": 4,
+        "switchMaxS": 8
       },
       "trackStampPx": 5,
       "miner": {
-        "intervalMinS": 6.0,
-        "intervalMaxS": 10.0
+        "intervalMinS": 6,
+        "intervalMaxS": 10
       },
       "avoidMines": true,
       "label": "Weißer",
@@ -241,13 +245,13 @@
       "mines": 2,
       "weapon": "rocket",
       "role": "sieger",
-      "aggression": 1.0,
+      "aggression": 1,
       "preferredRange": 220,
       "accuracy": 0.9,
       "leadAim": true,
       "miner": {
-        "intervalMinS": 5.0,
-        "intervalMaxS": 9.0
+        "intervalMinS": 5,
+        "intervalMaxS": 9
       },
       "avoidMines": true,
       "label": "Schwarzer",

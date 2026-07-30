@@ -32,7 +32,7 @@ Der Nutzer schreibt Deutsch → **immer auf Deutsch antworten.**
 
 ## Aktueller Stand (Stand: 2026-07)
 Spielbar und deterministisch; PWA/Offline; Touch + Desktop + Gamepad;
-63 Upgrades, 6 Raumtypen, Schrott-Währung, sichtbare Roguelike-Karte statt
+61 Upgrades, 6 Raumtypen, Schrott-Währung, sichtbare Roguelike-Karte statt
 unsichtbarer Raumtyp-Automatik. Maßgeblich ist **`PLAN.md` v2**
 (ersetzt v1 vollständig). Erledigt: **Phase 0** (Eingabe/Ziellinie/RNG/Arena-
 Weiche) und **Phase 1** (Telemetrie v2, Lesbarkeit, Run-Speicherung).
@@ -1138,6 +1138,47 @@ Run ohne sichtbare Karte hängen zu lassen.
   unbedienbar (das Sicherheitsnetz in `generateMap()` greift, war aber nie
   über viele Seeds nachgeprüft).
 
+### Balancerunde nach Nutzer-Feedback (Karten + Gegner) — gemergt
+Kein Phasenthema, sondern eine Liste konkreter Änderungswünsche. Reine
+Datenänderungen sind hier nur kurz genannt, Code-Änderungen ausführlich.
+- **Gegner**: Grüner bekommt 2 Abpraller + Vorhaltezielen (`leadAim`,
+  `accuracy` 0.8→0.9); Gelber weniger aggressiv (0.17→0.08); Pinker zielt
+  präziser (0.5→0.72).
+- **Karten-Werte**: Streuschuss ohne Magazin-Bonus; Scharfschütze 3× Tempo
+  und 2 statt 1 Kugel; Krallenfalle alle 300 statt 600 px; Annäherungsmine
+  nach 0,1 s scharf; Nachbrenner nur noch 1 Stufe; Turbo und Schild sind
+  jetzt `legendary`.
+- **Minen global**: Explosionsradius 64→51 px und Wurfweite −20 % (72→58 px
+  Tastatur/Gamepad, `MINE_MAX_THROW` 142→114 für den Touch-Wurfstick).
+- **Zwei Karten entfernt**: `durchschlag` und `zielsucher` — samt ihrer
+  `cfg.js`-Blöcke. Die Engine-Felder `phaseWalls`/`homing` bleiben in
+  `bullet.js`/`tank.js` bestehen (generische Geschoss-Eigenschaften, aktuell
+  von keiner Karte gesetzt). `terrain` hat dadurch 5 statt 6 Stacks —
+  Pionier bleibt freischaltbar (Regressionstest wacht darüber).
+- **Wolframkern** (`bullet.js: moveAxis()`): reißt die Wand ein und **fliegt
+  weiter**, statt dabei zu verschwinden. `continue` statt `return`, also
+  ohne Abpraller-Verbrauch und mit der Möglichkeit, im selben Schritt eine
+  zweite Wand zu treffen; `destructible` (Phase 11) zählt jetzt mit.
+- **Aasgeier** = „volles Magazin nach jedem Abschuss": neues Bullet-Feld
+  `magFreed`. `killTank()` markiert alle eigenen fliegenden Kugeln, und
+  `tank.js: liveBulletsOf()` überspringt markierte — sie fliegen und töten
+  normal weiter, blockieren aber keinen Magazinplatz mehr.
+- **Konterschild wirkt nur noch in Elite-/Verflucht-/Bossräumen**. Dafür
+  neu: `cfg.js: applyRoomContext(cfg, { elite, boss })`, aufgerufen an
+  denselben drei Stellen wie `applyRoomModifier()` (`createState`,
+  `respawnPlayer`, `updateWave`); `run.js` reicht den Kontext als
+  `createState`-Opt durch, `state.roomContext` hält ihn für den Respawn.
+  In normalen Räumen fällt der ganze Schild weg, nicht nur der Kugelkranz
+  (`createTank()` liest `cfg.counterShield` für `shieldReady`).
+- **Klebemine** hatte praktisch nie gehaftet: der Haft-Test lief über den
+  Minenradius (7 px). Jetzt eigener `stickRadiusPx: 42` (`mine.js`).
+- **Raumvorschau zeigt die eigenen Upgrades als antippbare Chips** mit
+  Wirkungstext (`preview.js`), genau wie die Gegnerliste darüber — vorher
+  war es eine reine Namenszeile ohne Erklärung. `main.js` liefert dafür
+  `{ name, level, description }` statt eines fertigen Strings.
+- Drei neue Wirkungstests (Aasgeier, Konterschild-Gating, Wolframkern),
+  jeder mit bestandener Gegenprobe.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1218,7 +1259,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Debug-Ansicht (nur `?debug=1`). Reine Beobachtung, keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v60`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v61`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

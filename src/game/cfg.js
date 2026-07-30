@@ -76,11 +76,6 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
     cfg.mines = 0;
     cfg.magazine = 3 + 2 * l('magazin');
   }
-  // Durchschlag: Kugeln fliegen durch Waende, dafuer keine Abpraller.
-  if (l('durchschlag')) {
-    cfg.phaseWalls = true;
-    cfg.ricochets = 0;
-  }
   if (l('krallenfalle')) {
     cfg.trapEveryPx = U.krallenfalle.everyPx[l('krallenfalle') - 1];
     cfg.trapStunS = U.krallenfalle.stunS;
@@ -142,11 +137,6 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
     cfg.spreadCount = U.streuschuss.count;
     cfg.spreadRad = U.streuschuss.spreadRad;
     cfg.ricochets = 0; // Faecher ohne Abpraller (Selbstschutz)
-    cfg.magazine += U.streuschuss.magazineBonus;
-  }
-  if (l('zielsucher')) {
-    cfg.homing = U.zielsucher.turnRateRad;
-    cfg.bulletSpeed *= U.zielsucher.speedMult;
   }
   if (l('nachbrenner')) {
     cfg.afterburnerMult = 1 + (U.nachbrenner.boostMult - 1) * l('nachbrenner');
@@ -205,6 +195,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   if (l('konterschild')) {
     cfg.counterShield = true;
     cfg.counterShieldCount = U.konterschild.count;
+    // Nur in Elite-/Verflucht-/Bossraeumen aktiv -- applyRoomContext()
+    // schaltet ihn in normalen Kampfraeumen wieder ab.
+    cfg.counterShieldEliteOnly = !!U.konterschild.eliteOnly;
   }
   // Ueberladung: verstaerkt alle eigenen Explosionsradien.
   if (l('ueberladung')) {
@@ -218,7 +211,12 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   // --- Neue Combo-Achsen ---
   if (l('turbo')) cfg.speed *= U.turbo.speedMult; // extreme Geschwindigkeit
   if (l('uebermacht')) cfg.magazinePerEnemy = U.uebermacht.perEnemy;
-  if (l('klebemine')) cfg.stickyMine = U.klebemine.stickDelayS;
+  if (l('klebemine')) {
+    cfg.stickyMine = U.klebemine.stickDelayS;
+    // Eigener, deutlich groesserer Haft-Radius: der Minenradius (7 px) hat
+    // in der Praxis fast nie gegriffen, die Karte war dadurch wirkungslos.
+    cfg.stickyRadius = U.klebemine.stickRadiusPx;
+  }
 
   // --- Elite-Karten (Phase 4, nur aus Eliteräumen) ---
   // Kriegsmaschine: mehr Magazin + schnellere Nachladung.
@@ -230,7 +228,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
     cfg.bulletSpeed *= U.scharfschuetze.speedMult;
     cfg.fireCooldown *= U.scharfschuetze.cooldownMult;
     cfg.ricochets += U.scharfschuetze.ricochetsBonus;
-    cfg.singleShot = true; // Magazin 1 (hart, unten angewandt)
+    // Hartes Magazin-Limit (unten angewandt, schlaegt alle anderen
+    // Magazin-Effekte). Frueher fest 1 -- jetzt aus den Kartendaten.
+    cfg.magazineFixed = U.scharfschuetze.magazineFixed;
   }
   // Powershot (Phase 5): die ersten powershotPerRoom Schuesse jedes Raums
   // sind automatisch verstaerkt (tank.js verwaltet den Ladungszaehler).
@@ -252,11 +252,8 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
     cfg.powershotBonusRicochets = cfg.powershotBonusRicochets ?? U.powershot.bonusRicochets;
   }
 
-  // Zielsucher: hartes Magazin-Limit 3 (ueberschreibt alle anderen
-  // Magazin-Effekte -- ganz am Ende angewandt).
-  if (l('zielsucher')) cfg.magazine = Math.min(cfg.magazine, 3);
-  // Scharfschuetze: hartes Magazin 1 (schlaegt alles).
-  if (cfg.singleShot) cfg.magazine = 1;
+  // Scharfschuetze: hartes Magazin (schlaegt alles, ganz am Ende angewandt).
+  if (cfg.magazineFixed) cfg.magazine = cfg.magazineFixed;
   // Pluenderer (Phase 18, erste Tag-resource-Karte): flacher Bonus pro
   // geraeumtem Raum, angewandt in run.js NACH dem Elite-Multiplikator
   // (wie die einmalige Kriegsbeute-Belohnung auch kein Vielfaches ist).
@@ -273,6 +270,23 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   cfg.secondary = equippedSecondary || 'mine';
   // Geisterbesatzung (Phase 7): einfacher Ein/Aus-Schalter, kein Stufenwert.
   cfg.ghostCrew = l('ghost_crew') > 0;
+  return cfg;
+}
+
+// Raumkontext auf ein aufgeloestes cfg anwenden (Nutzer-Balancerunde):
+// manche Karten sollen nur in bestimmten Raumarten wirken. Laeuft nach
+// applyUpgrades() an denselben drei Stellen wie applyRoomModifier()
+// (createState, respawnPlayer, updateWave).
+//   ctx = { elite: bool, boss: bool }
+export function applyRoomContext(cfg, ctx) {
+  if (!ctx) return cfg;
+  // Konterschild: nur in Elite-/Verflucht-/Bossraeumen. In normalen
+  // Kampfraeumen faellt der ganze Schild weg (nicht nur der Kugelkranz) --
+  // createTank() liest cfg.counterShield fuer shieldReady.
+  if (cfg.counterShieldEliteOnly && !ctx.elite && !ctx.boss) {
+    cfg.counterShield = false;
+    cfg.counterShieldCount = 0;
+  }
   return cfg;
 }
 

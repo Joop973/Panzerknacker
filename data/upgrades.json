@@ -66,7 +66,7 @@
     "wolframkern": {
       "id": "wolframkern",
       "name": "Wolframkern",
-      "description": "Geschoss zerstört zerstörbare Wand — und verschwindet dabei",
+      "description": "Geschoss reißt zerstörbare Wände ein und fliegt dabei weiter",
       "tag": "terrain",
       "rarity": "rare",
       "maxStacks": 1,
@@ -88,14 +88,14 @@
     "krallenfalle": {
       "id": "krallenfalle",
       "name": "Krallenfalle",
-      "description": "Alle 600 gefahrene Pixel bleibt eine Falle liegen: wer hineinfährt (auch du!), steht 4 s still",
+      "description": "Alle 300 gefahrene Pixel bleibt eine Falle liegen: wer hineinfährt (auch du!), steht 4 s still",
       "tag": "control",
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
       "everyPx": [
-        600
+        300
       ],
       "stunS": 4,
       "radiusPx": 9,
@@ -113,7 +113,7 @@
       "minRoom": 1,
       "perRoom": 1,
       "bonusRicochets": 2,
-      "speedFactor": 2.0
+      "speedFactor": 2
     },
     "doppelrohr": {
       "id": "doppelrohr",
@@ -133,7 +133,9 @@
       "tag": "scaling",
       "rarity": "rare",
       "maxStacks": 2,
-      "requires": ["doppelrohr"],
+      "requires": [
+        "doppelrohr"
+      ],
       "minRoom": 5,
       "spreadMult": 0.65
     },
@@ -275,7 +277,9 @@
       "tag": "defense",
       "rarity": "rare",
       "maxStacks": 1,
-      "requires": ["schild"],
+      "requires": [
+        "schild"
+      ],
       "minRoom": 1,
       "regenS": 20
     },
@@ -297,7 +301,9 @@
       "tag": "control",
       "rarity": "rare",
       "maxStacks": 1,
-      "requires": ["dash"],
+      "requires": [
+        "dash"
+      ],
       "minRoom": 3,
       "radiusPx": 80,
       "pushPx": 60,
@@ -314,16 +320,6 @@
       "minRoom": 1,
       "radiusPx": 60
     },
-    "durchschlag": {
-      "id": "durchschlag",
-      "name": "Durchschlag",
-      "description": "Deine Kugeln fliegen durch Wände — dafür prallen sie nicht mehr ab",
-      "tag": "terrain",
-      "rarity": "rare",
-      "maxStacks": 1,
-      "requires": [],
-      "minRoom": 1
-    },
     "glaskanone": {
       "id": "glaskanone",
       "name": "Glaskanone",
@@ -339,27 +335,14 @@
     "streuschuss": {
       "id": "streuschuss",
       "name": "Streuschuss",
-      "description": "Feuert 3 Kugeln im Fächer (ohne Abpraller), dafür +6 Magazin",
+      "description": "Feuert 3 Kugeln im Fächer — dafür ohne Abpraller",
       "tag": "stat",
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
       "count": 3,
-      "spreadRad": 0.2,
-      "magazineBonus": 6
-    },
-    "zielsucher": {
-      "id": "zielsucher",
-      "name": "Zielsucher",
-      "description": "Kugeln lenken zum Gegner, 30 % langsamer — Magazin fest auf 3 begrenzt",
-      "tag": "reactive",
-      "rarity": "rare",
-      "maxStacks": 1,
-      "requires": [],
-      "minRoom": 1,
-      "speedMult": 0.7,
-      "turnRateRad": 3.2
+      "spreadRad": 0.2
     },
     "nachbrenner": {
       "id": "nachbrenner",
@@ -367,7 +350,7 @@
       "description": "Nach jedem Schuss kurzer Tempo-Schub",
       "tag": "mobility",
       "rarity": "common",
-      "maxStacks": 2,
+      "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
       "boostMult": 1.6,
@@ -376,7 +359,7 @@
     "aasgeier": {
       "id": "aasgeier",
       "name": "Aasgeier",
-      "description": "Jeder Abschuss lädt deine Waffe sofort nach",
+      "description": "Jeder Abschuss gibt dir das volle Magazin zurück — schon fliegende Kugeln zählen nicht mehr dagegen (töten aber weiter)",
       "tag": "reactive",
       "rarity": "rare",
       "maxStacks": 1,
@@ -399,7 +382,7 @@
       "name": "Schild",
       "description": "Fängt einen Treffer ab — lädt sich einmal pro Leben wieder auf",
       "tag": "defense",
-      "rarity": "common",
+      "rarity": "legendary",
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1
@@ -478,13 +461,13 @@
     "annaeherungsmine": {
       "id": "annaeherungsmine",
       "name": "Annäherungsmine",
-      "description": "Deine Minen sind blitzschnell scharf und lösen schon aus der Ferne aus",
+      "description": "Deine Minen sind nach 0,1 s scharf und lösen schon aus der Ferne aus",
       "tag": "control",
       "rarity": "common",
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "armS": 0.35,
+      "armS": 0.1,
       "triggerRadiusPx": 22
     },
     "kettenblitz": {
@@ -537,13 +520,14 @@
     "konterschild": {
       "id": "konterschild",
       "name": "Konterschild",
-      "description": "Fängt einen Treffer ab (1× pro Leben) und feuert dabei einen Kugelkranz",
+      "description": "Nur in Elite-, Verflucht- und Bossräumen: fängt dort einen Treffer ab (1× pro Leben) und feuert einen Kugelkranz",
       "tag": "defense",
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "count": 10
+      "count": 10,
+      "eliteOnly": true
     },
     "ueberladung": {
       "id": "ueberladung",
@@ -561,7 +545,7 @@
       "name": "Turbo",
       "description": "+45 % Bewegungstempo",
       "tag": "mobility",
-      "rarity": "rare",
+      "rarity": "legendary",
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
@@ -570,15 +554,16 @@
     "scharfschuetze": {
       "id": "scharfschuetze",
       "name": "Scharfschütze",
-      "description": "Nur 1 Kugel gleichzeitig — dafür 2,2× Tempo, halber Cooldown, +2 Abpraller",
+      "description": "Nur 2 Kugeln gleichzeitig — dafür 3× Tempo, halber Cooldown, +2 Abpraller",
       "tag": "stat",
       "rarity": "legendary",
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "speedMult": 2.2,
+      "speedMult": 3,
       "cooldownMult": 0.5,
-      "ricochetsBonus": 2
+      "ricochetsBonus": 2,
+      "magazineFixed": 2
     },
     "uebermacht": {
       "id": "uebermacht",
@@ -594,13 +579,14 @@
     "klebemine": {
       "id": "klebemine",
       "name": "Klebemine",
-      "description": "Deine Minen haften am ersten getroffenen Gegner und zünden nach 0,6 s — sicherer Treffer",
+      "description": "Deine Minen haften aus kurzer Distanz am Gegner und zünden nach 0,6 s — sicherer Treffer",
       "tag": "control",
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "stickDelayS": 0.6
+      "stickDelayS": 0.6,
+      "stickRadiusPx": 42
     },
     "trophaee": {
       "id": "trophaee",
