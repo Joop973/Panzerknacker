@@ -63,14 +63,24 @@ html, body {
 }
 
 /* Start-Overlay mit Seed-Eingabe */
+/* Overlays sind IMMER scrollbar und zentrieren nur, solange der Inhalt
+   passt. Vorher stand hier nur `justify-content: center` ohne Scroll: wuchs
+   der Inhalt (viele Upgrades in der Raumvorschau, lange Kartenliste) ueber
+   die Bildschirmhoehe, ragten Kopf UND Fuss aus dem sichtbaren Bereich --
+   der Bestaetigungsknopf war dann nicht mehr erreichbar und der Run steckte
+   fest (Nutzer-Meldung). `justify-content: safe center` zentriert nur, wenn
+   Platz ist, und klemmt sonst am oberen Rand statt oben abzuschneiden. */
 .overlay {
   position: fixed;
   inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: safe center;
   gap: 14px;
+  padding: 12px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(10, 10, 14, 0.92);
   z-index: 10;
 }
@@ -768,13 +778,29 @@ body.touch-on #mineBtn {
   border-color: #c8b24a;
 }
 
-/* Eigene Upgrades in der Raumvorschau: dieselben Chips wie bei den Gegnern,
-   nur schmaler und in der Ausruestungs-Farbe (blau statt Panzer-Punkt). */
+/* Kompakte Chips (Gegner wie Upgrades): nur Symbol/Farbpunkt + Anzahl.
+   Ausgeschriebene Namen haben bei vielen Karten den "Weiter"-Knopf aus dem
+   Bild geschoben -- Details stehen jetzt im Text darunter bzw. im Tooltip. */
+.pv-chip-sm {
+  gap: 4px;
+  padding: 4px 8px;
+  min-width: 34px;
+  justify-content: center;
+}
+
+.pv-sym {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.pv-x {
+  font-size: 11px;
+  color: #9aa0a8;
+}
+
+/* Eigene Upgrades: gleiche Chips, aber in der Ausruestungs-Farbe. */
 .pv-chip-up {
-  font-size: 12px;
-  padding: 5px 10px;
   border-color: #2f5a70;
-  color: #8ecae6;
 }
 
 .pv-chip-up:hover {
@@ -798,7 +824,13 @@ body.touch-on #mineBtn {
   min-height: 2.6em;
 }
 
+/* Bleibt beim Scrollen am unteren Rand kleben und ist damit IMMER
+   erreichbar -- egal wie viele Upgrades und Gegner die Vorschau auflistet.
+   Vorher konnte er bei voller Ausruestung unter den Bildschirmrand rutschen
+   und der Run steckte fest (Nutzer-Meldung). */
 #previewGo {
+  position: sticky;
+  bottom: 0;
   background: #c8b24a;
   border: none;
   color: #1a1408;
@@ -806,7 +838,44 @@ body.touch-on #mineBtn {
   font-weight: bold;
   font-size: 18px;
   padding: 12px 60px;
+  margin-top: 4px;
   cursor: pointer;
+  box-shadow: 0 0 0 12px rgba(10, 10, 14, 0.92);
+}
+
+/* Flache Bildschirme (Handy quer): Titel, Abstaende und Karten kleiner,
+   damit der Inhalt ueberhaupt in die Hoehe passt. Ohne das lagen bei voller
+   Ausruestung der "Weiter"-Knopf (Raumvorschau) bzw. die Schrott-Aktionen
+   (Upgrade-Screen) unterhalb des sichtbaren Bereichs. */
+@media (max-height: 500px) {
+  .overlay {
+    gap: 8px;
+    padding: 8px;
+  }
+  .overlay h1 {
+    font-size: 24px;
+    letter-spacing: 3px;
+  }
+  #previewGo {
+    font-size: 15px;
+    padding: 8px 40px;
+  }
+  .cards {
+    gap: 8px;
+  }
+  .cards .card {
+    width: 150px;
+    min-height: 0;
+    padding: 8px 10px;
+    gap: 4px;
+    font-size: 12px;
+  }
+  .cards .card strong {
+    font-size: 13px;
+  }
+  .cards .card .cardmeta {
+    font-size: 10px;
+  }
 }
 
 /* --- Phase 12: Kartenscreen --- */

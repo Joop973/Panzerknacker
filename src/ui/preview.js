@@ -41,17 +41,22 @@ export function createPreview() {
       desc.className = 'pv-desc';
       desc.textContent = 'Tippe einen Panzer für Details.';
 
+      // Kompakt: nur Farbpunkt + Anzahl. Der Name steht im Detailtext
+      // darunter (Hover bzw. Tipp) und im nativen Tooltip -- bei acht
+      // Gegnertypen sprengten ausgeschriebene Namen sonst die Zeile und
+      // schoben den "Weiter"-Knopf aus dem Bild.
       for (const [type, n] of counts) {
         const def = tanksData.types[type] || {};
         const chip = document.createElement('button');
-        chip.className = 'pv-chip';
+        chip.className = 'pv-chip pv-chip-sm';
         chip.innerHTML =
           `<span class="pv-dot" style="background:${TANK_COLORS[type] || '#fff'}"></span>` +
-          `${def.label || type}${n > 1 ? ' ×' + n : ''}`;
+          (n > 1 ? `<span class="pv-x">×${n}</span>` : '');
+        chip.title = def.label || type;
         const pts = dangerByType && dangerByType[type];
         const showDesc = () => {
           desc.textContent =
-            `${def.label || type}${pts ? ` (Gefahr ${pts})` : ''}: ${def.desc || ''}`;
+            `${def.label || type}${n > 1 ? ` ×${n}` : ''}${pts ? ` (Gefahr ${pts})` : ''}: ${def.desc || ''}`;
         };
         chip.addEventListener('mouseenter', showDesc);
         chip.addEventListener('click', showDesc);
@@ -94,12 +99,19 @@ export function createPreview() {
         const upDesc = document.createElement('p');
         upDesc.className = 'pv-desc';
         upDesc.textContent = 'Tippe ein Upgrade für Details.';
+        // Nur Symbol + Stufe: mit einem Dutzend Karten waeren ausgeschriebene
+        // Namen mehrere Zeilen hoch und haben den "Weiter"-Knopf aus dem
+        // sichtbaren Bereich geschoben (Nutzer-Meldung). Name und Wirkung
+        // stehen im Detailtext darunter.
         for (const u of upgrades) {
           const chip = document.createElement('button');
-          chip.className = 'pv-chip pv-chip-up';
-          chip.textContent = u.level > 1 ? `${u.name} ×${u.level}` : u.name;
+          chip.className = 'pv-chip pv-chip-sm pv-chip-up';
+          chip.innerHTML =
+            `<span class="pv-sym">${u.symbol || '•'}</span>` +
+            (u.level > 1 ? `<span class="pv-x">×${u.level}</span>` : '');
+          chip.title = u.name;
           const show = () => {
-            upDesc.textContent = `${u.name}${u.level > 1 ? ` (Stufe ${u.level})` : ''}: ${u.description || ''}`;
+            upDesc.textContent = `${u.symbol || ''} ${u.name}${u.level > 1 ? ` (Stufe ${u.level})` : ''}: ${u.description || ''}`;
           };
           chip.addEventListener('mouseenter', show);
           chip.addEventListener('click', show);
