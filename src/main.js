@@ -703,7 +703,12 @@ async function init() {
         .filter(([, l]) => l > 0)
         .map(([id, l]) => {
           const def = upgradesData.upgrades[id];
-          return { name: def?.name || id, level: l, description: def?.description || '' };
+          return {
+            name: def?.name || id,
+            level: l,
+            description: def?.description || '',
+            symbol: def?.symbol || '•',
+          };
         });
       const dangerByType = {};
       for (const [ty, d] of Object.entries(diffData.danger)) dangerByType[ty] = d.points;

@@ -1210,6 +1210,36 @@ Datenänderungen sind hier nur kurz genannt, Code-Änderungen ausführlich.
   6-ms-Frame-Budget halten (misst den schlechtesten Logikschritt mit drei
   Grünen im Raum).
 
+### Bugfix: „Weiter" außerhalb des Bildschirms (Nutzer-Meldung) — gemergt
+**Symptom:** Mit einigen Upgrades war der „Weiter"-Knopf der Raumvorschau
+nicht mehr erreichbar — der Run steckte fest.
+**Ursache (zwei Schichten):** (1) `.overlay` hatte `justify-content: center`
+und **kein** `overflow-y` — wuchs der Inhalt über die Bildschirmhöhe, ragten
+Kopf UND Fuß aus dem sichtbaren Bereich, ohne Scrollmöglichkeit. Der Shop
+hatte das seit Phase 13 einzeln gelöst, alle anderen Overlays nicht.
+(2) Die Upgrade-Chips aus der letzten Balancerunde (ausgeschriebene Namen)
+haben den Inhalt zusätzlich in die Höhe getrieben.
+**Fix in drei Teilen:**
+- `.overlay` ist jetzt generell scrollbar (`overflow-y: auto`) und nutzt
+  `justify-content: safe center` — zentriert nur, solange Platz ist, und
+  klemmt sonst oben an, statt oben abzuschneiden. Gilt für ALLE Overlays.
+- `#previewGo` ist `position: sticky; bottom: 0` — der Knopf bleibt immer
+  im Bild, unabhängig davon, wie lang die Listen werden.
+- Neue Media Query `max-height: 500px` (Handy quer): kleinerer Titel,
+  engere Abstände, kompaktere Upgrade-Karten. Ohne die lagen im
+  Upgrade-Screen die drei Schrott-Aktionen außerhalb.
+- **Chips sind jetzt kompakt**: jede Karte hat ein `symbol` in
+  `data/upgrades.json` (61 Karten + Fallback), Gegner zeigen nur ihren
+  Farbpunkt. Name und Wirkung stehen im Detailtext darunter (Hover/Tipp)
+  und im `title`-Tooltip.
+- **`tests/uilayout.mjs` (NEU, braucht Playwright)**: prüft über vier
+  Viewports (inkl. 667×375 und „sehr flach" 740×360) mit 25 Upgrades auf
+  Stufe 2, dass in Raumvorschau UND Upgrade-Screen kein Bedienelement
+  außerhalb des Fensters liegt. Bewusst getrennt von `regression.mjs`, weil
+  es eine echte Layout-Engine braucht — die Node-Suite bleibt
+  abhängigkeitsfrei, der Test überspringt sich ohne Playwright selbst.
+  Gegenprobe bestanden (sticky + Media Query ausgebaut → 4 Meldungen).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1292,7 +1322,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v62`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v63`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -1330,6 +1360,7 @@ python3 -m http.server 8099        # dann http://localhost:8099/index.html
 node --check src/<datei>.js         # Syntax
 node tests/regression.mjs           # Regressionssuite (eingecheckt!)
 node tests/uspcheck.mjs 40           # USP-Kennzahl 1 messen (PLAN.md-Pruefpunkt)
+node tests/uilayout.mjs             # Overlay-Layout (braucht Playwright)
 ```
 Playwright-Browser liegt unter `/opt/pw-browsers/chromium`
 (`executablePath` setzen; NICHT `playwright install`).

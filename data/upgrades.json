@@ -10,7 +10,8 @@
       "rarity": "common",
       "maxStacks": 3,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🔢"
     },
     "abpraller": {
       "id": "abpraller",
@@ -20,7 +21,8 @@
       "rarity": "common",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "↗️"
     },
     "ladung": {
       "id": "ladung",
@@ -30,7 +32,8 @@
       "rarity": "common",
       "maxStacks": 3,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "⚡"
     },
     "kettenglied": {
       "id": "kettenglied",
@@ -40,7 +43,8 @@
       "rarity": "common",
       "maxStacks": 3,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🔗"
     },
     "sprengkraft": {
       "id": "sprengkraft",
@@ -51,7 +55,8 @@
       "maxStacks": 3,
       "requires": [],
       "minRoom": 1,
-      "radiusMult": 1.25
+      "radiusMult": 1.25,
+      "symbol": "💥"
     },
     "kettenantrieb": {
       "id": "kettenantrieb",
@@ -61,7 +66,8 @@
       "rarity": "common",
       "maxStacks": 3,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "⚙️"
     },
     "wolframkern": {
       "id": "wolframkern",
@@ -71,7 +77,8 @@
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🪨"
     },
     "sprengschuss": {
       "id": "sprengschuss",
@@ -83,7 +90,8 @@
       "requires": [],
       "minRoom": 1,
       "everyShots": 4,
-      "radiusPx": 60
+      "radiusPx": 60,
+      "symbol": "🧨"
     },
     "krallenfalle": {
       "id": "krallenfalle",
@@ -100,7 +108,8 @@
       "stunS": 4,
       "radiusPx": 9,
       "armDelayS": 0.8,
-      "maxActive": 3
+      "maxActive": 3,
+      "symbol": "🪤"
     },
     "powershot": {
       "id": "powershot",
@@ -113,7 +122,8 @@
       "minRoom": 1,
       "perRoom": 1,
       "bonusRicochets": 2,
-      "speedFactor": 2
+      "speedFactor": 2,
+      "symbol": "✨"
     },
     "doppelrohr": {
       "id": "doppelrohr",
@@ -124,7 +134,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 3,
-      "spreadRad": 0.09
+      "spreadRad": 0.09,
+      "symbol": "⑈"
     },
     "feuerleitzentrale": {
       "id": "feuerleitzentrale",
@@ -137,7 +148,8 @@
         "doppelrohr"
       ],
       "minRoom": 5,
-      "spreadMult": 0.65
+      "spreadMult": 0.65,
+      "symbol": "🎚️"
     },
     "flak": {
       "id": "flak",
@@ -149,7 +161,8 @@
       "requires": [],
       "minRoom": 3,
       "burstRangePx": 220,
-      "radiusPx": 50
+      "radiusPx": 50,
+      "symbol": "🎆"
     },
     "radar": {
       "id": "radar",
@@ -159,7 +172,8 @@
       "rarity": "common",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "📶"
     },
     "ballistikrechner": {
       "id": "ballistikrechner",
@@ -170,7 +184,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "previewBounces": 2
+      "previewBounces": 2,
+      "symbol": "📐"
     },
     "pluenderer": {
       "id": "pluenderer",
@@ -181,7 +196,8 @@
       "maxStacks": 3,
       "requires": [],
       "minRoom": 1,
-      "scrapPerLevel": 1
+      "scrapPerLevel": 1,
+      "symbol": "💰"
     },
     "beutejagd": {
       "id": "beutejagd",
@@ -192,7 +208,8 @@
       "maxStacks": 2,
       "requires": [],
       "minRoom": 1,
-      "scrapPerLevel": 2
+      "scrapPerLevel": 2,
+      "symbol": "🏹"
     },
     "nachtsicht": {
       "id": "nachtsicht",
@@ -202,7 +219,8 @@
       "rarity": "common",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🌙"
     },
     "sappeur": {
       "id": "sappeur",
@@ -213,7 +231,8 @@
       "maxStacks": 2,
       "requires": [],
       "minRoom": 1,
-      "hitsPerLevel": 1
+      "hitsPerLevel": 1,
+      "symbol": "⛏️"
     },
     "steinbruch": {
       "id": "steinbruch",
@@ -224,7 +243,8 @@
       "maxStacks": 2,
       "requires": [],
       "minRoom": 1,
-      "scrapPerLevel": 1
+      "scrapPerLevel": 1,
+      "symbol": "🧰"
     },
     "minenspuerer": {
       "id": "minenspuerer",
@@ -234,7 +254,8 @@
       "rarity": "common",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🔎"
     },
     "gefahrensinn": {
       "id": "gefahrensinn",
@@ -244,7 +265,8 @@
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "⚠️"
     },
     "abprallschock": {
       "id": "abprallschock",
@@ -256,7 +278,8 @@
       "requires": [],
       "minRoom": 2,
       "radiusPxPerLevel": 46,
-      "stunS": 0.7
+      "stunS": 0.7,
+      "symbol": "💫"
     },
     "doppelschlag": {
       "id": "doppelschlag",
@@ -268,7 +291,8 @@
       "requires": [],
       "minRoom": 2,
       "chargesPerTrickshot": 1,
-      "maxCharges": 3
+      "maxCharges": 3,
+      "symbol": "⏫"
     },
     "nachladeschild": {
       "id": "nachladeschild",
@@ -281,7 +305,8 @@
         "schild"
       ],
       "minRoom": 1,
-      "regenS": 20
+      "regenS": 20,
+      "symbol": "🔄"
     },
     "meisterschuetze": {
       "id": "meisterschuetze",
@@ -292,7 +317,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "scrapMult": 2
+      "scrapMult": 2,
+      "symbol": "🏅"
     },
     "erschuetterungsdash": {
       "id": "erschuetterungsdash",
@@ -307,7 +333,8 @@
       "minRoom": 3,
       "radiusPx": 80,
       "pushPx": 60,
-      "stunS": 0.5
+      "stunS": 0.5,
+      "symbol": "〰️"
     },
     "sprengmunition": {
       "id": "sprengmunition",
@@ -318,7 +345,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "radiusPx": 60
+      "radiusPx": 60,
+      "symbol": "☄️"
     },
     "glaskanone": {
       "id": "glaskanone",
@@ -330,7 +358,8 @@
       "requires": [],
       "minRoom": 1,
       "speedMult": 2,
-      "radiusPx": 40
+      "radiusPx": 40,
+      "symbol": "🔮"
     },
     "streuschuss": {
       "id": "streuschuss",
@@ -342,7 +371,8 @@
       "requires": [],
       "minRoom": 1,
       "count": 3,
-      "spreadRad": 0.2
+      "spreadRad": 0.2,
+      "symbol": "🔱"
     },
     "nachbrenner": {
       "id": "nachbrenner",
@@ -354,7 +384,8 @@
       "requires": [],
       "minRoom": 1,
       "boostMult": 1.6,
-      "boostS": 0.6
+      "boostS": 0.6,
+      "symbol": "🔥"
     },
     "aasgeier": {
       "id": "aasgeier",
@@ -364,7 +395,8 @@
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🦅"
     },
     "kamikaze": {
       "id": "kamikaze",
@@ -375,7 +407,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "radiusPx": 72
+      "radiusPx": 72,
+      "symbol": "💀"
     },
     "schild": {
       "id": "schild",
@@ -385,7 +418,8 @@
       "rarity": "legendary",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🛡️"
     },
     "emergency_shield": {
       "id": "emergency_shield",
@@ -396,7 +430,8 @@
       "maxStacks": 3,
       "requires": [],
       "minRoom": 1,
-      "chargesPerStack": 1
+      "chargesPerStack": 1,
+      "symbol": "🧿"
     },
     "dash": {
       "id": "dash",
@@ -409,7 +444,8 @@
       "minRoom": 1,
       "distancePx": 64,
       "iframeS": 0.3,
-      "cooldownS": 2.2
+      "cooldownS": 2.2,
+      "symbol": "💨"
     },
     "berserker": {
       "id": "berserker",
@@ -422,7 +458,8 @@
       "minRoom": 1,
       "firePerLife": 0.82,
       "speedPerLife": 1.12,
-      "maxStacksEffect": 3
+      "maxStacksEffect": 3,
+      "symbol": "😤"
     },
     "fernzuender": {
       "id": "fernzuender",
@@ -432,7 +469,8 @@
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "📡"
     },
     "streumine": {
       "id": "streumine",
@@ -443,7 +481,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "sub": 4
+      "sub": 4,
+      "symbol": "🌰"
     },
     "schockwelle": {
       "id": "schockwelle",
@@ -456,7 +495,8 @@
       "minRoom": 1,
       "radiusPx": 80,
       "pushPx": 52,
-      "stunS": 0.6
+      "stunS": 0.6,
+      "symbol": "🌊"
     },
     "annaeherungsmine": {
       "id": "annaeherungsmine",
@@ -468,7 +508,8 @@
       "requires": [],
       "minRoom": 1,
       "armS": 0.1,
-      "triggerRadiusPx": 22
+      "triggerRadiusPx": 22,
+      "symbol": "📍"
     },
     "kettenblitz": {
       "id": "kettenblitz",
@@ -479,7 +520,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "radiusPx": 34
+      "radiusPx": 34,
+      "symbol": "🔌"
     },
     "blutrausch": {
       "id": "blutrausch",
@@ -492,7 +534,8 @@
       "minRoom": 1,
       "durationS": 1.4,
       "speedMult": 1.3,
-      "iframeS": 0.35
+      "iframeS": 0.35,
+      "symbol": "🩸"
     },
     "schrapnell": {
       "id": "schrapnell",
@@ -504,7 +547,8 @@
       "requires": [],
       "minRoom": 1,
       "count": 6,
-      "bulletSpeed": 150
+      "bulletSpeed": 150,
+      "symbol": "🌟"
     },
     "raketenantrieb": {
       "id": "raketenantrieb",
@@ -515,7 +559,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "recoilPx": 15
+      "recoilPx": 15,
+      "symbol": "🚀"
     },
     "konterschild": {
       "id": "konterschild",
@@ -527,7 +572,8 @@
       "requires": [],
       "minRoom": 1,
       "count": 10,
-      "eliteOnly": true
+      "eliteOnly": true,
+      "symbol": "✳️"
     },
     "ueberladung": {
       "id": "ueberladung",
@@ -538,7 +584,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "mult": 1.3
+      "mult": 1.3,
+      "symbol": "🔆"
     },
     "turbo": {
       "id": "turbo",
@@ -549,7 +596,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "speedMult": 1.45
+      "speedMult": 1.45,
+      "symbol": "🏁"
     },
     "scharfschuetze": {
       "id": "scharfschuetze",
@@ -563,7 +611,8 @@
       "speedMult": 3,
       "cooldownMult": 0.5,
       "ricochetsBonus": 2,
-      "magazineFixed": 2
+      "magazineFixed": 2,
+      "symbol": "🎯"
     },
     "uebermacht": {
       "id": "uebermacht",
@@ -574,7 +623,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "perEnemy": 2
+      "perEnemy": 2,
+      "symbol": "📊"
     },
     "klebemine": {
       "id": "klebemine",
@@ -586,7 +636,8 @@
       "requires": [],
       "minRoom": 1,
       "stickDelayS": 0.6,
-      "stickRadiusPx": 42
+      "stickRadiusPx": 42,
+      "symbol": "🩹"
     },
     "trophaee": {
       "id": "trophaee",
@@ -597,7 +648,8 @@
       "maxStacks": 3,
       "requires": [],
       "minRoom": 1,
-      "shieldCharges": 1
+      "shieldCharges": 1,
+      "symbol": "🏆"
     },
     "kriegsmaschine": {
       "id": "kriegsmaschine",
@@ -609,7 +661,8 @@
       "requires": [],
       "minRoom": 1,
       "magazineBonus": 2,
-      "cooldownMult": 0.85
+      "cooldownMult": 0.85,
+      "symbol": "🛠️"
     },
     "kriegsbeute": {
       "id": "kriegsbeute",
@@ -620,7 +673,8 @@
       "maxStacks": 3,
       "requires": [],
       "minRoom": 1,
-      "scrapBonus": 5
+      "scrapBonus": 5,
+      "symbol": "💎"
     },
     "mine": {
       "id": "mine",
@@ -630,7 +684,8 @@
       "rarity": "common",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "💣"
     },
     "emp_mine": {
       "id": "emp_mine",
@@ -640,7 +695,8 @@
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🔵"
     },
     "hook": {
       "id": "hook",
@@ -650,7 +706,8 @@
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🪝"
     },
     "deflector": {
       "id": "deflector",
@@ -660,7 +717,8 @@
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🪞"
     },
     "smoke": {
       "id": "smoke",
@@ -670,7 +728,8 @@
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🌫️"
     },
     "trap_wall": {
       "id": "trap_wall",
@@ -680,7 +739,8 @@
       "rarity": "rare",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "🧱"
     },
     "ghost_crew": {
       "id": "ghost_crew",
@@ -690,13 +750,15 @@
       "rarity": "legendary",
       "maxStacks": 1,
       "requires": [],
-      "minRoom": 1
+      "minRoom": 1,
+      "symbol": "👻"
     }
   },
   "fallback": {
     "name": "+1 Leben",
     "description": "Ein zusätzliches Leben",
     "tag": "stat",
-    "rarity": "common"
+    "rarity": "common",
+    "symbol": "❤️"
   }
 }
