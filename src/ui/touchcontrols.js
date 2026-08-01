@@ -50,97 +50,114 @@ export function createTouchControls(cfg = {}) {
     fireRing.style.height = d + 'px';
   }
 
-  // Minen-Button ist ein WURFSTICK: berueren + ziehen bestimmt Richtung
-  // und Weite, Loslassen wirft die Bombe.
-  let mineStick = null; // { id, cx, cy, dx, dy }
-  let pendingThrow = null; // { angle, dist } (Welt) -- beim Loslassen gesetzt
-  const mineBtn = document.createElement('button');
-  mineBtn.id = 'mineBtn';
-  const mineKnob = document.createElement('div');
-  mineKnob.id = 'mineKnob';
-  const mineLabel = document.createElement('span');
-  mineLabel.textContent = 'BOMBE';
-  mineBtn.appendChild(mineLabel);
-  mineBtn.appendChild(mineKnob);
-  document.body.appendChild(mineBtn);
+  // Wurfstick-Fabrik (P4): Bombe UND Gadget sind derselbe Bedienbaustein --
+  // beruehren + ziehen bestimmt Richtung und Weite, Loslassen loest aus.
+  // Vorher stand das nur einmal fuer die Bombe da; beim zweiten Slot waere
+  // Kopieren die schlechtere Wahl gewesen (der pointercancel-Fix aus P3
+  // muesste dann an zwei Stellen stimmen).
+  function makeThrowStick(id, label) {
+    let stick = null; // { id, cx, cy, dx, dy }
+    let pending = null; // { angle, dist } (Welt) -- beim Loslassen gesetzt
+    const btn = document.createElement('button');
+    btn.id = id;
+    btn.className = 'throwstick';
+    const knob = document.createElement('div');
+    knob.className = 'throwknob';
+    const labelEl = document.createElement('span');
+    labelEl.textContent = label;
+    btn.appendChild(labelEl);
+    btn.appendChild(knob);
+    document.body.appendChild(btn);
 
-  function mineDrag() {
-    if (!mineStick) return null;
-    const len = Math.hypot(mineStick.dx, mineStick.dy);
-    if (len < 4) return { angle: 0, dist: 0 };
-    const frac = Math.min(1, len / MINE_STICK_R);
-    return { angle: Math.atan2(mineStick.dy, mineStick.dx), dist: frac * MINE_MAX_THROW };
+    function drag() {
+      if (!stick) return null;
+      const len = Math.hypot(stick.dx, stick.dy);
+      if (len < 4) return { angle: 0, dist: 0 };
+      const frac = Math.min(1, len / MINE_STICK_R);
+      return { angle: Math.atan2(stick.dy, stick.dx), dist: frac * MINE_MAX_THROW };
+    }
+
+    // Pointer-Events + setPointerCapture: der Zug bleibt am Button haengen,
+    // auch wenn der Finger ihn verlaesst (robuster als Touch-Bubbling).
+    btn.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      // Ein zweiter Finger darf den laufenden Zug NICHT uebernehmen: sonst
+      // zeigt stick.id auf den neuen Finger und das Loslassen des ersten
+      // wird wegen der id-Pruefung stillschweigend verworfen (P3).
+      if (stick) return;
+      if (!active) {
+        active = true;
+        document.body.classList.add('touch-on');
+      }
+      const r = btn.getBoundingClientRect();
+      stick = { id: e.pointerId, cx: r.left + r.width / 2, cy: r.top + r.height / 2, dx: 0, dy: 0 };
+      knob.style.transform = 'translate(-50%,-50%)';
+      try {
+        btn.setPointerCapture(e.pointerId);
+      } catch {
+        /* egal */
+      }
+    });
+    btn.addEventListener('pointermove', (e) => {
+      if (!stick || e.pointerId !== stick.id) return;
+      e.preventDefault();
+      let dx = e.clientX - stick.cx;
+      let dy = e.clientY - stick.cy;
+      const len = Math.hypot(dx, dy);
+      if (len > MINE_STICK_R) {
+        dx = (dx / len) * MINE_STICK_R;
+        dy = (dy / len) * MINE_STICK_R;
+      }
+      stick.dx = dx;
+      stick.dy = dy;
+      knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    });
+
+    // Stick zuruecksetzen -- OHNE ueber das Ausloesen zu entscheiden.
+    function reset(e) {
+      stick = null;
+      knob.style.transform = 'translate(-50%,-50%)';
+      try {
+        if (e && btn.hasPointerCapture?.(e.pointerId)) btn.releasePointerCapture(e.pointerId);
+      } catch {
+        /* Zeiger schon weg -- egal */
+      }
+    }
+    // Loslassen = ausloesen. Der EINZIGE Weg, auf dem etwas fliegt.
+    btn.addEventListener('pointerup', (e) => {
+      if (!stick || e.pointerId !== stick.id) return;
+      pending = drag();
+      reset(e);
+    });
+    // pointercancel = das System hat den Touch abgebrochen (Anruf,
+    // System-Geste, zu viele Finger). Der Spieler hat nie bestaetigt --
+    // es darf NICHT ausgeloest werden (PLAN-INPUT.md, Bug P3).
+    btn.addEventListener('pointercancel', (e) => {
+      if (!stick || e.pointerId !== stick.id) return;
+      reset(e);
+    });
+
+    return {
+      el: btn,
+      isHeld: () => !!stick,
+      preview: () => (stick ? drag() : null),
+      consume() {
+        const t = pending;
+        pending = null;
+        return t;
+      },
+      setLabel(text) {
+        labelEl.textContent = text;
+      },
+      setVisible(on) {
+        btn.classList.toggle('slot-empty', !on);
+      },
+    };
   }
 
-  // Pointer-Events + setPointerCapture: der Zug bleibt am Button haengen,
-  // auch wenn der Finger ihn verlaesst (robuster als Touch-Bubbling).
-  mineBtn.addEventListener('pointerdown', (e) => {
-    e.preventDefault();
-    // Ein zweiter Finger auf dem Button darf den laufenden Zug NICHT
-    // uebernehmen: sonst zeigt mineStick.id auf den neuen Finger, das
-    // Loslassen des ersten wird wegen der id-Pruefung stillschweigend
-    // verworfen -- fuer den Spieler "die Bombe kam nicht". Der erste Finger
-    // behaelt den Stick, bis er loslaesst.
-    if (mineStick) return;
-    if (!active) {
-      active = true;
-      document.body.classList.add('touch-on');
-    }
-    const r = mineBtn.getBoundingClientRect();
-    mineStick = { id: e.pointerId, cx: r.left + r.width / 2, cy: r.top + r.height / 2, dx: 0, dy: 0 };
-    mineKnob.style.transform = 'translate(-50%,-50%)';
-    try {
-      mineBtn.setPointerCapture(e.pointerId);
-    } catch {
-      /* egal */
-    }
-  });
-  mineBtn.addEventListener('pointermove', (e) => {
-    if (!mineStick || e.pointerId !== mineStick.id) return;
-    e.preventDefault();
-    let dx = e.clientX - mineStick.cx;
-    let dy = e.clientY - mineStick.cy;
-    const len = Math.hypot(dx, dy);
-    if (len > MINE_STICK_R) {
-      dx = (dx / len) * MINE_STICK_R;
-      dy = (dy / len) * MINE_STICK_R;
-    }
-    mineStick.dx = dx;
-    mineStick.dy = dy;
-    mineKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-  });
-  // Stick zuruecksetzen -- OHNE ueber das Werfen zu entscheiden. Beide
-  // Endpfade teilen sich das, damit sie sich nicht auseinanderentwickeln.
-  function resetMineStick(e) {
-    mineStick = null;
-    mineKnob.style.transform = 'translate(-50%,-50%)';
-    try {
-      if (e && mineBtn.hasPointerCapture?.(e.pointerId)) mineBtn.releasePointerCapture(e.pointerId);
-    } catch {
-      /* Zeiger schon weg -- egal */
-    }
-  }
-
-  // Loslassen = ausloesen. Das ist der EINZIGE Weg, auf dem eine Bombe
-  // fliegt.
-  function endMineStick(e) {
-    if (!mineStick || e.pointerId !== mineStick.id) return;
-    pendingThrow = mineDrag();
-    resetMineStick(e);
-  }
-
-  // pointercancel = das System hat den Touch abgebrochen (eingehender Anruf,
-  // System-Geste, zu viele Finger, Browser-Interferenz). Der Spieler hat den
-  // Wurf nie bestaetigt -- er darf deshalb NICHT ausgeloest werden.
-  // Vorher hing hier dieselbe Funktion wie an pointerup, die Bombe flog also
-  // an eine Position, die nie gewollt war (PLAN-INPUT.md, Bug P3).
-  function abortMineStick(e) {
-    if (!mineStick || e.pointerId !== mineStick.id) return;
-    resetMineStick(e);
-  }
-
-  mineBtn.addEventListener('pointerup', endMineStick);
-  mineBtn.addEventListener('pointercancel', abortMineStick);
+  const mine = makeThrowStick('mineBtn', 'BOMBE');
+  const gadget = makeThrowStick('gadgetBtn', 'GADGET');
+  gadget.setVisible(false); // Start: kein Gadget ausgeruestet
 
   function showStick(el, s) {
     el.base.classList.remove('hidden');
@@ -227,7 +244,7 @@ export function createTouchControls(cfg = {}) {
   return {
     isActive: () => active,
     // Liegt gerade ein Finger? (Quellen-Erkennung in input.js)
-    hasContact: () => left !== null || right !== null || mineStick !== null,
+    hasContact: () => left !== null || right !== null || mine.isHeld() || gadget.isHeld(),
     getMove() {
       if (!left) return { x: 0, y: 0 };
       return { x: left.dx / STICK_R, y: left.dy / STICK_R };
@@ -249,25 +266,35 @@ export function createTouchControls(cfg = {}) {
     },
     // Wurfstick losgelassen -> { angle, dist } (Welt-px) oder null.
     consumeThrow() {
-      const t = pendingThrow;
-      pendingThrow = null;
-      return t;
+      return mine.consume();
     },
     // Waehrend des Ziehens: Live-Vorschau { angle, dist } oder null.
     getMinePreview() {
-      return mineStick ? mineDrag() : null;
+      return mine.preview() || gadget.preview();
+    },
+    // --- Gadgetslot (P4): zweiter, baugleicher Wurfstick ----------------
+    consumeGadgetThrow() {
+      return gadget.consume();
+    },
+    isGadgetHeld() {
+      return gadget.isHeld();
+    },
+    // Knopf nur zeigen, wenn ueberhaupt ein Gadget ausgeruestet ist.
+    setGadgetLabel(text) {
+      gadget.setLabel(text || 'GADGET');
+      gadget.setVisible(!!text);
     },
     // Liegt der Finger gerade auf dem Wurfstick? (PLAN-INPUT.md P1:
     // `secondaryHeld` im Aktionsmodell -- "wird gerade gezielt", getrennt
     // vom Ausloesen beim Loslassen.)
     isSecondaryHeld() {
-      return !!mineStick;
+      return mine.isHeld();
     },
     // Sekundärslot (Phase 6): Beschriftung des Buttons, wenn die aktive
     // Sekundärwaffe wechselt (main.js ruft dies nach chooseUpgrade()/
     // Run-Start auf).
     setSecondaryLabel(text) {
-      mineLabel.textContent = text;
+      mine.setLabel(text);
     },
   };
 }

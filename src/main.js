@@ -370,6 +370,9 @@ async function init() {
     if (!run) return;
     const label = tanksData.secondaries?.[run.equippedSecondary]?.label || 'BOMBE';
     touch.setSecondaryLabel(label);
+    // P4: der Gadget-Knopf erscheint erst, wenn ueberhaupt eines
+    // ausgeruestet ist (Startzustand: keines).
+    touch.setGadgetLabel(run.equippedGadget ? tanksData.secondaries?.[run.equippedGadget]?.label || 'GADGET' : '');
   }
 
   function launchRun(seed, modeKey, resume) {
@@ -489,6 +492,11 @@ async function init() {
       firePressed: st.primaryPressed,
       mine: st.secondary,
       mineThrow: st.secondaryThrow,
+      // P4: zweiter Slot mit eigenem Ausloeser, eigener Zielvorgabe und
+      // eigenem Zuend-Knopf (Fernzuender).
+      gadget: st.gadgetRelease,
+      gadgetThrow: st.gadgetAim,
+      detonate: st.detonate,
       dash: st.dash,
     };
     // Virtuelle Sticks + Bomben-Button nur bei Touch einblenden.
@@ -649,7 +657,7 @@ async function init() {
         getScrap: () => run.scrap,
         getUpgrades: () => run.upgrades,
         getOffers: () => run.shopOffers,
-        getEquippedSecondary: () => run.equippedSecondary,
+        getEquippedSecondary: () => run.equippedGadget, // P4: der Shop tauscht Gadgets
         lifeBought: () => run.shopLifeBought,
         onBuyCard: (idx) => {
           const offer = run.shopOffers[idx];

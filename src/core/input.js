@@ -18,9 +18,9 @@
 //   secondaryHeld   bool    Sekundaerwaffe wird gerade gezielt (Halten)
 //   secondaryRelease bool   Sekundaerwaffe ausloesen (EIN Frame)
 //   secondaryAim    {angle,dist}|null  Zielvorgabe des Wurfsticks
-//   gadgetHeld      bool    Gadget wird gezielt   \  ab P4 belegt --
-//   gadgetRelease   bool    Gadget ausloesen      /  bis dahin immer false
-//   gadgetAim       {angle,dist}|null
+//   gadgetHeld      bool    Gadget wird gerade gezielt (Halten)
+//   gadgetRelease   bool    Gadget ausloesen (EIN Frame)
+//   gadgetAim       {angle,dist}|null  Zielvorgabe des Gadget-Wurfsticks
 //   detonate        bool    Bombe zuenden (EIN Frame)
 //   dash            bool    Ausweich-Dash (EIN Frame)
 //   menuDir         {x,y}   Menue-Navigation (D-Pad/Pfeiltasten, EIN Frame)
@@ -291,6 +291,14 @@ export function createInput(target, canvas, opts = {}) {
     }
     if (touch.isSecondaryHeld && touch.isSecondaryHeld()) st.secondaryHeld = true;
     if (touch.consumeSecondary()) st.secondaryRelease = true;
+    // P4: der Gadget-Wurfstick ist baugleich -- Halten zielt, Loslassen
+    // loest aus.
+    const gThrown = touch.consumeGadgetThrow?.();
+    if (gThrown) {
+      st.gadgetRelease = true;
+      st.gadgetAim = gThrown;
+    }
+    if (touch.isGadgetHeld?.()) st.gadgetHeld = true;
   }
 
   function profileGamepad(st, player, gp) {

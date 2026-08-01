@@ -46,8 +46,7 @@ export function createTank(type, cfg, x, y) {
     // eigener "Raum betreten"-Hook noetig.
     powershotCharges: (cfg && cfg.powershotPerRoom) || 0,
     // Sekundärslot (Phase 6): frisch pro Raum, aus demselben Grund.
-    secondaryMineCount: 0, // fuer "jede 4. Mine ist EMP" (emp_mine)
-    secondaryCooldown: 0, // Abklingzeit fuer hook/deflector/smoke/trap_wall
+    gadgetCooldown: 0, // P4: Abklingzeit des Gadgetslots (EMP/Haken/…)
     hookTimer: 0, // > 0: wird gerade zur Wand gezogen (Enterhaken)
     hookTarget: null,
     deflectorTimer: 0, // Restzeit des aktiven Deflektor-Fensters
@@ -355,10 +354,13 @@ export function dashTank(tank, state, moveAxis) {
 
 // Legt eine Mine am Ort des Panzers, begrenzt durch das Minen-Limit
 // (gleichzeitig liegende eigene Minen, aus tanks.json).
-export function layMine(tank, state, throwOverride) {
+export function layMine(tank, state, throwOverride, forceEmp = false) {
   const own = state.mines.filter((m) => !m.dead && m.owner === tank);
   // Fernzuender: sind alle Minen draussen, sprengt die Taste sie alle.
-  if (tank.cfg.remoteDetonate && own.length >= tank.cfg.mines && own.length > 0) {
+  // Gilt nur fuer den Bombenslot -- eine EMP aus dem Gadgetslot soll nicht
+  // versehentlich das ganze Feld zuenden (sie hat mit `detonate` einen
+  // eigenen, ausdruecklichen Knopf).
+  if (!forceEmp && tank.cfg.remoteDetonate && own.length >= tank.cfg.mines && own.length > 0) {
     for (const m of own) if (m.fuse === null) m.fuse = 0.001;
     return true;
   }
@@ -388,16 +390,10 @@ export function layMine(tank, state, throwOverride) {
       ly = ny;
     }
   }
-  // Sekundärslot "EMP-Mine" (Phase 6): teilt sich die Legemechanik mit
-  // der normalen Mine -- jede vierte gelegte Mine ist EMP (kein Schaden,
-  // betaeubt stattdessen). Gegner setzen cfg.secondary nie -> immer false.
-  let isEmp = false;
-  if (tank.cfg.secondary === 'emp_mine') {
-    tank.secondaryMineCount = (tank.secondaryMineCount || 0) + 1;
-    const everyNth = state.data.secondaries?.emp_mine?.everyNth ?? 4;
-    isEmp = tank.secondaryMineCount % everyNth === 0;
-  }
-  state.mines.push(createMine(lx, ly, tank, state.data.mine.radiusPx, isEmp));
+  // EMP-Mine (P4): kein Zaehlwerk mehr ("jede 4. Bombe"), sondern eine
+  // ausdrueckliche Entscheidung des Spielers -- sie kommt aus dem
+  // Gadgetslot und wird von useGadget() mit forceEmp aufgerufen.
+  state.mines.push(createMine(lx, ly, tank, state.data.mine.radiusPx, forceEmp));
   state.sounds.push({ name: 'mine', x: lx });
   // Schockwelle: nahe Gegner um die gelegte Mine wegstossen.
   if (tank.cfg.shockwaveRadius) {
@@ -425,23 +421,37 @@ export function layMine(tank, state, throwOverride) {
 // eine Abklingzeit (tank.secondaryCooldown), da sie Aktionen statt Vorraete
 // sind. Gibt true zurueck, wenn tatsaechlich etwas ausgeloest wurde.
 export function useSecondary(tank, state, throwOverride) {
-  // Raum-Modifikator "Ausruestungssperre" (Phase 10): Sekundärwaffe fuer
-  // diesen Raum komplett gesperrt (nicht ueber cfg.secondary=null geloest,
-  // weil `sec = tank.cfg.secondary || 'mine'` sonst wieder auf Mine faellt).
+  // Raum-Modifikator "Ausruestungssperre" (Phase 10): sperrt seit P4 BEIDE
+  // Slots (nicht ueber cfg.secondary=null geloest, weil der `|| 'mine'`-
+  // Rueckfall die Sperre sonst gleich wieder aufheben wuerde).
   if (tank.cfg.secondaryDisabled) return false;
-  const sec = tank.cfg.secondary || 'mine';
-  if (sec === 'mine' || sec === 'emp_mine') return layMine(tank, state, throwOverride);
-  if (tank.secondaryCooldown > 0) return false;
-  const scfg = state.data.secondaries?.[sec] || {};
+  return layMine(tank, state, throwOverride);
+}
+
+// Gadgetslot (P4): der zweite, tauschbare Slot. Anders als die Bombe sind
+// das Aktionen statt eines Vorrats -- sie teilen sich deshalb eine
+// Abklingzeit (tank.gadgetCooldown) statt eines Magazins.
+// Gibt true zurueck, wenn tatsaechlich etwas ausgeloest wurde.
+export function useGadget(tank, state, aimOverride) {
+  if (tank.cfg.secondaryDisabled) return false;
+  const g = tank.cfg.gadget;
+  if (!g) return false; // noch kein Gadget ausgeruestet
+  if (tank.gadgetCooldown > 0) return false;
+  const scfg = state.data.secondaries?.[g] || {};
   let used = false;
-  if (sec === 'hook') {
+  if (g === 'emp_mine') {
+    // P4: eigener Ausloeser statt "jede 4. Bombe ist EMP". Teilt sich die
+    // Lege-/Wurfmechanik weiterhin mit der Bombe (layMine), bekommt aber
+    // ihren eigenen Knopf und ihre eigene Abklingzeit.
+    used = layMine(tank, state, aimOverride, true);
+  } else if (g === 'hook') {
     used = fireHook(tank, state, scfg);
-  } else if (sec === 'deflector') {
+  } else if (g === 'deflector') {
     tank.deflectorTimer = scfg.activeS ?? 1.5;
     tank.deflectorCharges = 1;
     state.sounds.push({ name: 'shield', x: tank.x });
     used = true;
-  } else if (sec === 'smoke') {
+  } else if (g === 'smoke') {
     state.smokeClouds.push({
       x: tank.x,
       y: tank.y,
@@ -452,10 +462,10 @@ export function useSecondary(tank, state, throwOverride) {
     state.sounds.push({ name: 'mine', x: tank.x });
     state.spawnParticles?.(tank.x, tank.y, '#9aa0a8', 12, 70);
     used = true;
-  } else if (sec === 'trap_wall') {
+  } else if (g === 'trap_wall') {
     used = placeTrapWall(tank, state, scfg);
   }
-  if (used) tank.secondaryCooldown = scfg.cooldownS ?? 4;
+  if (used) tank.gadgetCooldown = scfg.cooldownS ?? 4;
   return used;
 }
 

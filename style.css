@@ -709,18 +709,17 @@ html, body {
   display: none;
 }
 
-/* Minen-Button unten rechts (eigene Exklusionszone) */
-#mineBtn {
+/* Wurfsticks unten rechts (eigene Exklusionszonen): Bombe und -- seit P4 --
+   das Gadget. Beide teilen sich das Aussehen, nur Farbe und Position
+   unterscheiden sich. */
+.throwstick {
   display: none;
   position: fixed;
-  right: calc(14px + env(safe-area-inset-right));
   bottom: calc(14px + env(safe-area-inset-bottom));
   width: 68px;
   height: 68px;
   border-radius: 50%;
   border: none;
-  background: rgba(200, 178, 74, 0.55);
-  color: #14120a;
   font-family: monospace;
   font-weight: bold;
   font-size: 13px;
@@ -728,11 +727,30 @@ html, body {
   touch-action: none;
 }
 
-body.touch-on #mineBtn {
+#mineBtn {
+  right: calc(14px + env(safe-area-inset-right));
+  background: rgba(200, 178, 74, 0.55);
+  color: #14120a;
+}
+
+/* Gadget links neben der Bombe -- gleiche Groesse, eigener Farbton, damit
+   im Gefecht ohne Hinsehen klar ist, welcher Knopf welcher ist. */
+#gadgetBtn {
+  right: calc(92px + env(safe-area-inset-right));
+  background: rgba(90, 170, 200, 0.55);
+  color: #06161c;
+}
+
+body.touch-on .throwstick {
   display: block;
 }
 
-#mineKnob {
+/* Kein Gadget ausgeruestet -> Knopf bleibt weg (auch bei touch-on). */
+body.touch-on .throwstick.slot-empty {
+  display: none;
+}
+
+.throwknob {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -744,7 +762,11 @@ body.touch-on #mineBtn {
   pointer-events: none;
 }
 
-#mineBtn span {
+#gadgetBtn .throwknob {
+  background: #06161c;
+}
+
+.throwstick span {
   position: absolute;
   top: 5px;
   left: 0;

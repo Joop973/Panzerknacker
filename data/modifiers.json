@@ -50,7 +50,7 @@
     {
       "id": "no_secondary",
       "name": "Ausruestungssperre",
-      "desc": "Deine Sekundaerwaffe ist in diesem Raum gesperrt.",
+      "desc": "Bombe und Gadget sind in diesem Raum gesperrt.",
       "noSecondary": true
     },
     {

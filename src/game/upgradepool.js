@@ -24,19 +24,6 @@ const EXCLUDED_TAGS = new Set(['weapon', 'elite']);
 // Karten sind fertig gebaut und duerfen trotzdem erscheinen.
 const WEAPON_ALLOWLIST = new Set(['doppelrohr', 'flak']);
 
-// Diese 7 Karten wirken nur auf die Minen-Legemechanik (mine/emp_mine
-// teilen sich Zuend-/Ausloeselogik in mine.js) -- bei jeder anderen
-// Sekundärwaffe sind sie wirkungslos, deshalb im Pool ausgeblendet.
-const MINE_ONLY_IDS = new Set([
-  'kettenglied',
-  'sprengkraft',
-  'fernzuender',
-  'schockwelle',
-  'annaeherungsmine',
-  'klebemine',
-  'streumine',
-]);
-
 function weightedPick(list, rng, weights) {
   let total = 0;
   for (const d of list) total += weights[d.rarity] || 1;
@@ -81,7 +68,7 @@ function fallbackOffer(upgradesData) {
 //   onlyRarity     -- nur diese Seltenheit (z. B. 'legendary' fuer Treasure)
 //   bypassRoomGate -- minRoom + legendary.minRoom ignorieren
 function buildCandidates(upgradesData, opts) {
-  const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate, equippedSecondary } = opts;
+  const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate } = opts;
   const legMinRoom = balance.legendary?.minRoom ?? 0;
   const bannedSet = banned || new Set();
   const defs = upgradesData.upgrades;
@@ -93,16 +80,13 @@ function buildCandidates(upgradesData, opts) {
     } else if (EXCLUDED_TAGS.has(def.tag) && !(def.tag === 'weapon' && WEAPON_ALLOWLIST.has(id))) continue;
     if (onlyRarity && def.rarity !== onlyRarity) continue;
     if (bannedSet.has(id)) continue;
-    // Phase 6: Minen-spezifische Karten nur anbieten, solange mine/emp_mine
-    // ausgeruestet ist -- bei anderen Sekundärwaffen wirkungslos.
-    if (
-      MINE_ONLY_IDS.has(id) &&
-      equippedSecondary &&
-      equippedSecondary !== 'mine' &&
-      equippedSecondary !== 'emp_mine'
-    ) {
-      continue;
-    }
+    // P4: Die frueher noetige Minen-Sperre (MINE_ONLY_IDS) ist entfallen.
+    // Die Bombe liegt jetzt in einem eigenen, festen Slot und ist IMMER
+    // ausgeruestet -- die sieben minenspezifischen Karten (kettenglied,
+    // sprengkraft, fernzuender, schockwelle, annaeherungsmine, klebemine,
+    // streumine) koennen deshalb nie mehr wirkungslos werden.
+    // Damit loest sich zugleich Konflikt C aus PLAN-INPUT.md: der Tag
+    // `control` haengt nicht mehr an der ausgeruesteten Sekundaerwaffe.
     if ((chosen[id] || 0) >= def.maxStacks) continue;
     if (!bypassRoomGate) {
       if (roomIndex < (def.minRoom || 1)) continue;

@@ -1,29 +1,41 @@
 {
-  "mine": { "label": "BOMBE" },
+  "_comment": "P4: Zwei getrennte Slots. `category: secondary` ist die Bombe -- sie ist IMMER ausgeruestet und nicht tauschbar. `category: gadget` sind die fuenf tauschbaren Werkzeuge; genau eines davon kann zusaetzlich ausgeruestet sein (run.equippedGadget, Start: keines). Vorher lagen alle sechs in EINEM tauschbaren Slot, wodurch man die Bombe verlieren konnte.",
+
+  "mine": {
+    "category": "secondary",
+    "label": "BOMBE"
+  },
+
   "emp_mine": {
+    "_comment": "P4: eigenstaendiges Gadget mit eigenem Ausloeser statt 'jede 4. Bombe ist EMP'. Deshalb everyNth entfernt und eine eigene Abklingzeit wie bei den anderen Gadgets.",
+    "category": "gadget",
     "label": "EMP",
-    "everyNth": 4,
     "stunRadius": 96,
-    "stunDuration": 1.5
+    "stunDuration": 1.5,
+    "cooldownS": 6.0
   },
   "hook": {
+    "category": "gadget",
     "label": "HAKEN",
     "maxRangePx": 222,
     "pullSpeedPx": 520,
     "cooldownS": 3.0
   },
   "deflector": {
+    "category": "gadget",
     "label": "SCHILD",
     "activeS": 1.5,
     "cooldownS": 4.0
   },
   "smoke": {
+    "category": "gadget",
     "label": "RAUCH",
     "radiusPx": 90,
     "durationS": 4.0,
     "cooldownS": 5.0
   },
   "trap_wall": {
+    "category": "gadget",
     "label": "MAUER",
     "hits": 3,
     "placeDistPx": 48,

@@ -122,12 +122,16 @@ export function createShopScreen() {
   }
 
   function renderSecondaries(scrap) {
+    // P4: der Shop tauscht das GADGET -- die Bombe liegt im festen Slot und
+    // steht nicht zum Tausch. Deshalb nur Eintraege mit category 'gadget'.
     const equipped = ctx.getEquippedSecondary();
-    const others = Object.keys(ctx.secondariesData).filter((id) => id !== equipped);
+    const others = Object.keys(ctx.secondariesData).filter(
+      (id) => ctx.secondariesData[id]?.category === 'gadget' && id !== equipped,
+    );
     if (!others.length) return;
-    const cur = ctx.secondariesData[equipped]?.label || equipped;
+    const cur = equipped ? ctx.secondariesData[equipped]?.label || equipped : 'keines';
     el.appendChild(
-      sectionTitle(`Sekundärwaffe tauschen (${ctx.costs.shopSecondary}⚙, aktuell: ${cur}):`),
+      sectionTitle(`Gadget tauschen (${ctx.costs.shopSecondary}⚙, aktuell: ${cur}):`),
     );
     const list = document.createElement('div');
     list.className = 'droplist';
