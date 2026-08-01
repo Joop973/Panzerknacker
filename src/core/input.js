@@ -36,6 +36,8 @@
 //
 // Belegungen, Deadzones und Reichweiten kommen aus data/input.json.
 
+import { WIDTH, HEIGHT } from '../config.js';
+
 const EMPTY_AIM = null;
 
 export function createInput(target, canvas, opts = {}) {
@@ -53,7 +55,7 @@ export function createInput(target, canvas, opts = {}) {
   const has = (list, code) => Array.isArray(list) && list.includes(code);
 
   const pressed = new Set();
-  const mouse = { x: canvas.width / 2, y: 0, held: false, moved: false };
+  const mouse = { x: WIDTH / 2, y: 0, held: false, moved: false };
   let manualProfile = null; // 'touch'|'keyboard'|'gamepad' -- Override aus den Einstellungen
   let source = 'keyboard';
   let debug = false;
@@ -76,11 +78,16 @@ export function createInput(target, canvas, opts = {}) {
     if (!manualProfile) source = s;
   }
 
+  // Bildschirm- in ARENA-Koordinaten (768x512). Bewusst gegen die festen
+  // Logikmasse gerechnet, NICHT gegen canvas.width/height: seit P2 ist der
+  // Backing-Store devicePixelRatio-fach groesser, canvas.width waere also
+  // je nach Geraet das 2-fache der Arenabreite -- der Zielpunkt laege dann
+  // weit ausserhalb des Raums.
   function toCanvas(e) {
     const rect = canvas.getBoundingClientRect();
     return {
-      x: (e.clientX - rect.left) * (canvas.width / rect.width),
-      y: (e.clientY - rect.top) * (canvas.height / rect.height),
+      x: (e.clientX - rect.left) * (WIDTH / rect.width),
+      y: (e.clientY - rect.top) * (HEIGHT / rect.height),
     };
   }
 

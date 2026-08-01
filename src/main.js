@@ -7,6 +7,7 @@
 import { STEP, WIDTH } from './config.js';
 import { createLoop } from './core/loop.js';
 import { createInput } from './core/input.js';
+import { createViewport } from './core/viewport.js';
 import { createAudio } from './core/audio.js';
 import {
   createRun,
@@ -108,6 +109,10 @@ async function init() {
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
+  // P2: Backing-Store an devicePixelRatio koppeln (gedeckelt) und die
+  // sichtbare Hoehe als CSS-Variable bereitstellen. Muss VOR dem ersten
+  // render() laufen -- der Kontext bekommt hier seine Grundtransformation.
+  const viewport = createViewport(canvas, ctx, optionsData);
   const startOverlay = document.getElementById('start');
   const seedInput = document.getElementById('seedInput');
   const startBtn = document.getElementById('startBtn');
@@ -427,6 +432,33 @@ async function init() {
       () => screen.orientation?.lock?.('landscape').catch(() => {}),
       () => {},
     );
+  }
+
+  // P2: manueller Vollbild-Umschalter im Startmenue. Nur sichtbar, wenn der
+  // Browser Element-Vollbild ueberhaupt kann -- auf iOS gibt es das nicht,
+  // dort waere der Knopf eine Sackgasse. Der automatische Aufruf beim
+  // Run-Start (goFullscreen) bleibt unveraendert; dieser Knopf ist der
+  // ausdrueckliche Weg fuer Desktop und Android. P9 haengt ihn zusaetzlich
+  // an die Einstellungen.
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const canFullscreen = !!document.documentElement.requestFullscreen;
+  function refreshFullscreenBtn() {
+    if (!canFullscreen) return;
+    fullscreenBtn.textContent = document.fullscreenElement ? 'Vollbild verlassen' : 'Vollbild';
+  }
+  if (canFullscreen) {
+    fullscreenBtn.classList.remove('hidden');
+    refreshFullscreenBtn();
+    fullscreenBtn.addEventListener('click', () => {
+      if (document.fullscreenElement) document.exitFullscreen?.();
+      else document.documentElement.requestFullscreen?.().catch(() => {});
+    });
+    // Vollbild kann auch per F11/Escape wechseln -- Beschriftung nachziehen
+    // und die Canvasgroesse neu rechnen (der Viewport aendert sich dabei).
+    document.addEventListener('fullscreenchange', () => {
+      refreshFullscreenBtn();
+      viewport.update();
+    });
   }
 
   // Display-Wachsperre: beim Gamepad-Spielen fasst man den Touchscreen

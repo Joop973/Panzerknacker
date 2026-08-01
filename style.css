@@ -10,16 +10,36 @@ html, body {
   /* dvh: dynamische Viewport-Hoehe -- rechnet die (eingeklappte)
      Adressleiste heraus, sodass kein Rand entsteht. */
   height: 100dvh;
+  /* P2: --vvh setzt src/core/viewport.js aus visualViewport.height. Das ist
+     die einzige Groesse, die auch die eingeblendete Bildschirmtastatur
+     kennt (Seed-Eingabefeld im Startmenue) -- 100dvh tut das nicht. Ohne
+     visualViewport-Unterstuetzung bleibt der 100dvh-Wert darueber stehen. */
+  height: var(--vvh, 100dvh);
   background: #000;
   color: #ccc;
   font-family: system-ui, sans-serif;
   overflow: hidden;
+  /* P2: kein Gummiband-Scrollen und kein Pull-to-Refresh auf der ganzen
+     Seite (vorher nur `contain` auf den Overlays). `none` statt `contain`,
+     weil hier nichts scrollt, was eine Scroll-Kette braeuchte. */
+  overscroll-behavior: none;
+}
+
+/* P2: position:fixed nimmt html/body aus dem Scrollfluss. Auf iOS
+   verhindert das, dass die Seite beim Wischen ueber den Canvas als Ganzes
+   verschoben wird -- der haeufigste Grund fuer einen "verrutschten"
+   Bildschirm im Querformat. Die Overlays sind selbst fixed positioniert
+   und scrollen weiterhin intern (overflow-y: auto). */
+html, body {
+  position: fixed;
+  inset: 0;
 }
 
 #game {
   width: 100%;
   height: 100vh;
   height: 100dvh;
+  height: var(--vvh, 100dvh);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -33,8 +53,14 @@ html, body {
   /* auto statt pixelated: die detaillierten Panzer-Sprites bleiben beim
      Hochskalieren (Handy-Vollbild) weich statt blockig. */
   image-rendering: auto;
-  max-width: 100%;
-  max-height: 90vh;
+  /* P2: Der Backing-Store ist seit der DPR-Kopplung ein Vielfaches der
+     Arena (bis 1536x1024). Da ein Canvas seine intrinsische Groesse aus den
+     width/height-ATTRIBUTEN bezieht, wuerde er sonst im Layout mitwachsen.
+     Deshalb hier auf die Logikgroesse deckeln -- NICHT ueber feste
+     width/height, denn zwei definite Masse setzen aspect-ratio ausser
+     Kraft und verzerren den Canvas, sobald max-height greift. */
+  max-width: min(100%, 768px);
+  max-height: min(90vh, 512px);
   /* Seitenverhaeltnis halten, wenn skaliert */
   aspect-ratio: 768 / 512;
   touch-action: none;
@@ -50,6 +76,9 @@ html, body {
   #canvas {
     max-height: 100vh;
     max-height: 100dvh;
+    /* Deckel auf die Logikhoehe wie oben -- sonst waechst der Canvas auf
+       einem hohen Querformat-Tablet mit dem Backing-Store mit. */
+    max-height: min(var(--vvh, 100dvh), 512px);
   }
   .hint {
     display: none;

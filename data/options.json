@@ -1,3 +1,5 @@
 {
-  "aimLine": true
+  "aimLine": true,
+  "_comment_maxPixelRatio": "P2: Deckel fuer den Canvas-Backing-Store (WIDTH*dpr x HEIGHT*dpr). Ungedeckelt fuellt ein DPR-3-Handy die neunfache Pixelmenge -- Fuellrate ist dort der Engpass und Phase 11b haelt das Frame-Budget knapp. Ab 2 ist der Schaerfegewinn auf Handygroessen kaum noch sichtbar.",
+  "maxPixelRatio": 2
 }
