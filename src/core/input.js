@@ -427,6 +427,17 @@ export function createInput(target, canvas, opts = {}) {
     getMinePreview() {
       return touch ? touch.getMinePreview() : null;
     },
+    // P6: getrennte Vorschau des Gadgetslots -- der Haken zeichnet eine
+    // Linie, die EMP-Bombe einen Wurfbogen.
+    getGadgetPreview() {
+      return touch ? touch.getGadgetPreview?.() : null;
+    },
+    // Wird gerade auf das Gadget gezielt? Auf Touch das Halten des
+    // Wurfsticks; auf PC/Controller gibt es keine Zielphase, dort zeigt die
+    // Vorschau dauerhaft (siehe main.js).
+    isGadgetAiming() {
+      return !!touch?.isGadgetHeld?.();
+    },
     isDebug() {
       return debug;
     },

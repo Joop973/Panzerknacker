@@ -445,7 +445,8 @@ export function useGadget(tank, state, aimOverride) {
     // ihren eigenen Knopf und ihre eigene Abklingzeit.
     used = layMine(tank, state, aimOverride, true);
   } else if (g === 'hook') {
-    used = fireHook(tank, state, scfg);
+    // Zielrichtung: Touch-Wurfstick, sonst Blickrichtung.
+    used = fireHook(tank, state, scfg, aimOverride ? aimOverride.angle : tank.turret);
   } else if (g === 'deflector') {
     tank.deflectorTimer = scfg.activeS ?? 1.5;
     tank.deflectorCharges = 1;
@@ -472,26 +473,57 @@ export function useGadget(tank, state, aimOverride) {
 // Enterhaken: Raymarch in Blickrichtung bis maxRangePx. Trifft er eine
 // Wand, wird der Panzer ueber mehrere Ticks dorthin gezogen (moveTank()
 // uebernimmt den eigentlichen Zug via tank.hookTimer/hookTarget).
-function fireHook(tank, state, scfg) {
+// P6: EINE Quelle fuer "wo landet der Haken?" -- Zielvorschau und echter
+// Schuss rechnen damit garantiert dasselbe. (Dasselbe Prinzip wie die
+// Ziellinie aus Phase 0a, die bewusst die echte updateBullet-Physik nutzt,
+// statt sie nachzubauen.)
+// Liefert { x, y, hit }: bei hit === false ist { x, y } das Reichweitenende.
+export function traceHook(tank, state, scfg, angle) {
   const step = state.data.ai.raycastStepPx;
-  const maxRange = scfg.maxRangePx ?? 260;
-  const cos = Math.cos(tank.turret);
-  const sin = Math.sin(tank.turret);
+  const maxRange = scfg.maxRangePx ?? 222;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
   let x = tank.x;
   let y = tank.y;
   for (let d = 0; d < maxRange; d += step) {
     const nx = x + cos * step;
     const ny = y + sin * step;
+    // isSolid deckt ALLE Wandtypen ab, an denen sich ein Haken festmachen
+    // kann: feste, durchschiessbare, Spiegel-, zerstoerbare, Generator- und
+    // (ueber das Grid) auch die eigene Sperrmauer sowie geschlossene
+    // bewegliche Waende. Loecher sind bewusst NICHT dabei -- dort ist
+    // nichts zum Festhaken.
     if (state.isSolid(nx, ny)) {
-      tank.hookTarget = { x: nx - cos * tank.cfg.radius, y: ny - sin * tank.cfg.radius };
-      tank.hookTimer = 1;
-      state.sounds.push({ name: 'dash', x: tank.x });
-      return true;
+      return { x: nx - cos * tank.cfg.radius, y: ny - sin * tank.cfg.radius, hit: true };
     }
     x = nx;
     y = ny;
   }
-  return false; // keine Wand in Reichweite -> kein Cooldown verbraucht
+  return { x, y, hit: false };
+}
+
+// Enterhaken: Raymarch in Zielrichtung bis maxRangePx. Trifft er eine Wand,
+// wird der Panzer ueber mehrere Ticks dorthin gezogen (moveTank() uebernimmt
+// den eigentlichen Zug via tank.hookTimer/hookTarget).
+// `angle` kommt bei Touch aus dem Gadget-Wurfstick, sonst aus der
+// Blickrichtung (Maus/Zielstick) -- die Zielphase steuert den Haken also
+// genau wie den Bombenwurf.
+function fireHook(tank, state, scfg, angle) {
+  const t = traceHook(tank, state, scfg, angle);
+  if (t.hit) {
+    tank.hookTarget = { x: t.x, y: t.y };
+    tank.hookTimer = 1;
+    state.sounds.push({ name: 'dash', x: tank.x });
+  } else {
+    // P6: "Cooldown auch ohne Treffer". Ein Fehlschuss ist damit eine echte
+    // Fehlentscheidung statt eines folgenlosen Versuchs -- vorher kostete
+    // ein Griff ins Leere gar nichts. Hoer- und sichtbar quittiert, sonst
+    // wirkt die verbrauchte Abklingzeit wie ein Defekt (dieselbe Auflage
+    // wie beim gesperrten Schuss aus P1).
+    state.sounds.push({ name: 'empty', x: tank.x });
+    state.flashes.push({ x: t.x, y: t.y, age: 0, dim: true });
+  }
+  return true; // gefeuert ist gefeuert -- Abklingzeit laeuft in jedem Fall
 }
 
 // Sperrmauer: entsteht auf der Kachel vor dem Panzer, wenn diese begehbar

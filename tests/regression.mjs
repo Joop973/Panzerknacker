@@ -431,6 +431,9 @@ function check(ok, msg) {
   // Alle Anzeige-Schalter der Informations-Karten aktiv.
   Object.assign(st.player.cfg, {
     radar: true, mineSense: true, threatSense: true, aimPreviewBounces: 2, ignoreFog: false,
+    // P6: sonst steigt drawHookPreview() sofort wieder aus und der Zweig
+    // bliebe ungetestet -- genau der blinde Fleck, den dieser Block schliesst.
+    gadget: 'hook',
   });
   // Je eine eigene und eine gegnerische Mine, kurz vor der Zuendung.
   const enemy = st.tanks.find((t) => t !== st.player);
@@ -453,6 +456,10 @@ function check(ok, msg) {
     ['drawTexts', effects.drawTexts, [fakeCtx, st]],
     ['drawMinePreview', effects.drawMinePreview, [fakeCtx, st, { angle: 0.5, dist: 70 }]],
     ['drawAimLine', effects.drawAimLine, [fakeCtx, st, trace]],
+    // P6: beide Zweige der Haken-Vorschau (Treffer und Fehlschuss) --
+    // der Renderpfad war schon zweimal der blinde Fleck.
+    ['drawHookPreview', effects.drawHookPreview, [fakeCtx, st, 0]],
+    ['drawHookPreview(quer)', effects.drawHookPreview, [fakeCtx, st, Math.PI / 3]],
   ]) {
     try {
       fn(...args);
@@ -668,6 +675,160 @@ function check(ok, msg) {
   console.log(
     `Bankshot-Gegner: ${shots} Schüsse, Logikschritt ${robustMs.toFixed(2)} ms (drittgrösster Wert, Maximum ${worstMs.toFixed(2)} ms)`,
   );
+}
+
+// ---- 8e. P6: Enterhaken ------------------------------------------------
+// Fuenf Zusagen der Phase: Zielrichtung steuerbar, Ausloesen beim
+// Loslassen (kommt aus P4), Zug an ALLEN Wandtypen, Abklingzeit AUCH ohne
+// Treffer, waehrend des Zugs steuerlos. Dazu die Zielvorschau.
+{
+  const { createState } = await import('../src/game/state.js');
+  const { useGadget, traceHook, moveTank } = await import('../src/game/tank.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+  const hookCfg = tanksData.secondaries.hook;
+
+  const mkRoom = () =>
+    createState(tanksData, tilesData, {
+      genRng: rngFor(3, 2, 'rooms'),
+      enemyTypes: ['t_brown'],
+      aiSeed: hashSeed(3, 2, 'ai'),
+      playerUpgrades: { hook: 1 },
+      upgradesData,
+      equippedSecondary: 'mine',
+      equippedGadget: 'hook',
+      transform: {},
+    });
+
+  // (a) Vorschau und Schuss rechnen dasselbe. Das ist die eigentliche
+  // Zusicherung: beide rufen traceHook() -- wuerde der Schuss eine eigene
+  // Kopie benutzen, koennten sie auseinanderlaufen.
+  {
+    const st = mkRoom();
+    const p = st.player;
+    let geprueft = 0;
+    for (let i = 0; i < 16; i++) {
+      const angle = (i / 16) * Math.PI * 2;
+      const t = traceHook(p, st, hookCfg, angle);
+      if (!t.hit) continue;
+      const px = p.x;
+      const py = p.y;
+      p.gadgetCooldown = 0;
+      p.hookTimer = 0;
+      p.hookTarget = null;
+      useGadget(p, st, { angle, dist: 0 });
+      check(
+        !!p.hookTarget &&
+          Math.abs(p.hookTarget.x - t.x) < 1e-9 &&
+          Math.abs(p.hookTarget.y - t.y) < 1e-9,
+        `P6: Vorschau und Schuss weichen ab (Winkel ${angle.toFixed(2)})`,
+      );
+      p.x = px;
+      p.y = py;
+      geprueft++;
+    }
+    check(geprueft >= 4, `P6: zu wenige Treffer-Richtungen geprueft (${geprueft})`);
+  }
+
+  // (b) Die Zielrichtung steuert den Haken -- nicht die Blickrichtung.
+  // Vorher nutzte fireHook() immer tank.turret, der Wurfstick war wirkungslos.
+  {
+    const st = mkRoom();
+    const p = st.player;
+    // Zwei Richtungen suchen, die zu verschiedenen Ankern fuehren.
+    let a1 = null;
+    let a2 = null;
+    for (let i = 0; i < 32 && (a1 === null || a2 === null); i++) {
+      const ang = (i / 32) * Math.PI * 2;
+      const t = traceHook(p, st, hookCfg, ang);
+      if (!t.hit) continue;
+      if (a1 === null) a1 = { ang, t };
+      else if (Math.hypot(t.x - a1.t.x, t.y - a1.t.y) > 40) a2 = { ang, t };
+    }
+    check(!!a2, 'P6: keine zwei unterschiedlichen Ankerpunkte gefunden (Testaufbau)');
+    if (a2) {
+      p.turret = a1.ang; // Blickrichtung auf den EINEN Anker
+      p.gadgetCooldown = 0;
+      useGadget(p, st, { angle: a2.ang, dist: 0 }); // Zielstick auf den ANDEREN
+      check(
+        Math.hypot(p.hookTarget.x - a2.t.x, p.hookTarget.y - a2.t.y) < 1e-9,
+        'P6: der Haken folgt der Blickrichtung statt der Zielvorgabe',
+      );
+    }
+  }
+
+  // (c) Fehlschuss kostet trotzdem die Abklingzeit -- und meldet sich.
+  {
+    const st = mkRoom();
+    const p = st.player;
+    // Richtung ohne Wand in Reichweite suchen.
+    let miss = null;
+    for (let i = 0; i < 64 && miss === null; i++) {
+      const ang = (i / 64) * Math.PI * 2;
+      if (!traceHook(p, st, hookCfg, ang).hit) miss = ang;
+    }
+    if (miss !== null) {
+      st.sounds.length = 0;
+      st.flashes.length = 0;
+      p.gadgetCooldown = 0;
+      const used = useGadget(p, st, { angle: miss, dist: 0 });
+      check(used === true, 'P6: Fehlschuss gilt als nicht ausgeloest');
+      check(p.gadgetCooldown > 0, 'P6: Fehlschuss kostet keine Abklingzeit');
+      check(!p.hookTarget, 'P6: Fehlschuss zieht den Panzer trotzdem');
+      check(
+        st.sounds.some((s) => (s?.name || s) === 'empty'),
+        'P6: Fehlschuss bleibt stumm',
+      );
+      check(st.flashes.some((f) => f.dim), 'P6: Fehlschuss ohne sichtbares Gegenstueck');
+    }
+  }
+
+  // (d) Der Zug greift an allen Wandtypen, an denen sich etwas festmachen
+  // laesst. Geprueft ueber isSolid(), das fireHook benutzt.
+  {
+    const st = mkRoom();
+    const p = st.player;
+    const { CELL } = await import('../src/config.js');
+    for (const type of ['breakable', 'reflect', 'destructible']) {
+      const w = st.walls.find((x) => x.type === type);
+      if (!w) continue;
+      check(
+        st.isSolid(w.x + CELL / 2, w.y + CELL / 2),
+        `P6: Haken findet an Wandtyp "${type}" keinen Halt`,
+      );
+    }
+    // Die eigene Sperrmauer ebenfalls (sie schreibt ins Grid).
+    const before = st.walls.length;
+    p.turret = 0;
+    st.placeTrapWall(p.x + CELL, p.y, 3);
+    if (st.walls.length > before) {
+      const tw = st.walls[st.walls.length - 1];
+      check(st.isSolid(tw.x + CELL / 2, tw.y + CELL / 2), 'P6: Haken findet an der Sperrmauer keinen Halt');
+    }
+  }
+
+  // (e) Waehrend des Zugs ignoriert die Bewegung jede Eingabe.
+  {
+    const st = mkRoom();
+    const p = st.player;
+    let ang = null;
+    for (let i = 0; i < 32 && ang === null; i++) {
+      const a = (i / 32) * Math.PI * 2;
+      if (traceHook(p, st, hookCfg, a).hit) ang = a;
+    }
+    if (ang !== null) {
+      p.gadgetCooldown = 0;
+      useGadget(p, st, { angle: ang, dist: 0 });
+      check(p.hookTimer > 0, 'P6: Zug startet nicht');
+      const target = { ...p.hookTarget };
+      // Gegenrichtung druecken -- darf den Zug nicht beeinflussen.
+      const gegen = { x: -Math.cos(ang), y: -Math.sin(ang) };
+      for (let i = 0; i < 30 && p.hookTimer > 0; i++) moveTank(p, gegen, st, 1 / 60);
+      check(
+        Math.hypot(p.x - target.x, p.y - target.y) < 24,
+        `P6: Eingabe hat den Zug abgelenkt (${Math.hypot(p.x - target.x, p.y - target.y).toFixed(1)} px vom Ziel)`,
+      );
+    }
+  }
 }
 
 // ---- 8d. P4: Bombenslot und Gadgetslot sind getrennt --------------------

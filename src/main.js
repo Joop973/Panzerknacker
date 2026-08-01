@@ -791,7 +791,23 @@ async function init() {
 
   function render(alpha) {
     if (!run) return;
-    renderer.render(run.state, alpha, tracks, run.phase === 'playing' ? input.getMinePreview() : null);
+    // P6: Zielwinkel des Gadgets fuer die Haken-Vorschau. Auf Touch nur
+    // waehrend des Ziehens am Gadget-Stick (echte Zielphase); auf PC und
+    // Controller gibt es keine Zielphase -- dort zeigt die Vorschau
+    // dauerhaft in Blickrichtung, solange der Haken ausgeruestet ist.
+    let gadgetAim = null;
+    if (run.phase === 'playing' && run.state.player.cfg.gadget === 'hook') {
+      const gp = input.getGadgetPreview();
+      if (gp) gadgetAim = gp.angle;
+      else if (!input.isGadgetAiming()) gadgetAim = run.state.player.turret;
+    }
+    renderer.render(
+      run.state,
+      alpha,
+      tracks,
+      run.phase === 'playing' ? input.getMinePreview() : null,
+      gadgetAim,
+    );
     if (input.isDebug() && run.phase === 'playing') {
       // Timing-Werte sind eine Frame-Anzeigeverzoegerung alt (timedRender()
       // aktualisiert sie erst NACH diesem Aufruf) -- fuer eine Debug-Anzeige
