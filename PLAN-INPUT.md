@@ -8,10 +8,11 @@ bisherige Steuerung beschrieben ist, damit es nur eine Quelle gibt.
 
 ---
 
-**Fortschritt:** P1 ✅ gebaut · P5 ❌ gestrichen (Nutzerentscheidung) ·
-P10 ✅ war schon erledigt. **Nächste Session: P2 (Viewport/Fullscreen).**
+**Fortschritt:** P1 ✅ · P2 ✅ gebaut · P5 ❌ gestrichen (Nutzerentscheidung) ·
+P10 ✅ war schon erledigt. **Nächste Session: P3 (Touch-Bug Sekundärwaffe —
+der `pointercancel`-Fehler ist unten schon diagnostiziert).**
 
-## Ist-Abgleich (Stand: Cache v64)
+## Ist-Abgleich (Stand: Cache v65)
 
 Vor dem Bau geprüft, was der Code **heute schon kann**. Ergebnis: mehrere
 Phasen sind ganz oder überwiegend erledigt, zwei kollidieren mit
@@ -22,7 +23,7 @@ bereits vorhandenen Code geflossen.
 | Phase | Ist-Stand | Restaufwand |
 |---|---|---|
 | P1 Input-Abstraktion ✅ **erledigt** | **Grundgerüst stand seit Phase 0a**: `src/core/input.js` ist die einzige Stelle, die Geräte-Events liest; `getState()` liefert ein Aktionsmodell; Gamepad wird gepollt, nicht per Event; Werte liegen in `data/input.json`. | Aktionsmodell **erweitern** (Gadget-Felder, `detonate`, Menü-Navigation, getrennte Held/Release-Flags) + die drei Profile aus `getState()` in eigene Funktionen ziehen. Kein Neubau. |
-| P2 Viewport/Fullscreen | Meta-Viewport ist **exakt** wie gefordert; `touch-action: none` und `overscroll-behavior` gesetzt; Fullscreen-Anforderung existiert. | `visualViewport`-Kopplung, `devicePixelRatio`-Skalierung, `position: fixed` auf html/body. |
+| P2 Viewport/Fullscreen ✅ **erledigt** | Meta-Viewport war **exakt** wie gefordert; `touch-action: none` und `overscroll-behavior` gesetzt; Fullscreen-Anforderung existierte. | Gebaut: `src/core/viewport.js` (DPR-Kopplung mit Deckel, `visualViewport` → `--vvh`), `position: fixed` global, Vollbild-Knopf. |
 | P3 Touch-Bug Sekundär | Pointer-Events, `pointerId`-Tracking und `setPointerCapture()` sind **bereits umgesetzt**. | **Ein konkreter Bug gefunden**, siehe unten — der Rest der Phase ist bereits erfüllt. |
 | P4 Gadget-Split | Ein Slot mit sechs austauschbaren Sekundärwaffen (Phase 6). | Echte Neuarbeit. Zwei Nebenwirkungen beachten, siehe unten. |
 | P5 Schild-Rework ❌ **gestrichen** | Vier Schild-Karten, Verfall nach 3 Räumen, Regeneration, Nachkauf. | **Nutzerentscheidung: „Schild erstmal so lassen wie es ist."** Konflikt A ist damit erledigt, E2/Bollwerk/`nachladeschild`/`emergency_shield`/`konterschild` bleiben unangetastet. Phase entfällt. |
@@ -191,7 +192,7 @@ Dasselbe Muster wie die Arena-Weiche aus Phase 0b, die erst Phase 14 füllte.
 
 ---
 
-## P2 — Viewport- und Fullscreen-Fix
+## P2 — Viewport- und Fullscreen-Fix ✅ gebaut
 
 **Was schon steht:** Meta-Viewport exakt wie gefordert
 (`width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no,
@@ -206,6 +207,50 @@ beim Run-Start.
   (Adressleisten-Einblendung auf iOS).
 - `devicePixelRatio`: Backing-Store × DPR, CSS-Größe bleibt die Logikgröße.
 - Vollbild-Button auf dem Startbildschirm vorbereiten (P9 verdrahtet ihn).
+
+### Umsetzung (gebaut)
+
+Neues Modul **`src/core/viewport.js`** — die einzige Stelle, die Canvasgröße
+und Auflösung verwaltet.
+
+- **Auflösung an `devicePixelRatio`:** Backing-Store `WIDTH*dpr × HEIGHT*dpr`,
+  Kontext bekommt `setTransform(dpr,…)` als Grundtransformation. Alle
+  Zeichenbefehle bleiben dadurch **unverändert** in Arena-Koordinaten —
+  `renderer.js` und `debug.js` mussten nicht angefasst werden.
+- **DPR gedeckelt** (`data/options.json: maxPixelRatio: 2`). Ungedeckelt
+  wären es bei DPR 3 die neunfache Pixelmenge; Füllrate ist auf Handys der
+  Engpass und Phase 11b hält das Frame-Budget knapp.
+- **`visualViewport`:** `--vvh`/`--vvw` als CSS-Variablen, im Stylesheet mit
+  `100dvh` als Rückfall. `dvh` kennt die eingeklappte Adressleiste, aber
+  **nicht** die eingeblendete Bildschirmtastatur — genau der Fall beim
+  Seed-Eingabefeld.
+- **`position: fixed` + `overscroll-behavior: none`** global auf html/body.
+- **Vollbild-Knopf** im Startmenü, nur sichtbar, wenn der Browser
+  Element-Vollbild kann (auf iOS wäre er eine Sackgasse). `fullscreenchange`
+  zieht Beschriftung und Canvasgröße nach.
+
+**Drei Fallen, alle gemessen statt vermutet:**
+
+1. **Zielkoordinaten (`input.js: toCanvas`).** Die Funktion rechnete gegen
+   `canvas.width`, das jetzt ein Vielfaches der Arenabreite ist. Ein Klick
+   in der rechten Bildhälfte hätte auf **x = 1152** einer 768 px breiten
+   Arena gezeigt. Jetzt gegen die festen Logikmaße aus `config.js`.
+2. **Layoutgröße hing plötzlich am DPR.** Ein Canvas leitet seine
+   intrinsische Größe aus den `width`/`height`-**Attributen** ab — der
+   größere Backing-Store ließ ihn im Layout mitwachsen (gemessen: 768×512
+   bei DPR 1, aber 972×648 bei DPR 2). Gelöst über
+   `max-width: min(100%, 768px)` / `max-height: min(90vh, 512px)`.
+3. **Der naheliegende Fix für (2) war falsch.** Feste CSS-Breite **und**
+   -Höhe zu setzen macht beide Maße definit und setzt damit `aspect-ratio`
+   außer Kraft: sobald `max-height` im Handy-Querformat greift, wurde der
+   Canvas **verzerrt** (768×390 statt 585×390, also ein Drittel zu breit).
+   Deshalb setzt `viewport.js` bewusst **keine** CSS-Maße.
+
+**Neuer Test `tests/viewport.mjs`** (braucht Playwright, überspringt sich
+sonst selbst): prüft über DPR 1/2/3 den Backing-Store und den Deckel, die
+DPR-Unabhängigkeit der Layoutgröße, das Seitenverhältnis in drei echten
+Handy-/Tablet-Querformaten und — der Kern — dass ein Mausereignis in
+Arena-Koordinaten ankommt. Gegenprobe für alle drei Fallen bestanden.
 
 ---
 

@@ -80,9 +80,10 @@ Kennzahl 1 (erzwungene Bankshots) war mit 33 % statt 60 % deutlich
 verfehlt — behoben über `difficulty.json: bankshotGuarantee`, jetzt 61,9 %
 und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
 jetzt überhaupt messbar.
-`PLAN-INPUT.md` **P1 (Input-Abstraktion)** ist gebaut, **P5 (Schild-Rework)
-auf Nutzerwunsch gestrichen** („Schild erstmal so lassen wie es ist").
-**Nächste Phase: `PLAN-INPUT.md` P2 (Viewport/Fullscreen).**
+`PLAN-INPUT.md` **P1 (Input-Abstraktion)** und **P2 (Viewport/DPR)** sind
+gebaut, **P5 (Schild-Rework) auf Nutzerwunsch gestrichen** („Schild erstmal
+so lassen wie es ist").
+**Nächste Phase: `PLAN-INPUT.md` P3 (Touch-Bug Sekundärwaffe).**
 Der Ergänzungsplan hat Vorrang vor `PLAN.md` Phase 18 Welle 4; die
 aufgeschobene Telemetrie-Auswertung bleibt davon unberührt.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -1336,6 +1337,50 @@ jetzt über ein einziges, vollständiges Aktionsmodell.
   600 → 3,9–5,4 ms (grün, und zwar zu Recht — das Budget ist knapp
   gehalten), 2400 → 7,5 ms (rot).
 
+### PLAN-INPUT.md P2 (Viewport/Fullscreen + DPR) — gemergt
+Neues Modul **`src/core/viewport.js`** — ab jetzt die einzige Stelle, die
+Canvasgröße und Auflösung verwaltet.
+- **Auflösung an `devicePixelRatio`**: Backing-Store `WIDTH*dpr ×
+  HEIGHT*dpr`, der Kontext bekommt `setTransform(dpr, …)` als
+  Grundtransformation. Alle Zeichenbefehle bleiben dadurch **unverändert**
+  in Arena-Koordinaten — `renderer.js` und `debug.js` mussten nicht
+  angefasst werden. Vorher wurde ein fester 768×512-Puffer vom Browser
+  hochskaliert (auf einem DPR-3-Handy auf über 2000 px Breite).
+- **DPR gedeckelt** (`data/options.json: maxPixelRatio: 2`): ungedeckelt
+  wären es bei DPR 3 die neunfache Pixelmenge. Füllrate ist auf Handys der
+  Engpass, und Phase 11b hält das Frame-Budget bewusst knapp.
+- **`visualViewport` → `--vvh`/`--vvw`** als CSS-Variablen, im Stylesheet
+  mit `100dvh` als Rückfall. `dvh` rechnet die eingeklappte Adressleiste
+  heraus, kennt aber die eingeblendete **Bildschirmtastatur** nicht — genau
+  der Fall beim Seed-Eingabefeld im Startmenü.
+- **`position: fixed` + `overscroll-behavior: none`** global auf html/body
+  (vorher nur `contain` auf den Overlays). Die Overlays scrollen weiterhin
+  intern.
+- **Vollbild-Knopf** im Startmenü, nur sichtbar, wenn der Browser
+  Element-Vollbild kann (auf iOS wäre er eine Sackgasse). `fullscreenchange`
+  zieht Beschriftung **und** Canvasgröße nach. P9 hängt ihn zusätzlich an
+  die Einstellungen.
+- **Falle 1 — Zielkoordinaten**: `input.js: toCanvas()` rechnete gegen
+  `canvas.width`, das jetzt ein Vielfaches der Arenabreite ist. Ein Klick in
+  der rechten Bildhälfte hätte auf **x = 1152** einer 768 px breiten Arena
+  gezeigt. Jetzt gegen die festen Logikmaße aus `config.js`.
+- **Falle 2 — Layoutgröße hing plötzlich am DPR**: ein Canvas leitet seine
+  intrinsische Größe aus den `width`/`height`-**Attributen** ab, der größere
+  Backing-Store ließ ihn also im Layout mitwachsen (gemessen: 768×512 bei
+  DPR 1, aber 972×648 bei DPR 2). Gelöst über
+  `max-width: min(100%, 768px)` / `max-height: min(90vh, 512px)`.
+- **Falle 3 — der naheliegende Fix für Falle 2 war falsch**: feste
+  CSS-Breite **und** -Höhe zu setzen macht beide Maße definit und setzt
+  damit `aspect-ratio` außer Kraft. Sobald `max-height` im Handy-Querformat
+  greift, wurde der Canvas **verzerrt** (768×390 statt 585×390, ein Drittel
+  zu breit). `viewport.js` setzt deshalb bewusst **keine** CSS-Maße.
+- **`tests/viewport.mjs` (NEU, braucht Playwright)**: prüft über DPR 1/2/3
+  Backing-Store und Deckel, die DPR-Unabhängigkeit der Layoutgröße, das
+  Seitenverhältnis in drei echten Handy-/Tablet-Querformaten und — der Kern
+  — dass ein Mausereignis in Arena-Koordinaten ankommt (dafür wird
+  `input.js` im echten Browser instanziiert, statt eine Sonde in den
+  Spielcode zu legen). Gegenprobe für alle drei Fallen bestanden.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1408,6 +1453,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/render/sprites.js` — lädt die PNG-Sprites (async, mit Fallback).
 - `src/ui/touchcontrols.js` — Touch: schwebende Twin-Sticks (DOM) + Minen-
   **Wurfstick** (Pointer Events + `setPointerCapture`).
+- `src/core/viewport.js` — Canvasgröße/Auflösung (P2): Backing-Store an
+  `devicePixelRatio` (gedeckelt über `options.json: maxPixelRatio`),
+  `visualViewport` → CSS-Variablen `--vvh`/`--vvw`. Setzt bewusst KEINE
+  CSS-Maße am Canvas (das würde `aspect-ratio` außer Kraft setzen).
 - `src/core/audio.js` — prozedurale Synthese (Phase 7b): kennt nur noch
   Oszillator/Rauschen/Filter/Panner, ALLE Werte kommen aus
   `data/sounds.json`. `play(name, x)` — `x` optional, platziert den Ton im
@@ -1418,7 +1467,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v64`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v65`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -1457,6 +1506,7 @@ node --check src/<datei>.js         # Syntax
 node tests/regression.mjs           # Regressionssuite (eingecheckt!)
 node tests/uspcheck.mjs 40           # USP-Kennzahl 1 messen (PLAN.md-Pruefpunkt)
 node tests/uilayout.mjs             # Overlay-Layout (braucht Playwright)
+node tests/viewport.mjs             # DPR/Viewport + Zielkoordinaten (Playwright)
 ```
 Playwright-Browser liegt unter `/opt/pw-browsers/chromium`
 (`executablePath` setzen; NICHT `playwright install`).
