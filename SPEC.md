@@ -310,6 +310,54 @@ Das ist gewolltes Risiko-Design und wird nicht abgemildert. Deshalb die harte Gr
 
 ## 9. Steuerung
 
+### Globale Steuerungsdoktrin (verbindlich, PLAN-INPUT.md v1.0)
+
+Drei Eingabeprofile, **ein** gemeinsames Aktionsmodell. Die Spiellogik kennt
+keine Tasten, nur Aktionen (`src/core/input.js`).
+
+| Aktion | Mobil | Controller | PC |
+|---|---|---|---|
+| Fahren | Linker Stick | Linker Stick | WASD |
+| Zielen Primär | Rechter Stick (Autofire ab Deadzone 0,15) | Rechter Stick (nur zielen) | Maus |
+| Primärwaffe feuern | Autofire | RT (manuell) | Linke Maustaste (gehalten) |
+| Sekundär (Bombe) zielen | Stick antippen + ziehen | Rechter Stick | Maus |
+| Sekundär legen/werfen | Loslassen | LT | Rechte Maustaste loslassen |
+| Bombe zünden | Eigener Button | LB | Taste E |
+| Gadget zielen | Stick antippen + ziehen | Rechter Stick | Maus |
+| Gadget auslösen | Loslassen | RB | Taste Q |
+| Menü navigieren | Touch | D-Pad | Maus / Pfeiltasten |
+| Menü bestätigen | Touch | A | Enter / Klick |
+| Fahren alternativ | – | D-Pad (nur im Raum) | – |
+
+**Grundprinzipien:**
+1. **Mobil:** Zielen und Auslösen sind derselbe Vorgang — antippen, ziehen,
+   loslassen.
+2. **Controller und PC:** Zielen und Auslösen sind **immer getrennt**. Stick
+   bzw. Maus zielen ausschließlich, ausgelöst wird über eine eigene Taste.
+3. Kein Autofire auf Controller; PC behält das Halten der linken Maustaste.
+4. Das D-Pad ist kontextabhängig: im Menü Navigation, im Raum Fahren.
+
+**RT vs. RB:** RT = Primärwaffe, RB = Gadget. Eine frühere Notiz nannte RB
+ebenfalls als Feuertaste — die ist hiermit hinfällig.
+
+### Bewusst in Kauf genommene Widersprüche
+
+Diese drei Punkte widersprechen älteren Festlegungen. Sie bleiben so, sind
+aber hier dokumentiert, damit sie nicht später „aus Versehen" zurückgedreht
+werden:
+
+1. **Controller ist die leichteste Eingabe.** Manuelles Feuern zielt
+   präziser als Autofire. Das steht gegen die Regel aus `PLAN.md` E1
+   („Mobile ist die schwerste Eingabe und die Basis fürs Balancing"). Bewusst
+   so belassen — balanciert wird weiterhin gegen Mobile.
+2. **`bullet.maxActive: 5` sperrt das Feuern hart** (E4: „Feuersperre statt
+   Verdrängung"). Das war gegen Autofire-Spray gebaut. Bei **manuellem**
+   Feuern wirkt ein wirkungsloser Tastendruck wie ein Fehler — deshalb
+   braucht der blockierte Schuss ein hörbares und sichtbares Signal
+   (umzusetzen mit PLAN-INPUT.md P1).
+3. **Mobile zielt und feuert untrennbar.** Daraus folgt, dass der Powershot
+   dort nicht aufgespart werden kann (`PLAN.md` E1/Phase 5). Gilt unverändert.
+
 ### Mobile (Landscape)
 - **Linke Bildschirmhälfte:** floating virtueller Stick → Fahren.
 - **Rechte Bildschirmhälfte:** floating virtueller Stick → Zielen. **Solange ausgelenkt,
