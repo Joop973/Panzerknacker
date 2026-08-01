@@ -17,8 +17,16 @@ export function createAudio() {
   let ctx = null;
   let master = null;
   let muted = false;
+  let volume = 1; // P9: Lautstaerkeregler (0..1), unabhaengig vom Mute-Schalter
   let data = null; // Inhalt von data/sounds.json (via setData)
   let panWidth = 0; // Arenabreite in px -- 0 = kein Panning
+
+  // P9: EIN Ort fuer die tatsaechliche Gain-Berechnung -- Mute UND Regler
+  // wirken auf denselben Knoten, statt zwei Zustaende gegeneinander
+  // auszuspielen. Stumm gewinnt immer (0), sonst gilt der Reglerwert.
+  function applyGain() {
+    if (master) master.gain.value = muted ? 0 : volume;
+  }
 
   function unlock() {
     if (!ctx) {
@@ -26,7 +34,7 @@ export function createAudio() {
       if (!AC) return;
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = muted ? 0 : 1;
+      master.gain.value = muted ? 0 : volume;
       master.connect(ctx.destination);
     }
     if (ctx.state === 'suspended') ctx.resume();
@@ -146,14 +154,22 @@ export function createAudio() {
     },
     toggleMute() {
       muted = !muted;
-      if (master) master.gain.value = muted ? 0 : 1;
+      applyGain();
       return muted;
     },
     setMuted(v) {
       muted = v;
-      if (master) master.gain.value = muted ? 0 : 1;
+      applyGain();
     },
     isMuted: () => muted,
+    // P9: Lautstaerkeregler statt reinem Mute. v ist 0..1 und wird NICHT
+    // geklemmt hier (der Aufrufer -- der Regler im Startmenue -- liefert
+    // bereits einen Wert in diesem Bereich).
+    setVolume(v) {
+      volume = v;
+      applyGain();
+    },
+    getVolume: () => volume,
     // Benanntes Spiel-Ereignis abspielen. `x` ist die Welt-x-Koordinate des
     // Ereignisses (optional) -- damit wird der Ton im Stereobild platziert.
     play(name, x) {

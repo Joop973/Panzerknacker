@@ -61,6 +61,52 @@ try {
   for (const [width, height, label] of VIEWPORTS) {
     const page = await browser.newPage({ viewport: { width, height } });
     await page.goto(`http://localhost:${PORT}/index.html`, { waitUntil: 'load' });
+    await page.waitForSelector('#startBtn');
+    await page.waitForTimeout(300); // init() ist async (Datendateien laden)
+
+    // --- Startbildschirm (P9): alle Bedienelemente im Bild, inkl. der
+    // neuen Zeilen (Vollbild, Lautstaerke, Eingabeprofil, Spiel beenden) ---
+    const startOff = await page.evaluate(() => {
+      const els = [...document.querySelectorAll('#start button, #start input')].filter(
+        (el) => !el.classList.contains('hidden') && !el.disabled,
+      );
+      return els
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return { id: el.id || el.dataset.profile || el.dataset.mode || el.textContent?.trim().slice(0, 16), r };
+        })
+        .filter(({ r }) => r.height > 0 && (r.top < 0 || r.bottom > window.innerHeight));
+    });
+    if (startOff.length) {
+      fail(
+        `${label} (${width}x${height}): Startbildschirm -- ${startOff.length} Bedienelement(e) ausserhalb: ` +
+          startOff.map((o) => o.id).join(', '),
+      );
+    }
+
+    // --- Einstellungsseite (P9): Vollbild/Lautstaerke/Eingabeprofil/
+    // Reset/Beenden liegen auf einer eigenen Seite, "Zurueck" muss
+    // erreichbar bleiben -- dieselbe Falle wie #previewUpBack in P8. ---
+    const settingsOff = await page.evaluate(() => {
+      document.getElementById('settingsOpen')?.click();
+      const els = [...document.querySelectorAll('#settings button, #settings input')].filter(
+        (el) => !el.classList.contains('hidden') && !el.disabled,
+      );
+      const out = els
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          return { id: el.id || el.dataset.profile || el.textContent?.trim().slice(0, 16), r };
+        })
+        .filter(({ r }) => r.height > 0 && (r.top < 0 || r.bottom > window.innerHeight));
+      document.getElementById('settingsBack')?.click();
+      return out;
+    });
+    if (settingsOff.length) {
+      fail(
+        `${label} (${width}x${height}): Einstellungsseite -- ${settingsOff.length} Bedienelement(e) ausserhalb: ` +
+          settingsOff.map((o) => o.id).join(', '),
+      );
+    }
 
     // --- Raumvorschau: der "Weiter"-Knopf MUSS sichtbar sein ---
     const pv = await page.evaluate(
@@ -137,7 +183,9 @@ try {
       fail(`${label} (${width}x${height}): Upgrade-Screen -- ${us.length} Bedienelement(e) ausserhalb: ${us.join(', ')}`);
     }
 
-    if (pv.sichtbar && pv.up.sichtbar && !us.length) console.log(`OK  ${label.padEnd(20)} ${width}x${height}`);
+    if (!startOff.length && !settingsOff.length && pv.sichtbar && pv.up.sichtbar && !us.length) {
+      console.log(`OK  ${label.padEnd(20)} ${width}x${height}`);
+    }
     await page.close();
   }
 } finally {

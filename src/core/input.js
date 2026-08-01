@@ -408,6 +408,22 @@ export function createInput(target, canvas, opts = {}) {
       st.secondaryThrow = st.secondaryAim;
       return st;
     },
+    // P9: Menue-Navigation OHNE Spieler (Startbildschirm, vor dem ersten
+    // Run). getState() braucht ein player-Objekt fuer stickbasiertes Zielen
+    // -- Menuenavigation nicht, deshalb ein eigener, schlanker Poll.
+    // Tastatur liefert menuDir ueber dieselben Pfeiltasten/WASD-Codes wie
+    // die Fahrsteuerung (data/input.json), Gamepad ueber das D-Pad.
+    // SPEC.md 9: "Menü navigieren: Touch = Touch (direktes Antippen),
+    // Controller = D-Pad, PC = Maus/Pfeiltasten" -- Touch tippt Knoepfe
+    // direkt an und braucht diesen Kanal nicht.
+    getMenuState() {
+      const gp = pollGamepad();
+      const kb = keyboardMove();
+      const menuDir = gp && (gp.menuDir.x || gp.menuDir.y) ? gp.menuDir : kb;
+      const menuConfirm = !!(queued.menuConfirm || gp?.menuConfirm);
+      queued.menuConfirm = false;
+      return { menuDir, menuConfirm };
+    },
     // Esc / P / Gamepad-Start (einmal pro Druck). Die Gamepad-Flanke legt
     // profileGamepad() in dieselbe Warteschlange -- hier nur auslesen.
     consumePause() {

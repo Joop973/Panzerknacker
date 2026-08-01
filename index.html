@@ -37,17 +37,43 @@
       <button id="resumeBtn" class="hidden">Run fortsetzen</button>
       <button id="startBtn">Start</button>
       <button id="dailyBtn" class="secondary">Tages-Seed spielen</button>
-      <!-- P2 legt den Knopf an und blendet ihn ein, wenn der Browser
-           Element-Vollbild kann (iOS kann es nicht -> bleibt versteckt).
-           P9 haengt ihn zusaetzlich an die Einstellungen. -->
-      <button id="fullscreenBtn" class="secondary hidden">Vollbild</button>
       <div class="opts">
         <label><input type="checkbox" id="optThreat" checked /> Bedrohungslinien</label>
         <label><input type="checkbox" id="optMotion" /> Reduzierte Bewegung</label>
         <label><input type="checkbox" id="optAim" checked /> Ziellinie</label>
       </div>
       <p id="beststats" class="beststats"></p>
+      <!-- P9: Vollbild/Lautstaerke/Eingabeprofil/Reset/Beenden liegen auf
+           einer eigenen Seite -- gleiches Muster wie die Ausruestungsseite
+           aus P8. Alle fuenf zusaetzlich auf den Hauptbildschirm gepackt
+           liess ihn im Handy-Querformat nicht mehr ohne Scrollen passen
+           (gemessen: 6-7 Bedienelemente unterhalb des sichtbaren Bereichs
+           bei 667x375 -- derselbe Fehlerfall wie beim "Weiter"-Knopf). -->
+      <button id="settingsOpen" class="secondary">Einstellungen &#9656;</button>
+    </div>
+    <div id="settings" class="overlay hidden">
+      <h1>Einstellungen</h1>
+      <!-- P2 legt den Knopf an und blendet ihn ein, wenn der Browser
+           Element-Vollbild kann (iOS kann es nicht -> bleibt versteckt). -->
+      <button id="fullscreenBtn" class="secondary hidden">Vollbild</button>
+      <!-- P9: Lautstaerkeregler statt reinem Mute (der Knopf oben im Spiel
+           bleibt fuer den schnellen Zugriff waehrend der Runde). -->
+      <label class="volumelabel" for="volumeSlider">Lautst&auml;rke
+        <input type="range" id="volumeSlider" min="0" max="100" step="5" value="100" />
+      </label>
+      <!-- P9: Eingabeprofil-Override (P1 hat setProfile()/getProfile()
+           bereits gebaut). Knopfreihe statt <select> -- gleiches Muster wie
+           die Schwierigkeitsauswahl, jeder Knopf ein eigener Fokusstopp
+           fuer die Tastatur-/Gamepad-Navigation. -->
+      <div id="profileSelect" class="modes profiles" role="group" aria-label="Eingabeprofil">
+        <button data-profile="" class="active">Automatisch</button>
+        <button data-profile="touch">Touch</button>
+        <button data-profile="keyboard">Tastatur/Maus</button>
+        <button data-profile="gamepad">Gamepad</button>
+      </div>
       <button id="resetBtn" class="linklike">Bestwerte zur&uuml;cksetzen</button>
+      <button id="quitBtn" class="linklike">Spiel beenden</button>
+      <button id="settingsBack">Zur&uuml;ck</button>
     </div>
   </main>
   <!-- Inline-Guard laeuft auch bei file:// (wo Modul-Skripte blockiert

@@ -8,12 +8,12 @@ bisherige Steuerung beschrieben ist, damit es nur eine Quelle gibt.
 
 ---
 
-**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ · P4 ✅ · P6 ✅ · P7 ✅ · P8 ✅ gebaut ·
-P5 ❌ gestrichen (Nutzerentscheidung) · P10 ✅ war schon erledigt.
-**Nächste Session: P9 (Startbildschirm).** Danach nur noch P11
-(Lichtquellen) — dann ist der Ergänzungsplan abgearbeitet.
+**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ · P4 ✅ · P6 ✅ · P7 ✅ · P8 ✅ ·
+P9 ✅ gebaut · P5 ❌ gestrichen (Nutzerentscheidung) · P10 ✅ war schon
+erledigt. **Nächste Session: P11 (Lichtquellen) — die letzte Phase, danach
+ist der Ergänzungsplan abgearbeitet.**
 
-## Ist-Abgleich (Stand: Cache v70)
+## Ist-Abgleich (Stand: Cache v71)
 
 Vor dem Bau geprüft, was der Code **heute schon kann**. Ergebnis: mehrere
 Phasen sind ganz oder überwiegend erledigt, zwei kollidieren mit
@@ -31,7 +31,7 @@ bereits vorhandenen Code geflossen.
 | P6 Haken-Rework ✅ **erledigt** | `hook.maxRangePx` **222** (Nutzerentscheidung), Bombenwurf `throwPx: 58`. | Gebaut: Zielrichtung aus der Zielphase, Abklingzeit auch ohne Treffer, Zielvorschau über dieselbe Funktion wie der Schuss. |
 | P7 Stats-Anzeige ✅ **erledigt** | Nicht vorhanden. | Gebaut: umschaltbares Werte-Panel im HUD (Tab), in der Pause immer sichtbar (Handy-Weg). Reine Ableitung, keine neuen Felder. |
 | P8 Zwischenraum-UI ✅ **erledigt** | Raumvorschau zeigt Gegner **und** Upgrades als Chips. | Gebaut: Ausrüstung auf eigener Vollbild-Seite, Hauptbereich dadurch kurz genug für jedes Handy-Querformat. |
-| P9 Startbildschirm | **Existiert**: Start, Tages-Seed, Fortsetzen, Schwierigkeit, Bestwerte zurücksetzen, Optionen (Ziellinie, Bedrohungslinien, Reduzierte Bewegung), Mute. | D-Pad-Navigation, Vollbild-Button, Lautstärkeregler, „Spiel beenden". |
+| P9 Startbildschirm ✅ **erledigt** | Existierte: Start, Tages-Seed, Fortsetzen, Schwierigkeit, Bestwerte zurücksetzen, Optionen (Ziellinie, Bedrohungslinien, Reduzierte Bewegung), Mute. | Gebaut: `src/ui/menunav.js` (Tastatur-/Gamepad-Fokusnavigation), Lautstärkeregler, Eingabeprofil-Override, „Spiel beenden"; alles Neue auf einer eigenen Einstellungsseite (Muster P8), sonst passte der Startbildschirm im Handy-Querformat nicht mehr. |
 | P10 Grüner gefährlicher | **Bereits erledigt** (Session vor dieser): `requiresBounceShot` (Bandenrechner), 2 Abpraller, `accuracy` 0.9, Feuerrate unverändert. | Nur noch Feinschliff, falls er sich beim Spielen zu schwach anfühlt. |
 | P11 Lichtquellen | `fog`/`darkness` existieren als Raum-Modifikatoren mit `visionRadiusPx`, gerendert über `drawFog()`. | Lichtquellen für Gegner/Bomben/Geschosse + additive Maske statt einer Blende um den Spieler. |
 
@@ -495,7 +495,7 @@ Dafür musste `tests/domstub.mjs` um einen **`Image`-Stub** erweitert werden:
 als Modul-Seiteneffekt `new Image()` aufruft. Ohne den Stub lässt sich das
 Modul headless gar nicht importieren.
 
-## P9 — Startbildschirm
+## P9 — Startbildschirm ✅ gebaut
 
 **Was schon steht:** Startbildschirm mit Seed-Eingabe, Tages-Seed,
 „Run fortsetzen", Schwierigkeitsauswahl, Bestwerte-Reset, drei
@@ -504,6 +504,63 @@ Options-Schalter (Ziellinie, Bedrohungslinien, reduzierte Bewegung), Mute.
 **Was zu tun ist:** D-Pad-/Tastatur-Navigation mit sichtbarer Hervorhebung,
 Vollbild-Button (Geste aus P2), Lautstärkeregler statt reinem Mute,
 Eingabeprofil-Override (aus P1), „Spiel beenden" mit Bestätigung.
+
+### Umsetzung (gebaut)
+
+- **Neues Modul `src/ui/menunav.js`** (`createMenuNav`): generische
+  Tastatur-/Gamepad-Fokusnavigation für Overlays (SPEC.md 9: „Menü
+  navigieren"). NUR die Y-Achse bewegt den Fokus durch eine Liste (mit
+  Anlauf-/Wiederholzeit wie bei typischer Menü-Bedienung); die X-Achse ist
+  dem fokussierten Element vorbehalten, wenn es ein `<input type="range">`
+  ist — sonst tut sie nichts. Touch braucht das nie, dort wird direkt
+  angetippt (Doktrin-Tabelle).
+- **`input.js: getMenuState()`** (neu): ein schlanker Poll ohne
+  Spieler-Objekt — `getState(player)` setzt eins voraus (stickbasiertes
+  Zielen), Menünavigation nicht. Tastatur nutzt dieselben Codes wie die
+  Fahrsteuerung (Pfeiltasten sind in `data/input.json` bereits mit
+  WASD kombiniert), Gamepad das D-Pad.
+- **Lautstärkeregler** (`audio.js: setVolume/getVolume`): eigener Wert
+  0..1, getrennt vom `muted`-Schalter. Beide wirken auf denselben
+  Gain-Knoten (`applyGain()`) — Stumm gewinnt immer, der Reglerwert bleibt
+  aber erhalten und gilt wieder, sobald entstummt wird. Der In-Game-Mute-
+  Knopf bleibt unverändert für den schnellen Zugriff während der Runde.
+- **Eingabeprofil-Override**: Knopfreihe statt `<select>` — gleiches
+  Muster wie die Schwierigkeitsauswahl, jeder Knopf ein eigener
+  Fokusstopp. Ruft `input.setProfile()`/`getProfile()`, die seit P1
+  bereitstehen.
+- **„Spiel beenden"**: `window.confirm()` + `window.close()` — dasselbe
+  Bestätigungsmuster wie „Bestwerte zurücksetzen". `window.close()` wirkt
+  nur auf Tabs/Fenster, die per Skript geöffnet wurden, oder in einer
+  installierten PWA; sonst passiert nach der Bestätigung bewusst nichts
+  Sichtbares statt einer Fehlermeldung.
+- **Umsetzungsfund — zu viel Inhalt für den Hauptbildschirm:** Vollbild,
+  Lautstärke, Eingabeprofil-Reihe, Reset und Beenden zusätzlich auf den
+  Startbildschirm gepackt ließ ihn im Handy-Querformat nicht mehr ohne
+  Scrollen passen (`tests/uilayout.mjs` maß 6–7 Bedienelemente unterhalb
+  des sichtbaren Bereichs bei 667×375 — dieselbe Fehlerklasse wie der
+  „Weiter"-Knopf-Blocker). Gelöst nach dem **P8-Muster**: eine eigene
+  Einstellungsseite (`#settings`), erreichbar über einen Knopf
+  „Einstellungen ▸" auf dem Hauptbildschirm, mit sticky „Zurück".
+  `tests/uilayout.mjs` prüft seither auch diese Seite mit.
+- **Nebenfund beim Bauen** (nicht Teil der Phase, aber blockierte die
+  Lesbarkeit): Die neue Eingabeprofil-Reihe erbte dieselbe
+  Selektor-Spezifitäts-Gleichstand-Falle wie die bestehende
+  Schwierigkeitsauswahl — `.overlay button` und `.modes button` haben
+  dieselbe Spezifität, bei Gleichstand gewinnt die später im Stylesheet
+  stehende Regel (`.overlay button`), wodurch aktive und inaktive Knöpfe
+  gleich golden aussahen. Für `.profiles` explizit behoben; die
+  bestehende Schwierigkeitsauswahl bewusst unangetastet gelassen
+  (separater Fund, nicht Teil von P9).
+- **Tests**: `tests/regression.mjs` prüft `createMenuNav` isoliert
+  (Fokus bewegen inkl. Anlaufzeit, Reglerverstellung, Bestätigen auf
+  Knopf/Checkbox, `reset()`), `audio.js`s Lautstärke/Mute-Zusammenspiel
+  und `getMenuState()` ohne Spieler — Gegenprobe für alle Kernpunkte
+  bestanden. `tests/uilayout.mjs` prüft Start- **und** Einstellungsseite
+  über alle vier Viewports; Gegenprobe zeigt, dass die aktuelle
+  Einstellungsseite bei den vier getesteten Größen auch ohne `sticky`
+  passt (vorsorglich trotzdem gesetzt, gleiches Muster wie `#previewUpBack`
+  aus P8 — kein nachgewiesener Fehlerfall bei diesen Abmessungen, aber
+  spätere Erweiterungen könnten das ändern).
 
 ---
 
