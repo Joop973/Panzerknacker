@@ -8,12 +8,12 @@ bisherige Steuerung beschrieben ist, damit es nur eine Quelle gibt.
 
 ---
 
-**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ · P4 ✅ gebaut · P5 ❌ gestrichen
-(Nutzerentscheidung) · P10 ✅ war schon erledigt.
-**Nächste Session: P6 (Haken-Rework; Reichweite steht bereits auf 222 px,
-offen ist die Zielvorschau).**
+**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ · P4 ✅ · P6 ✅ gebaut ·
+P5 ❌ gestrichen (Nutzerentscheidung) · P10 ✅ war schon erledigt.
+**Nächste Session: P7 (Stats-Anzeige) — echte Neuarbeit, aber laut
+Ist-Abgleich sind alle Werte zur Laufzeit schon vorhanden.**
 
-## Ist-Abgleich (Stand: Cache v67)
+## Ist-Abgleich (Stand: Cache v68)
 
 Vor dem Bau geprüft, was der Code **heute schon kann**. Ergebnis: mehrere
 Phasen sind ganz oder überwiegend erledigt, zwei kollidieren mit
@@ -28,7 +28,7 @@ bereits vorhandenen Code geflossen.
 | P3 Touch-Bug Sekundär ✅ **erledigt** | Pointer-Events, `pointerId`-Tracking und `setPointerCapture()` waren **bereits umgesetzt**. | Gebaut: eigener `pointercancel`-Abbruchpfad; dazu **zwei weitere Fehler** gefunden und behoben (Zweitfinger, Sperrzone pro Berührung). |
 | P4 Gadget-Split ✅ **erledigt** | Ein Slot mit sechs austauschbaren Sekundärwaffen (Phase 6). | Gebaut: fester Bombenslot + tauschbarer Gadgetslot, eigener Auslöser/Zielpfad je Slot. Konflikt C damit aufgelöst (`MINE_ONLY_IDS` entfällt). |
 | P5 Schild-Rework ❌ **gestrichen** | Vier Schild-Karten, Verfall nach 3 Räumen, Regeneration, Nachkauf. | **Nutzerentscheidung: „Schild erstmal so lassen wie es ist."** Konflikt A ist damit erledigt, E2/Bollwerk/`nachladeschild`/`emergency_shield`/`konterschild` bleiben unangetastet. Phase entfällt. |
-| P6 Haken-Rework | `hook.maxRangePx` **222** (Nutzerentscheidung), Bombenwurf `throwPx: 58`. | Reichweite ist **gesetzt** (Konflikt B entschieden). Offen bleiben nur die übrigen P6-Punkte (Zielvorschau usw.). |
+| P6 Haken-Rework ✅ **erledigt** | `hook.maxRangePx` **222** (Nutzerentscheidung), Bombenwurf `throwPx: 58`. | Gebaut: Zielrichtung aus der Zielphase, Abklingzeit auch ohne Treffer, Zielvorschau über dieselbe Funktion wie der Schuss. |
 | P7 Stats-Anzeige | Nicht vorhanden. | Echte Neuarbeit. |
 | P8 Zwischenraum-UI | Raumvorschau zeigt Gegner **und** Upgrades als Chips. | Echte Neuarbeit; kehrt die Chip-Anzeige aus der letzten Balancerunde bewusst wieder um. |
 | P9 Startbildschirm | **Existiert**: Start, Tages-Seed, Fortsetzen, Schwierigkeit, Bestwerte zurücksetzen, Optionen (Ziellinie, Bedrohungslinien, Reduzierte Bewegung), Mute. | D-Pad-Navigation, Vollbild-Button, Lautstärkeregler, „Spiel beenden". |
@@ -366,7 +366,7 @@ entfällt ersatzlos (Konflikt A geschlossen). Das bestehende Schildmodell —
 E2-Verfall nach `shield.roomLifetime`, Bollwerk, `nachladeschild`,
 `emergency_shield`, `konterschild`, beide Kaufwege — bleibt unverändert.
 
-## P6 — Haken-Rework
+## P6 — Haken-Rework ✅ gebaut
 
 **Reichweite entschieden:** `hook.maxRangePx` = **222** (bereits in
 `data/secondaries.json` gesetzt), die Formel aus dem Ausgangsdokument ist
@@ -375,6 +375,44 @@ verworfen. Die übrigen Punkte
 Cooldown auch ohne Treffer, während des Zugs steuerlos aber verwundbar) sind
 unstrittig — der Zug selbst existiert bereits (`tank.js: fireHook()`), es
 fehlt die **Zielvorschau**.
+
+### Umsetzung (gebaut)
+
+Ist-Abgleich gegen die fünf Punkte: **zwei waren schon erfüllt**
+(Auslösen beim Loslassen kam mit dem Gadget-Wurfstick aus P4; „steuerlos,
+aber verwundbar" stimmt seit Phase 6 — `moveTank()` ignoriert die Eingabe
+während `hookTimer > 0`, und der Panzer bekommt dabei keine Unverwundbarkeit).
+Der **Zug an allen Wandtypen** trägt ebenfalls schon: `isSolid()` deckt
+feste, durchschießbare, Spiegel-, zerstörbare und Generator-Wände ab, dazu
+über das Grid auch die eigene Sperrmauer und geschlossene bewegliche Wände.
+Löcher sind bewusst ausgenommen — dort ist nichts zum Festhaken.
+
+Drei Punkte waren offen:
+
+- **Die Zielrichtung wurde ignoriert.** `fireHook()` nutzte immer
+  `tank.turret`; der Gadget-Wurfstick aus P4 war damit wirkungslos. Jetzt
+  steuert die Zielvorgabe den Haken, genau wie beim Bombenwurf — auf
+  PC/Controller weiterhin die Blickrichtung.
+- **Ein Fehlschuss kostete gar nichts** (`return false` → keine
+  Abklingzeit). Jetzt läuft sie in jedem Fall; der Griff ins Leere ist damit
+  eine echte Fehlentscheidung. Hör- und sichtbar quittiert (`empty` +
+  gedimmter Blitz), sonst wirkt die verbrauchte Abklingzeit wie ein Defekt —
+  dieselbe Auflage wie beim gesperrten Schuss aus P1.
+- **Zielvorschau** (`effects.js: drawHookPreview`): Linie bis zum
+  Ankerpunkt, durchgezogen mit Ankerkreuz bei Treffer, gestrichelt bei
+  Fehlschuss. Der Unterschied muss **vor** dem Auslösen erkennbar sein,
+  weil ein Fehlschuss jetzt die Abklingzeit kostet.
+
+**Eine Quelle für „wo landet der Haken":** neu `tank.js: traceHook()` —
+Vorschau und Schuss rufen dieselbe Funktion, sie können nicht auseinander
+laufen (dasselbe Prinzip wie die Ziellinie aus Phase 0a, die bewusst die
+echte Geschossphysik nutzt). Die Regressionssuite prüft das über 16
+Richtungen; Gegenprobe mit einem eigenen Raymarch im Schuss bestanden.
+
+**Nebenbefund — ein in P4 eingebauter Fehler:** `getMinePreview()` gab dort
+`mine.preview() || gadget.preview()` zurück. Beim Zielen mit dem Gadget
+zeichnete das die **Bomben**-Wurfvorschau. Jetzt getrennte Abfragen
+(`getMinePreview` / `getGadgetPreview`).
 
 ---
 

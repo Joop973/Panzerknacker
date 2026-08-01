@@ -16,6 +16,7 @@ import {
   drawTexts,
   drawThreatLines,
   drawMinePreview,
+  drawHookPreview,
   drawAimLine,
   drawThreatRings,
 } from './effects.js';
@@ -886,7 +887,7 @@ export function createRenderer(ctx) {
   }
 
   return {
-    render(state, alpha, tracks, minePreview) {
+    render(state, alpha, tracks, minePreview, gadgetAim) {
       renderState = state;
       ctx.imageSmoothingEnabled = true; // weiche Sprite-Skalierung
       // Screenshake: deterministisches Wackeln aus der Spielzeit.
@@ -902,6 +903,10 @@ export function createRenderer(ctx) {
       if (renderOpts.threatLines) drawThreatLines(ctx, state);
       if (renderOpts.aimLine) drawAimLine(ctx, state, traceTrajectory);
       if (minePreview) drawMinePreview(ctx, state, minePreview);
+      // P6: Zielvorschau des Enterhakens. gadgetAim ist der Zielwinkel
+      // (Touch: Wurfstick, sonst Blickrichtung) oder null, wenn gerade
+      // nicht gezielt wird.
+      if (gadgetAim !== null && gadgetAim !== undefined) drawHookPreview(ctx, state, gadgetAim);
       drawWalls(state.walls, state.time);
       drawHazards(ctx, state);
       drawWaveWarning(ctx, state);

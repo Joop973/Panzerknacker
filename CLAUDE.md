@@ -82,10 +82,10 @@ verfehlt — behoben über `difficulty.json: bankshotGuarantee`, jetzt 61,9 %
 und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
 jetzt überhaupt messbar.
 `PLAN-INPUT.md` **P1 (Input-Abstraktion)**, **P2 (Viewport/DPR)**,
-**P3 (Touch-Bug Sekundärwaffe)** und **P4 (Gadget-Split)** sind gebaut,
-**P5 (Schild-Rework) auf Nutzerwunsch gestrichen** („Schild erstmal so
-lassen wie es ist").
-**Nächste Phase: `PLAN-INPUT.md` P6 (Haken-Rework: Zielvorschau).**
+**P3 (Touch-Bug Sekundärwaffe)**, **P4 (Gadget-Split)** und
+**P6 (Haken-Rework)** sind gebaut, **P5 (Schild-Rework) auf Nutzerwunsch
+gestrichen** („Schild erstmal so lassen wie es ist").
+**Nächste Phase: `PLAN-INPUT.md` P7 (Stats-Anzeige).**
 Der Ergänzungsplan hat Vorrang vor `PLAN.md` Phase 18 Welle 4; die
 aufgeschobene Telemetrie-Auswertung bleibt davon unberührt.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -1460,6 +1460,45 @@ Slot — wer eine Gadgetkarte nahm, verlor die Bombe.
   Minen-Sekundärwaffe" (die Bedingung gibt es nicht mehr) und bekommt
   stattdessen eine Zusicherung, dass die Sperre nicht zurückkommt.
 
+### PLAN-INPUT.md P6 (Haken-Rework) — gemergt
+Ist-Abgleich gegen die fünf Punkte der Phase: **zwei waren schon erfüllt**
+(Auslösen beim Loslassen kam mit dem Gadget-Wurfstick aus P4; „steuerlos,
+aber verwundbar" stimmt seit Phase 6 — `moveTank()` ignoriert die Eingabe
+bei `hookTimer > 0`, ohne Unverwundbarkeit zu geben). Der **Zug an allen
+Wandtypen** trug ebenfalls schon: `isSolid()` deckt feste, durchschießbare,
+Spiegel-, zerstörbare und Generator-Wände ab, über das Grid auch die eigene
+Sperrmauer und geschlossene bewegliche Wände. Löcher sind bewusst
+ausgenommen — dort ist nichts zum Festhaken.
+- **Die Zielrichtung wurde ignoriert**: `fireHook()` nutzte immer
+  `tank.turret`, der Gadget-Wurfstick aus P4 war damit wirkungslos. Jetzt
+  steuert die Zielvorgabe den Haken (auf PC/Controller weiter die
+  Blickrichtung).
+- **Ein Fehlschuss kostete gar nichts** (`return false` → keine
+  Abklingzeit). Jetzt läuft sie in jedem Fall; der Griff ins Leere ist damit
+  eine echte Fehlentscheidung. Quittiert mit `empty` + gedimmtem Blitz —
+  dieselbe Auflage wie beim gesperrten Schuss aus P1, sonst wirkt die
+  verbrauchte Abklingzeit wie ein Defekt.
+- **Zielvorschau** (`effects.js: drawHookPreview`): Linie bis zum
+  Ankerpunkt — durchgezogen mit Ankerkreuz bei Treffer, gestrichelt bei
+  Fehlschuss, gedämpft während der Abklingzeit. Der Unterschied muss **vor**
+  dem Auslösen erkennbar sein, weil ein Fehlschuss jetzt kostet.
+- **Eine Quelle für „wo landet der Haken"**: neu `tank.js: traceHook()` —
+  Vorschau und Schuss rufen dieselbe Funktion und können nicht auseinander
+  laufen (Prinzip wie die Ziellinie aus Phase 0a mit der echten
+  Geschossphysik). Die Suite prüft das über 16 Richtungen; Gegenprobe mit
+  einem eigenen Raymarch im Schuss bestanden. **Wichtig beim Gegenprüfen:**
+  eine Änderung an `traceHook` selbst kann der Test nicht sehen (beide
+  Seiten verschieben sich gleich) — die Gegenprobe muss den Schuss auf eine
+  eigene Rechnung umstellen.
+- **Nebenbefund, in P4 selbst eingebaut**: `getMinePreview()` gab dort
+  `mine.preview() || gadget.preview()` zurück — beim Zielen mit dem Gadget
+  zeichnete das die **Bomben**-Wurfvorschau. Jetzt getrennte Abfragen
+  (`getMinePreview` / `getGadgetPreview`).
+- `drawHookPreview` ist im Fake-Canvas-Renderpfadtest mit beiden Zweigen
+  verdrahtet (dafür muss `cfg.gadget = 'hook'` gesetzt sein, sonst steigt
+  die Funktion sofort aus und der Zweig bliebe ungetestet — per Gegenprobe
+  bestätigt).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1546,7 +1585,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v67`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v68`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

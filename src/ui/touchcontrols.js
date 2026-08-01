@@ -269,8 +269,12 @@ export function createTouchControls(cfg = {}) {
       return mine.consume();
     },
     // Waehrend des Ziehens: Live-Vorschau { angle, dist } oder null.
+    // Bombe und Gadget haben BEWUSST getrennte Abfragen: sie zeichnen
+    // unterschiedliche Vorschauen (Wurfbogen vs. Hakenlinie), ein
+    // gemeinsamer Rueckgabewert wuerde beim Zielen mit dem Gadget die
+    // Bombenvorschau zeigen.
     getMinePreview() {
-      return mine.preview() || gadget.preview();
+      return mine.preview();
     },
     // --- Gadgetslot (P4): zweiter, baugleicher Wurfstick ----------------
     consumeGadgetThrow() {
@@ -278,6 +282,9 @@ export function createTouchControls(cfg = {}) {
     },
     isGadgetHeld() {
       return gadget.isHeld();
+    },
+    getGadgetPreview() {
+      return gadget.preview();
     },
     // Knopf nur zeigen, wenn ueberhaupt ein Gadget ausgeruestet ist.
     setGadgetLabel(text) {

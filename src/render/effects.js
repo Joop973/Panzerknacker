@@ -1,6 +1,8 @@
 // Effekt-Zeichnungen (aus renderer.js ausgelagert): Minen, Fallen,
 // Radar-Marker, Muendungsblitze, Partikel, Explosionen, Schwebetexte.
 
+import { traceHook } from '../game/tank.js';
+
 export function drawMines(ctx, state) {
   const mcfg = state.data.mine;
   const bmine = state.data.balance.mine;
@@ -219,6 +221,52 @@ export function drawMinePreview(ctx, state, preview) {
   ctx.beginPath();
   ctx.arc(lx, ly, 5, 0, Math.PI * 2);
   ctx.fill();
+}
+
+// P6: Zielvorschau des Enterhakens. Nutzt traceHook() -- also GENAU die
+// Funktion, mit der auch geschossen wird. Vorschau und Wirkung koennen
+// dadurch nicht auseinanderlaufen (dasselbe Prinzip wie bei der Ziellinie
+// unten, die die echte Geschossphysik aufruft).
+// `angle` ist bei Touch der Winkel des Gadget-Wurfsticks, sonst die
+// Blickrichtung.
+export function drawHookPreview(ctx, state, angle) {
+  const p = state.player;
+  if (!p.alive || p.cfg.gadget !== 'hook') return;
+  // Waehrend eines laufenden Zugs waere die Vorschau sinnlos.
+  if (p.hookTimer > 0) return;
+  const scfg = state.data.secondaries?.hook || {};
+  const t = traceHook(p, state, scfg, angle);
+  // Auf Abklingzeit: gedaempft zeichnen statt ausblenden -- der Spieler
+  // soll die Reichweite auch dann einschaetzen koennen.
+  const ready = (p.gadgetCooldown || 0) <= 0;
+  const hit = t.hit;
+  // Trifft der Haken, ist die Linie durchgezogen und der Ankerpunkt
+  // markiert; geht er ins Leere, gestrichelt und ohne Anker -- der
+  // Unterschied muss VOR dem Ausloesen erkennbar sein, weil ein Fehlschuss
+  // seit P6 die Abklingzeit kostet.
+  const a = ready ? (hit ? 0.85 : 0.4) : 0.25;
+  ctx.strokeStyle = hit ? `rgba(120,220,255,${a})` : `rgba(150,160,170,${a})`;
+  ctx.lineWidth = hit ? 2 : 1.5;
+  ctx.setLineDash(hit ? [] : [5, 6]);
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(t.x, t.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  if (hit) {
+    ctx.strokeStyle = `rgba(120,220,255,${a})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, 7, 0, Math.PI * 2);
+    ctx.stroke();
+    // Kleines Kreuz im Anker -- auch bei viel Bildbewegung eindeutig.
+    ctx.beginPath();
+    ctx.moveTo(t.x - 4, t.y);
+    ctx.lineTo(t.x + 4, t.y);
+    ctx.moveTo(t.x, t.y - 4);
+    ctx.lineTo(t.x, t.y + 4);
+    ctx.stroke();
+  }
 }
 
 // Dauerhafte Ziellinie (Phase 0a, Grundspiel -- kein Upgrade):
