@@ -849,13 +849,71 @@ body.touch-on .throwstick.slot-empty {
   color: #9aa0a8;
 }
 
-/* Eigene Upgrades: gleiche Chips, aber in der Ausruestungs-Farbe. */
-.pv-chip-up {
-  border-color: #2f5a70;
+/* P8: Ausruestung auf eigener Vollbild-Seite -- Symbol, Name und Wirkung
+   stehen dort direkt nebeneinander, statt hinter einem Tipp zu liegen.
+   Die Liste scrollt intern (.overlay ist bereits overflow-y: auto), der
+   "Zurueck"-Knopf bleibt ueber sticky immer erreichbar. */
+.pv-uplist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 620px;
+  /* Platz fuer den schwebenden Zurueck-Knopf -- sonst bleibt die letzte
+     Zeile dauerhaft dahinter verborgen. */
+  padding-bottom: 46px;
 }
 
-.pv-chip-up:hover {
-  border-color: #8ecae6;
+.pv-uprow {
+  display: grid;
+  grid-template-columns: 26px minmax(120px, 0.9fr) 2fr;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  background: #1b1b22;
+  border-left: 3px solid #2f5a70;
+  font-family: monospace;
+  font-size: 13px;
+  text-align: left;
+}
+
+.pv-upname {
+  color: #8ecae6;
+  font-weight: bold;
+}
+
+.pv-upname em {
+  color: #9aa0a8;
+  font-style: normal;
+  font-weight: normal;
+  font-size: 11px;
+}
+
+.pv-updesc {
+  color: #c8c4b8;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+/* Zurueck-Knopf bleibt im Bild, egal wie lang die Liste wird -- dieselbe
+   Vorsorge wie beim "Weiter"-Knopf der Vorschau. Er schwebt ueber der
+   Liste, deshalb ein abgesetzter Rand: sonst klebt er ohne sichtbare
+   Trennung auf der Zeile darunter. */
+#previewUpBack {
+  position: sticky;
+  bottom: 0;
+  box-shadow: 0 0 0 6px rgba(10, 10, 14, 0.92);
+}
+
+@media (max-height: 500px) {
+  .pv-uprow {
+    grid-template-columns: 22px minmax(100px, 0.9fr) 2fr;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .pv-updesc {
+    font-size: 11px;
+  }
 }
 
 .pv-dot {

@@ -83,10 +83,11 @@ und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
 jetzt überhaupt messbar.
 `PLAN-INPUT.md` **P1 (Input-Abstraktion)**, **P2 (Viewport/DPR)**,
 **P3 (Touch-Bug Sekundärwaffe)**, **P4 (Gadget-Split)** und
-**P6 (Haken-Rework)** und **P7 (Werte-Anzeige)** sind gebaut,
-**P5 (Schild-Rework) auf Nutzerwunsch gestrichen** („Schild erstmal so
-lassen wie es ist").
-**Nächste Phase: `PLAN-INPUT.md` P8 (Mobile Zwischenraum-UI).**
+**P6 (Haken-Rework)**, **P7 (Werte-Anzeige)** und **P8 (Zwischenraum-UI)**
+sind gebaut, **P5 (Schild-Rework) auf Nutzerwunsch gestrichen** („Schild
+erstmal so lassen wie es ist").
+**Nächste Phase: `PLAN-INPUT.md` P9 (Startbildschirm), danach nur noch
+P11 (Lichtquellen).**
 Der Ergänzungsplan hat Vorrang vor `PLAN.md` Phase 18 Welle 4; die
 aufgeschobene Telemetrie-Auswertung bleibt davon unberührt.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -1529,6 +1530,31 @@ herauskommt, war nirgends ablesbar.
   erst im nächsten Raum — der Vergleichsraum muss über `createState()` mit
   `playerUpgrades` gebaut werden.
 
+### PLAN-INPUT.md P8 (Mobile Zwischenraum-UI) — gemergt
+Die Chipreihe der eigenen Ausrüstung ist aus dem Hauptbereich der
+Raumvorschau verschwunden; dort steht jetzt **eine Zeile** — ein Knopf
+„Deine Ausrüstung (N) ▸" auf eine eigene Vollbild-Seite
+(`#previewUpgrades`).
+- **Verstärkt den Bugfix der letzten Balancerunde, statt ihn
+  zurückzunehmen**: der Hauptbereich wird kürzer, nicht länger — der
+  „Weiter"-Knopf rückt weiter vom Bildschirmrand weg.
+- **Auf der eigenen Seite ist Platz**: Symbol, Name, Stufe und Wirkung
+  stehen direkt nebeneinander, der „Tippe für Details"-Umweg entfällt. Die
+  Symbole aus `data/upgrades.json` werden weiterverwendet.
+- **„Zurück" führt in die Vorschau, nicht in den Raum** — sonst wäre der
+  Blick auf die Ausrüstung eine Einbahnstraße. `hide()` räumt **beide**
+  Seiten weg (genau die Fehlerklasse, die schon einmal einen Run blockiert
+  hat, als der Kartenscreen über dem Spielfeld liegen blieb).
+- **`#previewUpBack` ist `sticky`** — Gegenprobe: ohne die Regel liegt der
+  Knopf bei 12 Karten auf **1076 px** in einem 375-px-Fenster.
+- Fünf Fälle in `tests/regression.mjs`, Gegenprobe für drei davon;
+  `tests/uilayout.mjs` prüft die neue Seite über alle vier Viewports mit.
+- **`tests/domstub.mjs` brauchte einen `Image`-Stub**: `preview.js` zieht
+  über `renderer.js` die Sprite-Initialisierung mit, die als
+  Modul-Seiteneffekt `new Image()` aufruft — ohne den Stub lässt sich das
+  Modul headless gar nicht importieren. Wichtig dabei: das DOM muss schon
+  beim **Import** stehen, nicht erst beim Testfall.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1615,7 +1641,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v69`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v70`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

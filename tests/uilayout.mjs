@@ -80,12 +80,34 @@ try {
           () => {},
         );
         const b = document.getElementById('previewGo').getBoundingClientRect();
-        return { sichtbar: b.top >= 0 && b.bottom <= window.innerHeight, unten: Math.round(b.bottom) };
+        // P8: die Ausruestung liegt jetzt auf einer eigenen Vollbild-Seite.
+        // Auch DEREN "Zurueck" muss erreichbar bleiben -- die Liste wird mit
+        // vielen Karten lang, genau die Falle, die den "Weiter"-Knopf der
+        // Vorschau seinerzeit aus dem Bild geschoben hat.
+        let up = { sichtbar: true, unten: 0 };
+        const open = document.getElementById('previewUpOpen');
+        if (open) {
+          open.click();
+          const rb = document.getElementById('previewUpBack').getBoundingClientRect();
+          up = { sichtbar: rb.top >= 0 && rb.bottom <= window.innerHeight, unten: Math.round(rb.bottom) };
+        }
+        return {
+          sichtbar: b.top >= 0 && b.bottom <= window.innerHeight,
+          unten: Math.round(b.bottom),
+          hatSeite: !!open,
+          up,
+        };
       },
       { ups: ownedUpgrades, tanksData: tanks },
     );
     if (!pv.sichtbar) {
       fail(`${label} (${width}x${height}): "Weiter" der Raumvorschau liegt ausserhalb (Unterkante ${pv.unten}, Fenster ${height})`);
+    }
+    if (!pv.hatSeite) {
+      fail(`${label} (${width}x${height}): kein Zugang zur Ausruestungsseite (P8)`);
+    }
+    if (!pv.up.sichtbar) {
+      fail(`${label} (${width}x${height}): "Zurueck" der Ausruestungsseite liegt ausserhalb (Unterkante ${pv.up.unten}, Fenster ${height})`);
     }
 
     // --- Upgrade-Screen: alle Knoepfe im Bild ---
@@ -115,7 +137,7 @@ try {
       fail(`${label} (${width}x${height}): Upgrade-Screen -- ${us.length} Bedienelement(e) ausserhalb: ${us.join(', ')}`);
     }
 
-    if (pv.sichtbar && !us.length) console.log(`OK  ${label.padEnd(20)} ${width}x${height}`);
+    if (pv.sichtbar && pv.up.sichtbar && !us.length) console.log(`OK  ${label.padEnd(20)} ${width}x${height}`);
     await page.close();
   }
 } finally {
