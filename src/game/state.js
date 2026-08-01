@@ -8,7 +8,7 @@
 
 import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
 import { mulberry32 } from '../core/rng.js';
-import { createTank, moveTank, fireBullet, layMine, useSecondary, dashTank } from './tank.js';
+import { createTank, moveTank, fireBullet, layMine, useSecondary, useGadget, dashTank } from './tank.js';
 import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
@@ -115,7 +115,7 @@ function applyAffixByIndex(t, index, eliteAffixes) {
 
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
-    roomSpec, arenas, transform, equippedSecondary, waveSplit, waveCfg, eliteAffixes, modifier,
+    roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
     destructibleWalls, hazardType, roomContext } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
@@ -164,7 +164,7 @@ export function createState(data, tiles, opts) {
     'player',
     applyRoomContext(
       applyRoomModifier(
-        applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData, equippedSecondary),
+        applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData, equippedSecondary, equippedGadget),
         modifier,
         true,
       ),
@@ -215,6 +215,7 @@ export function createState(data, tiles, opts) {
     playerUpgrades,
     upgradesData,
     equippedSecondary: equippedSecondary || 'mine', // Phase 6: fuer respawnPlayer()
+    equippedGadget: equippedGadget || null, // P4: zweiter Slot, ebenfalls fuer respawnPlayer()
     roomContext: roomContext || null, // { elite, boss } -- raumabhaengige Karten
     rng: mulberry32((aiSeed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
     playerSpawn: room.playerSpawn,
@@ -233,6 +234,7 @@ export function createState(data, tiles, opts) {
     // des Spielers aus -- nur der freiwillige Bankshot tut das.
     voluntaryRicochetKills: 0,
     secondaryUses: 0,
+    gadgetUses: 0, // P4: Nutzungen des zweiten Slots (Telemetrie)
     powershotsFired: 0,
     ghostKills: 0, // Phase 7: Kills durch Geister-Kugeln (nicht dem Spieler zugerechnet)
     // Trickshot-Belohnung (PLAN.md v2 Phase 5): kurze Zeitlupe nach einem
@@ -595,7 +597,13 @@ function respawnPlayer(state) {
     'player',
     applyRoomContext(
       applyRoomModifier(
-        applyUpgrades(resolveCfg(state.data, 'player'), state.playerUpgrades, state.upgradesData, state.equippedSecondary),
+        applyUpgrades(
+          resolveCfg(state.data, 'player'),
+          state.playerUpgrades,
+          state.upgradesData,
+          state.equippedSecondary,
+          state.equippedGadget,
+        ),
         state.modifier,
         true,
       ),
@@ -690,7 +698,7 @@ export function stepState(state, cmd, dt) {
     // Phase 6: Sekundärslot-Timer (Turm-Betäubung EMP-Mine, Cooldown der
     // vier neuen Sekundärwaffen, Enterhaken-Zug, Deflektor-Fenster).
     if (t.turretStunTimer > 0) t.turretStunTimer = Math.max(0, t.turretStunTimer - dt);
-    if (t.secondaryCooldown > 0) t.secondaryCooldown = Math.max(0, t.secondaryCooldown - dt);
+    if (t.gadgetCooldown > 0) t.gadgetCooldown = Math.max(0, t.gadgetCooldown - dt);
     if (t.deflectorTimer > 0) {
       t.deflectorTimer = Math.max(0, t.deflectorTimer - dt);
       if (t.deflectorTimer <= 0) t.deflectorCharges = 0;
@@ -727,6 +735,14 @@ export function stepState(state, cmd, dt) {
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
     if (cmd.fire) fireBullet(p, state, cmd.firePressed);
     if (cmd.mine && useSecondary(p, state, cmd.mineThrow)) state.secondaryUses++;
+    // P4: zweiter Slot mit eigenem Ausloeser und eigener Zielvorgabe.
+    if (cmd.gadget && useGadget(p, state, cmd.gadgetThrow)) state.gadgetUses++;
+    // Fernzuender bekommt seit P4 einen ausdruecklichen Knopf, statt sich
+    // den Bombenknopf mit dem Legen zu teilen (dort loeste er nur aus, wenn
+    // das Minen-Limit ohnehin erreicht war -- praktisch unauffindbar).
+    if (cmd.detonate && p.cfg.remoteDetonate) {
+      for (const m of state.mines) if (!m.dead && m.owner === p && m.fuse === null) m.fuse = 0.001;
+    }
   }
 
   // Deckungs-KI (Phase 16): throttled (15 Hz, Reihum-Verfahren) VOR der

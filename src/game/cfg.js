@@ -53,7 +53,7 @@ export function resolveCfg(data, type) {
 // Upgrade-Level auf das Spieler-cfg anwenden (Spec Abschnitt 8 +
 // Erweiterungen). Die Stellwerte der neuen Upgrades kommen aus
 // upgrades.json (upsData).
-export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
+export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadget) {
   if (!ups) return cfg;
   const l = (k) => ups[k] || 0;
   cfg.magazine += 2 * l('magazin');
@@ -264,10 +264,15 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary) {
   // Meisterschuetze (Phase 18, Tag synergy): verdoppelt die Trickshot-
   // Belohnung (Phase 5) -- reiner Multiplikator, keine neue Mechanik.
   if (l('meisterschuetze')) cfg.trickshotScrapMult = U.meisterschuetze.scrapMult;
-  // Sekundärslot (Phase 6): explizit vom Run vorgegeben, kein Level-Scan
-  // (mehrere Sekundärkarten koennen gleichzeitig Level > 0 haben, siehe
-  // run.js: chooseUpgrade -- nur equippedSecondary bestimmt die aktive).
+  // Sekundärslot (Phase 6, seit P4 fest): die Bombe ist immer ausgeruestet
+  // und nicht mehr tauschbar. Der Parameter bleibt bestehen, damit ein
+  // spaeterer zweiter Sekundaertyp keinen Umbau braucht.
   cfg.secondary = equippedSecondary || 'mine';
+  // Gadgetslot (P4): explizit vom Run vorgegeben, kein Level-Scan --
+  // mehrere Gadgetkarten koennen gleichzeitig Level > 0 haben (eine alte
+  // Karte wird beim Wechsel nicht zurueckgesetzt), nur equippedGadget
+  // bestimmt das aktive. null = kein Gadget ausgeruestet (Startzustand).
+  cfg.gadget = equippedGadget || null;
   // Geisterbesatzung (Phase 7): einfacher Ein/Aus-Schalter, kein Stufenwert.
   cfg.ghostCrew = l('ghost_crew') > 0;
   return cfg;

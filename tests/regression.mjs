@@ -148,31 +148,35 @@ function check(ok, msg) {
 // erreicht -- und tagCounts zaehlt STACKS, nicht Karten. Gibt es im Pool
 // eines Tags weniger Stacks als die Schwelle, ist die Transformation
 // mathematisch tot (so war `terrain`/Pionier mit 2 von 3 nach Welle 2).
-// Die Minen-Karten zaehlen dabei nur mit, solange mine/emp_mine ausgeruestet
-// ist (upgradepool.js: MINE_ONLY_IDS) -- deshalb beide Faelle pruefen.
+// Die frueher noetige Zusatzpruefung "auch OHNE Minen-Sekundärwaffe" ist
+// mit P4 entfallen: die Bombe liegt im eigenen, festen Slot und ist immer
+// ausgeruestet, MINE_ONLY_IDS gibt es nicht mehr. Stattdessen wird jetzt
+// geprueft, dass genau das auch stimmt -- keine Karte darf noch an eine
+// ausgeruestete Sekundaerwaffe gebunden sein.
 {
-  const MINE_ONLY = new Set([
-    'kettenglied', 'sprengkraft', 'fernzuender', 'schockwelle',
-    'annaeherungsmine', 'klebemine', 'streumine',
-  ]);
   const T = tanksData.transformations;
   const threshold = T.threshold ?? 3;
   const defs = Object.values(upgradesData.upgrades);
   for (const tf of Object.values(T.transformations)) {
     const cards = defs.filter((c) => c.tag === tf.tag);
     const all = cards.reduce((s, c) => s + c.maxStacks, 0);
-    const noMine = cards
-      .filter((c) => !MINE_ONLY.has(c.id))
-      .reduce((s, c) => s + c.maxStacks, 0);
     check(
       all >= threshold,
       `Transformation "${tf.name}" (${tf.tag}) ist nicht freischaltbar: nur ${all} Stacks im Pool, ${threshold} nötig`,
     );
-    check(
-      noMine >= threshold,
-      `Transformation "${tf.name}" (${tf.tag}) ist ohne Minen-Sekundärwaffe nicht freischaltbar: nur ${noMine} Stacks, ${threshold} nötig`,
-    );
   }
+  // P4-Zusicherung: der Pool haengt an keiner Ausruestung mehr. Gegenprobe
+  // gegen ein Wiedereinschleichen der alten Sperre.
+  // Gesucht ist eine echte VERWENDUNG, kein Kommentar -- deshalb auf den
+  // Aufruf gemustert und Kommentarzeilen vorher entfernt.
+  const poolSrc = readFileSync(new URL('../src/game/upgradepool.js', import.meta.url), 'utf8')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+  check(
+    !/MINE_ONLY_IDS\s*\.\s*has/.test(poolSrc),
+    'P4: MINE_ONLY_IDS wird wieder benutzt -- Karten haengen an der ausgeruesteten Waffe',
+  );
 }
 
 // ---- 6b. Jede Karte loest sauber in ein Spieler-cfg auf -----------------
