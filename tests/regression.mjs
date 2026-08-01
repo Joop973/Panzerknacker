@@ -677,6 +677,94 @@ function check(ok, msg) {
   );
 }
 
+// ---- 8f. P7: Werte-Anzeige ---------------------------------------------
+// Die Anzeige leitet ALLE Zahlen aus dem aufgeloesten cfg ab -- kein neues
+// Feld. Geprueft wird deshalb (1) dass sie ohne Absturz zeichnet, (2) dass
+// sie tatsaechlich Text ausgibt (sonst waere eine leere Box gruen) und
+// (3) dass Upgrades die ausgegebenen Zahlen veraendern.
+{
+  const { createHud } = await import('../src/ui/hud.js');
+  // Fake-Canvas, das jeden fillText mitschreibt.
+  const texts = [];
+  const fakeCtx = new Proxy(
+    { canvas: { width: 768, height: 512 }, measureText: () => ({ width: 40 }) },
+    {
+      get: (t, k) => {
+        if (k in t) return t[k];
+        if (k === 'fillText') return (s) => texts.push(String(s));
+        return () => {};
+      },
+      set: () => true,
+    },
+  );
+  const hud = createHud(fakeCtx);
+
+  const draw = (run) => {
+    texts.length = 0;
+    try {
+      hud.render(run, { stats: true });
+    } catch (e) {
+      check(false, `P7: Werte-Anzeige wirft (${e.message})`);
+    }
+    return texts.join('\n');
+  };
+
+  const plain = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+  // Die Anzeige gilt nur im laufenden Raum -- ein frischer Run steht auf
+  // 'preview' und wuerde gar nichts zeichnen.
+  plain.phase = 'playing';
+  const outPlain = draw(plain);
+  check(/WERTE/.test(outPlain), 'P7: Werte-Anzeige zeichnet keine Ueberschrift');
+  for (const label of ['Tempo', 'Geschosstempo', 'Abpraller', 'Magazin', 'Bomben', 'Bombenradius']) {
+    check(outPlain.includes(label), `P7: Zeile "${label}" fehlt in der Werte-Anzeige`);
+  }
+  // Ohne Upgrades darf keine Abweichung ausgewiesen sein.
+  check(!/\(\+\d+ %\)/.test(outPlain), 'P7: frischer Run zeigt bereits Upgrade-Abweichungen');
+
+  // Mit Tempo-Upgrade muss sich die Tempo-Zeile messbar aendern.
+  {
+    const boosted = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const speedCard = upgradesData.upgrades.turbo;
+    if (speedCard) {
+      // Den Raum MIT dem Upgrade neu bauen -- run.upgrades nachtraeglich zu
+      // setzen wirkt erst im naechsten Raum (Upgrades werden pro Raumbau
+      // aufgeloest).
+      const { createState } = await import('../src/game/state.js');
+      const { rngFor, hashSeed } = await import('../src/core/rng.js');
+      boosted.phase = 'playing';
+      boosted.upgrades = { turbo: 1 };
+      boosted.state = createState(tanksData, tilesData, {
+        genRng: rngFor(42, 1, 'rooms'),
+        enemyTypes: ['t_brown'],
+        aiSeed: hashSeed(42, 1, 'ai'),
+        playerUpgrades: { turbo: 1 },
+        upgradesData,
+        equippedSecondary: 'mine',
+        equippedGadget: null,
+        transform: {},
+      });
+      const before = plain.state.player.cfg.speed;
+      const after = boosted.state.player.cfg.speed;
+      check(after > before, `P7: Turbo aendert das Tempo nicht (${before} -> ${after}, Testaufbau)`);
+      const out = draw(boosted);
+      check(/\(\+\d+ %\)/.test(out), 'P7: Werte-Anzeige weist die Upgrade-Abweichung nicht aus');
+    }
+  }
+
+  // Die Anzeige erscheint auch in der Pause (einziger Weg auf dem Handy).
+  {
+    texts.length = 0;
+    hud.render(plain, { paused: true });
+    check(texts.join('\n').includes('WERTE'), 'P7: Werte-Anzeige fehlt in der Pause (Handy-Weg)');
+  }
+  // ... und NICHT unaufgefordert im normalen Spiel.
+  {
+    texts.length = 0;
+    hud.render(plain, {});
+    check(!texts.join('\n').includes('WERTE'), 'P7: Werte-Anzeige ist dauerhaft eingeblendet');
+  }
+}
+
 // ---- 8e. P6: Enterhaken ------------------------------------------------
 // Fuenf Zusagen der Phase: Zielrichtung steuerbar, Ausloesen beim
 // Loslassen (kommt aus P4), Zug an ALLEN Wandtypen, Abklingzeit AUCH ohne

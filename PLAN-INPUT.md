@@ -8,12 +8,11 @@ bisherige Steuerung beschrieben ist, damit es nur eine Quelle gibt.
 
 ---
 
-**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ · P4 ✅ · P6 ✅ gebaut ·
+**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ · P4 ✅ · P6 ✅ · P7 ✅ gebaut ·
 P5 ❌ gestrichen (Nutzerentscheidung) · P10 ✅ war schon erledigt.
-**Nächste Session: P7 (Stats-Anzeige) — echte Neuarbeit, aber laut
-Ist-Abgleich sind alle Werte zur Laufzeit schon vorhanden.**
+**Nächste Session: P8 (Mobile Zwischenraum-UI).**
 
-## Ist-Abgleich (Stand: Cache v68)
+## Ist-Abgleich (Stand: Cache v69)
 
 Vor dem Bau geprüft, was der Code **heute schon kann**. Ergebnis: mehrere
 Phasen sind ganz oder überwiegend erledigt, zwei kollidieren mit
@@ -29,7 +28,7 @@ bereits vorhandenen Code geflossen.
 | P4 Gadget-Split ✅ **erledigt** | Ein Slot mit sechs austauschbaren Sekundärwaffen (Phase 6). | Gebaut: fester Bombenslot + tauschbarer Gadgetslot, eigener Auslöser/Zielpfad je Slot. Konflikt C damit aufgelöst (`MINE_ONLY_IDS` entfällt). |
 | P5 Schild-Rework ❌ **gestrichen** | Vier Schild-Karten, Verfall nach 3 Räumen, Regeneration, Nachkauf. | **Nutzerentscheidung: „Schild erstmal so lassen wie es ist."** Konflikt A ist damit erledigt, E2/Bollwerk/`nachladeschild`/`emergency_shield`/`konterschild` bleiben unangetastet. Phase entfällt. |
 | P6 Haken-Rework ✅ **erledigt** | `hook.maxRangePx` **222** (Nutzerentscheidung), Bombenwurf `throwPx: 58`. | Gebaut: Zielrichtung aus der Zielphase, Abklingzeit auch ohne Treffer, Zielvorschau über dieselbe Funktion wie der Schuss. |
-| P7 Stats-Anzeige | Nicht vorhanden. | Echte Neuarbeit. |
+| P7 Stats-Anzeige ✅ **erledigt** | Nicht vorhanden. | Gebaut: umschaltbares Werte-Panel im HUD (Tab), in der Pause immer sichtbar (Handy-Weg). Reine Ableitung, keine neuen Felder. |
 | P8 Zwischenraum-UI | Raumvorschau zeigt Gegner **und** Upgrades als Chips. | Echte Neuarbeit; kehrt die Chip-Anzeige aus der letzten Balancerunde bewusst wieder um. |
 | P9 Startbildschirm | **Existiert**: Start, Tages-Seed, Fortsetzen, Schwierigkeit, Bestwerte zurücksetzen, Optionen (Ziellinie, Bedrohungslinien, Reduzierte Bewegung), Mute. | D-Pad-Navigation, Vollbild-Button, Lautstärkeregler, „Spiel beenden". |
 | P10 Grüner gefährlicher | **Bereits erledigt** (Session vor dieser): `requiresBounceShot` (Bandenrechner), 2 Abpraller, `accuracy` 0.9, Feuerrate unverändert. | Nur noch Feinschliff, falls er sich beim Spielen zu schwach anfühlt. |
@@ -418,12 +417,40 @@ zeichnete das die **Bomben**-Wurfvorschau. Jetzt getrennte Abfragen
 
 # TIER 2 — Information & Rahmen
 
-## P7 — Stats-Anzeige
+## P7 — Stats-Anzeige ✅ gebaut
 
 Unverändert. Hinweis: Alle geforderten Werte sind zur Laufzeit vorhanden
 (`player.cfg.speed`, `cfg.bulletSpeed`, `balance.mine.radius *
 cfg.mineRadiusMult`, `liveBulletsOf()`, `cfg.mines`) — es braucht **keine**
 neuen Felder, nur eine Ableitung im HUD.
+
+### Umsetzung (gebaut)
+
+`hud.js: drawStats()` zeigt die Werte des eigenen Panzers, **wie sie nach
+allen Upgrades, Raum-Modifikatoren und Transformationen tatsächlich gelten**.
+Bis hierher zeigte das Spiel nur Kartennamen — welche Zahl dabei
+herauskommt, war nirgends ablesbar.
+
+- **Abweichung statt Absolutwert:** interessant ist nicht „Tempo 84", sondern
+  „Tempo 84 (+20 %)". Die Basis kommt aus `resolveCfg()` **ohne** Upgrades,
+  die Differenz wird daraus gerechnet — nichts wird gespeichert.
+- **Zwei Wege, ein Panel:** Umschalter **Tab** (neue Aktion `stats` in
+  `data/input.json`, `e.preventDefault()` sonst wandert der Fokus) und
+  **immer während der Pause**. Damit ist die Anzeige auf dem Handy ohne
+  einen zusätzlichen Knopf erreichbar — dort gibt es keine Tastatur, aber
+  den Pausenknopf.
+- Gezeigt werden Tempo, Geschosstempo, Nachladen, Abpraller, Magazin,
+  Bomben, Bombenradius sowie — falls vorhanden — Gadget samt Restabklingzeit,
+  Dash, Schildladungen und der aktive Raum-Modifikator (der genau diese
+  Zahlen verändert und sonst nur in der Vorschau steht).
+- Hinweiszeile unter dem Spielfeld auf die seit P4/P7 neuen Tasten
+  aktualisiert (Q = Gadget, E = zünden, Tab = Werte).
+
+**Test:** Fake-Canvas schreibt jeden `fillText` mit — geprüft wird, dass das
+Panel überhaupt Text ausgibt (eine leere Box wäre sonst grün), dass alle
+Zeilen da sind, dass ein Tempo-Upgrade die ausgewiesene Abweichung
+verändert, dass die Pause es einblendet und dass es **nicht** dauerhaft im
+Bild steht. Gegenprobe für alle drei Kernpunkte bestanden.
 
 ## P8 — Mobile Zwischenraum-UI
 

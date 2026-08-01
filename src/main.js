@@ -814,7 +814,7 @@ async function init() {
       // voellig ausreichend genau.
       debugOverlay.render(run.state, fps, { logicMs: lastFrameLogicMs, renderMs: lastFrameRenderMs, worstLogicMs, worstRenderMs });
     }
-    hud.render(run, { paused: pause.isPaused(), toast });
+    hud.render(run, { paused: pause.isPaused(), toast, stats: input.isStats() });
     endlessBtn.classList.toggle('hidden', run.phase !== 'victory');
 
     frameCount++;

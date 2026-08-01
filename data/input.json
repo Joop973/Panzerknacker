@@ -23,7 +23,8 @@
     "dash": ["ShiftLeft", "ShiftRight"],
     "pause": ["Escape", "KeyP"],
     "debug": ["F1"],
-    "menuConfirm": ["Enter", "NumpadEnter"]
+    "menuConfirm": ["Enter", "NumpadEnter"],
+    "stats": ["Tab", "KeyI"]
   },
 
   "gamepad": {
