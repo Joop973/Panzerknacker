@@ -8,11 +8,12 @@ bisherige Steuerung beschrieben ist, damit es nur eine Quelle gibt.
 
 ---
 
-**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ gebaut · P5 ❌ gestrichen
+**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ · P4 ✅ gebaut · P5 ❌ gestrichen
 (Nutzerentscheidung) · P10 ✅ war schon erledigt.
-**Nächste Session: P4 (Gadget-Split) — vorher Konflikt C beachten.**
+**Nächste Session: P6 (Haken-Rework; Reichweite steht bereits auf 222 px,
+offen ist die Zielvorschau).**
 
-## Ist-Abgleich (Stand: Cache v66)
+## Ist-Abgleich (Stand: Cache v67)
 
 Vor dem Bau geprüft, was der Code **heute schon kann**. Ergebnis: mehrere
 Phasen sind ganz oder überwiegend erledigt, zwei kollidieren mit
@@ -25,7 +26,7 @@ bereits vorhandenen Code geflossen.
 | P1 Input-Abstraktion ✅ **erledigt** | **Grundgerüst stand seit Phase 0a**: `src/core/input.js` ist die einzige Stelle, die Geräte-Events liest; `getState()` liefert ein Aktionsmodell; Gamepad wird gepollt, nicht per Event; Werte liegen in `data/input.json`. | Aktionsmodell **erweitern** (Gadget-Felder, `detonate`, Menü-Navigation, getrennte Held/Release-Flags) + die drei Profile aus `getState()` in eigene Funktionen ziehen. Kein Neubau. |
 | P2 Viewport/Fullscreen ✅ **erledigt** | Meta-Viewport war **exakt** wie gefordert; `touch-action: none` und `overscroll-behavior` gesetzt; Fullscreen-Anforderung existierte. | Gebaut: `src/core/viewport.js` (DPR-Kopplung mit Deckel, `visualViewport` → `--vvh`), `position: fixed` global, Vollbild-Knopf. |
 | P3 Touch-Bug Sekundär ✅ **erledigt** | Pointer-Events, `pointerId`-Tracking und `setPointerCapture()` waren **bereits umgesetzt**. | Gebaut: eigener `pointercancel`-Abbruchpfad; dazu **zwei weitere Fehler** gefunden und behoben (Zweitfinger, Sperrzone pro Berührung). |
-| P4 Gadget-Split | Ein Slot mit sechs austauschbaren Sekundärwaffen (Phase 6). | Echte Neuarbeit. Zwei Nebenwirkungen beachten, siehe unten. |
+| P4 Gadget-Split ✅ **erledigt** | Ein Slot mit sechs austauschbaren Sekundärwaffen (Phase 6). | Gebaut: fester Bombenslot + tauschbarer Gadgetslot, eigener Auslöser/Zielpfad je Slot. Konflikt C damit aufgelöst (`MINE_ONLY_IDS` entfällt). |
 | P5 Schild-Rework ❌ **gestrichen** | Vier Schild-Karten, Verfall nach 3 Räumen, Regeneration, Nachkauf. | **Nutzerentscheidung: „Schild erstmal so lassen wie es ist."** Konflikt A ist damit erledigt, E2/Bollwerk/`nachladeschild`/`emergency_shield`/`konterschild` bleiben unangetastet. Phase entfällt. |
 | P6 Haken-Rework | `hook.maxRangePx` **222** (Nutzerentscheidung), Bombenwurf `throwPx: 58`. | Reichweite ist **gesetzt** (Konflikt B entschieden). Offen bleiben nur die übrigen P6-Punkte (Zielvorschau usw.). |
 | P7 Stats-Anzeige | Nicht vorhanden. | Echte Neuarbeit. |
@@ -108,6 +109,11 @@ Absicht der Formel bleibt also erfüllt. Konflikt B ist geschlossen.
 2. **`emp_mine` teilt sich die komplette Legemechanik mit `mine`**
    (`tank.js: layMine()`, jede 4. Mine ist EMP). Als eigenständiges Gadget
    braucht sie einen eigenen Auslöse- und Zielpfad.
+
+**✅ In P4 aufgelöst.** Nicht durch eine neue Gewichtung, sondern weil die
+Bombe seit P4 nicht mehr abwählbar ist: `MINE_ONLY_IDS` entfällt ersatzlos,
+die sieben Karten können nie mehr wirkungslos werden, und `emp_mine` hat als
+Gadget ihren eigenen Auslöser (`forceEmp`) bekommen.
 
 ### Konflikt D — Feuer-Stopp bei `maxActive`
 
@@ -302,10 +308,49 @@ echten `PointerEvent`s gegengeprüft.
 
 # TIER 1 — Datenmodell & Kernmechaniken
 
-## P4 — Waffenkategorien-Split: Sekundärwaffe und Gadget
+## P4 — Waffenkategorien-Split: Sekundärwaffe und Gadget ✅ gebaut
 
 Unverändert wie im Ausgangsdokument, **plus** die beiden Nebenwirkungen aus
 Konflikt C (MINE_ONLY-Karten, `emp_mine`-Legemechanik).
+
+### Umsetzung (gebaut)
+
+**Zwei Slots statt einem.** Die Bombe liegt im festen Sekundärslot
+(`category: "secondary"` in `data/secondaries.json`) und ist **immer**
+ausgerüstet; die fünf übrigen Einträge sind `category: "gadget"` und teilen
+sich den zweiten, tauschbaren Slot (`run.equippedGadget`, Start: keines).
+Vorher lagen alle sechs in **einem** Slot — wer eine Gadgetkarte nahm,
+verlor damit die Bombe.
+
+- **`tank.js`**: `useSecondary()` ist nur noch die Bombe, `useGadget()` der
+  zweite Dispatch mit eigener Abklingzeit (`tank.gadgetCooldown`). Beide
+  Slots sind vollständig unabhängig — die Gadget-Abklingzeit blockiert die
+  Bombe nicht (in der Regressionssuite zugesichert).
+- **`emp_mine` ist jetzt ein echtes Gadget** mit eigenem Auslöser statt
+  „jede 4. Bombe ist EMP". `layMine()` bekommt dafür `forceEmp`; der
+  Zähler `secondaryMineCount` entfällt.
+- **Der Fernzünder bekommt einen eigenen Knopf** (`cmd.detonate`, aus P1
+  bereits im Aktionsmodell). Vorher löste er nur aus, wenn das Minen-Limit
+  ohnehin erreicht war — praktisch unauffindbar.
+- **Konflikt C ist damit aufgelöst, nicht umschifft:** `MINE_ONLY_IDS`
+  entfällt **ersatzlos**. Die sieben minenspezifischen Karten können nie
+  mehr wirkungslos werden, weil die Bombe nicht mehr abwählbar ist — und
+  der Tag `control` hängt nicht länger an der ausgerüsteten Waffe. Die
+  Minen-Karte selbst ist aus `data/upgrades.json` entfernt (eine Karte für
+  einen festen Slot wäre wirkungslos).
+- **Touch**: `makeThrowStick()` als Fabrik statt einer Kopie — Bombe und
+  Gadget sind derselbe Bedienbaustein. Wichtig, weil der
+  `pointercancel`-Fix aus P3 sonst an zwei Stellen hätte stimmen müssen.
+  Der Gadget-Knopf erscheint nur, wenn eines ausgerüstet ist.
+- **HUD**: zweiter Slot mit Kürzel und Restsekunden der Abklingzeit — ohne
+  das wäre der einzige Hinweis auf einen kalten Slot, dass der Knopf nichts
+  tut.
+- **Shop** tauscht Gadgets (nach `category` gefiltert), nicht mehr die
+  Bombe. Die Raum-Modifikator-„Ausrüstungssperre" sperrt seit P4 **beide**
+  Slots.
+
+**Gadgets backen pro Raum** (wie Transformationen und Raum-Modifikatoren):
+eine mitten im Raum gewechselte Ausrüstung wirkt erst im nächsten Raum.
 
 Betroffene Dateien: `data/secondaries.json` (Kategorie je Eintrag),
 `data/upgrades.json` (Tag/Kategorie), `src/game/upgradepool.js`

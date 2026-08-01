@@ -670,6 +670,89 @@ function check(ok, msg) {
   );
 }
 
+// ---- 8d. P4: Bombenslot und Gadgetslot sind getrennt --------------------
+// Kernzusage der Phase: die Bombe kann NIE verloren gehen (eigener, fester
+// Slot), das Gadget ist der tauschbare zweite Slot. Vorher lagen beide in
+// einem Slot -- wer eine Gadgetkarte nahm, verlor die Bombe.
+{
+  const { createState } = await import('../src/game/state.js');
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { useGadget, useSecondary } = await import('../src/game/tank.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+
+  const mkRoom = (upgrades, gadget) =>
+    createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: ['t_brown'],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades: upgrades,
+      upgradesData,
+      equippedSecondary: 'mine',
+      equippedGadget: gadget,
+      transform: {},
+    });
+
+  // (a) Ohne jede Karte: Bombe da, Gadget leer.
+  {
+    const st = mkRoom({}, null);
+    check(st.player.cfg.secondary === 'mine', 'P4: Bombe ist ohne Karten nicht ausgeruestet');
+    check(st.player.cfg.gadget === null, 'P4: es ist ohne Karte schon ein Gadget ausgeruestet');
+    check(useSecondary(st.player, st, null) === true, 'P4: Bombe laesst sich ohne Karten nicht legen');
+    check(useGadget(st.player, st, null) === false, 'P4: leerer Gadgetslot loest trotzdem aus');
+  }
+
+  // (b) Mit Gadget: beide Slots unabhaengig nutzbar, Gadget mit Abklingzeit.
+  {
+    const st = mkRoom({ smoke: 1 }, 'smoke');
+    check(st.player.cfg.gadget === 'smoke', 'P4: ausgeruestetes Gadget kommt nicht im cfg an');
+    check(useGadget(st.player, st, null) === true, 'P4: Gadget loest nicht aus');
+    check(st.smokeClouds.length === 1, 'P4: Gadget-Wirkung bleibt aus');
+    check(st.player.gadgetCooldown > 0, 'P4: Gadget hat keine Abklingzeit gesetzt');
+    check(useGadget(st.player, st, null) === false, 'P4: Gadget ignoriert die eigene Abklingzeit');
+    // Die Bombe ist davon voellig unberuehrt -- das ist der Kern der Phase.
+    check(useSecondary(st.player, st, null) === true, 'P4: Gadget-Abklingzeit blockiert auch die Bombe');
+  }
+
+  // (c) EMP kommt jetzt aus dem Gadgetslot, nicht mehr als "jede 4. Bombe".
+  {
+    const st = mkRoom({ emp_mine: 1 }, 'emp_mine');
+    check(useGadget(st.player, st, null) === true, 'P4: EMP-Gadget loest nicht aus');
+    const emp = st.mines.filter((m) => m.isEmp);
+    check(emp.length === 1, `P4: EMP-Gadget legt keine EMP-Mine (${emp.length})`);
+    // Die normale Bombe darf dadurch NICHT blau werden.
+    useSecondary(st.player, st, null);
+    check(st.mines.filter((m) => m.isEmp).length === 1, 'P4: die normale Bombe ist ebenfalls EMP geworden');
+  }
+
+  // (d) Die Kartenwahl ruestet das Gadget aus (echter Weg ueber
+  //     pendingOffers, nicht ueber ein direkt gesetztes Feld).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    check(run.equippedGadget === null, 'P4: Run startet bereits mit einem Gadget');
+    check(run.state.player.cfg.secondary === 'mine', 'P4: Run startet ohne Bombe');
+    const card = Object.values(upgradesData.upgrades).find((u) => u.tag === 'gadget');
+    check(!!card, 'P4: es gibt gar keine Gadgetkarte im Pool');
+    run.phase = 'upgrade';
+    run.pendingOffers = [card];
+    chooseUpgrade(run, 0);
+    check(run.equippedGadget === card.id, `P4: Gadgetkarte ruestet nicht aus (${run.equippedGadget})`);
+  }
+
+  // (e) Die Bombe ist keine Karte mehr -- sonst waere sie doppelt vergeben.
+  check(!upgradesData.upgrades.mine, 'P4: die Minen-Karte ist noch im Pool, obwohl die Bombe fest ist');
+
+  // (f) Jeder Gadget-Eintrag traegt seine Kategorie, sonst greift die
+  //     Shop-Filterung ins Leere und boete die Bombe zum Tausch an.
+  for (const [id, def] of Object.entries(tanksData.secondaries)) {
+    if (id.startsWith('_')) continue;
+    check(
+      def.category === 'gadget' || def.category === 'secondary',
+      `P4: secondaries.json "${id}" hat keine gueltige category`,
+    );
+  }
+  check(tanksData.secondaries.mine.category === 'secondary', 'P4: die Bombe ist nicht als fester Slot markiert');
+}
+
 // ---- 8c. P3: Touch-Wurfstick der Sekundaerwaffe -------------------------
 // Der Wurfstick loest NUR beim Loslassen aus. Bricht das System die
 // Beruehrung ab (pointercancel: eingehender Anruf, System-Geste, zu viele

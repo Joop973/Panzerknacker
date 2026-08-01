@@ -32,7 +32,7 @@ Der Nutzer schreibt Deutsch → **immer auf Deutsch antworten.**
 
 ## Aktueller Stand (Stand: 2026-07)
 Spielbar und deterministisch; PWA/Offline; Touch + Desktop + Gamepad;
-61 Upgrades, 6 Raumtypen, Schrott-Währung, sichtbare Roguelike-Karte statt
+60 Upgrades, 6 Raumtypen, Schrott-Währung, sichtbare Roguelike-Karte statt
 unsichtbarer Raumtyp-Automatik. Maßgeblich ist **`PLAN.md` v2**
 (ersetzt v1 vollständig). Erledigt: **Phase 0** (Eingabe/Ziellinie/RNG/Arena-
 Weiche) und **Phase 1** (Telemetrie v2, Lesbarkeit, Run-Speicherung).
@@ -42,7 +42,8 @@ durch die gleichnamigen v1-Phasen abgedeckt (Abweichungen auf Nutzerwunsch:
 `eliteMult: 2` statt `eliteBonus: 3`). **Phase 4** (gerichtete Panzerung),
 **Phase 5** (Abprallen belohnen: Trickshot, Spiegelwände, Powershot),
 **Phase 6** (Sekundärslot: Mine wird zu einer von sechs austauschbaren
-Sekundärwaffen), **Phase 7** (Geisterpanzer: getötete Gegner kämpfen kurz
+Sekundärwaffen; seit `PLAN-INPUT.md` P4 in festen Bombenslot + tauschbaren
+Gadgetslot getrennt), **Phase 7** (Geisterpanzer: getötete Gegner kämpfen kurz
 als durchscheinender Verbündeter weiter), **Phase 8** (Gegner-Rollen statt
 Gegner-Typen: vier datengetriebene Rollen statt neun eigener
 Fahr-/Turmfunktionen), **Phase 9** (Elite-Affixe, Wellen, additive
@@ -80,10 +81,11 @@ Kennzahl 1 (erzwungene Bankshots) war mit 33 % statt 60 % deutlich
 verfehlt — behoben über `difficulty.json: bankshotGuarantee`, jetzt 61,9 %
 und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
 jetzt überhaupt messbar.
-`PLAN-INPUT.md` **P1 (Input-Abstraktion)**, **P2 (Viewport/DPR)** und
-**P3 (Touch-Bug Sekundärwaffe)** sind gebaut, **P5 (Schild-Rework) auf
-Nutzerwunsch gestrichen** („Schild erstmal so lassen wie es ist").
-**Nächste Phase: `PLAN-INPUT.md` P4 (Gadget-Split, Konflikt C beachten).**
+`PLAN-INPUT.md` **P1 (Input-Abstraktion)**, **P2 (Viewport/DPR)**,
+**P3 (Touch-Bug Sekundärwaffe)** und **P4 (Gadget-Split)** sind gebaut,
+**P5 (Schild-Rework) auf Nutzerwunsch gestrichen** („Schild erstmal so
+lassen wie es ist").
+**Nächste Phase: `PLAN-INPUT.md` P6 (Haken-Rework: Zielvorschau).**
 Der Ergänzungsplan hat Vorrang vor `PLAN.md` Phase 18 Welle 4; die
 aufgeschobene Telemetrie-Auswertung bleibt davon unberührt.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -1419,6 +1421,45 @@ verloren. Alle drei in `src/ui/touchcontrols.js`.
 - Gegenprobe für alle drei Fixes einzeln bestanden; zusätzlich im echten
   Browser mit echten `PointerEvent`s gegengeprüft.
 
+### PLAN-INPUT.md P4 (Gadget-Split) — gemergt
+Zwei Slots statt einem. Die **Bombe liegt im festen Sekundärslot** und ist
+immer ausgerüstet; die fünf übrigen Einträge aus `data/secondaries.json`
+(`category: "gadget"`) teilen sich den zweiten, tauschbaren Slot
+(`run.equippedGadget`, Start: keines). Vorher lagen alle sechs in EINEM
+Slot — wer eine Gadgetkarte nahm, verlor die Bombe.
+- **`tank.js`**: `useSecondary()` ist nur noch die Bombe, `useGadget()` der
+  zweite Dispatch mit eigener Abklingzeit (`tank.gadgetCooldown`). Die
+  Slots sind vollständig unabhängig — die Gadget-Abklingzeit blockiert die
+  Bombe nicht (in der Suite zugesichert, Gegenprobe bestanden).
+- **`emp_mine` ist ein echtes Gadget** mit eigenem Auslöser statt „jede 4.
+  Bombe ist EMP": `layMine()` bekommt `forceEmp`, der Zähler
+  `secondaryMineCount` entfällt. Der **Fernzünder** bekommt mit
+  `cmd.detonate` (aus P1 schon im Aktionsmodell) endlich einen eigenen
+  Knopf — vorher löste er nur aus, wenn das Minen-Limit ohnehin erreicht
+  war, also praktisch unauffindbar.
+- **Konflikt C aufgelöst statt umschifft**: `MINE_ONLY_IDS` in
+  `upgradepool.js` entfällt **ersatzlos**. Weil die Bombe nicht mehr
+  abwählbar ist, können die sieben minenspezifischen Karten nie mehr
+  wirkungslos werden, und der Tag `control` hängt nicht länger an der
+  ausgerüsteten Waffe. Die **Minen-Karte ist aus `data/upgrades.json`
+  entfernt** (60 statt 61 Karten) — eine Karte für einen festen Slot wäre
+  wirkungslos. `run.upgrades` startet dadurch leer statt mit `{ mine: 1 }`.
+- **Touch**: `makeThrowStick()` als **Fabrik** statt einer Kopie — Bombe und
+  Gadget sind derselbe Bedienbaustein. Bewusst so, weil der
+  `pointercancel`-Fix aus P3 sonst an zwei Stellen hätte stimmen müssen.
+  Der Gadget-Knopf (`#gadgetBtn`, links neben der Bombe, eigener Farbton)
+  erscheint nur, wenn eines ausgerüstet ist (`.slot-empty`).
+- **HUD** zeigt den zweiten Slot mit Kürzel und Restsekunden — ohne das wäre
+  der einzige Hinweis auf einen noch kalten Slot, dass der Knopf nichts tut.
+- **Shop** tauscht Gadgets (nach `category` gefiltert), nicht mehr die
+  Bombe; die Raum-Modifikator-„Ausrüstungssperre" sperrt jetzt **beide**
+  Slots.
+- **Gadgets backen pro Raum** (Muster wie Transformationen/Modifikatoren):
+  eine mitten im Raum gewechselte Ausrüstung wirkt erst im nächsten Raum.
+- Der Transformations-Test verliert seine Zusatzprüfung „auch ohne
+  Minen-Sekundärwaffe" (die Bedingung gibt es nicht mehr) und bekommt
+  stattdessen eine Zusicherung, dass die Sperre nicht zurückkommt.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1505,7 +1546,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v66`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v67`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

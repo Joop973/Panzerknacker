@@ -34,11 +34,13 @@ export function createHud(ctx) {
     ctx.font = '11px monospace';
     ctx.fillStyle = '#9aa0a8';
     let ammoLine = `Kugeln ${p.cfg.magazine - liveBullets}/${p.cfg.magazine}  Minen ${p.cfg.mines - liveMines}/${p.cfg.mines}`;
-    // EMP-Mine (Phase 6, Sekundärslot): Zähler bis zur naechsten blauen Mine.
-    if (p.cfg.secondary === 'emp_mine') {
-      const everyNth = run.data.secondaries?.emp_mine?.everyNth ?? 4;
-      const rest = everyNth - ((p.secondaryMineCount || 0) % everyNth);
-      ammoLine += `  ⚡${rest}`;
+    // Gadgetslot (P4): zweiter Slot mit eigener Abklingzeit. Bereit =
+    // Kuerzel hell, sonst die Restsekunden -- ohne das waere der einzige
+    // Hinweis auf einen noch kalten Slot, dass der Knopf nichts tut.
+    if (p.cfg.gadget) {
+      const gl = run.data.secondaries?.[p.cfg.gadget]?.label || 'GADGET';
+      const cd = p.gadgetCooldown || 0;
+      ammoLine += cd > 0 ? `  ${gl} ${cd.toFixed(1)}s` : `  ${gl} ✓`;
     }
     ctx.fillText(ammoLine, 118, 15);
     // Schrottstand permanent (Phase 3) -- Gold, zwischen Munition und Mitte.
