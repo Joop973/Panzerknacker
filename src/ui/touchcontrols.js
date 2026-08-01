@@ -76,6 +76,12 @@ export function createTouchControls(cfg = {}) {
   // auch wenn der Finger ihn verlaesst (robuster als Touch-Bubbling).
   mineBtn.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    // Ein zweiter Finger auf dem Button darf den laufenden Zug NICHT
+    // uebernehmen: sonst zeigt mineStick.id auf den neuen Finger, das
+    // Loslassen des ersten wird wegen der id-Pruefung stillschweigend
+    // verworfen -- fuer den Spieler "die Bombe kam nicht". Der erste Finger
+    // behaelt den Stick, bis er loslaesst.
+    if (mineStick) return;
     if (!active) {
       active = true;
       document.body.classList.add('touch-on');
@@ -103,14 +109,38 @@ export function createTouchControls(cfg = {}) {
     mineStick.dy = dy;
     mineKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
   });
-  function endMineStick(e) {
-    if (!mineStick || e.pointerId !== mineStick.id) return;
-    pendingThrow = mineDrag(); // Bombe wird geworfen
+  // Stick zuruecksetzen -- OHNE ueber das Werfen zu entscheiden. Beide
+  // Endpfade teilen sich das, damit sie sich nicht auseinanderentwickeln.
+  function resetMineStick(e) {
     mineStick = null;
     mineKnob.style.transform = 'translate(-50%,-50%)';
+    try {
+      if (e && mineBtn.hasPointerCapture?.(e.pointerId)) mineBtn.releasePointerCapture(e.pointerId);
+    } catch {
+      /* Zeiger schon weg -- egal */
+    }
   }
+
+  // Loslassen = ausloesen. Das ist der EINZIGE Weg, auf dem eine Bombe
+  // fliegt.
+  function endMineStick(e) {
+    if (!mineStick || e.pointerId !== mineStick.id) return;
+    pendingThrow = mineDrag();
+    resetMineStick(e);
+  }
+
+  // pointercancel = das System hat den Touch abgebrochen (eingehender Anruf,
+  // System-Geste, zu viele Finger, Browser-Interferenz). Der Spieler hat den
+  // Wurf nie bestaetigt -- er darf deshalb NICHT ausgeloest werden.
+  // Vorher hing hier dieselbe Funktion wie an pointerup, die Bombe flog also
+  // an eine Position, die nie gewollt war (PLAN-INPUT.md, Bug P3).
+  function abortMineStick(e) {
+    if (!mineStick || e.pointerId !== mineStick.id) return;
+    resetMineStick(e);
+  }
+
   mineBtn.addEventListener('pointerup', endMineStick);
-  mineBtn.addEventListener('pointercancel', endMineStick);
+  mineBtn.addEventListener('pointercancel', abortMineStick);
 
   function showStick(el, s) {
     el.base.classList.remove('hidden');
@@ -120,14 +150,23 @@ export function createTouchControls(cfg = {}) {
     el.knob.style.top = STICK_R + s.dy - 16 + 'px';
   }
 
+  // Bedienelemente (Bomben-/Dash-/Pause-Button, Eingabefelder, Overlays)
+  // sind natuerliche Sperrzonen -- dort entsteht nie ein Stick.
+  // Bewusst PRO BERUEHRUNG geprueft: e.target gilt nur fuer die erste
+  // Beruehrung eines Ereignisses. Wer gleichzeitig den Bombenknopf und die
+  // Fahrflaeche antippt, hat sonst BEIDE Beruehrungen verworfen -- der
+  // Fahrstick waere stumm geblieben.
+  const inBlockedZone = (target) => !!(target && target.closest && target.closest('button, input, .overlay'));
+
   function onStart(e) {
-    if (e.target.closest && e.target.closest('button, input, .overlay')) return;
+    const usable = [...e.changedTouches].filter((t) => !inBlockedZone(t.target));
+    if (!usable.length) return;
     e.preventDefault();
     if (!active) {
       active = true;
       document.body.classList.add('touch-on');
     }
-    for (const t of e.changedTouches) {
+    for (const t of usable) {
       if (t.clientX < window.innerWidth / 2 && left === null) {
         const now = performance.now();
         if (now - lastLeftTap < DOUBLE_TAP_MS) mineQueued = true; // Doppeltipp

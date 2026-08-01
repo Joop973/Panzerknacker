@@ -110,6 +110,48 @@ class El {
     if (this.disabled) return;
     for (const fn of this.listeners.click || []) fn({ target: this, preventDefault() {}, stopPropagation() {} });
   }
+  // Generischer Ereignis-Ausloeser fuer alles ausser click (Pointer-/
+  // Touch-Ereignisse in ui/touchcontrols.js). Die Felder liefert der Test.
+  emit(type, ev = {}) {
+    const e = { type, target: this, preventDefault() {}, stopPropagation() {}, ...ev };
+    for (const fn of this.listeners[type] || []) fn(e);
+    return e;
+  }
+  // Pointer-Capture: der Stub merkt sich nur, WELCHE Zeiger gefangen sind --
+  // das reicht, um zu pruefen, dass ein Abbruch sauber freigibt.
+  setPointerCapture(id) {
+    (this.captured ||= new Set()).add(id);
+  }
+  releasePointerCapture(id) {
+    this.captured?.delete(id);
+  }
+  hasPointerCapture(id) {
+    return !!this.captured?.has(id);
+  }
+  getBoundingClientRect() {
+    return {
+      left: this.offsetLeft,
+      top: this.offsetTop,
+      width: this.offsetWidth,
+      height: this.offsetHeight,
+      right: this.offsetLeft + this.offsetWidth,
+      bottom: this.offsetTop + this.offsetHeight,
+    };
+  }
+  // touchcontrols.js prueft ueber closest(), ob eine Beruehrung auf einem
+  // Bedienelement liegt (Sperrzone).
+  closest(sel) {
+    const parts = sel.split(',').map((s) => s.trim());
+    let node = this;
+    while (node) {
+      for (const p of parts) {
+        if (/^[a-zA-Z]+$/.test(p) && node.tagName === p.toUpperCase()) return node;
+        if (p.startsWith('.') && node.classList.contains(p.slice(1))) return node;
+      }
+      node = node.parentNode;
+    }
+    return null;
+  }
   scrollIntoView() {}
   focus() {}
   // Alle Nachfahren als flache Liste (Reihenfolge = Dokumentordnung).
@@ -156,7 +198,28 @@ export function installDom() {
   const prevDoc = globalThis.document;
   const prevWin = globalThis.window;
   globalThis.document = doc;
-  globalThis.window = { document: doc, addEventListener() {}, matchMedia: () => ({ matches: false, addEventListener() {} }) };
+  // window mit echter Listener-Verwaltung: ui/touchcontrols.js haengt die
+  // beiden Fahr-/Zielsticks an window-Touchereignisse, ein Test muss sie
+  // also ausloesen koennen. innerWidth/innerHeight liefern die Bildschirm-
+  // haelften fuer die Stick-Zuordnung (links = fahren, rechts = zielen).
+  const winListeners = {};
+  globalThis.window = {
+    document: doc,
+    innerWidth: 800,
+    innerHeight: 400,
+    addEventListener(type, fn) {
+      (winListeners[type] ||= []).push(fn);
+    },
+    removeEventListener(type, fn) {
+      winListeners[type] = (winListeners[type] || []).filter((f) => f !== fn);
+    },
+    emit(type, ev = {}) {
+      const e = { type, target: doc.body, preventDefault() {}, stopPropagation() {}, ...ev };
+      for (const fn of winListeners[type] || []) fn(e);
+      return e;
+    },
+    matchMedia: () => ({ matches: false, addEventListener() {} }),
+  };
   return () => {
     globalThis.document = prevDoc;
     globalThis.window = prevWin;

@@ -8,11 +8,11 @@ bisherige Steuerung beschrieben ist, damit es nur eine Quelle gibt.
 
 ---
 
-**Fortschritt:** P1 ✅ · P2 ✅ gebaut · P5 ❌ gestrichen (Nutzerentscheidung) ·
-P10 ✅ war schon erledigt. **Nächste Session: P3 (Touch-Bug Sekundärwaffe —
-der `pointercancel`-Fehler ist unten schon diagnostiziert).**
+**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ gebaut · P5 ❌ gestrichen
+(Nutzerentscheidung) · P10 ✅ war schon erledigt.
+**Nächste Session: P4 (Gadget-Split) — vorher Konflikt C beachten.**
 
-## Ist-Abgleich (Stand: Cache v65)
+## Ist-Abgleich (Stand: Cache v66)
 
 Vor dem Bau geprüft, was der Code **heute schon kann**. Ergebnis: mehrere
 Phasen sind ganz oder überwiegend erledigt, zwei kollidieren mit
@@ -24,7 +24,7 @@ bereits vorhandenen Code geflossen.
 |---|---|---|
 | P1 Input-Abstraktion ✅ **erledigt** | **Grundgerüst stand seit Phase 0a**: `src/core/input.js` ist die einzige Stelle, die Geräte-Events liest; `getState()` liefert ein Aktionsmodell; Gamepad wird gepollt, nicht per Event; Werte liegen in `data/input.json`. | Aktionsmodell **erweitern** (Gadget-Felder, `detonate`, Menü-Navigation, getrennte Held/Release-Flags) + die drei Profile aus `getState()` in eigene Funktionen ziehen. Kein Neubau. |
 | P2 Viewport/Fullscreen ✅ **erledigt** | Meta-Viewport war **exakt** wie gefordert; `touch-action: none` und `overscroll-behavior` gesetzt; Fullscreen-Anforderung existierte. | Gebaut: `src/core/viewport.js` (DPR-Kopplung mit Deckel, `visualViewport` → `--vvh`), `position: fixed` global, Vollbild-Knopf. |
-| P3 Touch-Bug Sekundär | Pointer-Events, `pointerId`-Tracking und `setPointerCapture()` sind **bereits umgesetzt**. | **Ein konkreter Bug gefunden**, siehe unten — der Rest der Phase ist bereits erfüllt. |
+| P3 Touch-Bug Sekundär ✅ **erledigt** | Pointer-Events, `pointerId`-Tracking und `setPointerCapture()` waren **bereits umgesetzt**. | Gebaut: eigener `pointercancel`-Abbruchpfad; dazu **zwei weitere Fehler** gefunden und behoben (Zweitfinger, Sperrzone pro Berührung). |
 | P4 Gadget-Split | Ein Slot mit sechs austauschbaren Sekundärwaffen (Phase 6). | Echte Neuarbeit. Zwei Nebenwirkungen beachten, siehe unten. |
 | P5 Schild-Rework ❌ **gestrichen** | Vier Schild-Karten, Verfall nach 3 Räumen, Regeneration, Nachkauf. | **Nutzerentscheidung: „Schild erstmal so lassen wie es ist."** Konflikt A ist damit erledigt, E2/Bollwerk/`nachladeschild`/`emergency_shield`/`konterschild` bleiben unangetastet. Phase entfällt. |
 | P6 Haken-Rework | `hook.maxRangePx` **222** (Nutzerentscheidung), Bombenwurf `throwPx: 58`. | Reichweite ist **gesetzt** (Konflikt B entschieden). Offen bleiben nur die übrigen P6-Punkte (Zielvorschau usw.). |
@@ -254,7 +254,7 @@ Arena-Koordinaten ankommt. Gegenprobe für alle drei Fallen bestanden.
 
 ---
 
-## P3 — Touch-Bug Sekundärwaffe
+## P3 — Touch-Bug Sekundärwaffe ✅ gebaut
 
 **Was schon steht:** Pointer-Events, `pointerId`-Prüfung in `pointermove`
 und `pointerup`, `setPointerCapture()`, Sperrzone zwischen den Stickzonen.
@@ -262,6 +262,41 @@ und `pointerup`, `setPointerCapture()`, Sperrzone zwischen den Stickzonen.
 **Was zu tun ist:** Der oben beschriebene **`pointercancel`-Bug**: eigener
 Abbruch-Pfad ohne Auslösung. Danach die fünf Testschritte des
 Ausgangsdokuments durchgehen — sie decken auch die schon vorhandenen Teile ab.
+
+### Umsetzung (gebaut)
+
+Beim Durchgehen der vorhandenen Teile kamen **zwei weitere Fehler** dazu —
+beide dieselbe Klasse wie der gemeldete: eine Eingabe geht still verloren.
+
+1. **`pointercancel` löste aus** (der bekannte Bug). `pointerup` und
+   `pointercancel` hingen an derselben Funktion. Jetzt zwei Pfade:
+   `endMineStick` (wirft) und `abortMineStick` (setzt nur zurück), mit
+   gemeinsamem `resetMineStick`, das auch das Pointer-Capture freigibt.
+2. **Ein zweiter Finger auf dem Bombenknopf übernahm den Zug.** `pointerdown`
+   überschrieb `mineStick.id` mit dem neuen Zeiger — das Loslassen des
+   **ersten** Fingers fiel danach durch die id-Prüfung und wurde
+   stillschweigend verworfen. Für den Spieler: „die Bombe kam nicht."
+   Jetzt behält der erste Finger den Stick, bis er loslässt.
+3. **Die Sperrzone galt pro Ereignis statt pro Berührung.** `onStart` prüfte
+   nur `e.target` — das ist die Berührung, die das Ereignis ausgelöst hat.
+   Wer gleichzeitig den Bombenknopf und die Fahrfläche antippte, verlor
+   **beide** Berührungen, der Fahrstick entstand gar nicht. Jetzt wird jede
+   Berührung einzeln gegen die Sperrzone geprüft.
+
+**Bewusst NICHT gebaut:** ein `lostpointercapture`-Handler. Er wäre nur dann
+richtig, wenn er nach `pointerup` feuert — feuert er davor, würde er jeden
+regulären Wurf schlucken, also genau den Fehler erzeugen, den die Phase
+beseitigt. Die Reihenfolge ließ sich hier nicht verlässlich nachmessen
+(synthetisches `setPointerCapture` greift nicht), deshalb kein ungeprüfter
+Pfad.
+
+**Tests:** sechs Fälle in `tests/regression.mjs` (werfen, Abbruch wirft
+nicht, nach Abbruch wieder werfbar, Zweitfinger, Sperrzone pro Berührung,
+Sperrzone gilt weiterhin) — Gegenprobe für alle drei Fixes einzeln
+bestanden. Dafür wurde `tests/domstub.mjs` um Pointer-Ereignisse,
+`getBoundingClientRect`, Pointer-Capture und `closest()` erweitert, plus ein
+`window` mit echter Listener-Verwaltung. Zusätzlich im echten Browser mit
+echten `PointerEvent`s gegengeprüft.
 
 ---
 

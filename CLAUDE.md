@@ -80,10 +80,10 @@ Kennzahl 1 (erzwungene Bankshots) war mit 33 % statt 60 % deutlich
 verfehlt — behoben über `difficulty.json: bankshotGuarantee`, jetzt 61,9 %
 und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
 jetzt überhaupt messbar.
-`PLAN-INPUT.md` **P1 (Input-Abstraktion)** und **P2 (Viewport/DPR)** sind
-gebaut, **P5 (Schild-Rework) auf Nutzerwunsch gestrichen** („Schild erstmal
-so lassen wie es ist").
-**Nächste Phase: `PLAN-INPUT.md` P3 (Touch-Bug Sekundärwaffe).**
+`PLAN-INPUT.md` **P1 (Input-Abstraktion)**, **P2 (Viewport/DPR)** und
+**P3 (Touch-Bug Sekundärwaffe)** sind gebaut, **P5 (Schild-Rework) auf
+Nutzerwunsch gestrichen** („Schild erstmal so lassen wie es ist").
+**Nächste Phase: `PLAN-INPUT.md` P4 (Gadget-Split, Konflikt C beachten).**
 Der Ergänzungsplan hat Vorrang vor `PLAN.md` Phase 18 Welle 4; die
 aufgeschobene Telemetrie-Auswertung bleibt davon unberührt.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -1381,6 +1381,44 @@ Canvasgröße und Auflösung verwaltet.
   `input.js` im echten Browser instanziiert, statt eine Sonde in den
   Spielcode zu legen). Gegenprobe für alle drei Fallen bestanden.
 
+### PLAN-INPUT.md P3 (Touch-Bug Sekundärwaffe) — gemergt
+Der gemeldete Fehler war real; beim Prüfen der laut Plan „schon erfüllten"
+Teile kamen **zwei weitere** derselben Klasse dazu: eine Eingabe geht still
+verloren. Alle drei in `src/ui/touchcontrols.js`.
+- **`pointercancel` warf die Bombe trotzdem** (der bekannte Bug):
+  `pointerup` und `pointercancel` hingen an derselben Funktion, die immer
+  `pendingThrow` gesetzt hat. Bricht das System die Berührung ab (Anruf,
+  System-Geste, zu viele Finger), flog die Bombe an eine nie bestätigte
+  Position. Jetzt zwei Pfade — `endMineStick` (wirft) und `abortMineStick`
+  (setzt nur zurück) — mit gemeinsamem `resetMineStick`, das zusätzlich das
+  Pointer-Capture freigibt.
+- **Ein zweiter Finger auf dem Bombenknopf übernahm den Zug**:
+  `pointerdown` überschrieb `mineStick.id`, das Loslassen des **ersten**
+  Fingers fiel danach durch die id-Prüfung und wurde stillschweigend
+  verworfen („die Bombe kam nicht"). Der erste Finger behält den Stick jetzt
+  bis zum Loslassen.
+- **Die Sperrzone galt pro Ereignis statt pro Berührung**: `onStart` prüfte
+  nur `e.target` — das ist die Berührung, die das Ereignis ausgelöst hat.
+  Wer gleichzeitig den Bombenknopf und die Fahrfläche antippte, verlor
+  **beide** Berührungen, der Fahrstick entstand gar nicht. Jetzt filtert
+  `onStart` jede Berührung einzeln gegen `inBlockedZone()`.
+- **Bewusst NICHT gebaut: ein `lostpointercapture`-Handler.** Er wäre nur
+  richtig, wenn er *nach* `pointerup` feuert — feuert er davor, schluckt er
+  jeden regulären Wurf und erzeugt genau den Fehler, den die Phase
+  beseitigt. Die Reihenfolge ließ sich hier nicht verlässlich nachmessen
+  (synthetisches `setPointerCapture` greift nicht), deshalb kein
+  ungeprüfter Pfad.
+- **`tests/domstub.mjs` erweitert**: generisches `emit()` für Pointer-/
+  Touch-Ereignisse, `getBoundingClientRect`, Pointer-Capture-Buchführung,
+  `closest()` und ein `window` mit echter Listener-Verwaltung
+  (`innerWidth` für die Stick-Hälften). Damit liegen sechs P3-Fälle in der
+  **schnellen Node-Suite** statt in einem Browsertest. Wichtig beim
+  Schreiben: jeder Fall braucht ein **frisches DOM** — `createTouchControls()`
+  hängt einen weiteren `#mineBtn` in den Body *und* weitere Listener an
+  `window`, sonst bedient der nächste Fall die Instanz des vorigen.
+- Gegenprobe für alle drei Fixes einzeln bestanden; zusätzlich im echten
+  Browser mit echten `PointerEvent`s gegengeprüft.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1467,7 +1505,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v65`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v66`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -1514,5 +1552,6 @@ Regressions-Standard: `tests/regression.mjs` muss grün sein (~1 s). Enthält:
 5 Seeds über 16 Räume deterministisch bis zum Sieg, Ziellinien-Trace
 crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
-Effekt-Renderpfad mit Fake-Canvas, **Overlay-Verhalten mit
-`tests/domstub.mjs`** und der USP-Bankshot-Quote (≥ 60 %).
+Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
+`tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) und der
+USP-Bankshot-Quote (≥ 60 %).
