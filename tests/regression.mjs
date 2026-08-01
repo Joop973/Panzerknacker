@@ -666,6 +666,109 @@ function check(ok, msg) {
   );
 }
 
+// ---- 8c. P3: Touch-Wurfstick der Sekundaerwaffe -------------------------
+// Der Wurfstick loest NUR beim Loslassen aus. Bricht das System die
+// Beruehrung ab (pointercancel: eingehender Anruf, System-Geste, zu viele
+// Finger), darf keine Bombe fliegen -- vorher hing dieselbe Funktion an
+// pointerup UND pointercancel, die Bombe flog also an eine Position, die der
+// Spieler nie bestaetigt hatte.
+{
+  const { installDom } = await import('./domstub.mjs');
+  const { createTouchControls } = await import('../src/ui/touchcontrols.js');
+  // Mitte des Buttons laut domstub-Layout (offsetLeft/Top 10, 40x40).
+  const CX = 30;
+  const CY = 30;
+  // JEDER Fall bekommt ein frisches DOM: createTouchControls() haengt einen
+  // weiteren #mineBtn in den Body und weitere Listener an window -- ohne
+  // Isolation wuerde der naechste Fall die Instanz des vorigen bedienen.
+  const withTouch = (fn) => {
+    const restore = installDom();
+    try {
+      const tc = createTouchControls({});
+      fn(tc, document.getElementById('mineBtn'));
+    } finally {
+      restore();
+    }
+  };
+
+  // (a) Normalfall: ziehen und loslassen wirft.
+  withTouch((tc, btn) => {
+    btn.emit('pointerdown', { pointerId: 1, clientX: CX, clientY: CY });
+    btn.emit('pointermove', { pointerId: 1, clientX: CX + 40, clientY: CY });
+    btn.emit('pointerup', { pointerId: 1, clientX: CX + 40, clientY: CY });
+    const thrown = tc.consumeThrow();
+    check(!!thrown, 'P3: Loslassen wirft die Bombe nicht mehr');
+    check(thrown && thrown.dist > 0, 'P3: gezogener Wurf hat keine Weite');
+    check(Math.abs(thrown?.angle ?? 9) < 1e-6, `P3: Wurfwinkel falsch (${thrown?.angle})`);
+  });
+
+  // (b) Der Fehlerfall: Abbruch durch das System wirft NICHT.
+  withTouch((tc, btn) => {
+    btn.emit('pointerdown', { pointerId: 2, clientX: CX, clientY: CY });
+    btn.emit('pointermove', { pointerId: 2, clientX: CX + 40, clientY: CY });
+    btn.emit('pointercancel', { pointerId: 2, clientX: CX + 40, clientY: CY });
+    check(tc.consumeThrow() === null, 'P3: pointercancel wirft die Bombe trotzdem (Bug P3)');
+    check(!tc.isSecondaryHeld(), 'P3: nach dem Abbruch gilt der Stick noch als gehalten');
+    check(!btn.hasPointerCapture(2), 'P3: Pointer-Capture nach dem Abbruch nicht freigegeben');
+  });
+
+  // (c) Nach einem Abbruch muss der naechste Wurf wieder gehen -- ein
+  // haengengebliebener Stick waere schlimmer als der urspruengliche Fehler.
+  withTouch((tc, btn) => {
+    btn.emit('pointerdown', { pointerId: 3, clientX: CX, clientY: CY });
+    btn.emit('pointercancel', { pointerId: 3, clientX: CX, clientY: CY });
+    btn.emit('pointerdown', { pointerId: 4, clientX: CX, clientY: CY });
+    btn.emit('pointermove', { pointerId: 4, clientX: CX, clientY: CY + 40 });
+    btn.emit('pointerup', { pointerId: 4, clientX: CX, clientY: CY + 40 });
+    check(!!tc.consumeThrow(), 'P3: nach einem Abbruch laesst sich nicht mehr werfen');
+  });
+
+  // (d) Ein zweiter Finger auf dem Button uebernimmt den Zug nicht.
+  // Sonst zeigt die gemerkte pointerId auf den neuen Finger und das
+  // Loslassen des ERSTEN wird stillschweigend verworfen.
+  withTouch((tc, btn) => {
+    btn.emit('pointerdown', { pointerId: 5, clientX: CX, clientY: CY });
+    btn.emit('pointermove', { pointerId: 5, clientX: CX + 40, clientY: CY });
+    btn.emit('pointerdown', { pointerId: 6, clientX: CX, clientY: CY }); // zweiter Finger
+    btn.emit('pointerup', { pointerId: 5, clientX: CX + 40, clientY: CY });
+    check(!!tc.consumeThrow(), 'P3: zweiter Finger schluckt den Wurf des ersten');
+  });
+
+  // (e) Sperrzone pro Beruehrung: Bombenknopf und Fahrflaeche gleichzeitig
+  // angetippt -- der Fahrstick muss trotzdem entstehen. Frueher pruefte
+  // onStart nur e.target (die ERSTE Beruehrung) und verwarf dadurch beide.
+  withTouch((tc, btn) => {
+    const arena = document.createElement('canvas');
+    document.body.appendChild(arena);
+    window.emit('touchstart', {
+      target: btn,
+      changedTouches: [
+        { identifier: 1, target: btn, clientX: CX, clientY: CY },
+        { identifier: 2, target: arena, clientX: 100, clientY: 200 },
+      ],
+    });
+    check(tc.hasContact(), 'P3: gleichzeitiger Knopfdruck schluckt den Fahrstick');
+    // Ein frischer Stick hat noch keine Auslenkung -- erst die Bewegung
+    // ergibt einen Fahrwert.
+    window.emit('touchmove', {
+      changedTouches: [{ identifier: 2, target: arena, clientX: 140, clientY: 200 }],
+    });
+    const mv = tc.getMove();
+    check(mv.x > 0, `P3: Fahrstick liefert keine Bewegung (x=${mv.x})`);
+  });
+
+  // (f) Die Sperrzone gilt weiterhin: eine Beruehrung AUF dem Knopf allein
+  // erzeugt keinen Fahrstick (sonst waere (e) auf Kosten der Sperrzone
+  // erkauft).
+  withTouch((tc, btn) => {
+    window.emit('touchstart', {
+      target: btn,
+      changedTouches: [{ identifier: 1, target: btn, clientX: CX, clientY: CY }],
+    });
+    check(!tc.hasContact(), 'P3: Beruehrung auf dem Bombenknopf erzeugt einen Fahrstick');
+  });
+}
+
 // ---- 8. Overlays schliessen sich nach der Aktion -----------------------
 // Vom Nutzer gemeldeter Blocker: nach dem Anklicken eines Kartenknotens blieb
 // das #map-Overlay ueber dem Spielfeld liegen und fing jede weitere Eingabe
