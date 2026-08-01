@@ -6,6 +6,7 @@
 
 import { WIDTH, HEIGHT } from '../config.js';
 import { enemyCount, totalRooms } from '../game/run.js';
+import { resolveCfg } from '../game/cfg.js';
 
 function fmtTime(s) {
   const m = Math.floor(s / 60);
@@ -179,6 +180,80 @@ export function createHud(ctx) {
     );
   }
 
+  // P7: Werte des eigenen Panzers, wie sie nach allen Upgrades, Raum-
+  // Modifikatoren und Transformationen TATSAECHLICH gelten. Bis hierher
+  // zeigte das Spiel nur Kartennamen -- welche Zahl dabei herauskommt, war
+  // nirgends ablesbar.
+  //
+  // Alle Werte werden aus dem aufgeloesten cfg abgeleitet, es gibt KEINE
+  // neuen Felder (Ist-Abgleich in PLAN-INPUT.md). Die Basiswerte kommen aus
+  // resolveCfg() ohne Upgrades -- daraus die Abweichung, denn interessant ist
+  // nicht "Tempo 132", sondern "Tempo 132 (+20 %)".
+  function drawStats(run) {
+    const st = run.state;
+    const p = st.player;
+    if (!p) return;
+    const base = resolveCfg(run.data, 'player');
+    const bmine = run.data.balance.mine;
+  
+    // Abweichung in Prozent, nur wenn es eine gibt.
+    const pct = (now, was) => {
+      if (!was || Math.abs(now - was) < 1e-6) return '';
+      const d = Math.round(((now - was) / was) * 100);
+      return d === 0 ? '' : ` (${d > 0 ? '+' : ''}${d} %)`;
+    };
+    const num = (v) => (Math.abs(v - Math.round(v)) < 0.05 ? String(Math.round(v)) : v.toFixed(1));
+  
+    const liveBullets = st.bullets.filter((b) => b.owner === p && !b.dead).length;
+    const rows = [
+      ['Tempo', `${num(p.cfg.speed)}${pct(p.cfg.speed, base.speed)}`],
+      ['Geschosstempo', `${num(p.cfg.bulletSpeed)}${pct(p.cfg.bulletSpeed, base.bulletSpeed)}`],
+      ['Nachladen', `${p.cfg.fireCooldown.toFixed(2)} s${pct(p.cfg.fireCooldown, base.fireCooldown)}`],
+      ['Abpraller', `${p.cfg.ricochets}${p.cfg.ricochets !== base.ricochets ? ` (${base.ricochets})` : ''}`],
+      ['Magazin', `${p.cfg.magazine - liveBullets}/${p.cfg.magazine}${pct(p.cfg.magazine, base.magazine)}`],
+      ['Bomben', `${p.cfg.mines}${pct(p.cfg.mines, base.mines)}`],
+      [
+        'Bombenradius',
+        `${num(bmine.radius * (p.cfg.mineRadiusMult || 1))}${pct(p.cfg.mineRadiusMult || 1, 1)}`,
+      ],
+    ];
+    if (p.cfg.gadget) {
+      const gl = run.data.secondaries?.[p.cfg.gadget]?.label || p.cfg.gadget;
+      const cd = p.gadgetCooldown || 0;
+      rows.push(['Gadget', cd > 0 ? `${gl} (${cd.toFixed(1)} s)` : `${gl} bereit`]);
+    }
+    if (p.cfg.dash) rows.push(['Dash', `${p.cfg.dash.cooldown.toFixed(1)} s Abklingzeit`]);
+    if (st.shieldCharges?.length) rows.push(['Schild', `${st.shieldCharges.length} Ladung(en)`]);
+    // Raum-Modifikator sichtbar machen: er veraendert genau diese Zahlen und
+    // ist sonst nur in der Vorschau zu sehen.
+    if (st.modifier?.name) rows.push(['Raum', st.modifier.name]);
+  
+    const w = 208;
+    const lineH = 14;
+    const h = 22 + rows.length * lineH;
+    const x = WIDTH - w - 8;
+    const y = 30;
+    ctx.fillStyle = 'rgba(10,10,14,0.82)';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = 'rgba(200,178,74,0.5)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
+    ctx.font = 'bold 11px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#c8b24a';
+    ctx.fillText('WERTE', x + 8, y + 15);
+    ctx.font = '11px monospace';
+    rows.forEach(([k, v], i) => {
+      const ry = y + 15 + (i + 1) * lineH;
+      ctx.fillStyle = '#9aa0a8';
+      ctx.fillText(k, x + 8, ry);
+      ctx.fillStyle = '#e8e4d8';
+      ctx.textAlign = 'right';
+      ctx.fillText(v, x + w - 8, ry);
+      ctx.textAlign = 'left';
+    });
+  }
+
   return {
     render(run, opts = {}) {
       if (run.phase === 'playing' || run.phase === 'transition') drawBar(run);
@@ -187,9 +262,16 @@ export function createHud(ctx) {
       else if (run.phase === 'gameover') drawEnd(run, 'GAME OVER', '#ff6a5e');
       else if (run.phase === 'victory') drawEnd(run, 'SIEG!', '#7ade6a');
       if (opts.paused && run.phase === 'playing') drawPause(run);
+      // P7: Stats-Anzeige. Sichtbar per Umschalter (Tab) und IMMER waehrend
+      // der Pause -- so ist sie auf dem Handy ohne zusaetzlichen Knopf
+      // erreichbar (dort gibt es keine Tastatur, aber den Pausenknopf).
+      if ((opts.stats || opts.paused) && (run.phase === 'playing' || run.phase === 'transition')) {
+        drawStats(run);
+      }
     },
   };
 }
+
 
 // Kontextuelle Tutorial-Einblendungen (nur beim allerersten Run auf dem
 // Geraet). Raum 1: fahren/zielen, Raum 2: Mine, Raum 3: Abpraller-

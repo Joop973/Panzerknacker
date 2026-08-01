@@ -83,9 +83,10 @@ und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
 jetzt überhaupt messbar.
 `PLAN-INPUT.md` **P1 (Input-Abstraktion)**, **P2 (Viewport/DPR)**,
 **P3 (Touch-Bug Sekundärwaffe)**, **P4 (Gadget-Split)** und
-**P6 (Haken-Rework)** sind gebaut, **P5 (Schild-Rework) auf Nutzerwunsch
-gestrichen** („Schild erstmal so lassen wie es ist").
-**Nächste Phase: `PLAN-INPUT.md` P7 (Stats-Anzeige).**
+**P6 (Haken-Rework)** und **P7 (Werte-Anzeige)** sind gebaut,
+**P5 (Schild-Rework) auf Nutzerwunsch gestrichen** („Schild erstmal so
+lassen wie es ist").
+**Nächste Phase: `PLAN-INPUT.md` P8 (Mobile Zwischenraum-UI).**
 Der Ergänzungsplan hat Vorrang vor `PLAN.md` Phase 18 Welle 4; die
 aufgeschobene Telemetrie-Auswertung bleibt davon unberührt.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -1499,6 +1500,35 @@ ausgenommen — dort ist nichts zum Festhaken.
   die Funktion sofort aus und der Zweig bliebe ungetestet — per Gegenprobe
   bestätigt).
 
+### PLAN-INPUT.md P7 (Werte-Anzeige) — gemergt
+`hud.js: drawStats()` zeigt die Werte des eigenen Panzers, **wie sie nach
+allen Upgrades, Raum-Modifikatoren und Transformationen tatsächlich
+gelten**. Bis dahin zeigte das Spiel nur Kartennamen — welche Zahl dabei
+herauskommt, war nirgends ablesbar.
+- **Reine Ableitung, kein neues Feld** (so im Ist-Abgleich vorhergesagt):
+  alles kommt aus dem aufgelösten `cfg`, die Basis aus `resolveCfg()` ohne
+  Upgrades. Angezeigt wird die **Abweichung** — interessant ist nicht
+  „Tempo 84", sondern „Tempo 84 (+20 %)".
+- **Zwei Wege, ein Panel**: Umschalter **Tab** (neue Aktion `stats` in
+  `data/input.json`; `preventDefault`, sonst wandert der Fokus) und
+  **immer während der Pause**. Dadurch ist die Anzeige auf dem Handy ohne
+  zusätzlichen Knopf erreichbar — dort gibt es keine Tastatur, aber den
+  Pausenknopf.
+- Zeilen: Tempo, Geschosstempo, Nachladen, Abpraller, Magazin, Bomben,
+  Bombenradius; dazu falls vorhanden Gadget samt Restabklingzeit, Dash,
+  Schildladungen und der aktive Raum-Modifikator.
+- Hinweiszeile unter dem Spielfeld auf die neuen Tasten aktualisiert
+  (Q = Gadget, E = zünden, Tab = Werte).
+- **Test mit mitschreibendem Fake-Canvas** (jeder `fillText` wird
+  gesammelt): das Panel muss überhaupt Text ausgeben — eine leere Box wäre
+  sonst grün —, alle Zeilen enthalten, bei einem Tempo-Upgrade eine
+  Abweichung ausweisen, in der Pause erscheinen und im normalen Spiel
+  **nicht** dauerhaft stehen. Gegenprobe für alle drei Kernpunkte bestanden.
+  **Fallstrick beim Testaufbau:** ein frischer Run steht auf `preview` und
+  zeichnet gar nichts, und ein nachträglich gesetztes `run.upgrades` wirkt
+  erst im nächsten Raum — der Vergleichsraum muss über `createState()` mit
+  `playerUpgrades` gebaut werden.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1585,7 +1615,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v68`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v69`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

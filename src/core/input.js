@@ -59,6 +59,7 @@ export function createInput(target, canvas, opts = {}) {
   let manualProfile = null; // 'touch'|'keyboard'|'gamepad' -- Override aus den Einstellungen
   let source = 'keyboard';
   let debug = false;
+  let stats = false; // P7: Werte-Anzeige eingeblendet?
   let wasFiring = false; // fuer die Feuer-Flanke (primaryPressed)
 
   // Flankengetriggerte Wuensche, die zwischen zwei getState()-Aufrufen
@@ -126,6 +127,13 @@ export function createInput(target, canvas, opts = {}) {
     }
     if (has(keys.menuConfirm, e.code)) {
       if (!e.repeat) queued.menuConfirm = true;
+      return;
+    }
+    // P7: Werte-Anzeige umschalten. Tab wuerde sonst den Fokus wandern
+    // lassen -- der Wechsel gehoert ins Spiel, nicht in die Seite.
+    if (has(keys.stats, e.code)) {
+      e.preventDefault();
+      if (!e.repeat) stats = !stats;
       return;
     }
     if (has(keys.dash, e.code)) {
@@ -440,6 +448,11 @@ export function createInput(target, canvas, opts = {}) {
     },
     isDebug() {
       return debug;
+    },
+    // P7: Werte-Anzeige (Tab). Auf dem Handy uebernimmt die Pause diese
+    // Rolle -- dort ist die Anzeige immer eingeblendet (siehe hud.js).
+    isStats() {
+      return stats;
     },
     destroy() {
       target.removeEventListener('keydown', onKeyDown);
