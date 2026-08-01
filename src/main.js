@@ -95,6 +95,10 @@ async function init() {
   // Phase 7b: Minen-Warnpuls braucht seinen Takt in der Spiellogik
   // (mine.js) -- der Rest von sounds.json geht direkt an das Audio-Modul.
   tanksData.sounds = soundsData;
+  // P1: die Spiellogik braucht aus data/input.json nur den feedback-Block
+  // (Rueckmeldung bei gesperrtem Schuss). Geraete-Events liest weiterhin
+  // ausschliesslich src/core/input.js.
+  tanksData.input = inputCfg;
   // Feste Layouts EINMALIG beim Laden pruefen (Flood-Fill etc.). Ein
   // unloesbares Layout meldet sich hier mit klarer Meldung statt spaeter
   // im laufenden Spiel.
@@ -448,6 +452,9 @@ async function init() {
       move: st.move,
       aim: st.aim,
       fire: st.firing,
+      // Frischer Abzug (Flanke) -- nur damit meldet ein durch das volle
+      // Magazin blockierter Schuss sich zurueck (SPEC.md 9, Konflikt D).
+      firePressed: st.primaryPressed,
       mine: st.secondary,
       mineThrow: st.secondaryThrow,
       dash: st.dash,

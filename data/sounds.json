@@ -122,6 +122,12 @@
         { "freq": 1047, "dur": 0.22, "vol": 0.12, "wave": "square", "at": 0.39 }
       ]
     },
+    "empty": {
+      "_comment": "P1: Abzug gedrueckt, aber das Magazin ist voll ausgeflogen (bullet.maxActive -- Feuersperre statt Verdraengung, Phase 0a). Bewusst ein trockenes Klacken ohne Tonhoehe statt eines Fehlton-Piepsens: es ist keine Fehlbedienung, sondern eine Wartezeit. Sichtbares Gegenstueck ist der gedimmte Muendungsblitz (effects.js: drawFlashes).",
+      "filter": { "type": "lowpass", "freq": 2600 },
+      "noise": { "dur": 0.04, "vol": 0.06 },
+      "steps": [{ "freq": 160, "slideTo": 110, "dur": 0.05, "vol": 0.05, "wave": "square" }]
+    },
     "tone_high": {
       "_comment": "t_white wechselt in die offensive Rolle (Phase 8: phaseToggle).",
       "steps": [{ "freq": 880, "dur": 0.12, "vol": 0.12, "wave": "square" }]

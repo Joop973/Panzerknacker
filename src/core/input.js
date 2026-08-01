@@ -1,43 +1,79 @@
-// Einheitliche Eingabe-Abstraktion (Phase 0a).
+// Einheitliche Eingabe-Abstraktion (Phase 0a, erweitert in PLAN-INPUT.md P1).
 //
 // Diese Schicht ist die EINZIGE Stelle, die Geraete-Events liest. Die
 // Spiellogik ruft nur getState() auf und weiss nicht, ob der Zustand von
 // Touch, Maus/Tastatur oder Gamepad kommt.
 //
-// Einheitlicher Zustand:
-//   move      {x,y}  Fahrtrichtung (roh, -1..1 je Achse)
-//   aim       {x,y}  Zielpunkt in Arena-Koordinaten
-//   firing    bool   Dauerfeuer-Wunsch (Cooldown/Magazin gelten in der Logik)
-//   secondary bool   Sekundaerwaffe (Mine), FLANKENGETRIGGERT
-// Zusatzkanaele des Projekts (bestehende Features, gleiche Schicht):
-//   secondaryThrow {angle,dist}|null  Touch-Wurfstick (Wurfweite)
-//   dash      bool   Ausweich-Dash (flankengetriggert)
+// --- Aktionsmodell (InputState) ---------------------------------------
+//   move            {x,y}   Fahrtrichtung (roh, -1..1 je Achse)
+//   aim             {x,y}   Zielpunkt in Arena-Koordinaten
+//   aimActive       bool    wird gerade aktiv gezielt (Stick ausgelenkt /
+//                           Maus bewegt)? -- fuer Anzeigen, nicht fuers Feuern
+//   primaryFire     bool    Dauerfeuer-Wunsch (Cooldown/Magazin gelten in
+//                           der Spiellogik)
+//   primaryPressed  bool    NEUE Flanke des Feuerwunsches (ein Frame lang).
+//                           Nur damit laesst sich "Tastendruck ins volle
+//                           Magazin" von gehaltenem Autofire unterscheiden
+//                           (SPEC.md Abschnitt 9, Konflikt D).
+//   secondaryHeld   bool    Sekundaerwaffe wird gerade gezielt (Halten)
+//   secondaryRelease bool   Sekundaerwaffe ausloesen (EIN Frame)
+//   secondaryAim    {angle,dist}|null  Zielvorgabe des Wurfsticks
+//   gadgetHeld      bool    Gadget wird gezielt   \  ab P4 belegt --
+//   gadgetRelease   bool    Gadget ausloesen      /  bis dahin immer false
+//   gadgetAim       {angle,dist}|null
+//   detonate        bool    Bombe zuenden (EIN Frame)
+//   dash            bool    Ausweich-Dash (EIN Frame)
+//   menuDir         {x,y}   Menue-Navigation (D-Pad/Pfeiltasten, EIN Frame)
+//   menuConfirm     bool    Menue bestaetigen (EIN Frame)
+//   source          'touch' | 'keyboard' | 'gamepad'
 //
-// Quellen-Erkennung laeuft automatisch: die zuletzt benutzte Eingabeart
-// gewinnt (source), damit das HUD die virtuellen Sticks nur bei Touch zeigt.
+// Alle "EIN Frame"-Flags werden beim Auslesen in getState() verbraucht.
 //
-// Werte aus data/input.json: stick.deadzone, stick.twoZone,
-// stick.fireThreshold, player.fireRate.
+// --- Drei Profile ------------------------------------------------------
+// profileTouch / profileGamepad / profileKeyboardMouse schreiben JEDES nur
+// in denselben InputState. Welches gewinnt, entscheidet die zuletzt benutzte
+// Quelle (source) bzw. ein manueller Override (setProfile).
+//
+// Belegungen, Deadzones und Reichweiten kommen aus data/input.json.
+
+const EMPTY_AIM = null;
 
 export function createInput(target, canvas, opts = {}) {
-  // Alle Stellwerte kommen aus data/input.json. Die ?? -Werte sind reine
+  // Alle Stellwerte aus data/input.json. Die ?? -Werte sind reine
   // Absturzsicherungen, falls die Datei fehlt -- kein Tuning-Ort.
   const cfg = opts.inputCfg || {};
   const touch = opts.touch || null; // Touch-Treiber (ui/touchcontrols.js)
   const stickCfg = cfg.stick || {};
+  const keys = cfg.keyboard || {};
+  const pad = cfg.gamepad || {};
+  const padAxes = pad.axes || { moveX: 0, moveY: 1, aimX: 2, aimY: 3 };
   const deadzone = stickCfg.deadzone ?? 0.15;
+  const reachPx = cfg.aim?.reachPx ?? 120;
+
+  const has = (list, code) => Array.isArray(list) && list.includes(code);
 
   const pressed = new Set();
-  const aim = { x: canvas.width / 2, y: 0 }; // Mauszeiger in Arena-Koordinaten
-  let mouseHeld = false; // Linksklick gehalten -> firing
-  let secondaryQueued = false;
-  let pauseQueued = false;
-  let dashQueued = false;
+  const mouse = { x: canvas.width / 2, y: 0, held: false, moved: false };
+  let manualProfile = null; // 'touch'|'keyboard'|'gamepad' -- Override aus den Einstellungen
+  let source = 'keyboard';
   let debug = false;
-  let source = 'keyboard'; // 'touch' | 'keyboard' | 'gamepad'
+  let wasFiring = false; // fuer die Feuer-Flanke (primaryPressed)
+
+  // Flankengetriggerte Wuensche, die zwischen zwei getState()-Aufrufen
+  // anfallen. Werden beim Auslesen verbraucht.
+  const queued = {
+    secondary: false,
+    gadget: false,
+    detonate: false,
+    dash: false,
+    pause: false,
+    menuConfirm: false,
+    menuX: 0,
+    menuY: 0,
+  };
 
   function markSource(s) {
-    source = s;
+    if (!manualProfile) source = s;
   }
 
   function toCanvas(e) {
@@ -48,26 +84,45 @@ export function createInput(target, canvas, opts = {}) {
     };
   }
 
+  // ---- Rohe Geraete-Events (nur hier!) --------------------------------
   function onKeyDown(e) {
-    if (e.code === 'F1') {
+    if (has(keys.debug, e.code)) {
       e.preventDefault(); // F1 oeffnet sonst die Browser-Hilfe
       if (!e.repeat) debug = !debug;
       return;
     }
-    if (e.code === 'Space') {
+    if (has(keys.secondary, e.code)) {
       e.preventDefault(); // Leertaste scrollt sonst die Seite
       if (!e.repeat) {
-        secondaryQueued = true;
+        queued.secondary = true;
         markSource('keyboard');
       }
       return;
     }
-    if (e.code === 'Escape' || e.code === 'KeyP') {
-      if (!e.repeat) pauseQueued = true;
+    if (has(keys.gadget, e.code)) {
+      if (!e.repeat) {
+        queued.gadget = true;
+        markSource('keyboard');
+      }
       return;
     }
-    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
-      if (!e.repeat) dashQueued = true;
+    if (has(keys.detonate, e.code)) {
+      if (!e.repeat) {
+        queued.detonate = true;
+        markSource('keyboard');
+      }
+      return;
+    }
+    if (has(keys.pause, e.code)) {
+      if (!e.repeat) queued.pause = true;
+      return;
+    }
+    if (has(keys.menuConfirm, e.code)) {
+      if (!e.repeat) queued.menuConfirm = true;
+      return;
+    }
+    if (has(keys.dash, e.code)) {
+      if (!e.repeat) queued.dash = true;
       return;
     }
     pressed.add(e.code);
@@ -80,26 +135,31 @@ export function createInput(target, canvas, opts = {}) {
   function onBlur() {
     // Fokusverlust: alle Tasten loslassen, sonst "klebt" der Panzer.
     pressed.clear();
-    mouseHeld = false;
+    mouse.held = false;
   }
   function onMouseMove(e) {
     const p = toCanvas(e);
-    aim.x = p.x;
-    aim.y = p.y;
+    mouse.x = p.x;
+    mouse.y = p.y;
+    mouse.moved = true;
     markSource('keyboard');
   }
   function onMouseDown(e) {
-    if (e.button !== 0) return;
     // Klicks auf UI-Elemente (Buttons, Overlays) sind keine Schuesse.
     if (e.target.closest && e.target.closest('button, input, .overlay')) return;
     const p = toCanvas(e);
-    aim.x = p.x;
-    aim.y = p.y;
-    mouseHeld = true; // gehalten = Dauerfeuer
+    mouse.x = p.x;
+    mouse.y = p.y;
+    if (e.button === 0) mouse.held = true; // links gehalten = Dauerfeuer
+    if (e.button === 2) queued.secondary = true; // rechts = Sekundaerwaffe
     markSource('keyboard');
   }
   function onMouseUp(e) {
-    if (e.button === 0) mouseHeld = false;
+    if (e.button === 0) mouse.held = false;
+  }
+  function onContextMenu(e) {
+    // Rechtsklick ist die Sekundaerwaffe -- kein Browser-Menue darueber.
+    if (e.target.closest && e.target.closest('canvas')) e.preventDefault();
   }
 
   target.addEventListener('keydown', onKeyDown);
@@ -108,12 +168,10 @@ export function createInput(target, canvas, opts = {}) {
   target.addEventListener('mousemove', onMouseMove);
   target.addEventListener('mousedown', onMouseDown);
   target.addEventListener('mouseup', onMouseUp);
+  target.addEventListener('contextmenu', onContextMenu);
 
-  // ---- Gamepad (gepollt, Flankenerkennung fuer Tasten) ----
-  let gpSecondaryWasDown = false;
-  let gpStartWasDown = false;
-  let gpDashWasDown = false;
-
+  // ---- Gamepad: gepollt, nicht eventbasiert ---------------------------
+  const gpPrev = {}; // Button-Index -> war im letzten Frame gedrueckt?
   function pollGamepad() {
     if (typeof navigator === 'undefined' || !navigator.getGamepads) return null;
     let gp = null;
@@ -124,38 +182,147 @@ export function createInput(target, canvas, opts = {}) {
       }
     }
     if (!gp) {
-      gpSecondaryWasDown = false;
+      for (const k in gpPrev) gpPrev[k] = false;
       return null;
     }
+    const down = (idx) => idx != null && !!gp.buttons[idx]?.pressed;
+    // Flanke: jetzt gedrueckt, im letzten Frame nicht.
+    // Das Ergebnis wird PRO POLL gemerkt (edgeSeen): derselbe Knopf darf
+    // zwei Aktionen belegen (A = Sekundaer im Spiel, Bestaetigen im Menue).
+    // Ohne den Cache wuerde der zweite edge()-Aufruf false liefern, weil der
+    // erste gpPrev schon aktualisiert hat.
+    const edgeSeen = {};
+    const edge = (idx) => {
+      if (idx == null) return false;
+      if (idx in edgeSeen) return edgeSeen[idx];
+      const now = down(idx);
+      const was = !!gpPrev[idx];
+      gpPrev[idx] = now;
+      edgeSeen[idx] = now && !was;
+      return edgeSeen[idx];
+    };
     const dz = (v) => (Math.abs(v) < deadzone ? 0 : v);
-    const move = { x: dz(gp.axes[0] || 0), y: dz(gp.axes[1] || 0) };
-    const ax = dz(gp.axes[2] || 0);
-    const ay = dz(gp.axes[3] || 0);
+    const move = { x: dz(gp.axes[padAxes.moveX] || 0), y: dz(gp.axes[padAxes.moveY] || 0) };
+    const ax = dz(gp.axes[padAxes.aimX] || 0);
+    const ay = dz(gp.axes[padAxes.aimY] || 0);
     const aimLen = Math.hypot(ax, ay);
-    const aimDir = aimLen > deadzone ? { x: ax, y: ay } : null;
-    const fireHeld = !!gp.buttons[7]?.pressed; // rechter Trigger
-    // Sekundaerwaffe: linker Trigger (Spec 0a) ODER A/X (Altbelegung).
-    const secDown = !!gp.buttons[6]?.pressed || !!gp.buttons[0]?.pressed;
-    const secondaryPressed = secDown && !gpSecondaryWasDown;
-    gpSecondaryWasDown = secDown;
-    const startDown = !!gp.buttons[9]?.pressed; // Start/Options -> Pause
-    const pausePressed = startDown && !gpStartWasDown;
-    gpStartWasDown = startDown;
-    const dashDown = !!gp.buttons[1]?.pressed; // B / Circle -> Dash
-    const dashPressed = dashDown && !gpDashWasDown;
-    gpDashWasDown = dashDown;
-    if (move.x || move.y || aimDir || fireHeld || secDown) markSource('gamepad');
-    return { move, aimDir, aimLen, fireHeld, secondaryPressed, pausePressed, dashPressed };
+    const dpad = pad.dpad || {};
+    const out = {
+      move,
+      aimDir: aimLen > deadzone ? { x: ax, y: ay } : null,
+      // Doktrin (SPEC.md 9): Auf dem Controller zielt der Stick NUR --
+      // gefeuert wird ausschliesslich mit dem Trigger, kein Autofire.
+      fireHeld: down(pad.primaryFire),
+      firePressed: edge(pad.primaryFire),
+      secondaryHeld: down(pad.secondary),
+      // A-Knopf als Zweitbelegung: kurzer Druck loest sofort aus (kein
+      // Zielen ueber Halten). Deckt die alte Belegung aus Phase 0a ab.
+      secondaryAlt: edge(pad.secondaryAlt),
+      secondaryRelease: false, // unten aus der Flanke abgeleitet
+      gadgetHeld: down(pad.gadget),
+      gadgetRelease: false,
+      detonate: edge(pad.detonate),
+      dash: edge(pad.dash),
+      pause: edge(pad.pause),
+      menuConfirm: edge(pad.menuConfirm),
+      menuDir: {
+        x: (edge(dpad.right) ? 1 : 0) - (edge(dpad.left) ? 1 : 0),
+        y: (edge(dpad.down) ? 1 : 0) - (edge(dpad.up) ? 1 : 0),
+      },
+      dpadMove: {
+        x: (down(dpad.right) ? 1 : 0) - (down(dpad.left) ? 1 : 0),
+        y: (down(dpad.down) ? 1 : 0) - (down(dpad.up) ? 1 : 0),
+      },
+    };
+    // Release = die fallende Flanke der Halte-Tasten (Doktrin: zielen und
+    // ausloesen sind auf dem Controller getrennt, ausgeloest wird beim
+    // Loslassen wie auf dem Handy).
+    out.secondaryRelease = !out.secondaryHeld && !!gpPrev._secHeld;
+    out.gadgetRelease = !out.gadgetHeld && !!gpPrev._gadHeld;
+    gpPrev._secHeld = out.secondaryHeld;
+    gpPrev._gadHeld = out.gadgetHeld;
+    if (move.x || move.y || out.aimDir || out.fireHeld || out.secondaryHeld || out.dpadMove.x || out.dpadMove.y) {
+      markSource('gamepad');
+    }
+    return out;
   }
 
   function keyboardMove() {
     let x = 0;
     let y = 0;
-    if (pressed.has('KeyA') || pressed.has('ArrowLeft')) x -= 1;
-    if (pressed.has('KeyD') || pressed.has('ArrowRight')) x += 1;
-    if (pressed.has('KeyW') || pressed.has('ArrowUp')) y -= 1;
-    if (pressed.has('KeyS') || pressed.has('ArrowDown')) y += 1;
+    if ([...pressed].some((c) => has(keys.left, c))) x -= 1;
+    if ([...pressed].some((c) => has(keys.right, c))) x += 1;
+    if ([...pressed].some((c) => has(keys.up, c))) y -= 1;
+    if ([...pressed].some((c) => has(keys.down, c))) y += 1;
     return { x, y };
+  }
+
+  // ---- Die drei Profile ------------------------------------------------
+  // Jedes schreibt NUR in den uebergebenen InputState. Reihenfolge in
+  // getState(): Touch < Gamepad < Tastatur/Maus -- die zuletzt tatsaechlich
+  // benutzte Quelle setzt sich durch.
+
+  function profileTouch(st, player) {
+    if (!touch || !touch.isActive()) return;
+    if (touch.hasContact && touch.hasContact()) markSource('touch');
+    const tMove = touch.getMove();
+    if (tMove.x || tMove.y) st.move = tMove;
+    const tAim = touch.getAimVector(); // { x, y, mag } normalisiert
+    if (tAim) {
+      st.aim = { x: player.x + tAim.x * reachPx, y: player.y + tAim.y * reachPx };
+      st.aimActive = true;
+      // Mobil: Zielen und Feuern sind derselbe Vorgang (Doktrin, Punkt 1).
+      // Reines Autofire ab Deadzone; bei twoZone erst ab fireThreshold.
+      st.primaryFire = stickCfg.twoZone ? tAim.mag >= (stickCfg.fireThreshold ?? 0.6) : true;
+    }
+    // Wurfstick: Halten zielt, Loslassen loest aus (consumeThrow liefert
+    // den Wurf genau einmal, beim Loslassen).
+    const thrown = touch.consumeThrow();
+    if (thrown) {
+      st.secondaryRelease = true;
+      st.secondaryAim = thrown;
+    }
+    if (touch.isSecondaryHeld && touch.isSecondaryHeld()) st.secondaryHeld = true;
+    if (touch.consumeSecondary()) st.secondaryRelease = true;
+  }
+
+  function profileGamepad(st, player, gp) {
+    if (!gp) return;
+    // D-Pad faehrt im Raum (Doktrin, Punkt 4) -- der linke Stick hat Vorrang.
+    if (gp.move.x || gp.move.y) st.move = gp.move;
+    else if (gp.dpadMove.x || gp.dpadMove.y) st.move = gp.dpadMove;
+    if (gp.aimDir) {
+      st.aim = { x: player.x + gp.aimDir.x * reachPx, y: player.y + gp.aimDir.y * reachPx };
+      st.aimActive = true;
+    }
+    if (gp.fireHeld) st.primaryFire = true;
+    if (gp.firePressed) st.primaryPressed = true;
+    if (gp.secondaryHeld) st.secondaryHeld = true;
+    if (gp.secondaryRelease || gp.secondaryAlt) st.secondaryRelease = true;
+    if (gp.gadgetHeld) st.gadgetHeld = true;
+    if (gp.gadgetRelease) st.gadgetRelease = true;
+    if (gp.detonate) st.detonate = true;
+    if (gp.dash) st.dash = true;
+    if (gp.menuConfirm) st.menuConfirm = true;
+    if (gp.menuDir.x || gp.menuDir.y) st.menuDir = gp.menuDir;
+    // Start/Options: dieselbe Warteschlange wie die Tastatur-Pause, damit
+    // consumePause() nur eine Quelle kennt.
+    if (gp.pause) queued.pause = true;
+  }
+
+  function profileKeyboardMouse(st) {
+    const kb = keyboardMove();
+    if (kb.x || kb.y) st.move = kb;
+    // Die Maus zielt nur, wenn nicht schon ein Stick aktiv gezielt hat --
+    // sonst wuerde der (immer vorhandene) Zeiger Touch und Gamepad
+    // ueberschreiben. Prioritaet damit wie bisher: Gamepad > Touch > Maus.
+    if (!st.aimActive) {
+      st.aim = { x: mouse.x, y: mouse.y };
+      if (mouse.moved) st.aimActive = true;
+    }
+    if (mouse.held) st.primaryFire = true;
+    // Menue-Navigation ueber dieselben Pfeiltasten, die auch fahren.
+    if (kb.x || kb.y) st.menuDir = { x: kb.x, y: kb.y };
   }
 
   return {
@@ -163,57 +330,79 @@ export function createInput(target, canvas, opts = {}) {
     // Zielen, das relativ zum Panzer arbeitet).
     getState(player) {
       const gp = pollGamepad();
-      if (touch && touch.isActive()) {
-        // Touch meldet sich selbst als Quelle, sobald ein Finger liegt.
-        if (touch.hasContact && touch.hasContact()) markSource('touch');
-      }
 
-      // --- move: Tastatur > Gamepad > Touch (aktive Quelle gewinnt) ---
-      const kb = keyboardMove();
-      const tMove = touch ? touch.getMove() : { x: 0, y: 0 };
-      const gpMove = gp && (gp.move.x || gp.move.y) ? gp.move : null;
-      const move = kb.x || kb.y ? kb : gpMove || tMove;
+      const st = {
+        move: { x: 0, y: 0 },
+        aim: { x: mouse.x, y: mouse.y },
+        aimActive: false,
+        primaryFire: false,
+        primaryPressed: false,
+        secondaryHeld: false,
+        secondaryRelease: false,
+        secondaryAim: EMPTY_AIM,
+        gadgetHeld: false,
+        gadgetRelease: false,
+        gadgetAim: EMPTY_AIM,
+        detonate: false,
+        dash: false,
+        menuDir: { x: 0, y: 0 },
+        menuConfirm: false,
+        source,
+      };
 
-      // --- aim + firing: Gamepad-Stick > Touch-Stick > Maus ---
-      let aimPt;
-      let firing = false;
-      const tAim = touch ? touch.getAimVector() : null; // { x, y, mag } normalisiert
-      if (gp && gp.aimDir) {
-        aimPt = { x: player.x + gp.aimDir.x * 120, y: player.y + gp.aimDir.y * 120 };
-        firing = true; // rechter Stick ausgelenkt -> Autofire
-      } else if (tAim) {
-        aimPt = { x: player.x + tAim.x * 120, y: player.y + tAim.y * 120 };
-        // Reines Autofire ab Deadzone. Bei twoZone erst ab fireThreshold
-        // (darunter wird nur gezielt).
-        firing = stickCfg.twoZone ? tAim.mag >= (stickCfg.fireThreshold ?? 0.6) : true;
-      } else {
-        aimPt = { x: aim.x, y: aim.y };
-        firing = mouseHeld; // Linksklick gehalten
-      }
-      if (gp && gp.fireHeld) firing = true; // rechter Trigger ueberschreibt
+      // Reihenfolge: die spaetere Quelle ueberschreibt nur, was sie
+      // tatsaechlich meldet (jedes Profil schreibt nur bei echtem Input).
+      profileTouch(st, player);
+      profileGamepad(st, player, gp);
+      profileKeyboardMouse(st);
 
-      // --- secondary (flankengetriggert) aus allen Quellen ---
-      const tThrow = touch ? touch.consumeThrow() : null;
-      const secondary =
-        secondaryQueued ||
-        !!(gp && gp.secondaryPressed) ||
-        (touch ? touch.consumeSecondary() : false) ||
-        !!tThrow;
-      secondaryQueued = false;
+      // Flankengetriggerte Wuensche aus den Event-Handlern einmischen und
+      // verbrauchen (Ein-Frame-Flags).
+      if (queued.secondary) st.secondaryRelease = true;
+      if (queued.gadget) st.gadgetRelease = true;
+      if (queued.detonate) st.detonate = true;
+      if (queued.dash) st.dash = true;
+      if (queued.menuConfirm) st.menuConfirm = true;
+      queued.secondary = false;
+      queued.gadget = false;
+      queued.detonate = false;
+      queued.dash = false;
+      queued.menuConfirm = false;
 
-      const dash = dashQueued || !!(gp && gp.dashPressed);
-      dashQueued = false;
+      // Feuer-Flanke fuer Maus/Touch nachziehen (der Gamepad-Zweig setzt sie
+      // selbst). Braucht die Spiellogik, um einen frischen Tastendruck ins
+      // volle Magazin von gehaltenem Dauerfeuer zu unterscheiden.
+      if (st.primaryFire && !wasFiring) st.primaryPressed = true;
+      wasFiring = st.primaryFire;
 
-      return { move, aim: aimPt, firing, secondary, secondaryThrow: tThrow || null, dash, source };
+      st.source = source;
+
+      // --- Rueckwaertskompatible Aliase --------------------------------
+      // Die Spiellogik (main.js -> stepRun) nutzt weiterhin diese Namen.
+      // Bewusst beibehalten, damit P1 keine Verhaltensaenderung ist.
+      st.firing = st.primaryFire;
+      st.secondary = st.secondaryRelease;
+      st.secondaryThrow = st.secondaryAim;
+      return st;
     },
-    // Esc / P / Gamepad-Start (einmal pro Druck).
+    // Esc / P / Gamepad-Start (einmal pro Druck). Die Gamepad-Flanke legt
+    // profileGamepad() in dieselbe Warteschlange -- hier nur auslesen.
     consumePause() {
-      const p = pauseQueued;
-      pauseQueued = false;
+      const p = queued.pause;
+      queued.pause = false;
       return p;
     },
     queueDash() {
-      dashQueued = true;
+      queued.dash = true;
+    },
+    // Manueller Profil-Override aus den Einstellungen (P9 verdrahtet die UI).
+    // null = automatische Erkennung.
+    setProfile(name) {
+      manualProfile = name || null;
+      if (manualProfile) source = manualProfile;
+    },
+    getProfile() {
+      return manualProfile;
     },
     // Nur bei Touch werden die virtuellen Sticks eingeblendet.
     getSource() {
@@ -233,6 +422,7 @@ export function createInput(target, canvas, opts = {}) {
       target.removeEventListener('mousemove', onMouseMove);
       target.removeEventListener('mousedown', onMouseDown);
       target.removeEventListener('mouseup', onMouseUp);
+      target.removeEventListener('contextmenu', onContextMenu);
     },
   };
 }

@@ -113,10 +113,13 @@ export function drawThreatRings(ctx, state) {
 export function drawFlashes(ctx, state) {
   for (const f of state.flashes) {
     const t = 1 - f.age / 0.08;
-    ctx.fillStyle = '#fff2b0';
-    ctx.globalAlpha = t;
+    // P1: `dim` markiert einen Blitz, bei dem NICHTS passiert ist --
+    // gesperrter Schuss (Magazin voll ausgeflogen). Grau und kleiner statt
+    // gelb, damit man ihn nie mit einem echten Muendungsblitz verwechselt.
+    ctx.fillStyle = f.dim ? '#9aa4ad' : '#fff2b0';
+    ctx.globalAlpha = f.dim ? t * 0.55 : t;
     ctx.beginPath();
-    ctx.arc(f.x, f.y, 3 + 4 * (1 - t), 0, Math.PI * 2);
+    ctx.arc(f.x, f.y, (f.dim ? 2 : 3) + (f.dim ? 2 : 4) * (1 - t), 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }

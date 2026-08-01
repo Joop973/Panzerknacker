@@ -218,6 +218,12 @@ export function createTouchControls(cfg = {}) {
     getMinePreview() {
       return mineStick ? mineDrag() : null;
     },
+    // Liegt der Finger gerade auf dem Wurfstick? (PLAN-INPUT.md P1:
+    // `secondaryHeld` im Aktionsmodell -- "wird gerade gezielt", getrennt
+    // vom Ausloesen beim Loslassen.)
+    isSecondaryHeld() {
+      return !!mineStick;
+    },
     // Sekundärslot (Phase 6): Beschriftung des Buttons, wenn die aktive
     // Sekundärwaffe wechselt (main.js ruft dies nach chooseUpgrade()/
     // Run-Start auf).

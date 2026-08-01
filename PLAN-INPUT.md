@@ -8,7 +8,10 @@ bisherige Steuerung beschrieben ist, damit es nur eine Quelle gibt.
 
 ---
 
-## Ist-Abgleich (Stand: Cache v63)
+**Fortschritt:** P1 ✅ gebaut · P5 ❌ gestrichen (Nutzerentscheidung) ·
+P10 ✅ war schon erledigt. **Nächste Session: P2 (Viewport/Fullscreen).**
+
+## Ist-Abgleich (Stand: Cache v64)
 
 Vor dem Bau geprüft, was der Code **heute schon kann**. Ergebnis: mehrere
 Phasen sind ganz oder überwiegend erledigt, zwei kollidieren mit
@@ -18,12 +21,12 @@ bereits vorhandenen Code geflossen.
 
 | Phase | Ist-Stand | Restaufwand |
 |---|---|---|
-| P1 Input-Abstraktion | **Grundgerüst steht seit Phase 0a**: `src/core/input.js` ist die einzige Stelle, die Geräte-Events liest; `getState()` liefert ein Aktionsmodell; Gamepad wird gepollt, nicht per Event; Werte liegen in `data/input.json`. | Aktionsmodell **erweitern** (Gadget-Felder, `detonate`, Menü-Navigation, getrennte Held/Release-Flags) + die drei Profile aus `getState()` in eigene Funktionen ziehen. Kein Neubau. |
+| P1 Input-Abstraktion ✅ **erledigt** | **Grundgerüst stand seit Phase 0a**: `src/core/input.js` ist die einzige Stelle, die Geräte-Events liest; `getState()` liefert ein Aktionsmodell; Gamepad wird gepollt, nicht per Event; Werte liegen in `data/input.json`. | Aktionsmodell **erweitern** (Gadget-Felder, `detonate`, Menü-Navigation, getrennte Held/Release-Flags) + die drei Profile aus `getState()` in eigene Funktionen ziehen. Kein Neubau. |
 | P2 Viewport/Fullscreen | Meta-Viewport ist **exakt** wie gefordert; `touch-action: none` und `overscroll-behavior` gesetzt; Fullscreen-Anforderung existiert. | `visualViewport`-Kopplung, `devicePixelRatio`-Skalierung, `position: fixed` auf html/body. |
 | P3 Touch-Bug Sekundär | Pointer-Events, `pointerId`-Tracking und `setPointerCapture()` sind **bereits umgesetzt**. | **Ein konkreter Bug gefunden**, siehe unten — der Rest der Phase ist bereits erfüllt. |
 | P4 Gadget-Split | Ein Slot mit sechs austauschbaren Sekundärwaffen (Phase 6). | Echte Neuarbeit. Zwei Nebenwirkungen beachten, siehe unten. |
-| P5 Schild-Rework | Vier Schild-Karten, Verfall nach 3 Räumen, Regeneration, Nachkauf. | **Kollidiert mit E2, Bollwerk und drei Karten** — siehe Konflikt A. |
-| P6 Haken-Rework | `hook.maxRangePx: 260`, Bombenwurf `throwPx: 58`. | **Die geforderte Formel würde den Haken auf 116 px kürzen, also mehr als halbieren** — siehe Konflikt B. |
+| P5 Schild-Rework ❌ **gestrichen** | Vier Schild-Karten, Verfall nach 3 Räumen, Regeneration, Nachkauf. | **Nutzerentscheidung: „Schild erstmal so lassen wie es ist."** Konflikt A ist damit erledigt, E2/Bollwerk/`nachladeschild`/`emergency_shield`/`konterschild` bleiben unangetastet. Phase entfällt. |
+| P6 Haken-Rework | `hook.maxRangePx` **222** (Nutzerentscheidung), Bombenwurf `throwPx: 58`. | Reichweite ist **gesetzt** (Konflikt B entschieden). Offen bleiben nur die übrigen P6-Punkte (Zielvorschau usw.). |
 | P7 Stats-Anzeige | Nicht vorhanden. | Echte Neuarbeit. |
 | P8 Zwischenraum-UI | Raumvorschau zeigt Gegner **und** Upgrades als Chips. | Echte Neuarbeit; kehrt die Chip-Anzeige aus der letzten Balancerunde bewusst wieder um. |
 | P9 Startbildschirm | **Existiert**: Start, Tages-Seed, Fortsetzen, Schwierigkeit, Bestwerte zurücksetzen, Optionen (Ziellinie, Bedrohungslinien, Reduzierte Bewegung), Mute. | D-Pad-Navigation, Vollbild-Button, Lautstärkeregler, „Spiel beenden". |
@@ -73,10 +76,10 @@ Der Plan verlangt: 3 Ladungen, **kein Verfall**, **keine Regeneration**,
 | **`emergency_shield`** (Karte) + Shop-Aktion + Upgrade-Screen-Aktion „Schildladung" | Widerspricht „nicht nachkaufbar" — drei Kaufwege müssten entfallen. |
 | **`konterschild`** (Karte) | Hängt an `shieldReady`, müsste auf das neue Ladungsmodell umgestellt werden. |
 
-**Vor P5 zu entscheiden:** Soll E2 wirklich fallen? Falls ja, brauchen
-Bollwerk einen neuen Effekt und drei Karten eine Überarbeitung — die Phase
-ist dann deutlich größer als „Schild hat 3 Ladungen". Falls nein: P5 auf
-„Ladungsanzahl vereinheitlichen" eingrenzen.
+**✅ Entschieden (Nutzer): „Schild erstmal so lassen wie es ist."**
+E2 bleibt, Bollwerk bleibt wirksam, `nachladeschild`, `emergency_shield`,
+`konterschild` und die beiden Kaufwege bleiben unverändert. **P5 entfällt
+ersatzlos** — der Konflikt ist damit geschlossen, nicht vertagt.
 
 ### Konflikt B — P6 Hakenreichweite würde den Haken halbieren
 
@@ -86,9 +89,13 @@ Ist: Haken **260 px**, Bombenwurf **58 px** (nach der Wurfweiten-Senkung um
 als die Hälfte** der heutigen Reichweite, nicht mehr.
 
 Die Absicht („Haken reicht deutlich weiter als die Bombe") ist heute schon
-erfüllt (4,5-fach). **Vor P6 klären:** Faktor 2 auf die *heutige*
-Bombenreichweite anwenden (= Nerf auf 116) oder den Haken bei ~260 lassen und
-die Formel als Mindestabstand verstehen?
+erfüllt (4,5-fach).
+
+**✅ Entschieden (Nutzer): „Haken soll 222 px haben."** `hook.maxRangePx` ist
+in `data/secondaries.json` von 260 auf **222** gesetzt (bereits umgesetzt).
+Die Formel `hookRange = bombThrowRange * 2` wird damit **verworfen** — sie
+hätte 116 px ergeben. 222 px sind das 3,8-fache der Bombenreichweite, die
+Absicht der Formel bleibt also erfüllt. Konflikt B ist geschlossen.
 
 ### Konflikt C — P4 Gadget-Split, zwei Nebenwirkungen
 
@@ -113,7 +120,7 @@ hörbares/sichtbares „Magazin leer"-Signal.
 
 # TIER 0 — Fundament
 
-## P1 — Input-Abstraktionsschicht
+## P1 — Input-Abstraktionsschicht ✅ gebaut
 
 **Ziel:** Alle Eingaben laufen über ein zentrales Aktionsmodell. Die
 Spiellogik kennt keine Tasten, nur Aktionen.
@@ -145,6 +152,42 @@ läuft automatisch über `source`, alle Stellwerte liegen in
 Dasselbe Muster wie die Arena-Weiche aus Phase 0b, die erst Phase 14 füllte.
 
 **Testschritte (Handy):** unverändert wie im Ausgangsdokument.
+
+### Umsetzung (gebaut)
+
+- **Aktionsmodell erweitert** um `aimActive`, `primaryFire`,
+  `primaryPressed`, `secondaryHeld`, `secondaryRelease`, `secondaryAim`,
+  `gadgetHeld`, `gadgetRelease`, `gadgetAim`, `detonate`, `menuDir`,
+  `menuConfirm`. Alle Ein-Frame-Flags werden in `getState()` verbraucht.
+- **Rückwärtskompatible Aliase** (`firing`, `secondary`, `secondaryThrow`)
+  bleiben bestehen — P1 ist damit bewusst **keine** Verhaltensänderung für
+  die Spiellogik, nur eine Strukturänderung. Die alten Namen fallen erst,
+  wenn P4 die Aufrufstellen ohnehin anfasst.
+- **Drei Profilfunktionen** `profileTouch` / `profileGamepad` /
+  `profileKeyboardMouse` schreiben nur noch in denselben `InputState`.
+  Reihenfolge Touch < Gamepad < Tastatur/Maus; jedes Profil schreibt **nur
+  bei echtem Input**, deshalb überschreibt der immer vorhandene Mauszeiger
+  ein aktives Stick-Ziel nicht mehr (`if (!st.aimActive)`).
+- **Belegungen komplett nach `data/input.json`**: `keyboard.*` als Listen
+  von `KeyboardEvent.code`, `gamepad.*` als Button-Indizes laut Doktrin
+  (RT = Primär, LT = Sekundär, RB = Gadget, LB = Zünden), `aim.reachPx`.
+- **Rechte Maustaste** ist jetzt die Sekundärwaffe (`contextmenu` auf dem
+  Canvas unterdrückt), `setProfile()`/`getProfile()` als manueller Override
+  für P9.
+- **Umsetzungsfund — geteilte Gamepad-Knöpfe:** `edge()` aktualisiert
+  `gpPrev` beim Auslesen. Der A-Knopf belegt zwei Aktionen (Sekundärwaffe im
+  Spiel, Bestätigen im Menü); der zweite `edge()`-Aufruf im selben Poll
+  hätte deshalb immer `false` geliefert. Gelöst über einen Poll-lokalen
+  Cache (`edgeSeen`), nicht durch Doppelbelegungsverbot.
+- **Konflikt D gelöst:** `fireBullet(tank, state, pressed)` meldet einen
+  durch `bullet.maxActive` gesperrten Schuss mit Ton (`empty` in
+  `data/sounds.json`) **und** gedimmtem Blitz am Rohr
+  (`state.flashes`-Eintrag mit `dim: true`, grau statt gelb in
+  `effects.js: drawFlashes`) — aber **nur bei frischem Abzug** und höchstens
+  alle `input.json: feedback.blockedShotCooldownS` (0,35 s), sonst würde es
+  im Touch-Autofire dauerhaft klicken. Regressionstest deckt alle vier
+  Fälle ab (gehalten = still, frisch = Signal, Cooldown greift, Gegner nie),
+  Gegenprobe für jeden bestanden.
 
 ---
 
@@ -191,14 +234,18 @@ Betroffene Dateien: `data/secondaries.json` (Kategorie je Eintrag),
 (`equippedSecondary` → zusätzlich `equippedGadget`, Snapshot),
 `src/ui/hud.js` (zwei Slots), `src/core/input.js` (Gadget-Kanal aus P1).
 
-## P5 — Schild-Rework
+## P5 — Schild-Rework ❌ gestrichen
 
-**Erst Konflikt A entscheiden.** Danach unverändert wie im
-Ausgangsdokument.
+**Nutzerentscheidung: „Schild erstmal so lassen wie es ist."** Die Phase
+entfällt ersatzlos (Konflikt A geschlossen). Das bestehende Schildmodell —
+E2-Verfall nach `shield.roomLifetime`, Bollwerk, `nachladeschild`,
+`emergency_shield`, `konterschild`, beide Kaufwege — bleibt unverändert.
 
 ## P6 — Haken-Rework
 
-**Erst Konflikt B entscheiden** (Reichweitenformel). Die übrigen Punkte
+**Reichweite entschieden:** `hook.maxRangePx` = **222** (bereits in
+`data/secondaries.json` gesetzt), die Formel aus dem Ausgangsdokument ist
+verworfen. Die übrigen Punkte
 (Zielphase wie die Bombe, Auslösen beim Loslassen, Zug an allen Wandtypen,
 Cooldown auch ohne Treffer, während des Zugs steuerlos aber verwundbar) sind
 unstrittig — der Zug selbst existiert bereits (`tank.js: fireHook()`), es
