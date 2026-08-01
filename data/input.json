@@ -1,10 +1,52 @@
 {
+  "_comment": "Alle Eingabe-Stellwerte. src/core/input.js ist die EINZIGE Stelle, die Geraete-Events liest, und schreibt ausschliesslich in das gemeinsame Aktionsmodell (InputState). Die Spiellogik kennt keine Tasten, nur Aktionen -- Belegungen aendert man hier, nicht im Code.",
+
   "stick": {
     "deadzone": 0.15,
     "twoZone": false,
     "fireThreshold": 0.6
   },
+
   "player": {
     "fireRate": 1.2
+  },
+
+  "keyboard": {
+    "_comment": "KeyboardEvent.code-Werte. Mehrere Eintraege je Aktion sind erlaubt.",
+    "up": ["KeyW", "ArrowUp"],
+    "down": ["KeyS", "ArrowDown"],
+    "left": ["KeyA", "ArrowLeft"],
+    "right": ["KeyD", "ArrowRight"],
+    "secondary": ["Space"],
+    "detonate": ["KeyE"],
+    "gadget": ["KeyQ"],
+    "dash": ["ShiftLeft", "ShiftRight"],
+    "pause": ["Escape", "KeyP"],
+    "debug": ["F1"],
+    "menuConfirm": ["Enter", "NumpadEnter"]
+  },
+
+  "gamepad": {
+    "_comment": "Standard-Gamepad-Mapping (navigator.getGamepads). axes: 0/1 linker Stick, 2/3 rechter Stick. Belegung laut Doktrin in SPEC.md Abschnitt 9: RT (7) = Primaerwaffe, LT (6) = Sekundaer, RB (5) = Gadget, LB (4) = Bombe zuenden.",
+    "axes": { "moveX": 0, "moveY": 1, "aimX": 2, "aimY": 3 },
+    "primaryFire": 7,
+    "secondary": 6,
+    "secondaryAlt": 0,
+    "gadget": 5,
+    "detonate": 4,
+    "dash": 1,
+    "pause": 9,
+    "menuConfirm": 0,
+    "dpad": { "up": 12, "down": 13, "left": 14, "right": 15 }
+  },
+
+  "aim": {
+    "_comment": "Stickbasiertes Zielen arbeitet relativ zum Panzer: der Zielpunkt liegt reachPx in Stickrichtung vor ihm.",
+    "reachPx": 120
+  },
+
+  "feedback": {
+    "_comment": "Konflikt D (SPEC.md Abschnitt 9): Bei manuellem Feuern (Controller/PC) wirkt ein durch bullet.maxActive blockierter Schuss wie ein Fehler. Ein frischer Tastendruck ins volle Magazin gibt deshalb ein hoer- UND sichtbares Signal, hoechstens alle blockedShotCooldownS Sekunden -- bei Autofire (Touch) bleibt es aus, sonst klickt es dauerhaft.",
+    "blockedShotCooldownS": 0.35
   }
 }

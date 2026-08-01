@@ -8,7 +8,7 @@
   },
   "hook": {
     "label": "HAKEN",
-    "maxRangePx": 260,
+    "maxRangePx": 222,
     "pullSpeedPx": 520,
     "cooldownS": 3.0
   },

@@ -192,12 +192,38 @@ function magazineOf(tank) {
 // Doppelrohr-Upgrade: zwei Kugeln im Spreizwinkel (jede zaehlt gegen
 // das Magazin). Sprengschuss-Upgrade: jeder N-te Abzug traegt eine
 // Sprengladung. Gibt true zurueck, wenn tatsaechlich gefeuert wurde.
-export function fireBullet(tank, state) {
+// Rueckmeldung fuer einen Schuss, den das volle Magazin blockiert
+// (PLAN-INPUT.md P1 / SPEC.md Abschnitt 9, Konflikt D): Bei Autofire ist die
+// Sperre unsichtbar und richtig so, bei manuellem Feuern wirkt ein
+// wirkungsloser Tastendruck wie ein Fehler. Deshalb ein kurzes Klicken plus
+// sichtbaren Marker am Rohr -- aber nur bei einem FRISCHEN Abzug und
+// hoechstens alle blockedShotCooldownS, sonst rattert es im Dauerfeuer.
+function signalBlockedShot(tank, state) {
+  if (tank !== state.player) return;
+  const cd = state.data.input?.feedback?.blockedShotCooldownS ?? 0.35;
+  if (state.blockedShotTimer > 0) return;
+  state.blockedShotTimer = cd;
+  const muzzle = tank.cfg.radius + 8;
+  state.sounds.push({ name: 'empty', x: tank.x });
+  state.flashes.push({
+    x: tank.x + Math.cos(tank.turret) * muzzle,
+    y: tank.y + Math.sin(tank.turret) * muzzle,
+    age: 0,
+    dim: true, // grauer, kleiner Blitz -- klar anders als der Muendungsblitz
+  });
+}
+
+// `pressed` = frischer Abzug (Flanke) statt gehaltenem Dauerfeuer. Nur dann
+// meldet ein blockierter Schuss sich zurueck.
+export function fireBullet(tank, state, pressed) {
   // Epsilon: der Cooldown ist als Summe von 1/60-Schritten nicht exakt
   // darstellbar; ohne Toleranz feuert man einen Tick zu spaet.
   if (tank.cooldown > 1e-9) return false;
   const mag = magazineOf(tank);
-  if (liveBulletsOf(state, tank) >= mag) return false;
+  if (liveBulletsOf(state, tank) >= mag) {
+    if (pressed) signalBlockedShot(tank, state);
+    return false;
+  }
 
   tank.shots++;
   // Sprengschuss: jeder N-te Schuss ist eine ABPRALLENDE Sprengkugel.

@@ -80,7 +80,9 @@ Kennzahl 1 (erzwungene Bankshots) war mit 33 % statt 60 % deutlich
 verfehlt — behoben über `difficulty.json: bankshotGuarantee`, jetzt 61,9 %
 und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
 jetzt überhaupt messbar.
-**Nächste Phase: `PLAN-INPUT.md` P1 (Input-Abstraktion erweitern).**
+`PLAN-INPUT.md` **P1 (Input-Abstraktion)** ist gebaut, **P5 (Schild-Rework)
+auf Nutzerwunsch gestrichen** („Schild erstmal so lassen wie es ist").
+**Nächste Phase: `PLAN-INPUT.md` P2 (Viewport/Fullscreen).**
 Der Ergänzungsplan hat Vorrang vor `PLAN.md` Phase 18 Welle 4; die
 aufgeschobene Telemetrie-Auswertung bleibt davon unberührt.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -1267,15 +1269,72 @@ gebaut, drei Angaben kollidieren mit bestehenden Festlegungen.
   Bollwerk-Transformation wirkungslos und streicht `nachladeschild`,
   `emergency_shield` und zwei Kaufwege. Vor der Phase zu entscheiden.
 - **P6 würde den Haken halbieren**: `hookRange = bombThrowRange * 2` ergibt
-  116 px, heute sind es 260 px (Bombenwurf 58 px). Die Absicht ist bereits
-  übererfüllt — Formel oder Zielwert klären.
+  116 px, damals waren es 260 px (Bombenwurf 58 px). Die Absicht war bereits
+  übererfüllt — inzwischen entschieden, siehe unten (222 px).
 - **P10 (Grüner gefährlicher) ist bereits erledigt** (Session davor).
 - Drei im Ausgangsdokument genannte Dateien existieren nicht:
   `data/weapons.json` → `secondaries.json`, `data/enemies.json` →
   `tanks.json`, `data/rooms.json` → `modifiers.json`.
 
-**Nächste Session: P1** (siehe `PLAN-INPUT.md`), sofern der Nutzer nicht
-zuerst die Konflikte A/B entscheiden will.
+**Konflikte A und B sind entschieden** (Nutzer): Schild bleibt wie es ist
+→ **P5 ersatzlos gestrichen**; Haken bekommt **222 px**
+(`data/secondaries.json: hook.maxRangePx`, war 260) → die Formel
+`bombThrowRange * 2` ist verworfen. **Nächste Session: P2.**
+
+### PLAN-INPUT.md P1 (Input-Abstraktionsschicht) — gemergt
+Kein neues Spielgefühl, sondern die Struktur darunter: alle Eingaben laufen
+jetzt über ein einziges, vollständiges Aktionsmodell.
+- **`InputState` erweitert** um `aimActive`, `primaryFire`,
+  `primaryPressed`, `secondaryHeld`, `secondaryRelease`, `secondaryAim`,
+  `gadgetHeld`/`gadgetRelease`/`gadgetAim` (bis P4 immer `false`/`null`,
+  Muster wie die Arena-Weiche aus Phase 0b), `detonate`, `menuDir`,
+  `menuConfirm`. Alle Ein-Frame-Flags werden in `getState()` verbraucht.
+- **Bewusst KEINE Verhaltensänderung**: die alten Namen `firing`,
+  `secondary`, `secondaryThrow` bleiben als Aliase auf die neuen Felder
+  bestehen, damit `main.js`/`stepRun()` unverändert bleiben. Sie fallen
+  erst, wenn P4 diese Aufrufstellen ohnehin anfasst.
+- **Drei Profilfunktionen statt einer if-Kette**: `profileTouch` /
+  `profileGamepad` / `profileKeyboardMouse` schreiben alle nur in denselben
+  `InputState`, Reihenfolge Touch < Gamepad < Tastatur/Maus. Jedes Profil
+  schreibt **nur bei echtem Input** — deshalb überschreibt der immer
+  vorhandene Mauszeiger ein aktives Stick-Ziel nicht mehr
+  (`if (!st.aimActive)`, war beim ersten Entwurf falsch).
+- **Belegungen komplett in `data/input.json`**: `keyboard.*` als Listen von
+  `KeyboardEvent.code`, `gamepad.*` als Button-Indizes (RT = Primär,
+  LT = Sekundär, RB = Gadget, LB = Zünden, D-Pad), `aim.reachPx`,
+  `feedback.blockedShotCooldownS`. Vorher standen die Indizes im Code.
+- **Umsetzungsfund — ein Knopf, zwei Aktionen**: `edge()` aktualisiert
+  `gpPrev` beim Auslesen, ein zweiter `edge()`-Aufruf für denselben
+  Button-Index im selben Poll lieferte deshalb immer `false`. Der A-Knopf
+  belegt aber genau zwei Aktionen (Sekundärwaffe im Spiel, Bestätigen im
+  Menü). Gelöst über einen Poll-lokalen Cache (`edgeSeen`) statt über ein
+  Doppelbelegungsverbot.
+- **Konflikt D gelöst — gesperrter Schuss meldet sich zurück**:
+  `bullet.maxActive` sperrt das Feuern hart (E4, „Feuersperre statt
+  Verdrängung"); auf Controller/PC wirkte ein wirkungsloser Abzug wie ein
+  Defekt. `fireBullet(tank, state, pressed)` gibt jetzt Ton (`empty` in
+  `data/sounds.json`, trockenes Klacken) **und** einen gedimmten grauen
+  Blitz am Rohr (`state.flashes`-Eintrag mit `dim: true`,
+  `effects.js: drawFlashes`) — aber **nur bei frischem Abzug**
+  (`primaryPressed`) und höchstens alle 0,35 s, sonst würde es im
+  Touch-Autofire pausenlos klicken. `main.js` hängt `data/input.json` dafür
+  als `tanksData.input` an.
+- **Rechte Maustaste** ist jetzt die Sekundärwaffe (`contextmenu` auf dem
+  Canvas unterdrückt); `setProfile()`/`getProfile()` als manueller
+  Profil-Override, den P9 an die Einstellungen hängt.
+- Regressionstest deckt alle vier Fälle der Rückmeldung ab (gehalten =
+  still, frisch = Ton + Blitz, Cooldown greift, Gegner nie) — Gegenprobe
+  für jeden einzeln bestanden.
+- **Nebenbefund: der Frame-Budget-Test war messtechnisch wacklig.** Er
+  verglich den *rohen Maximalwert* aus 2160 Logikschritten mit 6 ms und
+  fing prompt eine GC-Pause ein (6,39 ms in einem Lauf, 1,8–2,4 ms in fünf
+  direkt danach). Gemessen liegen nur ~10 der 2160 Ticks über 1 ms — der
+  Solver läuft dank `solvesPerTick` eben selten, ein Perzentil verdünnt
+  daher genau das seltene Ereignis (p99,5 = 0,99 ms). Jetzt wird der
+  **drittgrößte** Messwert bewertet: behält das Signal, verträgt zwei
+  Ausreißer. Gegengeprüft über `angleSamples`: 120 → 1,1–2,1 ms (grün),
+  600 → 3,9–5,4 ms (grün, und zwar zu Recht — das Budget ist knapp
+  gehalten), 2400 → 7,5 ms (rot).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
@@ -1359,7 +1418,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v63`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v64`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

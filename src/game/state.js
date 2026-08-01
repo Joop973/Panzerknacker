@@ -257,6 +257,9 @@ export function createState(data, tiles, opts) {
     // updateCoverPerception() -- siehe ai.js.
     coverTimer: 0,
     coverCursor: 0,
+    // Sperre fuer die "Magazin voll"-Rueckmeldung (tank.js:
+    // signalBlockedShot) -- sonst klickt es bei gehaltenem Abzug dauernd.
+    blockedShotTimer: 0,
     // Reaktor-Boss (Phase 14): Anzahl noch stehender Generatoren -- solange
     // > 0, faengt killTank() jeden Treffer auf t.cfg.bossInvincible ab.
     // Aus den Wandobjekten gezaehlt (nicht aus room.markers -- die Generator-
@@ -666,6 +669,7 @@ export function stepState(state, cmd, dt) {
   const p = state.player;
   state.time += dt;
   if (state.trickshotTimer > 0) state.trickshotTimer = Math.max(0, state.trickshotTimer - dt);
+  if (state.blockedShotTimer > 0) state.blockedShotTimer = Math.max(0, state.blockedShotTimer - dt);
 
   // Transformation "Saboteur" (Phase 5): betaeubte Gegner explodieren,
   // sobald ihre Betaeubung endet.
@@ -721,7 +725,7 @@ export function stepState(state, cmd, dt) {
     if (cmd.dash) dashTank(p, state, cmd.move); // vor der Bewegung
     moveTank(p, cmd.move, state, dt);
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
-    if (cmd.fire) fireBullet(p, state);
+    if (cmd.fire) fireBullet(p, state, cmd.firePressed);
     if (cmd.mine && useSecondary(p, state, cmd.mineThrow)) state.secondaryUses++;
   }
 
