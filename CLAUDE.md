@@ -82,12 +82,11 @@ verfehlt — behoben über `difficulty.json: bankshotGuarantee`, jetzt 61,9 %
 und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
 jetzt überhaupt messbar.
 `PLAN-INPUT.md` **P1 (Input-Abstraktion)**, **P2 (Viewport/DPR)**,
-**P3 (Touch-Bug Sekundärwaffe)**, **P4 (Gadget-Split)** und
-**P6 (Haken-Rework)**, **P7 (Werte-Anzeige)** und **P8 (Zwischenraum-UI)**
-sind gebaut, **P5 (Schild-Rework) auf Nutzerwunsch gestrichen** („Schild
-erstmal so lassen wie es ist").
-**Nächste Phase: `PLAN-INPUT.md` P9 (Startbildschirm), danach nur noch
-P11 (Lichtquellen).**
+**P3 (Touch-Bug Sekundärwaffe)**, **P4 (Gadget-Split)**,
+**P6 (Haken-Rework)**, **P7 (Werte-Anzeige)**, **P8 (Zwischenraum-UI)**
+und **P9 (Startbildschirm)** sind gebaut, **P5 (Schild-Rework) auf
+Nutzerwunsch gestrichen** („Schild erstmal so lassen wie es ist").
+**Nächste Phase: `PLAN-INPUT.md` P11 (Lichtquellen) — die letzte Phase.**
 Der Ergänzungsplan hat Vorrang vor `PLAN.md` Phase 18 Welle 4; die
 aufgeschobene Telemetrie-Auswertung bleibt davon unberührt.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -1555,6 +1554,46 @@ Raumvorschau verschwunden; dort steht jetzt **eine Zeile** — ein Knopf
   Modul headless gar nicht importieren. Wichtig dabei: das DOM muss schon
   beim **Import** stehen, nicht erst beim Testfall.
 
+### PLAN-INPUT.md P9 (Startbildschirm) — gemergt
+- **Neues Modul `src/ui/menunav.js`** (`createMenuNav`): generische
+  Tastatur-/Gamepad-Fokusnavigation für Overlays (SPEC.md 9: „Menü
+  navigieren"). Nur die Y-Achse bewegt den Fokus durch eine Liste (mit
+  Anlauf-/Wiederholzeit); die X-Achse ist dem fokussierten Element
+  vorbehalten, wenn es ein `<input type="range">` ist. Touch braucht das
+  nie, dort wird direkt angetippt.
+- **`input.js: getMenuState()`** (neu): schlanker Poll ohne Spieler-Objekt
+  — `getState(player)` setzt eins voraus, Menünavigation nicht.
+- **Lautstärkeregler** (`audio.js: setVolume/getVolume`): eigener Wert
+  0..1, getrennt vom `muted`-Schalter, beide auf demselben Gain-Knoten.
+  Stumm gewinnt immer, der Reglerwert bleibt aber erhalten und gilt
+  wieder, sobald entstummt wird.
+- **Eingabeprofil-Override**: Knopfreihe (Muster Schwierigkeitsauswahl)
+  statt `<select>`, ruft `input.setProfile()`/`getProfile()` (seit P1).
+- **„Spiel beenden"**: `window.confirm()` + `window.close()`, gleiches
+  Muster wie „Bestwerte zurücksetzen". `close()` wirkt nur bei per Skript
+  geöffneten Tabs/installierten PWAs; sonst passiert nach der Bestätigung
+  bewusst nichts Sichtbares statt einer Fehlermeldung.
+- **Umsetzungsfund — zu viel Inhalt für den Hauptbildschirm**: Vollbild,
+  Lautstärke, Eingabeprofil-Reihe, Reset und Beenden zusätzlich auf den
+  Startbildschirm gepackt ließ ihn im Handy-Querformat nicht mehr ohne
+  Scrollen passen (`tests/uilayout.mjs` maß 6–7 Bedienelemente unterhalb
+  des sichtbaren Bereichs bei 667×375). Gelöst nach dem **P8-Muster**:
+  eigene Einstellungsseite (`#settings`), Knopf „Einstellungen ▸" auf dem
+  Hauptbildschirm, sticky „Zurück". `tests/uilayout.mjs` prüft seither
+  auch diese Seite mit.
+- **Nebenfund**: die neue Eingabeprofil-Reihe erbte dieselbe
+  Selektor-Spezifitäts-Gleichstand-Falle wie die bestehende
+  Schwierigkeitsauswahl (`.overlay button` vs. `.modes button`, bei
+  Gleichstand gewinnt die später im Stylesheet stehende Regel) — aktive
+  und inaktive Knöpfe sahen gleich golden aus. Für `.profiles` behoben,
+  die bestehende Schwierigkeitsauswahl bewusst unangetastet gelassen
+  (separater Fund, nicht Teil von P9).
+- Tests: `createMenuNav` isoliert geprüft (Fokus/Anlaufzeit, Regler,
+  Bestätigen auf Knopf/Checkbox, `reset()`), `audio.js`-Lautstärke/Mute-
+  Zusammenspiel, `getMenuState()` ohne Spieler — Gegenprobe für alle
+  Kernpunkte bestanden. `tests/uilayout.mjs` prüft Start- und
+  Einstellungsseite über alle vier Viewports.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1641,7 +1680,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v70`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v71`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

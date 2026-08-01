@@ -117,6 +117,16 @@ class El {
     for (const fn of this.listeners[type] || []) fn(e);
     return e;
   }
+  // Standardkonformer dispatchEvent -- src/ui/menunav.js (P9) nutzt echte
+  // Event-Objekte (new Event('change')), nicht das emit()-Kurzformat, weil
+  // dasselbe Modul unveraendert im echten Browser laufen muss. `target`
+  // wird bewusst NICHT gesetzt: Node-Events haben dort nur einen Getter
+  // (echte Browser fuellen ihn intern beim Dispatch) -- die Listener in
+  // main.js lesen ohnehin ihren geschlossenen Elementbezug statt e.target.
+  dispatchEvent(e) {
+    for (const fn of this.listeners[e.type] || []) fn(e);
+    return true;
+  }
   // Pointer-Capture: der Stub merkt sich nur, WELCHE Zeiger gefangen sind --
   // das reicht, um zu pruefen, dass ein Abbruch sauber freigibt.
   setPointerCapture(id) {
@@ -167,18 +177,27 @@ class El {
     return out;
   }
   // Unterstuetzt die im Projekt benutzten Selektoren: "tag", ".klasse",
-  // "tag.klasse" und "tag.klasse[data-x=\"wert\"]".
+  // "tag.klasse", "tag.klasse[data-x=\"wert\"]" -- und, seit P9,
+  // kommagetrennte Listen davon ("button, input"), wie sie main.js fuer
+  // die Fokusnavigation benutzt. Ein einziger Durchlauf durch descendants()
+  // haelt die Dokumentordnung, statt Teillisten zu vereinigen.
   querySelectorAll(sel) {
-    const m = /^([a-zA-Z]*)((?:\.[\w-]+)*)(?:\[data-([\w-]+)="([^"]*)"\])?$/.exec(sel.trim());
-    if (!m) return [];
-    const [, tag, clsPart, dataKey, dataVal] = m;
-    const classes = clsPart ? clsPart.slice(1).split('.') : [];
-    return this.descendants().filter((el) => {
-      if (tag && el.tagName !== tag.toUpperCase()) return false;
-      for (const c of classes) if (!el.classList.contains(c)) return false;
-      if (dataKey && String(el.dataset[dataKey]) !== dataVal) return false;
-      return true;
-    });
+    const matchers = sel
+      .split(',')
+      .map((part) => {
+        const m = /^([a-zA-Z]*)((?:\.[\w-]+)*)(?:\[data-([\w-]+)="([^"]*)"\])?$/.exec(part.trim());
+        if (!m) return null;
+        const [, tag, clsPart, dataKey, dataVal] = m;
+        const classes = clsPart ? clsPart.slice(1).split('.') : [];
+        return (el) => {
+          if (tag && el.tagName !== tag.toUpperCase()) return false;
+          for (const c of classes) if (!el.classList.contains(c)) return false;
+          if (dataKey && String(el.dataset[dataKey]) !== dataVal) return false;
+          return true;
+        };
+      })
+      .filter(Boolean);
+    return this.descendants().filter((el) => matchers.some((match) => match(el)));
   }
   querySelector(sel) {
     return this.querySelectorAll(sel)[0] || null;

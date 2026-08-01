@@ -44,6 +44,7 @@ tanksData.secondaries = load('secondaries');
 tanksData.modifiers = load('modifiers');
 tanksData.limits = load('limits');
 tanksData.sounds = load('sounds');
+tanksData.input = load('input'); // P9: Tastencodes fuer getMenuState()-Tests
 
 let failures = 0;
 function check(ok, msg) {
@@ -675,6 +676,142 @@ function check(ok, msg) {
   console.log(
     `Bankshot-Gegner: ${shots} Schüsse, Logikschritt ${robustMs.toFixed(2)} ms (drittgrösster Wert, Maximum ${worstMs.toFixed(2)} ms)`,
   );
+}
+
+// ---- 8h. P9: Lautstaerkeregler (audio.js) --------------------------------
+// setVolume/getVolume laufen VOR unlock() (kein AudioContext vorhanden) --
+// muessen also auch mit master === null funktionieren, statt zu werfen.
+{
+  const { createAudio } = await import('../src/core/audio.js');
+  const audio = createAudio();
+  check(audio.getVolume() === 1, `P9: Standardlautstaerke ist nicht 1 (${audio.getVolume()})`);
+  audio.setVolume(0.4);
+  check(audio.getVolume() === 0.4, 'P9: setVolume/getVolume verlieren den Wert');
+  check(!audio.isMuted(), 'P9: setVolume mutet nebenbei');
+  // Mute gewinnt ueber den Reglerwert -- beide wirken auf denselben Gain-
+  // Knoten, Stumm darf den Reglerwert nicht loeschen (er muss nach dem
+  // Entstummen wieder gelten).
+  audio.setMuted(true);
+  check(audio.isMuted(), 'P9: setMuted(true) mutet nicht');
+  check(audio.getVolume() === 0.4, 'P9: Mute loescht den Reglerwert');
+  audio.setMuted(false);
+  check(audio.getVolume() === 0.4, 'P9: Regler verliert seinen Wert nach dem Entstummen');
+}
+
+// ---- 8i. P9: Menue-Navigation (Tastatur/Gamepad, Startbildschirm) -------
+{
+  const { createMenuNav } = await import('../src/ui/menunav.js');
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const btnA = document.createElement('button');
+    const btnB = document.createElement('button');
+    const range = document.createElement('input');
+    range.tagName = 'INPUT';
+    range.type = 'range';
+    range.min = '0';
+    range.max = '100';
+    range.step = '5';
+    range.value = '50';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = false;
+    const list = [btnA, btnB, range, checkbox];
+    const nav = createMenuNav(() => list);
+
+    // (a) Y bewegt den Fokus, mit sofortigem ersten Schritt.
+    nav.update({ menuDir: { x: 0, y: 1 }, menuConfirm: false }, 1 / 60);
+    check(btnB.classList.contains('menu-focus'), 'P9: erster Y-Schlag bewegt den Fokus nicht');
+    check(!btnA.classList.contains('menu-focus'), 'P9: altes Fokuselement bleibt markiert');
+
+    // (b) Gehaltene Richtung wiederholt NICHT vor REPEAT_FIRST_S (0,35 s).
+    nav.update({ menuDir: { x: 0, y: 1 }, menuConfirm: false }, 0.1);
+    check(range.classList.contains('menu-focus') === false, 'P9: Fokus wiederholt zu frueh');
+    // ... aber danach schon.
+    nav.update({ menuDir: { x: 0, y: 1 }, menuConfirm: false }, 0.3);
+    check(range.classList.contains('menu-focus'), 'P9: Fokus wiederholt gar nicht');
+
+    // (c) X passt NUR den Regler an, keinen anderen Elementtyp.
+    let inputFired = false;
+    range.addEventListener('input', () => (inputFired = true));
+    nav.update({ menuDir: { x: 1, y: 0 }, menuConfirm: false }, 1 / 60);
+    check(range.value === '55', `P9: X-Achse aendert den Regler nicht (${range.value})`);
+    check(inputFired, 'P9: Regler feuert kein input-Ereignis');
+    // Kein Wiederholen bei gehaltenem X (ein Schritt pro Tastendruck).
+    nav.update({ menuDir: { x: 1, y: 0 }, menuConfirm: false }, 1);
+    check(range.value === '55', 'P9: X-Achse wiederholt trotz gehaltener Richtung');
+    // Deckel bei max.
+    range.value = '100';
+    nav.update({ menuDir: { x: 0, y: 0 }, menuConfirm: false }, 1 / 60); // Flanke zuruecksetzen
+    nav.update({ menuDir: { x: 1, y: 0 }, menuConfirm: false }, 1 / 60);
+    check(range.value === '100', `P9: Regler ueberschreitet sein Maximum (${range.value})`);
+
+    // (d) X auf einem Knopf bewegt weder Fokus noch loest es etwas aus --
+    // insbesondere darf die Regler-Logik nicht versuchen, einen Knopf wie
+    // einen Regler zu behandeln (el.value waere dort undefined -> NaN).
+    nav.update({ menuDir: { x: 0, y: -1 }, menuConfirm: false }, 1); // zurueck auf btnA
+    nav.update({ menuDir: { x: 0, y: -1 }, menuConfirm: false }, 1);
+    check(btnA.classList.contains('menu-focus'), 'P9: Testaufbau (Fokus nicht auf btnA)');
+    let btnAClicked = false;
+    let btnAInputFired = false;
+    btnA.addEventListener('click', () => (btnAClicked = true));
+    btnA.addEventListener('input', () => (btnAInputFired = true));
+    nav.update({ menuDir: { x: 1, y: 0 }, menuConfirm: false }, 1 / 60);
+    check(!btnAClicked, 'P9: X-Achse loest auf einem Knopf etwas aus');
+    check(!btnAInputFired, 'P9: X-Achse behandelt einen Knopf wie einen Regler (input-Ereignis)');
+    check(btnA.value === undefined, `P9: X-Achse haengt einen Wert an den Knopf (value=${btnA.value})`);
+
+    // (e) Bestaetigen klickt einen Knopf.
+    nav.update({ menuDir: { x: 0, y: 0 }, menuConfirm: true }, 1 / 60);
+    check(btnAClicked, 'P9: Bestaetigen klickt den fokussierten Knopf nicht');
+
+    // (f) Bestaetigen togglet eine Checkbox MIT change-Ereignis (nicht nur
+    // .checked stumm umschalten -- main.js haengt an 'change').
+    let changed = false;
+    checkbox.addEventListener('change', () => (changed = true));
+    for (let i = 0; i < 3; i++) nav.update({ menuDir: { x: 0, y: 1 }, menuConfirm: false }, 1); // auf die Checkbox
+    check(checkbox.classList.contains('menu-focus'), 'P9: Testaufbau (Fokus nicht auf der Checkbox)');
+    nav.update({ menuDir: { x: 0, y: 0 }, menuConfirm: true }, 1 / 60);
+    check(checkbox.checked === true, 'P9: Bestaetigen togglet die Checkbox nicht');
+    check(changed, 'P9: Checkbox-Toggle feuert kein change-Ereignis');
+
+    // (g) reset() springt zurueck auf den Anfang der Liste.
+    nav.reset();
+    nav.update({ menuDir: { x: 0, y: 0 }, menuConfirm: false }, 1 / 60);
+    check(btnA.classList.contains('menu-focus'), 'P9: reset() springt nicht zum Listenanfang zurueck');
+  } finally {
+    restore();
+  }
+}
+
+// ---- 8j. P9: getMenuState() braucht keinen Spieler -----------------------
+// Der Startbildschirm existiert vor dem ersten Run -- getState(player)
+// wuerde dort abstuerzen (kein Spieler). getMenuState() ist der eigens
+// dafuer gebaute schlanke Pfad.
+{
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { createInput } = await import('../src/core/input.js');
+    const canvas = document.createElement('canvas');
+    const input = createInput(window, canvas, { inputCfg: tanksData.input });
+    const before = input.getMenuState();
+    check(
+      before && typeof before.menuDir === 'object' && typeof before.menuConfirm === 'boolean',
+      'P9: getMenuState() liefert keine sinnvolle Struktur',
+    );
+    // Pfeiltaste runter -> menuDir.y > 0 (dieselben Codes wie data/input.json).
+    window.emit('keydown', { code: 'ArrowDown', repeat: false, preventDefault() {} });
+    const st = input.getMenuState();
+    check(st.menuDir.y > 0, `P9: ArrowDown erzeugt kein menuDir.y (${JSON.stringify(st.menuDir)})`);
+    window.emit('keyup', { code: 'ArrowDown' });
+    // Enter -> menuConfirm EINMAL (danach wieder false, Ein-Frame-Flag).
+    window.emit('keydown', { code: 'Enter', repeat: false, preventDefault() {} });
+    check(input.getMenuState().menuConfirm === true, 'P9: Enter setzt menuConfirm nicht');
+    check(input.getMenuState().menuConfirm === false, 'P9: menuConfirm wird nicht verbraucht (Ein-Frame-Flag)');
+  } finally {
+    restore();
+  }
 }
 
 // ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------

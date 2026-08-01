@@ -36,6 +36,7 @@ import { validateArenas } from './game/generator.js';
 import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
+import { createMenuNav } from './ui/menunav.js';
 import { createTutorial } from './ui/hud.js';
 import {
   getFlag,
@@ -475,7 +476,13 @@ async function init() {
   }
 
   function update(dt) {
-    if (!run) return;
+    if (!run) {
+      // P9: Startbildschirm -- Tastatur-/Gamepad-Fokusnavigation statt
+      // Spiellogik. getMenuState() braucht keinen Spieler (anders als
+      // getState()), deshalb funktioniert das schon vor dem ersten Run.
+      activeMenuNav.update(input.getMenuState(), dt);
+      return;
+    }
     if (input.consumePause()) pause.toggle();
     if (pause.isPaused()) return;
 
@@ -854,12 +861,76 @@ async function init() {
   const loop = createLoop({ update: timedUpdate, render: timedRender, step: STEP });
 
   startBtn.addEventListener('click', startRun);
+  // P9: Vollbild/Lautstaerke/Eingabeprofil/Reset/Beenden liegen auf einer
+  // eigenen Seite (Muster P8: Ausruestungsseite) -- alle fuenf zusaetzlich
+  // auf den Hauptbildschirm gepackt liess ihn im Handy-Querformat nicht
+  // mehr ohne Scrollen passen (gemessen per tests/uilayout.mjs: 6-7
+  // Bedienelemente unterhalb des sichtbaren Bereichs bei 667x375).
+  const settingsOverlay = document.getElementById('settings');
+  document.getElementById('settingsOpen').addEventListener('click', () => {
+    startOverlay.classList.add('hidden');
+    settingsOverlay.classList.remove('hidden');
+    activeMenuNav = settingsMenuNav;
+    settingsMenuNav.reset();
+  });
+  document.getElementById('settingsBack').addEventListener('click', () => {
+    settingsOverlay.classList.add('hidden');
+    startOverlay.classList.remove('hidden');
+    activeMenuNav = startMenuNav;
+    startMenuNav.reset();
+  });
   document.getElementById('resetBtn').addEventListener('click', () => {
     if (window.confirm('Bestwerte wirklich löschen?')) {
       resetStats();
       refreshBestStats();
     }
   });
+  // P9: "Spiel beenden" -- window.close() wirkt nur auf Tabs/Fenster, die
+  // per Skript geoeffnet wurden (Sicherheitsvorgabe der Browser) oder in
+  // einer installierten PWA; sonst passiert nach der Bestaetigung bewusst
+  // nichts Sichtbares, statt eine Fehlermeldung zu zeigen. Gleiches
+  // Bestaetigungsmuster wie "Bestwerte zuruecksetzen" (window.confirm).
+  document.getElementById('quitBtn').addEventListener('click', () => {
+    if (window.confirm('Spiel wirklich beenden?')) window.close();
+  });
+  // P9: Lautstaerkeregler statt reinem Mute. setPref speichert 0..100 (wie
+  // im DOM), audio.setVolume erwartet 0..1.
+  const volumeSlider = document.getElementById('volumeSlider');
+  const initialVolume = getPref('volume', 100);
+  volumeSlider.value = String(initialVolume);
+  audio.setVolume(initialVolume / 100);
+  volumeSlider.addEventListener('input', () => {
+    const v = Number(volumeSlider.value);
+    audio.setVolume(v / 100);
+    setPref('volume', v);
+  });
+  // P9: Eingabeprofil-Override -- setProfile()/getProfile() stehen seit P1.
+  // Knopfreihe statt <select>, gleiches Muster wie die Schwierigkeitswahl:
+  // ein Klick setzt .active um und ruft input.setProfile().
+  const profileRow = document.getElementById('profileSelect');
+  const profileBtns = [...profileRow.children];
+  function setProfileUI(name) {
+    input.setProfile(name || null);
+    setPref('inputProfile', name || '');
+    for (const b of profileBtns) b.classList.toggle('active', (b.dataset.profile || '') === (name || ''));
+  }
+  for (const b of profileBtns) {
+    b.addEventListener('click', () => setProfileUI(b.dataset.profile));
+  }
+  setProfileUI(getPref('inputProfile', ''));
+  // P9: Tastatur-/Gamepad-Navigation auf Start- UND Einstellungsseite
+  // (SPEC.md 9). Fokussierbare Elemente sind alle sichtbaren, nicht
+  // deaktivierten Bedienelemente IN DOKUMENTORDNUNG -- eine feste
+  // ID-Liste haette bei jeder spaeteren UI-Aenderung von Hand nachgezogen
+  // werden muessen. `activeMenuNav` zeigt auf die gerade sichtbare Seite;
+  // update(dt) ruft immer nur die aktive auf.
+  const focusablesIn = (overlay) => () =>
+    [...overlay.querySelectorAll('button, input')].filter(
+      (el) => !el.classList.contains('hidden') && !el.disabled,
+    );
+  const startMenuNav = createMenuNav(focusablesIn(startOverlay));
+  const settingsMenuNav = createMenuNav(focusablesIn(settingsOverlay));
+  let activeMenuNav = startMenuNav;
   // Tages-Seed: fuer alle Spieler am selben Tag derselbe Run.
   document.getElementById('dailyBtn').addEventListener('click', () => {
     const d = new Date();
@@ -877,10 +948,16 @@ async function init() {
     refreshBestStats();
     refreshResumeBtn(); // abgebrochener Run bleibt fortsetzbar
     startOverlay.classList.remove('hidden');
+    settingsOverlay.classList.add('hidden'); // P9: falls noch offen -- defensiv
     seedInput.select();
     hideRoomScreens();
     endlessBtn.classList.add('hidden');
     run = null;
+    // P9: Fokus zurueck auf den Anfang -- sonst haengt die Hervorhebung
+    // auf einem Element, das beim letzten Besuch fokussiert war (z. B.
+    // "Run fortsetzen", das jetzt vielleicht gar nicht mehr sichtbar ist).
+    activeMenuNav = startMenuNav;
+    startMenuNav.reset();
   }
   const dashBtn = document.getElementById('dashBtn');
   dashBtn.addEventListener(

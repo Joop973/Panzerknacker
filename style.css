@@ -638,6 +638,57 @@ html, body {
   cursor: pointer;
 }
 
+/* P9: Lautstaerkeregler. */
+.volumelabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: monospace;
+  font-size: 13px;
+  color: #9aa0a8;
+}
+
+#volumeSlider {
+  width: 160px;
+  accent-color: #c8b24a;
+}
+
+/* P9: Eingabeprofil-Reihe -- kleiner als die Schwierigkeitsauswahl, da vier
+   statt drei Optionen auf schmalen Bildschirmen sonst umbrechen.
+   Hintergrund/Farbe hier EXPLIZIT gesetzt statt auf .modes button verlassen:
+   .overlay button hat dieselbe Selektor-Spezifitaet wie .modes button, bei
+   Gleichstand gewinnt die spaeter im Stylesheet stehende Regel -- das war
+   bisher .overlay button, wodurch aktive UND inaktive Knoepfe gleich gold
+   aussahen und "aktiv" nur an einer kaum sichtbaren Randfarbe zu erkennen
+   war. Fuer die neue Reihe hier bewusst behoben, ohne die bestehende
+   Schwierigkeitsauswahl anzufassen (separater Fund, nicht Teil von P9). */
+.profiles button {
+  font-size: 12px;
+  padding: 6px 12px;
+  background: #1b1b22;
+  color: #9aa0a8;
+}
+
+.profiles button.active {
+  background: #c8b24a;
+  color: #1a1408;
+}
+
+/* P9: sichtbare Fokushervorhebung fuer Tastatur-/Gamepad-Navigation
+   (SPEC.md 9: "Menü navigieren"). Ein dicker, abgesetzter Rahmen -- Touch
+   sieht das nie, dort wird direkt angetippt. */
+.menu-focus {
+  outline: 3px solid #ffe98a;
+  outline-offset: 2px;
+}
+
+/* P9: Einstellungsseite (Muster P8: #previewUpgrades) -- "Zurueck" bleibt
+   immer im Bild, gleiche Vorsorge wie #previewUpBack. */
+#settingsBack {
+  position: sticky;
+  bottom: 0;
+}
+
 .overlay button.linklike {
   background: none;
   border: none;
