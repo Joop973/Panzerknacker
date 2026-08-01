@@ -677,6 +677,110 @@ function check(ok, msg) {
   );
 }
 
+// ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------
+// Die Upgrade-Chips lagen im Hauptbereich der Raumvorschau und haben dort
+// bei vielen Karten den "Weiter"-Knopf aus dem Bild geschoben (Nutzer-
+// Meldung). P8 verschiebt sie auf eine eigene Seite -- der Hauptbereich
+// bleibt dadurch kurz. Geprueft wird beides: dass sie WEG sind und dass
+// man ueberhaupt noch hinkommt.
+{
+  const { installDom } = await import('./domstub.mjs');
+  // preview.js zieht ueber renderer.js die Sprite-Initialisierung mit --
+  // dafuer muss das DOM (inkl. Image-Stub) schon beim IMPORT stehen.
+  const restoreForImport = installDom();
+  const { createPreview } = await import('../src/ui/preview.js');
+  restoreForImport();
+  const upgrades = Array.from({ length: 14 }, (_, i) => ({
+    name: `Karte ${i}`,
+    level: (i % 3) + 1,
+    description: `Wirkung ${i}`,
+    symbol: '★',
+  }));
+  const withPreview = (fn) => {
+    const restore = installDom();
+    try {
+      fn(createPreview());
+    } finally {
+      restore();
+    }
+  };
+
+  // (a) Hauptbereich: keine Upgrade-Chips mehr, stattdessen EIN Knopf.
+  withPreview((pv) => {
+    let started = false;
+    pv.show({ title: 'Raum 5', character: 'Kampf', upgrades }, ['t_brown'], tanksData, () => {
+      started = true;
+    });
+    const main = document.getElementById('preview');
+    check(!main.classList.contains('hidden'), 'P8: Vorschau ist gar nicht offen');
+    check(
+      main.querySelectorAll('.pv-chip-up').length === 0,
+      'P8: die Upgrade-Chips stehen weiterhin im Hauptbereich',
+    );
+    const open = document.getElementById('previewUpOpen');
+    check(!!open, 'P8: kein Zugang zur Ausruestungsseite');
+    check(/14/.test(open.textContent), `P8: Knopf nennt die Kartenzahl nicht ("${open.textContent}")`);
+    // Der "Weiter"-Knopf funktioniert weiterhin.
+    document.getElementById('previewGo').click();
+    check(started, 'P8: "Weiter" startet den Raum nicht mehr');
+    check(main.classList.contains('hidden'), 'P8: Vorschau bleibt nach "Weiter" offen');
+  });
+
+  // (b) Die Seite listet JEDE Karte mit Name und Wirkung -- auf der eigenen
+  // Seite ist Platz, der Tipp-zum-Aufdecken entfaellt.
+  withPreview((pv) => {
+    pv.show({ title: 'Raum 5', upgrades }, ['t_brown'], tanksData, () => {});
+    document.getElementById('previewUpOpen').click();
+    const page = document.getElementById('previewUpgrades');
+    check(!page.classList.contains('hidden'), 'P8: Ausruestungsseite oeffnet nicht');
+    check(
+      document.getElementById('preview').classList.contains('hidden'),
+      'P8: Vorschau bleibt unter der Ausruestungsseite liegen (fangt Klicks ab)',
+    );
+    const rows = page.querySelectorAll('.pv-uprow');
+    check(rows.length === upgrades.length, `P8: nicht alle Karten gelistet (${rows.length}/${upgrades.length})`);
+    const txt = [...rows].map((r) => r.innerHTML).join('\n');
+    check(txt.includes('Karte 0') && txt.includes('Wirkung 0'), 'P8: Name oder Wirkung fehlt auf der Seite');
+    check(txt.includes('Stufe'), 'P8: die Stufe wird nicht ausgewiesen');
+  });
+
+  // (c) "Zurueck" fuehrt in die Vorschau, nicht in den Raum -- sonst waere
+  // der Blick auf die Ausruestung eine Einbahnstrasse.
+  withPreview((pv) => {
+    let started = false;
+    pv.show({ title: 'Raum 5', upgrades }, ['t_brown'], tanksData, () => {
+      started = true;
+    });
+    document.getElementById('previewUpOpen').click();
+    document.getElementById('previewUpBack').click();
+    check(
+      document.getElementById('previewUpgrades').classList.contains('hidden'),
+      'P8: Ausruestungsseite schliesst nicht (blockiert die Eingabe)',
+    );
+    check(!document.getElementById('preview').classList.contains('hidden'), 'P8: Vorschau kommt nicht zurueck');
+    check(!started, 'P8: "Zurueck" hat den Raum gestartet');
+  });
+
+  // (d) Ohne Upgrades gibt es auch keinen Knopf (frischer Run).
+  withPreview((pv) => {
+    pv.show({ title: 'Raum 1', upgrades: [] }, ['t_brown'], tanksData, () => {});
+    check(!document.getElementById('previewUpOpen'), 'P8: Ausruestungs-Knopf erscheint ohne Karten');
+  });
+
+  // (e) hide() raeumt BEIDE Seiten weg -- sonst haengt die
+  // Ausruestungsseite ueber dem Spiel (dieselbe Fehlerklasse wie der
+  // Kartenscreen-Blocker).
+  withPreview((pv) => {
+    pv.show({ title: 'Raum 5', upgrades }, ['t_brown'], tanksData, () => {});
+    document.getElementById('previewUpOpen').click();
+    pv.hide();
+    check(
+      document.getElementById('previewUpgrades').classList.contains('hidden'),
+      'P8: hide() laesst die Ausruestungsseite offen',
+    );
+  });
+}
+
 // ---- 8f. P7: Werte-Anzeige ---------------------------------------------
 // Die Anzeige leitet ALLE Zahlen aus dem aufgeloesten cfg ab -- kein neues
 // Feld. Geprueft wird deshalb (1) dass sie ohne Absturz zeichnet, (2) dass

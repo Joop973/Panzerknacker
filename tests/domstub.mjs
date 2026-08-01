@@ -197,6 +197,22 @@ export function installDom() {
 
   const prevDoc = globalThis.document;
   const prevWin = globalThis.window;
+  const prevImg = globalThis.Image;
+  // src/render/sprites.js legt beim Laden Image-Objekte an (initSprites()
+  // laeuft als Modul-Seiteneffekt). Ohne diesen Stub kann kein Test etwas
+  // importieren, das ueber renderer.js laeuft -- z. B. ui/preview.js, das
+  // TANK_COLORS von dort bezieht. Das Laden selbst schlaegt fehl (kein
+  // Netz), genau dafuer hat sprites.js seinen Fallback auf prozedurale
+  // Formen.
+  globalThis.Image = class {
+    set src(v) {
+      this._src = v;
+      if (typeof this.onerror === 'function') this.onerror();
+    }
+    get src() {
+      return this._src;
+    }
+  };
   globalThis.document = doc;
   // window mit echter Listener-Verwaltung: ui/touchcontrols.js haengt die
   // beiden Fahr-/Zielsticks an window-Touchereignisse, ein Test muss sie
@@ -223,5 +239,6 @@ export function installDom() {
   return () => {
     globalThis.document = prevDoc;
     globalThis.window = prevWin;
+    globalThis.Image = prevImg;
   };
 }

@@ -11,6 +11,48 @@ export function createPreview() {
   el.id = 'preview';
   document.body.appendChild(el);
 
+  // P8: Die eigene Ausruestung liegt NICHT mehr im Hauptbereich, sondern auf
+  // einer eigenen Vollbild-Seite. Grund: der Hauptbereich muss auf einem
+  // Handy im Querformat vollstaendig auf den Schirm passen -- mit einem
+  // Dutzend Karten schob die Chipreihe den "Weiter"-Knopf sonst aus dem
+  // Bild (Nutzer-Meldung). Auf der eigenen Seite ist Platz, Name und
+  // Wirkung stehen dort direkt an der Karte statt hinter einem Tipp.
+  const upEl = document.createElement('div');
+  upEl.className = 'overlay hidden';
+  upEl.id = 'previewUpgrades';
+  document.body.appendChild(upEl);
+
+  // Baut die Vollbild-Seite neu und blendet sie ein.
+  function showUpgradePage(upgrades) {
+    upEl.innerHTML = '';
+    const h = document.createElement('h1');
+    h.textContent = 'Deine Ausrüstung';
+    upEl.appendChild(h);
+
+    const list = document.createElement('div');
+    list.className = 'pv-uplist';
+    for (const u of upgrades) {
+      const row = document.createElement('div');
+      row.className = 'pv-uprow';
+      row.innerHTML =
+        `<span class="pv-sym">${u.symbol || '•'}</span>` +
+        `<span class="pv-upname">${u.name}${u.level > 1 ? ` <em>Stufe ${u.level}</em>` : ''}</span>` +
+        `<span class="pv-updesc">${u.description || ''}</span>`;
+      list.appendChild(row);
+    }
+    upEl.appendChild(list);
+
+    const back = document.createElement('button');
+    back.id = 'previewUpBack';
+    back.textContent = 'Zurück';
+    back.addEventListener('click', () => {
+      upEl.classList.add('hidden');
+      el.classList.remove('hidden'); // zurueck in die Vorschau, nicht in den Raum
+    });
+    upEl.appendChild(back);
+    upEl.classList.remove('hidden');
+  }
+
   return {
     // opts: { title, character (Raumtyp-Text),
     //         upgrades: [{ name, level, description }] (eigene Ausruestung) }
@@ -85,40 +127,20 @@ export function createPreview() {
         el.appendChild(haz);
       }
 
-      // Eigene Ausruestung: dieselben antippbaren Chips wie bei den Gegnern
-      // oben -- Hover bzw. Tipp zeigt, WAS die Karte tut. Vorher stand hier
-      // nur eine Namensliste ohne Wirkung (Nutzerwunsch).
+      // Eigene Ausruestung (P8): im Hauptbereich nur noch EINE Zeile --
+      // ein Knopf auf die Vollbild-Seite. Die Chipreihe selbst ist dorthin
+      // gewandert, damit die Vorschau kurz genug bleibt, dass "Weiter" auf
+      // jedem Handy erreichbar ist.
       if (upgrades && upgrades.length) {
-        const own = document.createElement('p');
-        own.className = 'pv-own';
-        own.textContent = 'Deine Upgrades:';
-        el.appendChild(own);
-
-        const upRow = document.createElement('div');
-        upRow.className = 'pv-chips';
-        const upDesc = document.createElement('p');
-        upDesc.className = 'pv-desc';
-        upDesc.textContent = 'Tippe ein Upgrade für Details.';
-        // Nur Symbol + Stufe: mit einem Dutzend Karten waeren ausgeschriebene
-        // Namen mehrere Zeilen hoch und haben den "Weiter"-Knopf aus dem
-        // sichtbaren Bereich geschoben (Nutzer-Meldung). Name und Wirkung
-        // stehen im Detailtext darunter.
-        for (const u of upgrades) {
-          const chip = document.createElement('button');
-          chip.className = 'pv-chip pv-chip-sm pv-chip-up';
-          chip.innerHTML =
-            `<span class="pv-sym">${u.symbol || '•'}</span>` +
-            (u.level > 1 ? `<span class="pv-x">×${u.level}</span>` : '');
-          chip.title = u.name;
-          const show = () => {
-            upDesc.textContent = `${u.symbol || ''} ${u.name}${u.level > 1 ? ` (Stufe ${u.level})` : ''}: ${u.description || ''}`;
-          };
-          chip.addEventListener('mouseenter', show);
-          chip.addEventListener('click', show);
-          upRow.appendChild(chip);
-        }
-        el.appendChild(upRow);
-        el.appendChild(upDesc);
+        const openUp = document.createElement('button');
+        openUp.id = 'previewUpOpen';
+        openUp.className = 'secondary';
+        openUp.textContent = `Deine Ausrüstung (${upgrades.length}) ▸`;
+        openUp.addEventListener('click', () => {
+          el.classList.add('hidden');
+          showUpgradePage(upgrades);
+        });
+        el.appendChild(openUp);
       }
 
       const go = document.createElement('button');
@@ -134,6 +156,7 @@ export function createPreview() {
     },
     hide() {
       el.classList.add('hidden');
+      upEl.classList.add('hidden');
     },
   };
 }

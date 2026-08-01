@@ -8,11 +8,12 @@ bisherige Steuerung beschrieben ist, damit es nur eine Quelle gibt.
 
 ---
 
-**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ · P4 ✅ · P6 ✅ · P7 ✅ gebaut ·
+**Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ · P4 ✅ · P6 ✅ · P7 ✅ · P8 ✅ gebaut ·
 P5 ❌ gestrichen (Nutzerentscheidung) · P10 ✅ war schon erledigt.
-**Nächste Session: P8 (Mobile Zwischenraum-UI).**
+**Nächste Session: P9 (Startbildschirm).** Danach nur noch P11
+(Lichtquellen) — dann ist der Ergänzungsplan abgearbeitet.
 
-## Ist-Abgleich (Stand: Cache v69)
+## Ist-Abgleich (Stand: Cache v70)
 
 Vor dem Bau geprüft, was der Code **heute schon kann**. Ergebnis: mehrere
 Phasen sind ganz oder überwiegend erledigt, zwei kollidieren mit
@@ -29,7 +30,7 @@ bereits vorhandenen Code geflossen.
 | P5 Schild-Rework ❌ **gestrichen** | Vier Schild-Karten, Verfall nach 3 Räumen, Regeneration, Nachkauf. | **Nutzerentscheidung: „Schild erstmal so lassen wie es ist."** Konflikt A ist damit erledigt, E2/Bollwerk/`nachladeschild`/`emergency_shield`/`konterschild` bleiben unangetastet. Phase entfällt. |
 | P6 Haken-Rework ✅ **erledigt** | `hook.maxRangePx` **222** (Nutzerentscheidung), Bombenwurf `throwPx: 58`. | Gebaut: Zielrichtung aus der Zielphase, Abklingzeit auch ohne Treffer, Zielvorschau über dieselbe Funktion wie der Schuss. |
 | P7 Stats-Anzeige ✅ **erledigt** | Nicht vorhanden. | Gebaut: umschaltbares Werte-Panel im HUD (Tab), in der Pause immer sichtbar (Handy-Weg). Reine Ableitung, keine neuen Felder. |
-| P8 Zwischenraum-UI | Raumvorschau zeigt Gegner **und** Upgrades als Chips. | Echte Neuarbeit; kehrt die Chip-Anzeige aus der letzten Balancerunde bewusst wieder um. |
+| P8 Zwischenraum-UI ✅ **erledigt** | Raumvorschau zeigt Gegner **und** Upgrades als Chips. | Gebaut: Ausrüstung auf eigener Vollbild-Seite, Hauptbereich dadurch kurz genug für jedes Handy-Querformat. |
 | P9 Startbildschirm | **Existiert**: Start, Tages-Seed, Fortsetzen, Schwierigkeit, Bestwerte zurücksetzen, Optionen (Ziellinie, Bedrohungslinien, Reduzierte Bewegung), Mute. | D-Pad-Navigation, Vollbild-Button, Lautstärkeregler, „Spiel beenden". |
 | P10 Grüner gefährlicher | **Bereits erledigt** (Session vor dieser): `requiresBounceShot` (Bandenrechner), 2 Abpraller, `accuracy` 0.9, Feuerrate unverändert. | Nur noch Feinschliff, falls er sich beim Spielen zu schwach anfühlt. |
 | P11 Lichtquellen | `fog`/`darkness` existieren als Raum-Modifikatoren mit `visionRadiusPx`, gerendert über `drawFog()`. | Lichtquellen für Gegner/Bomben/Geschosse + additive Maske statt einer Blende um den Spieler. |
@@ -452,12 +453,47 @@ Zeilen da sind, dass ein Tempo-Upgrade die ausgewiesene Abweichung
 verändert, dass die Pause es einblendet und dass es **nicht** dauerhaft im
 Bild steht. Gegenprobe für alle drei Kernpunkte bestanden.
 
-## P8 — Mobile Zwischenraum-UI
+## P8 — Mobile Zwischenraum-UI ✅ gebaut
 
 Unverändert. **Beachten:** Die Raumvorschau zeigt seit der letzten
 Balancerunde Upgrade-Chips mit Symbolen; P8 nimmt sie aus dem Hauptbereich
 wieder heraus und verschiebt sie auf die Vollbild-Seite. Die Symbole aus
 `data/upgrades.json` werden dort weiterverwendet.
+
+### Umsetzung (gebaut)
+
+Die Chipreihe der eigenen Ausrüstung ist aus dem Hauptbereich der
+Raumvorschau verschwunden; an ihrer Stelle steht **eine Zeile** — ein Knopf
+„Deine Ausrüstung (N) ▸" auf eine eigene Vollbild-Seite
+(`#previewUpgrades`).
+
+Das **verstärkt** den Bugfix aus der letzten Balancerunde, statt ihn
+zurückzunehmen: der Hauptbereich wird dadurch kürzer, nicht länger, und der
+„Weiter"-Knopf rückt weiter vom Bildschirmrand weg.
+
+- **Auf der eigenen Seite ist Platz**, deshalb stehen Symbol, Name, Stufe
+  und Wirkung dort direkt nebeneinander — der „Tippe für Details"-Umweg der
+  Chips entfällt. Die Symbole aus `data/upgrades.json` werden
+  weiterverwendet.
+- **„Zurück" führt in die Vorschau, nicht in den Raum** — sonst wäre der
+  Blick auf die Ausrüstung eine Einbahnstraße.
+- **`hide()` räumt beide Seiten weg.** Genau diese Fehlerklasse hat schon
+  einmal einen Run blockiert (Kartenscreen, der über dem Spielfeld liegen
+  blieb) — in der Suite eigens zugesichert.
+- **`#previewUpBack` ist `sticky`.** Gegenprobe: ohne die Regel liegt der
+  Knopf bei 12 Karten auf **1076 px** in einem 375-px-Fenster, also weit
+  außerhalb — dieselbe Falle wie damals beim „Weiter"-Knopf.
+
+**Tests:** fünf Fälle in `tests/regression.mjs` (keine Chips mehr im
+Hauptbereich, Knopf nennt die Kartenzahl, Seite listet jede Karte mit Name
+und Wirkung, „Zurück" startet den Raum nicht, `hide()` räumt beides weg),
+Gegenprobe für drei davon bestanden. `tests/uilayout.mjs` prüft die neue
+Seite über alle vier Viewports mit.
+
+Dafür musste `tests/domstub.mjs` um einen **`Image`-Stub** erweitert werden:
+`preview.js` zieht über `renderer.js` die Sprite-Initialisierung mit, die
+als Modul-Seiteneffekt `new Image()` aufruft. Ohne den Stub lässt sich das
+Modul headless gar nicht importieren.
 
 ## P9 — Startbildschirm
 
