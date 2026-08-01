@@ -80,8 +80,9 @@ Kennzahl 1 (erzwungene Bankshots) war mit 33 % statt 60 % deutlich
 verfehlt — behoben über `difficulty.json: bankshotGuarantee`, jetzt 61,9 %
 und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
 jetzt überhaupt messbar.
-**Nächste Phase: Phase 18, Welle 4 — bzw. zuerst die aufgeschobene
-Telemetrie-Auswertung, sobald 15–20 gespielte Runs vorliegen.**
+**Nächste Phase: `PLAN-INPUT.md` P1 (Input-Abstraktion erweitern).**
+Der Ergänzungsplan hat Vorrang vor `PLAN.md` Phase 18 Welle 4; die
+aufgeschobene Telemetrie-Auswertung bleibt davon unberührt.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -1239,6 +1240,42 @@ haben den Inhalt zusätzlich in die Höhe getrieben.
   es eine echte Layout-Engine braucht — die Node-Suite bleibt
   abhängigkeitsfrei, der Test überspringt sich ohne Playwright selbst.
   Gegenprobe bestanden (sticky + Media Query ausgebaut → 4 Meldungen).
+
+### Ergänzungsplan `PLAN-INPUT.md` (Input-Rework) — eingearbeitet
+Vom Nutzer gelieferte Plan-Erweiterung: elf Phasen (P1–P11) für Input-
+Abstraktion, Viewport, Gadget-Slot, Schild-Rework, Haken, Stats-Anzeige,
+Zwischenraum-UI, Startbildschirm und Lichtquellen. **Regel: eine Phase pro
+Session, strikt in Reihenfolge.** Die Steuerungsdoktrin (Tabelle der drei
+Eingabeprofile) steht in **`SPEC.md`, Abschnitt 9**, nicht im Plan — dort
+liegt die Steuerung schon beschrieben, es soll nur eine Quelle geben.
+
+**Der Ist-Abgleich vor dem Bau war der eigentliche Ertrag** (Muster wie beim
+`PLAN.md`-v3-Review): mehrere Phasen sind ganz oder überwiegend schon
+gebaut, drei Angaben kollidieren mit bestehenden Festlegungen.
+- **P1 (Input-Abstraktion) steht zu großen Teilen seit Phase 0a** —
+  `getState()`, Gamepad-Polling, `data/input.json`, keine Events in
+  `src/game/*`. Rest: Aktionsmodell um Gadget-/Menü-/Release-Felder
+  erweitern und die drei Profile aus den if-Zweigen ziehen.
+- **P2** Meta-Viewport ist bereits exakt wie gefordert; offen sind
+  `visualViewport`, `devicePixelRatio`, `position: fixed`.
+- **P3** Pointer-Events + `setPointerCapture` + `pointerId` gibt es schon.
+  **Gefundener Bug:** `pointercancel` hängt an derselben Funktion wie
+  `pointerup` und **wirft die Bombe trotzdem** — die Phase verlangt Abbruch
+  ohne Auslösung. Das erklärt vermutlich das gemeldete Fehlverhalten.
+- **P5 kollidiert mit E2, Bollwerk und drei Karten**: „kein Verfall, keine
+  Regeneration, nicht nachkaufbar" nimmt E2 zurück, macht die
+  Bollwerk-Transformation wirkungslos und streicht `nachladeschild`,
+  `emergency_shield` und zwei Kaufwege. Vor der Phase zu entscheiden.
+- **P6 würde den Haken halbieren**: `hookRange = bombThrowRange * 2` ergibt
+  116 px, heute sind es 260 px (Bombenwurf 58 px). Die Absicht ist bereits
+  übererfüllt — Formel oder Zielwert klären.
+- **P10 (Grüner gefährlicher) ist bereits erledigt** (Session davor).
+- Drei im Ausgangsdokument genannte Dateien existieren nicht:
+  `data/weapons.json` → `secondaries.json`, `data/enemies.json` →
+  `tanks.json`, `data/rooms.json` → `modifiers.json`.
+
+**Nächste Session: P1** (siehe `PLAN-INPUT.md`), sofern der Nutzer nicht
+zuerst die Konflikte A/B entscheiden will.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen

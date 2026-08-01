@@ -39,6 +39,14 @@ Trace gegen alle Wandtypen und in jedem echten Raum, Wellen-Freigabe-Guard,
 Determinismus-Probe (Karte + Raumlayout). Gegen den ungefixten Stand schlägt
 die Suite bei beiden Fehlern an.
 
+**Ergänzungsplan (2026-08):** `PLAN-INPUT.md` (v1.0) beschreibt den
+Input-Rework und mehrere Systemänderungen in elf eigenen Phasen (P1–P11).
+Er läuft **parallel zu diesem Plan** und hat einen eigenen Ist-Abgleich —
+darin sind drei Konflikte mit Festlegungen aus diesem Dokument benannt
+(E2-Schildverfall, Hakenreichweite, Feuersperre bei manuellem Feuern), die
+vor der jeweiligen Phase zu entscheiden sind. Die Steuerungsdoktrin selbst
+steht in `SPEC.md`, Abschnitt 9.
+
 **Reihenfolge-Korrektur:** Die nächste Session ist **Phase 7b — Audio**
 (einzige ausgelassene Phase, siehe dort), erst danach Phase 18 Welle 3.
 → **Phase 7b ist inzwischen gebaut** (siehe dort); nächste Session ist
