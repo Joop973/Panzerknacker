@@ -9,9 +9,10 @@ bisherige Steuerung beschrieben ist, damit es nur eine Quelle gibt.
 ---
 
 **Fortschritt:** P1 ✅ · P2 ✅ · P3 ✅ · P4 ✅ · P6 ✅ · P7 ✅ · P8 ✅ ·
-P9 ✅ gebaut · P5 ❌ gestrichen (Nutzerentscheidung) · P10 ✅ war schon
-erledigt. **Nächste Session: P11 (Lichtquellen) — die letzte Phase, danach
-ist der Ergänzungsplan abgearbeitet.**
+P9 ✅ · P11 ✅ gebaut · P5 ❌ gestrichen (Nutzerentscheidung) · P10 ✅ war
+schon erledigt. **Damit ist `PLAN-INPUT.md` vollständig abgearbeitet** —
+offene Arbeit läuft ab jetzt wieder über `PLAN.md` (aufgeschobene
+Telemetrie-Auswertung, siehe `CLAUDE.md`).
 
 ## Ist-Abgleich (Stand: Cache v71)
 
@@ -33,7 +34,7 @@ bereits vorhandenen Code geflossen.
 | P8 Zwischenraum-UI ✅ **erledigt** | Raumvorschau zeigt Gegner **und** Upgrades als Chips. | Gebaut: Ausrüstung auf eigener Vollbild-Seite, Hauptbereich dadurch kurz genug für jedes Handy-Querformat. |
 | P9 Startbildschirm ✅ **erledigt** | Existierte: Start, Tages-Seed, Fortsetzen, Schwierigkeit, Bestwerte zurücksetzen, Optionen (Ziellinie, Bedrohungslinien, Reduzierte Bewegung), Mute. | Gebaut: `src/ui/menunav.js` (Tastatur-/Gamepad-Fokusnavigation), Lautstärkeregler, Eingabeprofil-Override, „Spiel beenden"; alles Neue auf einer eigenen Einstellungsseite (Muster P8), sonst passte der Startbildschirm im Handy-Querformat nicht mehr. |
 | P10 Grüner gefährlicher | **Bereits erledigt** (Session vor dieser): `requiresBounceShot` (Bandenrechner), 2 Abpraller, `accuracy` 0.9, Feuerrate unverändert. | Nur noch Feinschliff, falls er sich beim Spielen zu schwach anfühlt. |
-| P11 Lichtquellen | `fog`/`darkness` existieren als Raum-Modifikatoren mit `visionRadiusPx`, gerendert über `drawFog()`. | Lichtquellen für Gegner/Bomben/Geschosse + additive Maske statt einer Blende um den Spieler. |
+| P11 Lichtquellen ✅ **erledigt** | `fog`/`darkness` existieren als Raum-Modifikatoren mit `visionRadiusPx`, gerendert über `drawFog()`. | Gebaut: additive Lichtmaske (Spieler/Gegner/Minen/Geschosse), Render-Budget `maxLightSources` gegen das 6-ms-Limit aus Phase 11b. |
 
 ### Dateinamen im Ausgangsdokument, die es nicht gibt
 
@@ -578,15 +579,73 @@ Logikschritt 2,2 ms von 6 ms Budget.
 ausweichbar"). Falls er zu schwach wirkt: `solveIntervalS` senken (rechnet
 öfter neu) oder `hitTolerancePx` erhöhen (findet mehr Lösungen).
 
-## P11 — Dunkler Raum: Lichtquellen
+## P11 — Dunkler Raum: Lichtquellen ✅ gebaut
 
-**Was schon steht:** `fog` und `darkness` als Raum-Modifikatoren
+**Was schon stand:** `fog` und `darkness` als Raum-Modifikatoren
 (`data/modifiers.json`, `visionRadiusPx` 260 bzw. 150), gerendert als
 Radialgradient um den Spieler (`renderer.js: drawFog()`), aufhebbar durch die
 Karte `nachtsicht`.
 
-**Was zu tun ist:** Aus der einen Blende eine **additive Lichtmaske** mit
-mehreren Quellen machen (Spieler, Gegner, Bomben, Geschosse) — die Werte
-gehören zu den Modifikatoren in `data/modifiers.json`, nicht in eine neue
-`rooms.json`. Performance auf dem Handy nach Phase 11b messen (Renderzeit
-≤ 6 ms).
+### Umsetzung (gebaut)
+- **Additive Lichtmaske statt einer Blende**: `drawFog()` füllt jeden Frame
+  ein eigenes Offscreen-Canvas (`fogCanvas`) komplett mit `fogColor`, stanzt
+  dann per `destination-out` (`punchLight()`, weicher Radialgradient) je ein
+  Loch für Spieler, lebende Gegner, aktive Minen und fliegende Geschosse
+  hinein — erst danach wandert die fertige Maske in einem `drawImage()` auf
+  den Hauptcanvas. Ein zweiter Canvas ist zwingend: `destination-out` direkt
+  auf dem Hauptcanvas würde auch Boden/Wände/Panzer durchsichtig machen statt
+  nur den Nebel.
+- **Werte in `data/modifiers.json: lightSources`** (ein gemeinsamer Block,
+  keine Duplikate pro Modifikator, gilt für jeden Modifikator mit
+  `visionRadiusPx`): `enemyRadiusPx` 90, `mineRadiusPx` 70, `bulletRadiusPx`
+  34 — bewusst kleiner als der Spieler-Radius, Nebenquellen sollen die Sicht
+  ergänzen, nicht den Effekt aufheben.
+- **Render-Leistungsbudget `maxLightSources` (10)**: Worst Case sind bis zu
+  44 gleichzeitige Kandidaten (`limits.json: enemiesAlive` 12 + `mines` 8 +
+  `balance.json: enemyBullet.maxActive` 24). Ohne Deckel kostet das
+  gemessen ~6,8 ms p90 — schon über dem 6-ms-Budget aus Phase 11b. `drawFog()`
+  sortiert alle Kandidaten nach Entfernung zum Spieler und puncht nur die
+  `maxLightSources` nächsten (Muster wie die Entitäten-Deckel in
+  `data/limits.json`, hier als Render- statt Simulationsbudget). Eine weit
+  entfernte Quelle trägt ohnehin am wenigsten zu dem bei, was der Spieler
+  gerade sieht.
+- **Umsetzungsfund — vorgebackene Lichtsprites waren LANGSAMER**: die
+  naheliegende Optimierung (ein Radialgradient je Art einmalig backen, dann
+  pro Instanz nur `drawImage()`) maß in `tests/fogperf.mjs` isoliert 10,3 ms
+  statt 6,5 ms Median bei 44 Quellen — vermutlich, weil `drawImage()` bei der
+  nötigen Hoch-/Herunterskalierung selbst resamplen muss. Verworfen zugunsten
+  von `createRadialGradient()+fillRect()` pro Aufruf; die eigentliche
+  Kostenbremse ist das Render-Budget, nicht die Zeichenmethode.
+- **`tests/fogperf.mjs` (neu, Playwright, selbstüberspringend)**: prüft (1)
+  Korrektheit über eine gezielt platzierte Test-Sonde außerhalb des
+  Spieler-Lichtkreises — bewusst **nicht** der nächste Nachbar einer
+  Zufallsszene, siehe Umsetzungsfund unten —, (2) dass `cfg.ignoreFog`
+  (Nachtsicht) die Maske weiterhin komplett abschaltet, (3) die Renderzeit im
+  beschriebenen Worst Case.
+- **Umsetzungsfund — der naheliegende Korrektheitstest hätte nie etwas
+  geprüft**: die erste Fassung maß die Helligkeit am nächsten Nachbarn einer
+  44-Quellen-Zufallsszene. Bei dieser Dichte liegt der nächste Nachbar im
+  Mittel nur ~35 px vom Spieler entfernt (2D-Poisson-Abschätzung) — also so
+  gut wie immer schon innerhalb des Spieler-eigenen Lichtradius (150 px im
+  härtesten Fall). Der Test hätte additive Fremdlicht-Quellen also nie
+  wirklich geprüft, selbst wenn nur der Spieler-Kreis gezeichnet würde
+  (Gegenprobe bestätigt: mit ausgeschalteten Nebenquellen bricht der neue,
+  sondenbasierte Test korrekt rot ein). Zweiter Fund dabei: eine per
+  `{...proto, x, y}` geklonte Test-Figur muss `prevX`/`prevY` explizit
+  mitsetzen — `drawFog()` interpoliert Gegnerpositionen über
+  `lerp(t.prevX, t.x, alpha)`, ein reiner Klon erbt sonst die **alte**
+  Position des Prototyps.
+- **Messmethode für die Renderzeit**: `tests/fogperf.mjs` misst DREI
+  unabhängige 500-Frame-Durchläufe und wertet den **Median der drei
+  p90-Werte** — ein einzelner Durchlauf reicht nicht, weil die Aussetzer
+  dieser (sandboxed) Testumgebung gelegentlich so clustern, dass ein
+  einzelner Durchlauf über 10 % verliert (Gegenprobe: 7,7 ms p90 statt der
+  üblichen ~4-5 ms in einem einzelnen Lauf). Eine echte Regression zeigt sich
+  in allen drei Durchläufen, ein einzelner Ausreißer-Durchlauf verliert gegen
+  die anderen zwei.
+- **Helligkeitsvergleich über ein 12×12-Fenster gemittelt**, nicht einen
+  Einzelpixel: das Boden-Sprite hat eigene Textur-Variation, ein Einzelpixel
+  kann rein zufällig auf eine dunkle Stelle treffen, ganz ohne Nebel
+  (Gegenprobe: mit Einzelpixel-Messung flakte der Korrektheitstest, weil die
+  Vergleichsstelle bei `(20,20)` zufällig auf einer Wandkachel lag statt auf
+  Boden).
