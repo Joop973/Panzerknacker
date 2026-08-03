@@ -1,5 +1,13 @@
 {
   "minRoom": 3,
+  "_comment_lightSources": "P11: aus der einen Blende um den Spieler wird eine additive Lichtmaske -- Gegner, Bomben und Geschosse leuchten mit, statt nur der Spieler. Gilt fuer JEDEN Modifikator mit visionRadiusPx (aktuell fog/darkness), deshalb ein gemeinsamer Block statt Duplikate pro Modifikator. Radien bewusst kleiner als visionRadiusPx -- Nebenlichtquellen sollen die Sicht ergaenzen, nicht den Effekt aufheben.",
+  "lightSources": {
+    "enemyRadiusPx": 90,
+    "mineRadiusPx": 70,
+    "bulletRadiusPx": 34,
+    "_comment_maxLightSources": "Render-Leistungsbudget (gemessen in tests/fogperf.mjs, Worst Case 44 Kandidaten: 12 Gegner + 8 Minen + 24 Geschosse). 10 haelt die p90-Renderzeit ueber mehrere Messreihen zuverlaessig bei ~4-5 ms (Budget 6 ms, Phase 11b) -- 14 lag im selben Test gelegentlich bei 6-8 ms, sobald die Testumgebung einen Lastschub zeigte, deshalb der zusaetzliche Sicherheitsabstand. Nur die dem Spieler NAECHSTEN maxLightSources werden gezeichnet, der Rest bleibt fuers Erste dunkel.",
+    "maxLightSources": 10
+  },
   "modifiers": [
     {
       "id": "fog",

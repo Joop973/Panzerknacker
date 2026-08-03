@@ -83,12 +83,12 @@ und in der Regressionssuite bewacht. Kennzahl 3 (freiwillige Bankshots) ist
 jetzt überhaupt messbar.
 `PLAN-INPUT.md` **P1 (Input-Abstraktion)**, **P2 (Viewport/DPR)**,
 **P3 (Touch-Bug Sekundärwaffe)**, **P4 (Gadget-Split)**,
-**P6 (Haken-Rework)**, **P7 (Werte-Anzeige)**, **P8 (Zwischenraum-UI)**
-und **P9 (Startbildschirm)** sind gebaut, **P5 (Schild-Rework) auf
-Nutzerwunsch gestrichen** („Schild erstmal so lassen wie es ist").
-**Nächste Phase: `PLAN-INPUT.md` P11 (Lichtquellen) — die letzte Phase.**
-Der Ergänzungsplan hat Vorrang vor `PLAN.md` Phase 18 Welle 4; die
-aufgeschobene Telemetrie-Auswertung bleibt davon unberührt.
+**P6 (Haken-Rework)**, **P7 (Werte-Anzeige)**, **P8 (Zwischenraum-UI)**,
+**P9 (Startbildschirm)** und **P11 (Lichtquellen)** sind gebaut, **P5
+(Schild-Rework) auf Nutzerwunsch gestrichen** („Schild erstmal so lassen
+wie es ist"). **`PLAN-INPUT.md` ist damit vollständig abgearbeitet** —
+offene Arbeit läuft wieder ausschließlich über `PLAN.md` (die aufgeschobene
+Telemetrie-Auswertung, s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -1594,6 +1594,63 @@ Raumvorschau verschwunden; dort steht jetzt **eine Zeile** — ein Knopf
   Kernpunkte bestanden. `tests/uilayout.mjs` prüft Start- und
   Einstellungsseite über alle vier Viewports.
 
+### PLAN-INPUT.md P11 (Lichtquellen) — gemergt
+Letzte Phase des Ergänzungsplans. Aus der einen Blende um den Spieler
+(`fog`/`darkness`, Phase 10) wird eine **additive Lichtmaske**: Spieler,
+lebende Gegner, aktive Minen und fliegende Geschosse leuchten jetzt
+gemeinsam, statt dass nur der Spieler-Kreis zählt.
+- **`renderer.js: drawFog()` komplett neu**: ein eigenes Offscreen-Canvas
+  (`fogCanvas`) wird jeden Frame mit `fogColor` gefüllt, dann bekommt jede
+  Lichtquelle per `destination-out` (`punchLight()`, weicher
+  Radialgradient) ein Loch hineingestanzt — erst danach wandert die
+  fertige Maske über ein einziges `drawImage()` auf den Hauptcanvas. Ein
+  zweiter Canvas ist zwingend: `destination-out` direkt auf dem
+  Hauptcanvas würde auch Boden/Wände/Panzer durchsichtig machen, nicht nur
+  den Nebel.
+- **Werte in `data/modifiers.json: lightSources`** (ein gemeinsamer Block
+  für jeden Modifikator mit `visionRadiusPx`, keine Duplikate):
+  `enemyRadiusPx` 90, `mineRadiusPx` 70, `bulletRadiusPx` 34 — bewusst
+  kleiner als der Spieler-Radius, Nebenquellen ergänzen die Sicht, heben
+  den Effekt nicht auf.
+- **Render-Leistungsbudget `maxLightSources` (10)**: Worst Case sind bis zu
+  44 gleichzeitige Kandidaten (`limits.json: enemiesAlive` 12 + `mines` 8 +
+  `balance.json: enemyBullet.maxActive` 24) — ohne Deckel gemessen ~6,8 ms
+  p90, über dem 6-ms-Budget aus Phase 11b. `drawFog()` sortiert alle
+  Kandidaten nach Entfernung zum Spieler und puncht nur die
+  `maxLightSources` nächsten (Muster wie die Entitäten-Deckel in
+  `data/limits.json`, hier als Render- statt Simulationsbudget).
+- **Umsetzungsfund — vorgebackene Lichtsprites waren LANGSAMER**: die
+  naheliegende Optimierung (Radialgradient je Art einmalig backen, dann
+  nur noch `drawImage()`) maß isoliert 10,3 ms statt 6,5 ms Median bei 44
+  Quellen — vermutlich, weil `drawImage()` bei der nötigen
+  Hoch-/Herunterskalierung selbst resamplen muss. Verworfen zugunsten von
+  `createRadialGradient()+fillRect()` pro Aufruf.
+- **`tests/fogperf.mjs` (neu, Playwright, selbstüberspringend)**: prüft
+  Korrektheit (additive Aufhellung + Nachtsicht-Abschaltung) und Renderzeit
+  im Worst Case.
+- **Umsetzungsfund — der naheliegende Korrektheitstest hätte nie etwas
+  geprüft**: eine erste Fassung maß die Helligkeit am nächsten Nachbarn
+  einer 44-Quellen-Zufallsszene. Bei dieser Dichte liegt der nächste
+  Nachbar im Mittel nur ~35 px vom Spieler entfernt (2D-Poisson-Schätzung)
+  — also so gut wie immer schon innerhalb des Spieler-eigenen Lichtradius
+  (150 px im härtesten Fall). Der Test hätte additive Fremdlicht-Quellen
+  nie wirklich geprüft, selbst wenn nur der Spieler-Kreis gezeichnet würde
+  (Gegenprobe bestätigt). Jetzt misst der Test an einer gezielt platzierten
+  Test-Sonde außerhalb des Spieler-Lichtkreises. Zweiter Fund dabei: eine
+  per `{...proto, x, y}` geklonte Test-Figur muss `prevX`/`prevY` explizit
+  mitsetzen — `drawFog()` interpoliert Gegnerpositionen über
+  `lerp(t.prevX, t.x, alpha)`, ein reiner Klon erbt sonst die alte Position
+  des Prototyps.
+- **Messmethode Renderzeit**: drei unabhängige 500-Frame-Durchläufe, Median
+  der drei p90-Werte — ein einzelner Durchlauf reicht nicht, weil die
+  Aussetzer dieser (sandboxed) Testumgebung gelegentlich so clustern, dass
+  ein einzelner Durchlauf über 10 % verliert (Gegenprobe: 7,7 ms p90 statt
+  der üblichen ~4-5 ms in einem einzelnen Lauf).
+- **Helligkeitsvergleich über ein 12×12-Fenster gemittelt**, nicht einen
+  Einzelpixel: das Boden-Sprite hat eigene Textur-Variation, ein
+  Einzelpixel kann rein zufällig auf eine dunkle Stelle treffen, ganz ohne
+  Nebel.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1680,7 +1737,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v71`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v72`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -1719,7 +1776,8 @@ node --check src/<datei>.js         # Syntax
 node tests/regression.mjs           # Regressionssuite (eingecheckt!)
 node tests/uspcheck.mjs 40           # USP-Kennzahl 1 messen (PLAN.md-Pruefpunkt)
 node tests/uilayout.mjs             # Overlay-Layout (braucht Playwright)
-node tests/viewport.mjs             # DPR/Viewport + Zielkoordinaten (Playwright)
+node tests/viewport.mjs             # DPR/Viewport + Zielkoordinaten (Playwright, braucht eigenen Server auf :8099)
+node tests/fogperf.mjs              # Additive Lichtmaske: Korrektheit + Renderzeit (Playwright, P11)
 ```
 Playwright-Browser liegt unter `/opt/pw-browsers/chromium`
 (`executablePath` setzen; NICHT `playwright install`).

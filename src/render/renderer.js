@@ -151,6 +151,33 @@ export function createRenderer(ctx) {
     f.stroke();
   }
 
+  // P11: Offscreen-Canvas fuer die additive Lichtmaske (Nebel/Dunkelheit).
+  // Anders als floorCanvas wird dieses JEDEN Frame neu gefuellt -- die
+  // Lichtquellen (Spieler, Gegner, Minen, Geschosse) bewegen sich. Ein
+  // zweiter Canvas ist trotzdem noetig: destination-out muss auf einer
+  // eigenen Flaeche punchen, sonst wuerden die "Loecher" auch Boden/Waende/
+  // Panzer auf dem Hauptcanvas durchsichtig machen statt nur den Nebel.
+  const fogCanvas = document.createElement('canvas');
+  fogCanvas.width = WIDTH;
+  fogCanvas.height = HEIGHT;
+  const fogCtx = fogCanvas.getContext('2d');
+
+  // P11: Kern-Rand-Uebergang je Lichtquellen-Art (Anteil des Radius, der
+  // noch voll durchsichtig bleibt, bevor die Ausblendung beginnt). Der
+  // Spieler hat traditionell den weichsten Uebergang, Nebenquellen einen
+  // etwas haerteren -- sie sollen als klar erkennbarer Lichtpunkt wirken,
+  // nicht als grosse diffuse Aufhellung.
+  //
+  // Umsetzungsfund: ein vorgebackenes Sprite (EIN Radialgradient je Art,
+  // dann pro Instanz nur noch drawImage()) klang nach der schnelleren Wahl,
+  // maß aber in tests/fogperf.mjs LANGSAMER als ein frischer Gradient pro
+  // Aufruf (10,3 ms vs. 6,5 ms Median bei 44 Quellen, isoliert
+  // nachgemessen) -- vermutlich, weil drawImage() bei der noetigen
+  // Hoch-/Herunterskalierung selbst resamplen muss. Deshalb bewusst bei
+  // createRadialGradient()+fillRect() pro Aufruf geblieben; die eigentliche
+  // Kostenbremse ist stattdessen die Quellen-Obergrenze weiter unten.
+  const LIGHT_INNER_FRAC = { player: 0.45, enemy: 0.3, mine: 0.25, bullet: 0.2 };
+
   // Sobald das Boden-Sprite geladen ist, wird der Offscreen-Boden EINMAL
   // mit der gekachelten Grafik neu gebacken (danach frame-kostenlos).
   let floorBaked = false;
@@ -862,12 +889,41 @@ export function createRenderer(ctx) {
     }
   }
 
-  // Raum-Modifikator "Nebel"/"Dunkelheit" (Phase 10): rein optische Maske --
-  // begrenzt die SICHTBARKEIT des Spielers, nicht die KI-Sichtlinien (die
-  // laufen weiter unveraendert ueber state.blocksSight/clearLine). Ein
-  // Radialgradient um den Spieler ist transparent im Kern und geht in
-  // fogColor ueber; jenseits des aeusseren Gradient-Stopps fuellt Canvas
-  // automatisch mit der letzten Farbe weiter -- deckt so auch die Ecken ab.
+  // Ein "Loch" in die Nebelflaeche stanzen: destination-out mit einem
+  // Radialgradient, der im Kern voll deckend ist und zum Rand ausblendet.
+  // Bewusst NUR das Bounding-Rect der Lichtquelle gefuellt (nicht der ganze
+  // Canvas) -- bei vielen gleichzeitigen Quellen waere ein voller
+  // fillRect() pro Quelle ein Vielfaches der Kosten fuer keinen
+  // sichtbaren Unterschied.
+  function punchLight(kind, x, y, r) {
+    if (r <= 0) return;
+    const grad = fogCtx.createRadialGradient(x, y, r * LIGHT_INNER_FRAC[kind], x, y, r);
+    grad.addColorStop(0, 'rgba(0,0,0,1)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    fogCtx.fillStyle = grad;
+    fogCtx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+
+  // Raum-Modifikator "Nebel"/"Dunkelheit" (Phase 10, additive Lichtmaske
+  // seit P11): rein optische Maske -- begrenzt die SICHTBARKEIT des
+  // Spielers, nicht die KI-Sichtlinien (die laufen weiter unveraendert
+  // ueber state.blocksSight/clearLine).
+  //
+  // Vorher: EIN Radialgradient direkt auf dem Hauptcanvas, nur um den
+  // Spieler. Jetzt: eine eigene Nebelflaeche (fogCanvas) wird pro Frame mit
+  // fogColor gefuellt, dann bekommen Spieler, lebende Gegner, aktive Minen
+  // UND fliegende Geschosse je ein Loch hineingestanzt (destination-out,
+  // punchLight) -- die Radien (`data/modifiers.json: lightSources`) sind
+  // bewusst kleiner als der Spieler-Radius, sonst waere der Modifikator
+  // wirkungslos. Erst danach wird die fertige Maske auf den Hauptcanvas
+  // gezeichnet -- ein einziges drawImage() traegt alle Loecher auf einmal.
+  //
+  // Leistung (gemessen, siehe tests/fogperf.mjs): Worst Case ist
+  // limits.json enemiesAlive (12) + mines (8) + balance.enemyBullet
+  // .maxActive (24) = bis zu 44 zusaetzliche Quellen-Kandidaten. Ohne
+  // Deckel kostet das im p90 ~6,8 ms -- schon ueber dem 6-ms-Budget aus
+  // Phase 11b. `lightSources.maxLightSources` (10) zeichnet nur die dem
+  // Spieler naechsten Kandidaten und haelt den p90 zuverlaessig bei ~4-5 ms.
   function drawFog(ctx, state, alpha) {
     const mod = state.modifier;
     if (!mod || !mod.visionRadiusPx) return;
@@ -876,14 +932,66 @@ export function createRenderer(ctx) {
     // mehr ein -- die KI-Sichtlinien (state.blocksSight/clearLine) bleiben
     // unveraendert, das ist bewusst nur eine Anzeige-Aufhebung.
     if (p.cfg.ignoreFog) return;
-    const x = lerp(p.prevX, p.x, alpha);
-    const y = lerp(p.prevY, p.y, alpha);
-    const r = mod.visionRadiusPx;
-    const grad = ctx.createRadialGradient(x, y, r * 0.45, x, y, r);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, mod.fogColor || 'rgba(4,5,9,0.9)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    const ls = state.data.modifiers?.lightSources || {};
+    // clearRect ZWINGEND vor dem Neu-Fuellen: fogColor ist meist
+    // halbtransparent (Nebel: Alpha 0,55), ein blosses fillRect mit
+    // source-over wuerde sich sonst Frame fuer Frame auf den Resten der
+    // Vorlage draufaddieren, statt sie zu ersetzen.
+    fogCtx.clearRect(0, 0, WIDTH, HEIGHT);
+    fogCtx.globalCompositeOperation = 'source-over';
+    fogCtx.fillStyle = mod.fogColor || 'rgba(4,5,9,0.9)';
+    fogCtx.fillRect(0, 0, WIDTH, HEIGHT);
+
+    fogCtx.globalCompositeOperation = 'destination-out';
+    // Spieler: die urspruengliche, staerkste Lichtquelle -- voller Radius,
+    // unveraendert gegenueber der alten Einzelquelle, IMMER gezeichnet
+    // (zaehlt nicht gegen das Nebenquellen-Budget unten).
+    const px = lerp(p.prevX, p.x, alpha);
+    const py = lerp(p.prevY, p.y, alpha);
+    punchLight('player', px, py, mod.visionRadiusPx);
+
+    // Leistungsbudget (gemessen in tests/fogperf.mjs): jede zusaetzliche
+    // Quelle kostet messbar Frame-Zeit (~0,15 ms bei diesen Radien) --
+    // im Worst Case stehen bis zu 12 Gegner + 8 Minen + 24 Geschosse an,
+    // zusammen deutlich ueber dem 6-ms-Budget aus Phase 11b. Statt alle zu
+    // zeichnen, werden nur die `maxLightSources` naechsten zum Spieler
+    // gepuncht -- eine weit entfernte Quelle traegt ohnehin am wenigsten
+    // zu dem bei, was der Spieler gerade tatsaechlich sieht. Dasselbe
+    // Prinzip wie die Entitaeten-Deckel in data/limits.json, nur als
+    // Render- statt Simulationsbudget.
+    const candidates = [];
+    if (ls.enemyRadiusPx) {
+      for (const t of state.tanks) {
+        if (t === p || !t.alive) continue;
+        const x = lerp(t.prevX, t.x, alpha);
+        const y = lerp(t.prevY, t.y, alpha);
+        candidates.push({ kind: 'enemy', x, y, r: ls.enemyRadiusPx, d2: (x - px) ** 2 + (y - py) ** 2 });
+      }
+    }
+    // Minen bewegen sich nicht (kein prevX/prevY noetig).
+    if (ls.mineRadiusPx) {
+      for (const m of state.mines) {
+        if (m.dead) continue;
+        candidates.push({ kind: 'mine', x: m.x, y: m.y, r: ls.mineRadiusPx, d2: (m.x - px) ** 2 + (m.y - py) ** 2 });
+      }
+    }
+    if (ls.bulletRadiusPx) {
+      for (const b of state.bullets) {
+        if (b.dead) continue;
+        const x = lerp(b.prevX, b.x, alpha);
+        const y = lerp(b.prevY, b.y, alpha);
+        candidates.push({ kind: 'bullet', x, y, r: ls.bulletRadiusPx, d2: (x - px) ** 2 + (y - py) ** 2 });
+      }
+    }
+    candidates.sort((a, b) => a.d2 - b.d2);
+    const budget = ls.maxLightSources ?? candidates.length;
+    for (let i = 0; i < Math.min(budget, candidates.length); i++) {
+      const c = candidates[i];
+      punchLight(c.kind, c.x, c.y, c.r);
+    }
+
+    ctx.drawImage(fogCanvas, 0, 0);
   }
 
   return {
