@@ -78,7 +78,7 @@
   "types": {
     "player": {
       "maxHp": 1,
-      "damage": 1,
+      "damage": 10,
       "speed": "normal",
       "magazine": 5,
       "ricochets": 1,
@@ -94,7 +94,7 @@
       "role": "guardian",
       "accuracy": 0,
       "label": "Brauner",
-      "maxHp": 1,
+      "maxHp": 20,
       "damage": 1,
       "desc": "Steht fest. Turm schwenkt suchend und schießt bei freier Sicht."
     },
@@ -108,7 +108,7 @@
       "aggression": 0.17,
       "accuracy": 0.2,
       "label": "Grauer",
-      "maxHp": 1,
+      "maxHp": 20,
       "damage": 1,
       "desc": "Fährt ziellos umher und zielt ungenau auf dich."
     },
@@ -123,7 +123,7 @@
       "preferredRange": 220,
       "accuracy": 0.8,
       "label": "Türkiser",
-      "maxHp": 1,
+      "maxHp": 30,
       "damage": 1,
       "desc": "Hält Abstand, weicht Kugeln aus. Feuert Raketen mit 1,6 s Pause dazwischen.",
       "fireRate": 1.6
@@ -143,7 +143,7 @@
         "intervalMaxS": 6
       },
       "label": "Gelber",
-      "maxHp": 1,
+      "maxHp": 30,
       "damage": 1,
       "desc": "Schnell. Legt wahllos Minen und meidet sie — sperrt sich manchmal selbst ein."
     },
@@ -157,7 +157,7 @@
       "aggression": 0.63,
       "accuracy": 0.72,
       "label": "Pinker",
-      "maxHp": 1,
+      "maxHp": 40,
       "damage": 1,
       "desc": "Jagt dich, zielt präzise und weicht dabei deinen Kugeln aus. Bis zu 3 Geschosse."
     },
@@ -170,7 +170,7 @@
       "role": "guardian",
       "accuracy": 0.9,
       "label": "Grüner",
-      "maxHp": 1,
+      "maxHp": 40,
       "damage": 1,
       "desc": "Steht fest und rechnet Abprallwinkel aus: schießt fast nur Bankshots mit 2 Abprallern — lädt 2 s pro Schuss nach.",
       "fireRate": 2,
@@ -192,7 +192,7 @@
       },
       "avoidMines": true,
       "label": "Lila",
-      "maxHp": 1,
+      "maxHp": 30,
       "damage": 1,
       "desc": "Schnell und offensiv bei Sichtlinie. Flankiert im Team aus zwei Richtungen."
     },
@@ -220,7 +220,7 @@
       },
       "avoidMines": true,
       "label": "Weißer",
-      "maxHp": 1,
+      "maxHp": 30,
       "damage": 1,
       "desc": "Wird nach Rundenstart unsichtbar! Achte auf Spuren, Schimmer und Mündungsblitz."
     },
@@ -238,7 +238,7 @@
         "reflects": true
       },
       "label": "Gepanzerter",
-      "maxHp": 1,
+      "maxHp": 50,
       "damage": 1,
       "desc": "Dicke Frontpanzerung: Schüsse von vorn prallen an ihm ab. Er fährt auf dich zu — triff ihn von der Seite oder von hinten."
     },
@@ -257,7 +257,7 @@
       },
       "requiresRicochet": true,
       "label": "Prisma",
-      "maxHp": 1,
+      "maxHp": 40,
       "damage": 1,
       "desc": "Wirft jeden direkten Schuss zurück. Nur eine an einer Wand abgeprallte Kugel tötet ihn (Explosionen ebenfalls)."
     },
@@ -278,7 +278,7 @@
       },
       "avoidMines": true,
       "label": "Schwarzer",
-      "maxHp": 1,
+      "maxHp": 40,
       "damage": 1,
       "desc": "Sehr schnell. Zielt mit Vorhalt — Ausweichen hilft kaum. Flieht vor Beschuss, legt Minen."
     },
@@ -292,7 +292,7 @@
       "accuracy": 0.9,
       "bossInvincible": true,
       "label": "Reaktorkern",
-      "maxHp": 1,
+      "maxHp": 500,
       "damage": 1,
       "desc": "Unverwundbar, solange Generatoren stehen. Nur ein Bankshot bringt einen Generator zum Einsturz."
     },
@@ -311,7 +311,7 @@
       },
       "requiresRicochet": true,
       "label": "Der Spiegel",
-      "maxHp": 1,
+      "maxHp": 500,
       "damage": 1,
       "desc": "Kopiert deine Bewegungen gespiegelt durch die Raummitte. Nur eine an einer Wand abgeprallte Kugel tötet ihn."
     },
@@ -329,7 +329,7 @@
         "reflects": true
       },
       "label": "Phalanx-Wache",
-      "maxHp": 1,
+      "maxHp": 100,
       "damage": 1,
       "desc": "Fünf Panzer rotieren gemeinsam um die Raummitte. Nur der kurze Lücken-Moment beim Rotieren lässt einen Treffer durch."
     }

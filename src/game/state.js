@@ -17,7 +17,7 @@ import { updateEnemy, updateCoverPerception } from './ai.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
-import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext } from './cfg.js';
+import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling } from './cfg.js';
 import { armorBlocks, reflectBullet, reflectFromAim, hasWallBounced, isLive } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
@@ -116,7 +116,7 @@ function applyAffixByIndex(t, index, eliteAffixes) {
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
-    destructibleWalls, hazardType, roomContext } = opts;
+    destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
@@ -188,7 +188,12 @@ export function createState(data, tiles, opts) {
     if (i >= firstWaveCount) return;
     if (tanks.length - 1 >= enemyCap) return;
     const s = room.enemySpawns[i];
-    const t = createTank(type, applyRoomModifier(resolveCfg(data, type), modifier, false), s.x, s.y);
+    const t = createTank(
+      type,
+      applyHpScaling(applyRoomModifier(resolveCfg(data, type), modifier, false), hpScale, hpSkipBosses),
+      s.x,
+      s.y,
+    );
     t.spawnX = s.x;
     t.spawnY = s.y;
     if (t.cfg.phalanx) t.phalanxIndex = phalanxCounter++;
@@ -217,6 +222,10 @@ export function createState(data, tiles, opts) {
     equippedSecondary: equippedSecondary || 'mine', // Phase 6: fuer respawnPlayer()
     equippedGadget: equippedGadget || null, // P4: zweiter Slot, ebenfalls fuer respawnPlayer()
     roomContext: roomContext || null, // { elite, boss } -- raumabhaengige Karten
+    // LP-Skalierung dieses Raums (Phase 2) -- gemerkt, damit die zweite
+    // Welle (updateWave) dieselben Werte bekommt wie die erste.
+    hpScale: hpScale ?? 1,
+    hpSkipBosses: !!hpSkipBosses,
     rng: mulberry32((aiSeed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
     playerSpawn: room.playerSpawn,
     emergencyRoom: room.emergency,
@@ -688,7 +697,16 @@ function updateWave(state, dt) {
   w.types.forEach((type, i) => {
     if (state.tanks.length - 1 >= enemyCap) return;
     const s = w.spawns[i];
-    const t = createTank(type, applyRoomModifier(resolveCfg(state.data, type), state.modifier, false), s.x, s.y);
+    const t = createTank(
+      type,
+      applyHpScaling(
+        applyRoomModifier(resolveCfg(state.data, type), state.modifier, false),
+        state.hpScale,
+        state.hpSkipBosses,
+      ),
+      s.x,
+      s.y,
+    );
     t.spawnX = s.x;
     t.spawnY = s.y;
     applyAffixByIndex(t, w.startIdx + i, state.eliteAffixes);

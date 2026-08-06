@@ -209,7 +209,44 @@ export function installDom() {
   const doc = new El('html');
   doc.body = new El('body');
   doc.appendChild(doc.body);
-  doc.createElement = (tag) => new El(tag);
+  // Canvas-Stub: renderer.js legt beim Aufbau zwei Offscreen-Canvas an
+  // (floorCanvas, fogCanvas) und zeichnet darauf. Der Kontext schluckt jeden
+  // Aufruf, protokolliert ihn aber in ctx.calls -- damit laesst sich der
+  // Renderpfad zum ersten Mal headless PRUEFEN statt nur "nicht crashen".
+  const makeCtx = () => {
+    const calls = [];
+    const state = { fillStyle: '#000', strokeStyle: '#000', lineWidth: 1, globalAlpha: 1 };
+    return new Proxy(state, {
+      get(t, k) {
+        if (k === 'calls') return calls;
+        if (k === 'canvas') return t.canvas;
+        if (k in t) return t[k];
+        if (k === 'createRadialGradient' || k === 'createLinearGradient') {
+          return () => ({ addColorStop() {} });
+        }
+        if (k === 'measureText') return () => ({ width: 10 });
+        if (k === 'getImageData') return () => ({ data: new Uint8ClampedArray(4) });
+        return (...args) => {
+          calls.push({ fn: String(k), args, fillStyle: t.fillStyle, globalAlpha: t.globalAlpha });
+        };
+      },
+      set(t, k, v) {
+        t[k] = v;
+        return true;
+      },
+    });
+  };
+  doc.createElement = (tag) => {
+    const el = new El(tag);
+    if (tag === 'canvas') {
+      el.width = 768;
+      el.height = 512;
+      const ctx = makeCtx();
+      ctx.canvas = el;
+      el.getContext = () => ctx;
+    }
+    return el;
+  };
   doc.createElementNS = (_ns, tag) => new El(tag);
   doc.getElementById = (id) => doc.descendants().find((e) => e.id === id) || null;
   doc.addEventListener = () => {};

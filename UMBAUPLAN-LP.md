@@ -10,8 +10,15 @@ Fertig-Bedingung. Alle Stellwerte gehören in JSON, nicht in den Code.
 Umfang: 28 Sitzungen. Phasen 1 bis 9 sind das Fundament — solange die nicht
 stehen, ist jede Karte Spekulation.
 
-**Fortschritt:** Phase 1 ✅ gebaut. **Nächste Sitzung: Phase 2
-(Gegner-Lebenspunkte, Anzeige, Skalierung).**
+**Fortschritt:** Phase 1 ✅ · Phase 2 ✅ gebaut. **Nächste Sitzung: Phase 3
+(Spieler-Lebenspunkte, Heilung, Schadenszahlen).**
+
+⚠️ **Zwischen Phase 2 und 3 ist das Spiel absichtlich unausgewogen**: Gegner
+haben seit Phase 2 zwei bis fünf Mal so viel Aushaltevermögen, der Spieler
+stirbt aber weiter am ersten Treffer (seine LP kommen erst in Phase 3).
+Gemessen mit einem Bot: die Räume dauern *nicht* länger, aber es gibt
+deutlich mehr Spielertode. Das ist eine Folge der Phasenreihenfolge, kein
+Balancefehler — Phase 3 stellt das Gleichgewicht wieder her.
 
 ---
 
@@ -129,7 +136,7 @@ einem synthetischen `cfg.maxHp = 42` geprüft.
 
 ---
 
-## Phase 2 — Gegner-Lebenspunkte, Anzeige, Skalierung
+## Phase 2 — Gegner-Lebenspunkte, Anzeige, Skalierung ✅ gebaut
 
 **Dateien:** `data/tanks.json`, `data/difficulty.json`,
 `src/render/renderer.js`, `src/game/state.js`
@@ -168,6 +175,64 @@ Dauerbalken unlesbar. Farbe folgt dem Panzer, nicht rot/grün.
    ganz, kein Teilschaden.
 4. In Raum 12 einen braunen Gegner zählen — er braucht drei Treffer.
 5. Elitegegner prüfen — doppelte Leiste.
+
+### Umsetzung (gebaut)
+
+- **LP-Werte** wie in der Tabelle. **Drei Typen fehlten dort** (`t_purple`,
+  `t_white`, `t_black`) — nach ihren `danger`-Punkten ins selbe 2–5-Treffer-
+  Band gelegt: Lila 30, Weißer 30, Schwarzer 40.
+- **Die Phalanx musste von 500 abweichen.** Sie besteht aus **fünf** Panzern
+  (Phase 14), 500 je Stück wären 250 Treffer statt der geplanten 50. Jetzt
+  100 je Wache — in Summe genau die 500 LP, die der Plan für einen Boss
+  vorsieht. Ein Regressionstest rechnet das über die Formation, nicht über
+  den Einzelpanzer.
+- **Bosse sind von der Raumskalierung ausgenommen**
+  (`difficulty.json: hpScaling.skipBosses`). Der Bossraum ist die letzte
+  Kartenreihe; mitskaliert wären es rund 87 statt 50 Treffer, was der eigenen
+  Festlegungstabelle des Plans widerspräche. Erkannt über die drei schon
+  vorhandenen Boss-Schalter (`bossInvincible`/`mirrorBoss`/`phalanx`, neu
+  gebündelt in `cfg.js: isBossCfg()`) statt über ein viertes Datenfeld.
+- **Explosionsschaden von 1 auf 40** (`balance.json: damage.explosion`).
+  Nicht im Plan erwähnt, aber zwingend: mit Gegner-LP von 20–50 wäre eine
+  Mine bei 1 Schaden **wirkungslos** geworden — samt aller sieben
+  Minen-Karten, und zwar lautlos, ohne dass irgendetwas kaputtgeht. 40 räumt
+  wie bisher fast alles aus (nur der Gepanzerte mit 50 überlebt knapp) und
+  ist zugleich schon der Wert, den Phase 3 für Minenschaden *gegen* den
+  Spieler vorsieht. Ein eigener Regressionstest wacht darüber, dass eine
+  Explosion mindestens den schwächsten Gegner tötet.
+- **Skalierung** in `cfg.js: applyHpScaling()`, angewendet **vor**
+  `createTank()` — das setzt `hp = cfg.maxHp`, also gibt es keine zweite
+  Stelle, die die aktuellen LP nachziehen müsste. Gilt für die erste **und**
+  die zweite Welle (`state.hpScale` wird für `updateWave()` gemerkt), nie für
+  den Spieler (eigener Erzeugungspfad).
+- **Lebensleiste** in `renderer.js: drawTank()`, nur bei `hp < maxHp`,
+  über den Affix-Punkten. Farbe folgt dem Panzer statt rot/grün: die
+  Zuordnung Balken → Panzer muss im Getümmel ohne Nachdenken klappen, und
+  rot/grün wäre zusätzlich für die häufigste Farbenblindheit die schlechteste
+  Wahl.
+
+**Abweichung bei Testschritt 4:** „In Raum 12 braucht ein brauner Gegner drei
+Treffer" stimmt mit der eigenen Formel des Plans nicht überein.
+20 × (1 + 0,05 × 11) = 31 LP, bei 10 Schaden also **vier** Treffer. Drei
+Treffer gelten in den Räumen 2–11 (Raum 11: exakt 30 LP). Die Formel ist
+maßgeblich — ihr zweites Rechenbeispiel („Raum 15 liegt bei 1,7×") geht
+exakt auf, der Testschritt liegt einen Raum daneben.
+
+**Was angepasst werden musste:** Zwei Bestandstests bauten sich eine Kugel von
+Hand zusammen und setzten dabei stillschweigend voraus, dass jeder Treffer
+tötet (USP-Kennzahl 3). Sie bekommen jetzt ausdrücklich tödlichen Schaden
+mit; die geprüfte Aussage bleibt unverändert.
+
+**Neue Dauertests** (`regression.mjs` Abschnitt 10, mit bestandener
+Gegenprobe für jeden): Trefferzahl je Typ im Band 2–5 (genau der Test, den
+Plan-Phase 28 verlangt), Elite = 10 Treffer, Boss = 50 (Phalanx über die
+Formation), Skalierungsformel, Boss-Ausnahme, Panzerung blockt weiterhin
+**ganz** statt anteilig, Explosion tötet den schwächsten Gegner, und die
+Lebensleiste erscheint nur am angeschlagenen Panzer.
+**`tests/domstub.mjs` hat dafür einen aufzeichnenden Canvas bekommen** —
+damit führt die abhängigkeitsfreie Node-Suite zum ersten Mal `renderer.js`
+wirklich aus und kann das Ergebnis *prüfen* statt nur „nicht abstürzen"
+festzustellen. Genau die Lücke, aus der seinerzeit der Ziellinien-Crash kam.
 
 ---
 

@@ -112,11 +112,13 @@ Bedarf neu messen statt den alten Wert zu glauben. (2) Phase 7 spricht von
 einem „Umbau" eines bestehenden 5-%-Krit-Systems — es gibt aktuell **gar
 kein** Krit-System im Code (keine Treffer für `crit`/`critChance` in
 `data/*.json` oder `src/game/*.js`); Phase 7 baut es komplett neu, nicht um.
-**Phase 1 (Schadensmodell) ist gebaut** — reiner Umbau, das Spiel verhält
-sich nachweislich identisch (s. eigenen Abschnitt unten). **Nächste Sitzung:
-Phase 2 (Gegner-Lebenspunkte, Anzeige, Skalierung)** — ab da ändert sich das
-Spielgefühl wirklich. `PLAN.md`/die Telemetrie-Auswertung bleibt parallel
-offen (s. To-do-Liste unten).
+**Phase 1 (Schadensmodell) und Phase 2 (Gegner-LP) sind gebaut** (s. eigene
+Abschnitte unten). ⚠️ **Zwischen Phase 2 und 3 ist das Spiel absichtlich
+unausgewogen**: Gegner halten jetzt 2–5 Treffer aus, der Spieler stirbt aber
+weiter am ersten (seine LP kommen erst in Phase 3). Das ist eine Folge der
+Phasenreihenfolge, kein Balancefehler. **Nächste Sitzung: Phase 3
+(Spieler-Lebenspunkte, Heilung, Schadenszahlen).** `PLAN.md`/die
+Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -1731,6 +1733,60 @@ weiterhin sofort. Die Phase trennt bewusst den Umbau von der Balance.
   durch. Jetzt wird zusätzlich mit einem synthetischen `cfg.maxHp = 42`
   geprüft.
 
+### UMBAUPLAN-LP Phase 2 (Gegner-LP, Skalierung, Lebensleiste) — gemergt
+Erste Phase, die das Spielgefühl wirklich ändert: Gegner halten 2–5 Treffer
+aus (Elite 10, Boss 50), Spielerschaden fest 10.
+- **LP-Werte** in `tanks.json` wie in der Plantabelle. **Drei Typen fehlten
+  dort** (`t_purple`/`t_white`/`t_black`) — nach ihren `danger`-Punkten ins
+  selbe 2–5-Treffer-Band gelegt (30/30/40).
+- **Die Phalanx musste von 500 abweichen**: sie besteht aus fünf Panzern
+  (Phase 14), 500 je Stück wären 250 statt 50 Treffer. Jetzt 100 je Wache —
+  in Summe die geplanten 500. Der Regressionstest rechnet über die
+  Formation, nicht über den Einzelpanzer.
+- **Skalierung** `difficulty.json: hpScaling.perRoom 0.05`,
+  `gegnerLP = maxHp × (1 + 0,05 × (raum − 1))`. Angewendet in
+  `cfg.js: applyHpScaling()` **vor** `createTank()` (das setzt
+  `hp = cfg.maxHp`) — keine zweite Stelle muss die aktuellen LP nachziehen.
+  Gilt für erste und zweite Welle (`state.hpScale` für `updateWave()`
+  gemerkt), nie für den Spieler. **Gegnerschaden skaliert bewusst nicht.**
+- **Bosse sind ausgenommen** (`hpScaling.skipBosses`): der Bossraum ist die
+  letzte Kartenreihe, mitskaliert wären es ~87 statt 50 Treffer. Erkannt
+  über die drei vorhandenen Boss-Schalter, gebündelt in
+  `cfg.js: isBossCfg()` — kein viertes Datenfeld.
+- **Elite verdoppelt die LP** (`difficulty.json: elite.hpMult 2`, neben
+  `budgetMult` — beides „wie viel härter ist ein Eliteraum").
+- **Explosionsschaden 1 → 40** (`balance.json: damage.explosion`). Nicht im
+  Plan erwähnt, aber zwingend: mit Gegner-LP von 20–50 wäre eine Mine bei 1
+  Schaden **wirkungslos** geworden, samt aller sieben Minen-Karten — und
+  zwar lautlos. 40 räumt wie bisher fast alles aus (nur der Gepanzerte mit
+  50 überlebt knapp) und ist schon der Wert, den Plan-Phase 3 für
+  Minenschaden gegen den Spieler vorsieht.
+- **Lebensleiste** in `renderer.js: drawTank()`, nur bei `hp < maxHp`, über
+  den Affix-Punkten. Farbe folgt dem Panzer statt rot/grün — die Zuordnung
+  Balken → Panzer muss im Getümmel ohne Nachdenken klappen, und rot/grün
+  wäre für die häufigste Farbenblindheit die schlechteste Wahl.
+- **Abweichung zum Plan bei Testschritt 4**: „Raum 12 braucht drei Treffer"
+  passt nicht zur eigenen Formel — 20 × 1,55 = 31 LP sind bei 10 Schaden
+  **vier** Treffer. Drei gelten in Raum 2–11. Die Formel ist maßgeblich (ihr
+  zweites Rechenbeispiel „Raum 15 = 1,7×" geht exakt auf).
+- **Gemessen statt geschätzt**: ein Bot mit Sichtlinienprüfung zeigt, dass
+  die Räume **nicht länger** dauern (Median 21,9 s statt 36,7 s), der Spieler
+  aber deutlich öfter stirbt — er ist länger exponiert und stirbt weiter am
+  ersten Treffer. Erwartete Zwischenlage bis Phase 3.
+- **Zwei Bestandstests mussten nachziehen**: sie bauten sich eine Kugel von
+  Hand und setzten stillschweigend Ein-Treffer-Tode voraus (USP-Kennzahl 3).
+  Sie bekommen jetzt ausdrücklich tödlichen Schaden mit, die geprüfte
+  Aussage bleibt.
+- **Neue Dauertests** (Abschnitt 10, Gegenprobe für jeden bestanden):
+  Trefferzahl-Band 2–5 je Typ (der von Plan-Phase 28 verlangte Test),
+  Elite 10, Boss 50, Skalierungsformel, Boss-Ausnahme, Panzerung blockt
+  weiterhin **ganz** statt anteilig, Explosion tötet den schwächsten Gegner,
+  Lebensleiste nur am angeschlagenen Panzer.
+- **`tests/domstub.mjs` hat einen aufzeichnenden Canvas bekommen** — damit
+  führt die abhängigkeitsfreie Node-Suite zum ersten Mal `renderer.js`
+  wirklich aus und kann das Ergebnis *prüfen* statt nur „nicht abstürzen"
+  festzustellen. Genau die Lücke, aus der seinerzeit der Ziellinien-Crash kam.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1817,7 +1873,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v73`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v74`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

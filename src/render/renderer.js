@@ -659,6 +659,25 @@ export function createRenderer(ctx) {
       });
     }
 
+    // Lebensleiste (UMBAUPLAN-LP Phase 2): NUR bei angeschlagenen Panzern.
+    // Auf einem Telefondisplay mit acht Gegnern waere ein Dauerbalken ueber
+    // jedem Panzer unlesbar -- so ist der Balken selbst die Information
+    // ("dieser hier ist schon angeschlagen"). Farbe folgt dem Panzer statt
+    // rot/gruen: die Zuordnung Balken -> Panzer muss im Getuemmel ohne
+    // Nachdenken klappen, und rot/gruen waere zusaetzlich fuer die
+    // haeufigste Farbenblindheit die schlechteste Wahl.
+    // Sitzt ueber den Affix-Punkten (r + 12), damit sich beides nie deckt.
+    if (t.hp < t.cfg.maxHp && t.cfg.maxHp > 0) {
+      const w = Math.round(r * 2);
+      const bx = Math.round(x - w / 2);
+      const by = Math.round(y - r - 18);
+      const frac = Math.max(0, Math.min(1, t.hp / t.cfg.maxHp));
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(bx - 1, by - 1, w + 2, 5);
+      ctx.fillStyle = TANK_COLORS[t.type] || '#ffffff';
+      ctx.fillRect(bx, by, Math.max(1, Math.round(w * frac)), 3);
+    }
+
     ctx.globalAlpha = 1;
   }
 

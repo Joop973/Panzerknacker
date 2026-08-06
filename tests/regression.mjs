@@ -370,6 +370,10 @@ function check(ok, msg) {
         radius: 3, owner: st.player, kind: 'bullet', age: 5, distance: 10,
         wallBounces: 2, ricochetsLeft: 0, ricochetsStart: 2, dead: false,
         reflected: false, reflectImmune: null, reflectImmuneT: 0, trail: [],
+        // Seit dem LP-Umbau (Phase 2) haben Gegner 20-50 LP: die Kugel muss
+        // ausdruecklich toedlich sein, sonst zaehlt kein Kill. Frueher war
+        // jeder Treffer toedlich, deshalb stand hier gar kein Schaden.
+        damage: enemy.cfg.maxHp,
       });
       // CMD/STEP stehen erst weiter unten (const) -- hier lokal.
       stepRun(run, { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false }, 1 / 60);
@@ -402,6 +406,10 @@ function check(ok, msg) {
         radius: 3, owner: st.player, kind: 'bullet', age: 5, distance: 10,
         wallBounces: 2, ricochetsLeft: 0, ricochetsStart: 2, dead: false,
         reflected: false, reflectImmune: null, reflectImmuneT: 0, trail: [],
+        // Seit dem LP-Umbau (Phase 2) haben Gegner 20-50 LP: die Kugel muss
+        // ausdruecklich toedlich sein, sonst zaehlt kein Kill. Frueher war
+        // jeder Treffer toedlich, deshalb stand hier gar kein Schaden.
+        damage: enemy.cfg.maxHp,
       });
       stepRun(run, { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false }, 1 / 60);
       check(
@@ -1622,6 +1630,157 @@ function check(ok, msg) {
       check(st.enemyKills === kills + 1, 'Phase 1: killTank() zaehlt den Kill nicht');
       st.killTank(e, 'test');
       check(st.enemyKills === kills + 1, 'Phase 1: doppelter killTank() zaehlt den Kill zweimal');
+    }
+  }
+}
+
+// ---- 10. UMBAUPLAN-LP Phase 2: Gegner-LP, Skalierung, Lebensleiste ------
+{
+  const { applyHpScaling, isBossCfg } = await import('../src/game/cfg.js');
+  const T = tanksData.types;
+  const dmg = T.player.damage;
+  const BOSSE = ['t_reactor', 't_mirror', 't_phalanx'];
+
+  // (a) Trefferzahl je Gegnertyp gegen den Standardpanzer. Genau der Test,
+  // den Plan-Phase 28 verlangt ("Weicht sie von der Tabelle in Phase 2 ab
+  // -> Fehler"). Bewusst als BAND geprueft, nicht als Einzelwert: die
+  // Festlegungstabelle des Plans sagt "Gegnerhaerte 2-5 Treffer, Elite 10,
+  // Boss 50" -- das ist die Design-Zusage, nicht die einzelne Zahl.
+  {
+    for (const [id, t] of Object.entries(T)) {
+      if (id === 'player' || BOSSE.includes(id)) continue;
+      const treffer = Math.ceil(t.maxHp / dmg);
+      check(
+        treffer >= 2 && treffer <= 5,
+        `Phase 2: ${id} braucht ${treffer} Treffer (${t.maxHp} LP), erlaubt sind 2-5`,
+      );
+    }
+    // Elite verdoppelt -> hoechstens 10 Treffer.
+    const haertester = Math.max(
+      ...Object.entries(T).filter(([id]) => id !== 'player' && !BOSSE.includes(id)).map(([, t]) => t.maxHp),
+    );
+    check(
+      Math.ceil((haertester * diffData.elite.hpMult) / dmg) === 10,
+      `Phase 2: haertester Elitegegner braucht ${Math.ceil((haertester * diffData.elite.hpMult) / dmg)} Treffer, erwartet 10`,
+    );
+    // Boss: 50 Treffer -- bei der Phalanx zaehlt die FORMATION (5 Panzer),
+    // nicht der einzelne. 500 LP je Phalanx-Wache waeren 250 Treffer.
+    check(
+      Math.ceil(T.t_reactor.maxHp / dmg) === 50 && Math.ceil(T.t_mirror.maxHp / dmg) === 50,
+      'Phase 2: Reaktor/Spiegel brauchen nicht 50 Treffer',
+    );
+    check(
+      Math.ceil((T.t_phalanx.maxHp * 5) / dmg) === 50,
+      `Phase 2: die 5er-Phalanx braucht zusammen ${Math.ceil((T.t_phalanx.maxHp * 5) / dmg)} Treffer, erwartet 50`,
+    );
+  }
+
+  // (b) Skalierungsformel: maxHp * (1 + perRoom * (raum - 1)).
+  {
+    const perRoom = diffData.hpScaling.perRoom;
+    for (const raum of [1, 5, 11, 15]) {
+      const cfg = { maxHp: 20 };
+      applyHpScaling(cfg, 1 + perRoom * (raum - 1), true);
+      check(
+        cfg.maxHp === Math.round(20 * (1 + perRoom * (raum - 1))),
+        `Phase 2: Skalierung in Raum ${raum} falsch (${cfg.maxHp})`,
+      );
+    }
+    // Raum 1 skaliert nicht.
+    const c1 = { maxHp: 20 };
+    applyHpScaling(c1, 1, true);
+    check(c1.maxHp === 20, 'Phase 2: Raum 1 skaliert bereits');
+  }
+
+  // (c) Bosse sind von der Raumskalierung ausgenommen -- sonst waere der
+  // Boss in der letzten Raumreihe rund 87 statt der geplanten 50 Treffer.
+  {
+    const boss = { maxHp: 500, bossInvincible: true };
+    applyHpScaling(boss, 1.75, true);
+    check(boss.maxHp === 500, `Phase 2: Boss wurde mitskaliert (${boss.maxHp} LP)`);
+    check(isBossCfg({ mirrorBoss: true }) && isBossCfg({ phalanx: true }), 'Phase 2: isBossCfg erkennt nicht alle Bosse');
+    check(!isBossCfg({ maxHp: 20 }), 'Phase 2: isBossCfg haelt einen normalen Gegner fuer einen Boss');
+    // Ohne die Ausnahme muss die Skalierung dagegen greifen.
+    const boss2 = { maxHp: 500, bossInvincible: true };
+    applyHpScaling(boss2, 1.75, false);
+    check(boss2.maxHp === 875, `Phase 2: skipBosses=false wirkt nicht (${boss2.maxHp})`);
+  }
+
+  // (d) Panzerung blockt weiterhin GANZ -- kein Teilschaden. Mit
+  // Lebenspunkten waere "Panzerung zieht nur einen Teil ab" ein naheliegender
+  // Umbau, den Phase 2 ausdruecklich NICHT will.
+  {
+    const { armorBlocks } = await import('../src/game/armor.js');
+    const { createBullet } = await import('../src/game/bullet.js');
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const e = st.tanks.find((t) => t !== st.player && t.alive);
+    if (e) {
+      e.cfg.armor = { arc: 120, reflects: true };
+      e.cfg.maxHp = 50;
+      e.hp = 50;
+      e.heading = 0;
+      const b = createBullet(e.x + 40, e.y, Math.PI, {
+        speed: 100, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10,
+      });
+      check(armorBlocks(e, b), 'Phase 2: Frontpanzerung blockt den Frontaltreffer nicht mehr');
+      check(e.hp === 50, `Phase 2: Frontpanzerung laesst Teilschaden durch (hp=${e.hp})`);
+    }
+  }
+
+  // (e) Eine Mine muss auch mit Lebenspunkten noch etwas ausrichten. Ohne
+  // diesen Waechter faellt balance.damage.explosion still auf einen Wert
+  // zurueck, bei dem Minen (und alle sieben Minen-Karten) wirkungslos sind,
+  // ohne dass irgendetwas kaputtgeht -- ein lautloser Totalausfall.
+  {
+    const expl = tanksData.balance.damage.explosion;
+    const schwaechster = Math.min(
+      ...Object.entries(T).filter(([id]) => id !== 'player' && !BOSSE.includes(id)).map(([, t]) => t.maxHp),
+    );
+    check(
+      expl >= schwaechster,
+      `Phase 2: Explosionsschaden ${expl} toetet nicht einmal den schwaechsten Gegner (${schwaechster} LP) -- Minen waeren wirkungslos`,
+    );
+  }
+
+  // (f) Lebensleiste: erscheint NUR am angeschlagenen Panzer. Laeuft ueber
+  // den echten Renderpfad (renderer.js) mit aufzeichnendem Canvas aus
+  // tests/domstub.mjs -- bis hierher hat die Node-Suite renderer.js nie
+  // ausgefuehrt, genau die Luecke, aus der seinerzeit der Ziellinien-Crash kam.
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { createRenderer } = await import('../src/render/renderer.js');
+      const { createTracks } = await import('../src/render/tracks.js');
+      const ctx = document.createElement('canvas').getContext('2d');
+      const renderer = createRenderer(ctx);
+      const tracks = createTracks();
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+      const st = run.state;
+      const e = st.tanks.find((t) => t !== st.player && t.alive);
+      // Die Leiste ist der einzige 3 px hohe fillRect im Renderpfad.
+      const balken = () => {
+        ctx.calls.length = 0;
+        renderer.render(st, 0, tracks, null, null);
+        return ctx.calls.filter((c) => c.fn === 'fillRect' && c.args[3] === 3).length;
+      };
+      if (e) {
+        e.cfg.maxHp = 40;
+        e.hp = 40;
+        check(balken() === 0, 'Phase 2: unbeschaedigter Gegner zeigt bereits eine Lebensleiste');
+        e.hp = 20;
+        check(balken() === 1, 'Phase 2: angeschlagener Gegner zeigt keine Lebensleiste');
+        // Zweiter angeschlagener Gegner -> zwei Leisten.
+        const e2 = st.tanks.find((t) => t !== st.player && t !== e && t.alive);
+        if (e2) {
+          e2.cfg.maxHp = 40;
+          e2.hp = 10;
+          check(balken() === 2, 'Phase 2: zweiter angeschlagener Gegner bekommt keine eigene Leiste');
+        }
+      }
+    } finally {
+      restore();
     }
   }
 }

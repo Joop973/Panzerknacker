@@ -16,7 +16,7 @@ const MAX_RUNS = 100;
 // Bei jeder Bedeutungsaenderung der Felder hochzaehlen -- sonst werden
 // spaeter Runs verglichen, die gar nicht vergleichbar sind.
 const SCHEMA_VERSION = 2;
-const GAME_VERSION = 'v73'; // an den sw.js-Cache-Namen gekoppelt halten
+const GAME_VERSION = 'v74'; // an den sw.js-Cache-Namen gekoppelt halten
 
 let current = null; // Sammelpuffer des laufenden Runs (null = keiner aktiv)
 

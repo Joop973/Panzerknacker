@@ -291,6 +291,27 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
 // applyUpgrades() an denselben drei Stellen wie applyRoomModifier()
 // (createState, respawnPlayer, updateWave).
 //   ctx = { elite: bool, boss: bool }
+// Ist dieses cfg ein Boss? (UMBAUPLAN-LP Phase 2). Bewusst ueber die drei
+// bereits vorhandenen Boss-Schalter statt ueber ein viertes Datenfeld --
+// dieselbe Erkennung, die stepState() (mirrorBoss/phalanx) und applyDamage()
+// (bossInvincible) ohnehin benutzen, nur an einer Stelle benannt.
+export function isBossCfg(cfg) {
+  return !!(cfg && (cfg.bossInvincible || cfg.mirrorBoss || cfg.phalanx));
+}
+
+// Lebenspunkte pro Raum hochskalieren (UMBAUPLAN-LP Phase 2). Wird VOR
+// createTank() angewendet, weil das dort `hp = cfg.maxHp` setzt -- so gibt
+// es keine zweite Stelle, die die aktuellen LP nachziehen muesste.
+// Nur Gegner: der Spieler wird auf einem eigenen Pfad erzeugt und nie
+// durch diese Funktion geschickt. Bosse sind ausgenommen (siehe
+// difficulty.json: hpScaling.skipBosses).
+export function applyHpScaling(cfg, scale, skipBosses) {
+  if (!scale || scale === 1) return cfg;
+  if (skipBosses && isBossCfg(cfg)) return cfg;
+  cfg.maxHp = Math.max(1, Math.round(cfg.maxHp * scale));
+  return cfg;
+}
+
 export function applyRoomContext(cfg, ctx) {
   if (!ctx) return cfg;
   // Konterschild: nur in Elite-/Verflucht-/Bossraeumen. In normalen
