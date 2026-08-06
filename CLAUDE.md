@@ -86,9 +86,37 @@ jetzt überhaupt messbar.
 **P6 (Haken-Rework)**, **P7 (Werte-Anzeige)**, **P8 (Zwischenraum-UI)**,
 **P9 (Startbildschirm)** und **P11 (Lichtquellen)** sind gebaut, **P5
 (Schild-Rework) auf Nutzerwunsch gestrichen** („Schild erstmal so lassen
-wie es ist"). **`PLAN-INPUT.md` ist damit vollständig abgearbeitet** —
-offene Arbeit läuft wieder ausschließlich über `PLAN.md` (die aufgeschobene
-Telemetrie-Auswertung, s. To-do-Liste unten).
+wie es ist"). **`PLAN-INPUT.md` ist damit vollständig abgearbeitet.**
+
+**Neu eingegangen: `UMBAUPLAN-LP.md`** (Stand: dieser Eintrag) — 28-Phasen-Plan
+für einen **vollständigen Umbau von Ein-Treffer-Kampf auf Lebenspunkte, zehn
+Klassen und sechs Schadenstypen**. Das ist ein Identitätswechsel, kein
+additiver Ausbau: er ersetzt das bisherige "ein Treffer tötet"-Modell und
+zieht deshalb ab **Phase 8** bewusst mehrere Systeme zurück, die dieses
+Projekt gerade erst gebaut und vermessen hat — `bankshotGuarantee` (USP-
+Kennzahl 1, s. o.) wird auf `chance: 0` gesetzt, `t_prism`s `requiresRicochet`
+entfällt zugunsten eines Schadensmultiplikators, `tests/uspcheck.mjs` wird
+außer Dienst gestellt. Das ist im Plan selbst so entschieden (Tabelle
+„Festgelegte Entscheidungen") und keine Inkonsistenz — nur wichtig, es beim
+Lesen von `PLAN.md`/dieser Datei nicht als Widerspruch misszuverstehen.
+**Vor dem Bau geprüft (Ist-Abgleich):** die im Plan zitierten Codestellen
+stimmen (`state.js:425 killTank()`, `'player'` hartkodiert in `state.js`
+Zeilen 164/597, `cfg.js` zieht Magazin/Kugeltempo für `type === 'player'`
+fest aus `balance.json`, `t_prism` hat aktuell `requiresRicochet: true`,
+`bankshotGuarantee.chance` steht auf 0.58) — **zwei Abweichungen
+gefunden:** (1) Phase 28 behauptet, der Frame-Budget-Test schlage *aktuell*
+fehl (8,86 ms/16,29 ms) — er ist seit der Session „Grüner wird
+Bankshot-Gegner" grün (~2,4 ms, 120 statt 180 `angleSamples` +
+`solvesPerTick`-Deckel); die Zahlen im Plan sind veraltet, an Phase 28 bei
+Bedarf neu messen statt den alten Wert zu glauben. (2) Phase 7 spricht von
+einem „Umbau" eines bestehenden 5-%-Krit-Systems — es gibt aktuell **gar
+kein** Krit-System im Code (keine Treffer für `crit`/`critChance` in
+`data/*.json` oder `src/game/*.js`); Phase 7 baut es komplett neu, nicht um.
+**Noch nicht gestartet** — `UMBAUPLAN-LP.md` selbst schreibt „eine Phase pro
+Sitzung" vor, Phase 1 beginnt erst mit einer expliziten Aufforderung dazu.
+Bis dahin bleibt `PLAN.md`/die Telemetrie-Auswertung parallel offen (s.
+To-do-Liste unten) — welcher der beiden Pläne zuerst weiterläuft, entscheidet
+der Nutzer.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
