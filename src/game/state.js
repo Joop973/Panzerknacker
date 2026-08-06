@@ -925,7 +925,17 @@ export function stepState(state, cmd, dt) {
         const cause = own
           ? 'die eigene Kugel'
           : `${state.data.types[b.owner?.type]?.label || '?'} (${WEAPON_LABEL[b.kind] || b.kind})`;
-        state.applyDamage(t, b.damage ?? 1, cause, {
+        // UMBAUPLAN-LP Phase 3: die eigene, zurueckgekommene Kugel tut dem
+        // Spieler einen EIGENEN Betrag (15) statt der 10, die sie einem
+        // Gegner zufuegt -- sie soll wehtun, aus voller Gesundheit aber nie
+        // toeten. Der Wert haengt also am Ziel, nicht am Geschoss, deshalb
+        // hier und nicht in b.damage. (Eine eigene Kugel wird ohnehin erst
+        // nach einem Abpraller fuer den Schuetzen scharf, siehe isLive().)
+        const selbstbeschuss = t === state.player && b.owner === state.player;
+        const schaden = selbstbeschuss
+          ? state.data.balance?.damage?.ownBullet ?? b.damage ?? 1
+          : b.damage ?? 1;
+        state.applyDamage(t, schaden, cause, {
           code: own ? 'own_bullet' : 'enemy_bullet',
           enemyType: own ? null : b.owner?.type || null,
           bulletOwner: own ? 'player' : 'enemy',

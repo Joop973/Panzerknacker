@@ -112,12 +112,11 @@ Bedarf neu messen statt den alten Wert zu glauben. (2) Phase 7 spricht von
 einem „Umbau" eines bestehenden 5-%-Krit-Systems — es gibt aktuell **gar
 kein** Krit-System im Code (keine Treffer für `crit`/`critChance` in
 `data/*.json` oder `src/game/*.js`); Phase 7 baut es komplett neu, nicht um.
-**Phase 1 (Schadensmodell) und Phase 2 (Gegner-LP) sind gebaut** (s. eigene
-Abschnitte unten). ⚠️ **Zwischen Phase 2 und 3 ist das Spiel absichtlich
-unausgewogen**: Gegner halten jetzt 2–5 Treffer aus, der Spieler stirbt aber
-weiter am ersten (seine LP kommen erst in Phase 3). Das ist eine Folge der
-Phasenreihenfolge, kein Balancefehler. **Nächste Sitzung: Phase 3
-(Spieler-Lebenspunkte, Heilung, Schadenszahlen).** `PLAN.md`/die
+**Phase 1 (Schadensmodell), Phase 2 (Gegner-LP) und Phase 3 (Spieler-LP)
+sind gebaut** (s. eigene Abschnitte unten). Damit steht das Grundgerüst:
+alle Panzer haben Lebenspunkte, der Spieler hält vier Gegnertreffer aus und
+startet jeden Raum mit vollen LP. **Nächste Sitzung: Phase 4
+(Abprall-Bonus — doppelter Schaden nach Wandkontakt).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -1787,6 +1786,47 @@ aus (Elite 10, Boss 50), Spielerschaden fest 10.
   wirklich aus und kann das Ergebnis *prüfen* statt nur „nicht abstürzen"
   festzustellen. Genau die Lücke, aus der seinerzeit der Ziellinien-Crash kam.
 
+### UMBAUPLAN-LP Phase 3 (Spieler-LP, Heilung, Schadenszahlen) — gemergt
+Der Spieler hat 100 LP und hält vier Gegnertreffer aus; jeder Raum startet
+mit vollen LP. Damit ist die Zwischenlage aus Phase 2 aufgelöst.
+- **Schadenswerte** (`tanks.json` + `balance.json: damage`): gegnerische
+  Kugel 25, Bossangriff 34, Minenexplosion 40, eigene abgeprallte Kugel 15.
+- **Die Heilung brauchte keine Zeile Code**: `createTank()` setzt seit
+  Phase 1 `hp = cfg.maxHp` und läuft bei jedem Raumaufbau, Respawn und
+  Wellen-Spawn ohnehin. Genau die Ersparnis, die Phase 1 angelegt hat — ein
+  Test sichert beide Wege (Raumwechsel, Respawn) ab.
+- **Die eigene Kugel hängt am ZIEL, nicht am Geschoss**: sie trägt
+  `damage: 10` (Spielerschaden gegen Gegner), soll dem Spieler selbst aber
+  15 zufügen. Deshalb `balance.json: damage.ownBullet`, angewandt in der
+  Trefferschleife, wenn Ziel **und** Besitzer der Spieler sind — nicht in
+  `b.damage`. Aus voller Gesundheit nie tödlich: der Bankschuss bleibt eine
+  Entscheidung, kein Todesurteil.
+- **`damage.explosion` (40) gilt in beide Richtungen** — Phase 2 hat den
+  Wert für Gegner gesetzt, Phase 3 nennt für den Spieler dieselbe Zahl.
+- **Die Lebensleiste des Spielers ist IMMER sichtbar**, die der Gegner
+  weiterhin nur bei Schaden (bewusste Asymmetrie: acht Gegner gleichzeitig
+  wären als Dauerbalken unlesbar, vom Spieler gibt es genau einen — und die
+  eigene Gesundheit ist die Zahl, nach der man *während* des Zielens
+  entscheidet).
+- **Lesart „Schadenszahlen" im Phasentitel**: die Schadens*werte* aus der
+  Tabelle, keine aufsteigenden Zahlen über getroffenen Panzern — der
+  Abschnittstext listet nur Werte.
+- **Gemessen**: gegenüber Phase 2 weniger Spielertode (15 → 8) bei mehr
+  erreichten Kampfräumen (5 → 7). Die *Raumdauer* ist mit dem Bot **nicht**
+  belastbar messbar (er bleibt bei freier Mitte-zu-Mitte-Sichtlinie stehen
+  und verkantet sich, wenn die Kugel an einer Ecke stirbt — dieselben Seeds
+  hingen schon im Ursprungscode). Raumdauer ist ohnehin erst in Plan-Phase 28
+  als Test vorgesehen.
+- **Neue Dauertests** (Abschnitt 11, Gegenprobe für jeden bestanden): vier
+  Gegnertreffer töten (der vierte, nicht früher), eigene Kugel schwächer als
+  ein Gegnerschuss und nie tödlich aus vollem Stand, Mine härter als ein
+  Gegnerschuss und trotzdem nicht sofort tödlich, Boss tötet in 3 Treffern,
+  volle LP nach Raumwechsel und Respawn, Spielerleiste immer sichtbar.
+- **Ein Test war zuerst zu schwach**: die Minen-Prüfung verglich nur das
+  Spielverhalten gegen den JSON-Wert und hätte jede Wertänderung mitgemacht
+  (Gegenprobe „Minenschaden auf 25" blieb grün). Jetzt prüft sie zusätzlich
+  die beiden zahlenunabhängigen Design-Aussagen des Plans.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1873,7 +1913,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v74`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v75`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

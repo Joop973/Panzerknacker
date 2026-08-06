@@ -659,16 +659,22 @@ export function createRenderer(ctx) {
       });
     }
 
-    // Lebensleiste (UMBAUPLAN-LP Phase 2): NUR bei angeschlagenen Panzern.
-    // Auf einem Telefondisplay mit acht Gegnern waere ein Dauerbalken ueber
+    // Lebensleiste. Bei GEGNERN (Phase 2) nur, wenn sie angeschlagen sind:
+    // auf einem Telefondisplay mit acht Gegnern waere ein Dauerbalken ueber
     // jedem Panzer unlesbar -- so ist der Balken selbst die Information
-    // ("dieser hier ist schon angeschlagen"). Farbe folgt dem Panzer statt
-    // rot/gruen: die Zuordnung Balken -> Panzer muss im Getuemmel ohne
-    // Nachdenken klappen, und rot/gruen waere zusaetzlich fuer die
-    // haeufigste Farbenblindheit die schlechteste Wahl.
+    // ("dieser hier ist schon angeschlagen"). Beim SPIELER (Phase 3) dagegen
+    // IMMER: es gibt nur einen, er verdeckt nichts, und die eigene Gesundheit
+    // ist die Zahl, nach der man waehrend des Zielens Entscheidungen trifft
+    // ("noch ein Treffer oder lieber in Deckung?"). Genau deshalb sagt der
+    // Plan "am Panzer, nicht nur am Bildschirmrand" -- auf dem Telefon
+    // schaut niemand in die Ecke, waehrend er zielt.
+    // Farbe folgt dem Panzer statt rot/gruen: die Zuordnung Balken -> Panzer
+    // muss im Getuemmel ohne Nachdenken klappen, und rot/gruen waere
+    // zusaetzlich fuer die haeufigste Farbenblindheit die schlechteste Wahl.
     // Sitzt ueber den Affix-Punkten (r + 12), damit sich beides nie deckt.
-    if (t.hp < t.cfg.maxHp && t.cfg.maxHp > 0) {
-      const w = Math.round(r * 2);
+    const istSpieler = t === state.player;
+    if (t.cfg.maxHp > 0 && (istSpieler || t.hp < t.cfg.maxHp)) {
+      const w = Math.round(r * (istSpieler ? 2.6 : 2));
       const bx = Math.round(x - w / 2);
       const by = Math.round(y - r - 18);
       const frac = Math.max(0, Math.min(1, t.hp / t.cfg.maxHp));
