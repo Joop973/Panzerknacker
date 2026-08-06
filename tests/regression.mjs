@@ -1807,6 +1807,13 @@ function check(ok, msg) {
     return { run, st };
   };
   // Einen Treffer zustellen: Kugel des Schuetzen direkt auf dem Spieler.
+  // BEWUSST ohne Wandabpraller (wallBounces bleibt 0) -- seit Phase 4
+  // verdoppelt ein Wandkontakt den Schaden, die Grundwerte dieser Phase
+  // liessen sich damit gar nicht mehr messen. Fuer die eigene Kugel wird
+  // stattdessen `reflected` gesetzt: das macht sie fuer den Schuetzen scharf
+  // (isLive), zaehlt aber bewusst NICHT als Wandkontakt -- eine vom Prisma
+  // zurueckgeworfene eigene Kugel trifft also mit dem Grundwert 15, eine an
+  // der Wand gebandete mit 30 (Phase 4, eigener Test in Abschnitt 12).
   const treffer = (st, owner, dmg) => {
     const p = st.player;
     p.protect = 0;
@@ -1814,7 +1821,7 @@ function check(ok, msg) {
       speed: 1, radius: 3, ricochets: 1, owner, kind: 'bullet', damage: dmg ?? owner.cfg.damage,
     });
     b.age = 5;
-    b.wallBounces = 1; // eine eigene Kugel wird erst nach dem Abpraller scharf
+    if (owner === p) b.reflected = true;
     st.bullets.length = 0;
     st.bullets.push(b);
     stepState(st, CMD0, 1 / 60);
@@ -1972,6 +1979,149 @@ function check(ok, msg) {
     } finally {
       restore();
     }
+  }
+}
+
+// ---- 12. UMBAUPLAN-LP Phase 4: Abprall-Bonus ----------------------------
+// "Der Abprall bleibt relevant, ohne erzwungen zu sein": eine Kugel mit
+// Wandkontakt richtet doppelten Schaden an -- kein Upgrade, keine
+// Klassenregel, und ausdruecklich fuer BEIDE Seiten.
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { stepState } = await import('../src/game/state.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+  const MULT = tanksData.balance.bullet.wallBounceDamageMult;
+
+  const blank = () => {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    st.player.protect = 0;
+    st.player.shieldReady = false;
+    st.shieldCharges = [];
+    return st;
+  };
+  // Einen Treffer zustellen und den tatsaechlich abgezogenen Schaden melden.
+  const schadenAn = (st, ziel, owner, opt = {}) => {
+    ziel.protect = 0;
+    ziel.shieldReady = false;
+    if (ziel !== st.player) {
+      ziel.cfg.armor = null;
+      ziel.cfg.requiresRicochet = false;
+    }
+    const vorher = ziel.hp;
+    const b = createBullet(ziel.x, ziel.y, 0, {
+      speed: 1, radius: 3, ricochets: 1, owner, kind: 'bullet',
+      damage: opt.damage ?? owner.cfg.damage,
+      explosive: !!opt.explosive,
+      explosionRadius: opt.explosive ? 60 : 0,
+    });
+    b.age = 5;
+    b.wallBounces = opt.bounces ?? 0;
+    b.reflected = !!opt.reflected;
+    st.bullets.length = 0;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+    return vorher - ziel.hp;
+  };
+  const gegner = (st) => st.tanks.find((t) => t !== st.player && t.alive);
+
+  // (a) Gegen einen Gegner: Wandkontakt verdoppelt.
+  {
+    const st1 = blank();
+    const e1 = gegner(st1);
+    e1.cfg.maxHp = 500;
+    e1.hp = 500; // hoch genug, dass beide Varianten ueberlebt werden
+    const direkt = schadenAn(st1, e1, st1.player);
+    const st2 = blank();
+    const e2 = gegner(st2);
+    e2.cfg.maxHp = 500;
+    e2.hp = 500;
+    const gebandet = schadenAn(st2, e2, st2.player, { bounces: 1 });
+    check(direkt > 0, 'Phase 4: direkter Treffer richtet gar keinen Schaden an');
+    check(
+      gebandet === Math.round(direkt * MULT),
+      `Phase 4: Abpraller macht ${gebandet} statt ${Math.round(direkt * MULT)} Schaden (direkt ${direkt}, Faktor ${MULT})`,
+    );
+  }
+
+  // (b) Die Auflage des Plans: der Bonus gilt AUCH fuer gegnerische
+  // Geschosse. "Sonst lernt der Spieler, dass gebandete Kugeln nur fuer ihn
+  // gefaehrlich sind." Das ist die Pruefung, die eine einseitige Umsetzung
+  // (nur Spielerkugeln) auffliegen laesst.
+  {
+    const st1 = blank();
+    st1.player.cfg.maxHp = 500;
+    st1.player.hp = 500;
+    const direkt = schadenAn(st1, st1.player, gegner(st1));
+    const st2 = blank();
+    st2.player.cfg.maxHp = 500;
+    st2.player.hp = 500;
+    const gebandet = schadenAn(st2, st2.player, gegner(st2), { bounces: 1 });
+    check(
+      gebandet === Math.round(direkt * MULT),
+      `Phase 4: gegnerischer Bankschuss macht ${gebandet} statt ${Math.round(direkt * MULT)} (direkt ${direkt})`,
+    );
+  }
+
+  // (c) Eine REFLEXION (Prisma/Panzerung, E3) ist kein Wandkontakt und
+  // verdoppelt deshalb nicht. Der Code zaehlt Reflexionen bewusst nicht in
+  // wallBounces (sonst liessen sich zwei Prismen gegeneinander ausspielen,
+  // ohne je eine Bande zu spielen) -- diese Trennung muss auch beim Schaden
+  // gelten, sonst waere sie an einer Stelle unterlaufen.
+  {
+    const st1 = blank();
+    st1.player.cfg.maxHp = 500;
+    st1.player.hp = 500;
+    const reflektiert = schadenAn(st1, st1.player, st1.player, { reflected: true });
+    const st2 = blank();
+    st2.player.cfg.maxHp = 500;
+    st2.player.hp = 500;
+    const gebandet = schadenAn(st2, st2.player, st2.player, { bounces: 1 });
+    check(
+      reflektiert === tanksData.balance.damage.ownBullet,
+      `Phase 4: reflektierte eigene Kugel macht ${reflektiert} statt ${tanksData.balance.damage.ownBullet} (Grundwert)`,
+    );
+    check(
+      gebandet === Math.round(reflektiert * MULT),
+      `Phase 4: gebandete eigene Kugel macht ${gebandet} statt ${Math.round(reflektiert * MULT)}`,
+    );
+  }
+
+  // (d) Nur der AUFSCHLAG wird verdoppelt, nicht die Explosion eines
+  // gebandeten Sprenggeschosses -- sonst wuerde ein einziger Wandkontakt
+  // gleich zwei Schadensquellen verdoppeln.
+  {
+    const st1 = blank();
+    const e1 = gegner(st1);
+    e1.cfg.maxHp = 900;
+    e1.hp = 900;
+    const direkt = schadenAn(st1, e1, st1.player, { explosive: true });
+    const st2 = blank();
+    const e2 = gegner(st2);
+    e2.cfg.maxHp = 900;
+    e2.hp = 900;
+    const gebandet = schadenAn(st2, e2, st2.player, { explosive: true, bounces: 1 });
+    const aufschlag = st1.player.cfg.damage;
+    check(
+      gebandet - direkt === aufschlag,
+      `Phase 4: gebandetes Sprenggeschoss macht ${gebandet - direkt} mehr statt ${aufschlag} -- die Explosion wurde mitverdoppelt`,
+    );
+  }
+
+  // (e) Der Faktor kommt aus balance.json, ist also kein hartkodiertes 2.
+  {
+    const alt = tanksData.balance.bullet.wallBounceDamageMult;
+    tanksData.balance.bullet.wallBounceDamageMult = 3;
+    const st = blank();
+    const e = gegner(st);
+    e.cfg.maxHp = 500;
+    e.hp = 500;
+    const dreifach = schadenAn(st, e, st.player, { bounces: 1 });
+    tanksData.balance.bullet.wallBounceDamageMult = alt;
+    check(
+      dreifach === st.player.cfg.damage * 3,
+      `Phase 4: Faktor wird nicht aus balance.json gelesen (${dreifach} statt ${st.player.cfg.damage * 3})`,
+    );
   }
 }
 

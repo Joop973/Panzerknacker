@@ -932,9 +932,21 @@ export function stepState(state, cmd, dt) {
         // hier und nicht in b.damage. (Eine eigene Kugel wird ohnehin erst
         // nach einem Abpraller fuer den Schuetzen scharf, siehe isLive().)
         const selbstbeschuss = t === state.player && b.owner === state.player;
-        const schaden = selbstbeschuss
+        const basisSchaden = selbstbeschuss
           ? state.data.balance?.damage?.ownBullet ?? b.damage ?? 1
           : b.damage ?? 1;
+        // UMBAUPLAN-LP Phase 4: eine Kugel mit Wandkontakt richtet doppelten
+        // Schaden an. Kein Upgrade und keine Klassenregel -- gilt fuer JEDES
+        // Geschoss und BEIDE Seiten, auch gegnerische (sonst lernt der
+        // Spieler, dass gebandete Kugeln nur fuer ihn gefaehrlich sind).
+        // Damit ersetzt der Anreiz den frueheren Zwang: der Abpraller lohnt
+        // sich, statt vorgeschrieben zu sein.
+        // Bewusst nur der AUFSCHLAG-Schaden: die Explosion eines gebandeten
+        // Sprenggeschosses laeuft ueber balance.damage.explosion und bleibt
+        // unveraendert -- sonst wuerde ein einziger Wandkontakt gleich zwei
+        // Schadensquellen verdoppeln.
+        const abprallMult = bounced ? state.data.balance?.bullet?.wallBounceDamageMult ?? 1 : 1;
+        const schaden = Math.round(basisSchaden * abprallMult);
         state.applyDamage(t, schaden, cause, {
           code: own ? 'own_bullet' : 'enemy_bullet',
           enemyType: own ? null : b.owner?.type || null,

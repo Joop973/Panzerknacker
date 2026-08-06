@@ -1,11 +1,13 @@
 {
+  "_comment_wallBounceDamageMult": "UMBAUPLAN-LP Phase 4: eine Kugel mit Wandkontakt (wallBounces > 0) richtet doppelten Schaden an. Gilt fuer jedes Geschoss und BEIDE Seiten, auch gegnerische -- sonst lernt der Spieler, dass gebandete Kugeln nur fuer ihn gefaehrlich sind. Ersetzt den frueheren Abprallzwang durch einen Anreiz. Nur der AUFSCHLAG-Schaden wird verdoppelt, nicht die Explosion eines Sprenggeschosses (die laeuft ueber damage.explosion). Eine REFLEXION (Prisma/Panzerung, E3) zaehlt bewusst nicht als Wandkontakt und verdoppelt daher nicht. Vom Plan vorgesehene Alternative, falls sich der pauschale Faktor zu flach anfuehlt und BEWUSST noch nicht gebaut: statt eines festen Faktors 1.5 je Abpraller mit Deckel bei 3.0.",
   "bullet": {
     "speed": 200,
     "maxDistance": 1200,
     "blinkFraction": 0.15,
     "maxActive": 5,
     "maxActiveCap": 8,
-    "selfImmunity": 0.35
+    "selfImmunity": 0.35,
+    "wallBounceDamageMult": 2.0
   },
   "_comment_damage": "UMBAUPLAN-LP: Schaden von Quellen ohne eigenen Panzer als Urheber bzw. mit zielabhaengigem Wert. Panzer-/Geschossschaden steht sonst beim Typ in tanks.json (cfg.damage). explosion 40 gilt in BEIDE Richtungen (Phase 2 gegen Gegner, Phase 3 gegen den Spieler -- der Plan nennt fuer beides 40). ownBullet: die eigene, zurueckgekommene Kugel tut dem Spieler 15 statt der 10, die sie einem Gegner zufuegt -- sie soll wehtun, aus voller Gesundheit aber nie toeten, damit der Bankschuss eine Entscheidung bleibt und kein Todesurteil.",
   "damage": {

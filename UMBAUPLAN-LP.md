@@ -10,8 +10,8 @@ Fertig-Bedingung. Alle Stellwerte gehören in JSON, nicht in den Code.
 Umfang: 28 Sitzungen. Phasen 1 bis 9 sind das Fundament — solange die nicht
 stehen, ist jede Karte Spekulation.
 
-**Fortschritt:** Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ gebaut. **Nächste
-Sitzung: Phase 4 (Abprall-Bonus).**
+**Fortschritt:** Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 ✅ gebaut.
+**Nächste Sitzung: Phase 5 (Statuseffekt-System).**
 
 Damit steht das Grundgerüst des LP-Modells: alle Panzer haben Lebenspunkte,
 der Spieler hält vier Gegnertreffer aus und startet jeden Raum mit vollen LP.
@@ -326,7 +326,7 @@ zusätzlich die beiden zahlenunabhängigen Design-Aussagen des Plans.
 
 ---
 
-## Phase 4 — Abprall-Bonus
+## Phase 4 — Abprall-Bonus ✅ gebaut
 
 **Ziel: der Abprall bleibt relevant, ohne erzwungen zu sein.**
 
@@ -357,6 +357,54 @@ Spieler, dass gebandete Kugeln nur für ihn gefährlich sind.
 3. Sich selbst von einer gebandeten eigenen Kugel treffen lassen — 30 statt 15.
 4. Einen gegnerischen Bankschuss kassieren — 50 statt 25.
 5. Einen Boss gebandet treffen und die Leiste vergleichen.
+
+### Umsetzung (gebaut)
+
+Alle fünf Testschritte nachgestellt und bestätigt: Brauner direkt 20 → 10 → 0
+(zwei Treffer), gebandet 20 → 0 (einer); eigene Kugel gebandet 30; gegnerischer
+Bankschuss 50 statt 25; Boss 50 Treffer direkt gegen 25 gebandet.
+
+- **Eine Zeile in der Trefferschleife** (`state.js`) — `bounced` wurde dort
+  ohnehin schon für die Trickshot-Belohnung berechnet, der Faktor kommt aus
+  `balance.json: bullet.wallBounceDamageMult`. Kein Upgrade, keine
+  Klassenregel, beide Seiten.
+- **Nur der AUFSCHLAG wird verdoppelt, nicht die Explosion.** Ein gebandetes
+  Sprenggeschoss richtet doppelten Trefferschaden an, seine Explosion läuft
+  aber unverändert über `damage.explosion` — sonst würde ein einziger
+  Wandkontakt gleich zwei Schadensquellen verdoppeln. Eigener Test dafür.
+- **Eine Reflexion (Prisma/Panzerung, E3) zählt bewusst nicht als
+  Wandkontakt** und verdoppelt daher nicht. Der Code zählt Reflexionen seit
+  jeher nicht in `wallBounces` (sonst ließen sich zwei Prismen gegeneinander
+  ausspielen, ohne je eine Bande zu spielen); diese Trennung gilt jetzt auch
+  beim Schaden. Konkret: eine vom Prisma zurückgeworfene eigene Kugel trifft
+  mit dem Grundwert 15, eine an der Wand gebandete mit 30.
+- **Die Alternative aus dem Plan (`perBounce: 1.5`, Deckel 3,0) ist bewusst
+  NICHT als Datenfeld angelegt**, sondern im `_comment_`-Eintrag von
+  `balance.json` beschrieben. Zwei gleichzeitig vorhandene Faktor-Felder, von
+  denen nur eines wirkt, wären eine Stolperfalle — der Plan verlangt, den Wert
+  „vorzusehen", nicht ihn scharf zu schalten.
+
+**Gemessen:** gegenüber Phase 3 bleiben die Spielertode praktisch gleich
+(8 → 9), die Räume werden aber deutlich schneller geräumt (Median 125 s →
+87 s, ein Hänger weniger). Die Symmetrie gleicht sich also weitgehend aus.
+Der Messwert **unterschätzt den Spielervorteil eher**: der Bot zielt nie
+absichtlich über Bande, seine Abpraller sind Zufallstreffer — die Gegner
+banden dagegen systematisch (der Grüne rechnet Winkel). Ein Mensch, der
+bewusst bandet, gewinnt mehr als der Bot.
+
+**Neue Dauertests** (`regression.mjs` Abschnitt 12, Gegenprobe für jeden
+bestanden): Wandkontakt verdoppelt gegen Gegner, **derselbe Bonus für
+gegnerische Geschosse** (die Gegenprobe „nur Spielerkugeln" fliegt damit
+auf — genau die Auflage des Plans), Reflexion verdoppelt nicht, Explosion
+wird nicht mitverdoppelt, und der Faktor stammt wirklich aus `balance.json`
+statt aus einer hartkodierten 2.
+
+**Was angepasst werden musste:** Der Testhelfer aus Phase 3 gab jeder Kugel
+einen Wandabpraller mit (damals nötig, damit die eigene Kugel überhaupt
+scharf ist). Damit wären ab Phase 4 alle Grundwerte verdoppelt und nicht mehr
+messbar gewesen. Er setzt jetzt `wallBounces: 0` und für die eigene Kugel
+stattdessen `reflected` — das macht sie scharf, ohne als Wandkontakt zu
+zählen.
 
 ---
 
