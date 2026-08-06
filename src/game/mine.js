@@ -41,8 +41,14 @@ export function isArmed(mine, mcfg) {
 // Allgemeine Explosion an einer Position (Minen, Sprengschuss-Upgrade):
 // toetet Panzer im Radius, zerstoert breakable-Waende, zuendet scharfe
 // Minen als Kettenreaktion.
-export function explodeAt(state, x, y, R, spare, meta) {
+export function explodeAt(state, x, y, R, spare, meta, damage) {
   const mcfg = state.data.mine;
+  // UMBAUPLAN-LP Phase 1: Explosionsschaden hat keinen Panzer als Urheber
+  // (eine Mine ist kein Geschoss mit cfg.damage), deshalb ein eigener Wert
+  // in balance.json. Der optionale Parameter ist fuer spaetere Quellen mit
+  // abweichendem Schaden vorgesehen (Phase 3: Bossangriff), Bestandsaufrufe
+  // bleiben unveraendert.
+  const dmg = damage ?? state.data.balance?.damage?.explosion ?? 1;
   state.explosions.push({ x, y, age: 0 });
   state.sounds.push({ name: 'boom', x });
   state.addShake?.(6);
@@ -55,7 +61,7 @@ export function explodeAt(state, x, y, R, spare, meta) {
     if (!t.alive || t.protect > 0 || t === spare) continue;
     if (pionier && t === state.player) continue;
     if (circlesOverlap(x, y, R, t.x, t.y, t.cfg.radius)) {
-      state.killTank(t, 'eine Explosion', meta);
+      state.applyDamage(t, dmg, 'eine Explosion', meta);
     }
   }
 

@@ -7,6 +7,10 @@
     "maxActiveCap": 8,
     "selfImmunity": 0.35
   },
+  "_comment_damage": "UMBAUPLAN-LP Phase 1: Schaden von Quellen, die keinen eigenen Panzer als Urheber haben (Explosionen). Panzer-/Geschossschaden steht dagegen beim Typ in tanks.json (cfg.damage). Vorerst 1 -- zusammen mit maxHp 1 ueberall toetet damit wie bisher jeder Treffer sofort. Phase 3 setzt hier echte Zahlen ein (Minenexplosion 40).",
+  "damage": {
+    "explosion": 1
+  },
   "enemyBullet": {
     "maxActive": 24
   },

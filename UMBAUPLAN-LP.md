@@ -10,6 +10,9 @@ Fertig-Bedingung. Alle Stellwerte gehören in JSON, nicht in den Code.
 Umfang: 28 Sitzungen. Phasen 1 bis 9 sind das Fundament — solange die nicht
 stehen, ist jede Karte Spekulation.
 
+**Fortschritt:** Phase 1 ✅ gebaut. **Nächste Sitzung: Phase 2
+(Gegner-Lebenspunkte, Anzeige, Skalierung).**
+
 ---
 
 ## Festgelegte Entscheidungen
@@ -30,7 +33,7 @@ stehen, ist jede Karte Spekulation.
 
 ---
 
-## Phase 1 — Schadensmodell im Code
+## Phase 1 — Schadensmodell im Code ✅ gebaut
 
 **Ziel: reiner Umbau. Nach dieser Sitzung spielt sich das Spiel exakt wie
 vorher.** Das ist die wichtigste Phase, weil sie den Umbau von der Balance
@@ -64,6 +67,65 @@ kompletter Run sich identisch anfühlt.
    funktioniert, Statistik zählt korrekt.
 4. Einen Boss angreifen — `bossInvincible` fängt weiterhin ab.
 5. Raum bis zum Ende spielen, Schrottbelohnung prüfen.
+
+### Umsetzung (gebaut)
+
+- **`applyDamage(tank, amount, cause, meta)` neu, `killTank()` bleibt.** Der
+  Schnitt liegt bewusst so: **alles, was einen Treffer ABWEHRT** (Reaktorkern-
+  Unverwundbarkeit, Schildladung, Gegnerschild, Spielerschild) ist von
+  `killTank()` nach `applyDamage()` gewandert, danach wird abgezogen und erst
+  bei `hp <= 0` die reine Todeslogik gerufen. Grund: die Gatter verhindern
+  *Schaden*, nicht *den Tod* — solange `maxHp`/`damage` überall 1 sind, ist
+  das exakt dasselbe Verhalten, aber mit echten Lebenspunkten wäre die alte
+  Platzierung falsch (ein Schild, das nur bei tödlichen Treffern greift, wäre
+  eine zweite Lebensleiste — genau das, was Phase 8 vermeiden will).
+  `killTank()` bleibt als eigener, direkt aufrufbarer Trichter bestehen
+  (Kettenreaktionen, Statistik, Telemetrie, Geisterpanzer) und hat neu einen
+  Doppeltod-Schutz (`if (!tank.alive) return`), weil eine Kettenreaktion ihn
+  sonst zweimal im selben Frame treffen kann.
+- **Nur zwei echte Aufrufer** mussten umgestellt werden: die Geschoss-Treffer-
+  Schleife in `state.js` und `explodeAt()` in `mine.js`. Beide prüfen `protect`
+  bereits vorher selbst, `applyDamage()` braucht deshalb keine eigene
+  Spawnschutz-Prüfung.
+- **Geschosse tragen ihren Schaden** (`createBullet({ damage })`, Standard 1),
+  mitgegeben vom Erzeuger aus `cfg.damage`. Bewusst beim Abschuss eingefroren
+  statt beim Treffer aus `b.owner` gelesen: sonst würde eine noch fliegende
+  Kugel rückwirkend stärker, wenn ihr Besitzer zwischendurch ein Upgrade
+  bekommt — oder ins Leere greifen, wenn er stirbt.
+- **Explosionsschaden steht in `balance.json: damage.explosion`**, nicht bei
+  einem Panzertyp — eine Mine hat keinen `cfg.damage`. `explodeAt()` hat dafür
+  einen optionalen letzten Parameter (für Phase 3: Bossangriff), alle
+  Bestandsaufrufe bleiben unverändert.
+- **`resolveCfg()`** liefert `maxHp`/`damage` (beide `?? 1`), `createTank()`
+  setzt `hp = cfg.maxHp`. Weil `createTank()` bei jedem Raumwechsel, Respawn
+  und Wellen-Spawn ohnehin läuft, braucht die „volle LP je Raum"-Regel aus
+  Phase 3 später **keinen eigenen Hook**.
+- **`tanks.json`**: alle 15 Typen haben jetzt explizit `maxHp: 1` und
+  `damage: 1` (nicht nur den Fallback) — Phase 2 ändert damit reine Zahlen.
+
+**Verhaltensbeweis statt „fühlt sich gleich an":** Die Fertig-Bedingung
+verlangt einen identischen Run. Dafür wurde ein Wegwerf-Werkzeug gebaut, das
+5 Seeds mit je 240 Ticks echter Simulation pro Raum (Gegner fahren, schießen,
+Kugeln prallen ab, Minen zünden) durchspielt und **506 vollständige
+Zustandsproben** protokolliert — Positionen aller Panzer auf drei
+Nachkommastellen, Kugel-/Minen-/Partikelzahlen, alle Zähler, Endstand jedes
+Runs. Alter und neuer Stand sind **zeilenweise identisch**. Gegenprobe: ein
+einziges `t_brown: maxHp 2` erzeugt sofort 15 abweichende Zeilen — das
+Werkzeug ist also nicht blind.
+
+**Neue Dauertests** (`tests/regression.mjs`, Abschnitt 9, neun Prüfungen):
+Sie testen bewusst den **Mechanismus mit eigenen Zahlen**, nicht die aktuellen
+JSON-Werte — sonst wären sie schon durch Phase 2 rot, ohne dass etwas kaputt
+ist. Enthalten: Strukturwächter (jeder Typ hat `maxHp`/`damage` — fängt einen
+in Phase 2 vergessenen Typ), Teilschaden tötet nicht, Tod läuft durch
+`killTank()`, alle drei Abwehr-Gatter fangen den Schaden statt den Tod,
+Geschoss trägt den Schuss-Zeitpunkt-Schaden, Treffer/Explosion ziehen den
+richtigen Betrag, Doppeltod zählt einfach.
+**Gegenprobe für alle bestanden** — und dabei ein blinder Test gefunden: die
+erste Fassung von „Panzer starten mit vollen LP" prüfte `hp === cfg.maxHp` im
+echten Raum, was bei `maxHp: 1` überall **trivial wahr** ist. Ein hartkodiertes
+`hp: 1` in `createTank()` rutschte glatt durch. Jetzt wird zusätzlich mit
+einem synthetischen `cfg.maxHp = 42` geprüft.
 
 ---
 

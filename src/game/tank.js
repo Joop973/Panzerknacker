@@ -30,6 +30,12 @@ export function createTank(type, cfg, x, y) {
     iceVx: 0, // Raum-Modifikator "Glatteis" (Phase 10): nachgleitende Geschwindigkeit
     iceVy: 0,
     cooldown: 0,
+    // Lebenspunkte (UMBAUPLAN-LP Phase 1). Frisch bei jeder Erzeugung --
+    // createTank() laeuft ohnehin bei jedem Raumwechsel, Respawn und
+    // Wellen-Spawn, deshalb braucht die "volle LP je Raum"-Regel aus Phase 3
+    // spaeter keinen eigenen Hook. Solange cfg.maxHp ueberall 1 ist, toetet
+    // wie bisher jeder Treffer sofort.
+    hp: (cfg && cfg.maxHp) || 1,
     protect: 0, // > 0: Spawn-Schutz (unverwundbar, blinkt)
     stunTimer: 0, // > 0: Krallenfalle -- kann nicht fahren
     shots: 0, // Schusszaehler (Sprengschuss-Upgrade)
@@ -276,6 +282,7 @@ export function fireBullet(tank, state, pressed) {
         phaseWalls: tank.cfg.phaseWalls || false,
         homing: tank.cfg.homing || 0,
         burstDistance: tank.cfg.burstRangePx || 0,
+        damage: tank.cfg.damage,
       }),
     );
     // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.

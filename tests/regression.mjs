@@ -1430,6 +1430,202 @@ function check(ok, msg) {
   );
 }
 
+// ---- 9. UMBAUPLAN-LP Phase 1: Schadensmodell ----------------------------
+// Der Umbau von "ein Treffer toetet" auf Lebenspunkte. Diese Pruefungen
+// testen bewusst den MECHANISMUS mit eigenen Zahlen, nicht die aktuellen
+// Werte aus tanks.json (die stehen in Phase 1 noch ueberall auf 1 und
+// werden in Phase 2/3 planmaessig ersetzt) -- sonst waere der Test schon
+// durch die naechste Phase wieder rot, ohne dass etwas kaputt ist.
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { explodeAt } = await import('../src/game/mine.js');
+  const { fireBullet } = await import('../src/game/tank.js');
+  const { stepState } = await import('../src/game/state.js');
+
+  // (a) Struktur: jeder Panzertyp hat maxHp und damage. Das ist der Waechter
+  // dafuer, dass Phase 2 keinen Typ vergisst -- ein Gegner ohne maxHp faellt
+  // sonst still auf den Fallback 1 zurueck und stirbt mitten im
+  // Lebenspunkte-Spiel weiter am ersten Treffer.
+  {
+    const fehlend = Object.entries(tanksData.types)
+      .filter(([, t]) => typeof t.maxHp !== 'number' || typeof t.damage !== 'number')
+      .map(([id]) => id);
+    check(fehlend.length === 0, `Phase 1: Typen ohne maxHp/damage in tanks.json: ${fehlend.join(', ')}`);
+    const ungueltig = Object.entries(tanksData.types)
+      .filter(([, t]) => t.maxHp <= 0)
+      .map(([id]) => id);
+    check(ungueltig.length === 0, `Phase 1: Typen mit maxHp <= 0 (waeren sofort tot): ${ungueltig.join(', ')}`);
+  }
+
+  // (b) Panzer starten mit vollen Lebenspunkten aus dem cfg.
+  // WICHTIG mit einem cfg.maxHp != 1 geprueft: solange in tanks.json ueberall
+  // 1 steht, waere "hp === cfg.maxHp" im echten Raum trivial erfuellt -- ein
+  // hartkodiertes `hp: 1` in createTank() wuerde glatt durchrutschen (in der
+  // Gegenprobe genau so passiert). Der Raum-Durchlauf darunter wird erst ab
+  // Phase 2 aussagekraeftig und bleibt als Waechter fuer dann stehen.
+  {
+    const { createTank } = await import('../src/game/tank.js');
+    const t = createTank('player', { maxHp: 42, radius: 10 }, 0, 0);
+    check(t.hp === 42, `Phase 1: createTank() uebernimmt cfg.maxHp nicht (hp=${t.hp})`);
+    const ohne = createTank('player', { radius: 10 }, 0, 0);
+    check(ohne.hp === 1, `Phase 1: createTank() ohne maxHp faellt nicht auf 1 zurueck (hp=${ohne.hp})`);
+
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    for (const tk of run.state.tanks) {
+      check(tk.hp === tk.cfg.maxHp, `Phase 1: ${tk.type} startet mit hp ${tk.hp} statt maxHp ${tk.cfg.maxHp}`);
+    }
+  }
+
+  // (c) Der Kern: applyDamage zieht ab und toetet ERST bei hp <= 0.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const e = st.tanks.find((t) => t !== st.player && t.alive);
+    check(!!e, 'Phase 1: kein Gegner fuer den Schadenstest');
+    if (e) {
+      e.cfg.maxHp = 10;
+      e.hp = 10;
+      e.shieldReady = false;
+      st.applyDamage(e, 4, 'test');
+      check(e.hp === 6 && e.alive, `Phase 1: Teilschaden toetet oder rechnet falsch (hp=${e.hp}, alive=${e.alive})`);
+      st.applyDamage(e, 4, 'test');
+      check(e.hp === 2 && e.alive, `Phase 1: zweiter Teilschaden falsch (hp=${e.hp}, alive=${e.alive})`);
+      const kills = st.enemyKills;
+      st.applyDamage(e, 2, 'test');
+      check(!e.alive, 'Phase 1: hp auf 0 hat den Panzer nicht getoetet');
+      check(st.enemyKills === kills + 1, 'Phase 1: der Tod lief nicht durch killTank() (Statistik zaehlt nicht)');
+    }
+  }
+
+  // (d) Die Abwehr-Gatter sitzen in applyDamage, nicht mehr in killTank:
+  // ein Schild faengt den TREFFER ab, es wird also gar kein Schaden gezogen.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const e = st.tanks.find((t) => t !== st.player && t.alive);
+    if (e) {
+      e.cfg.maxHp = 10;
+      e.hp = 10;
+      e.shieldReady = true;
+      st.applyDamage(e, 4, 'test');
+      check(e.hp === 10, `Phase 1: Gegnerschild hat den Schaden nicht abgefangen (hp=${e.hp})`);
+      check(!e.shieldReady, 'Phase 1: Gegnerschild wurde nicht verbraucht');
+      check(e.alive, 'Phase 1: Gegner mit Schild ist trotzdem gestorben');
+    }
+    // Spieler-Schildladung (raumuebergreifend) genauso.
+    const p = st.player;
+    p.cfg.maxHp = 100;
+    p.hp = 100;
+    p.shieldReady = false;
+    st.shieldCharges = [3];
+    st.applyDamage(p, 25, 'test');
+    check(p.hp === 100, `Phase 1: Schildladung hat den Schaden nicht abgefangen (hp=${p.hp})`);
+    check(st.shieldCharges.length === 0, 'Phase 1: Schildladung wurde nicht verbraucht');
+  }
+
+  // (e) Der unverwundbare Reaktorkern (Phase 14) nimmt weiterhin keinen
+  // Schaden, solange Generatoren stehen -- und ist danach normal verwundbar.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const e = st.tanks.find((t) => t !== st.player && t.alive);
+    if (e) {
+      e.cfg.bossInvincible = true;
+      e.cfg.maxHp = 50;
+      e.hp = 50;
+      e.shieldReady = false;
+      st.bossGeneratorsLeft = 1;
+      st.applyDamage(e, 20, 'test');
+      check(e.hp === 50, `Phase 1: Reaktorkern nimmt trotz stehender Generatoren Schaden (hp=${e.hp})`);
+      st.bossGeneratorsLeft = 0;
+      st.applyDamage(e, 20, 'test');
+      check(e.hp === 30, `Phase 1: Reaktorkern nimmt ohne Generatoren keinen Schaden (hp=${e.hp})`);
+    }
+  }
+
+  // (f) Geschosse tragen den Schaden ihres Schuetzen -- und zwar den Wert,
+  // der beim ABSCHUSS galt (nicht den, der beim Treffer gilt).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const p = st.player;
+    p.cfg.damage = 7;
+    p.cooldown = 0;
+    st.bullets.length = 0;
+    fireBullet(p, st, true);
+    const b = st.bullets.find((x) => x.owner === p);
+    check(b?.damage === 7, `Phase 1: Geschoss traegt den Schaden des Schuetzen nicht (${b?.damage})`);
+    p.cfg.damage = 99; // nachtraegliche Aenderung darf die fliegende Kugel nicht ruecknwirkend staerken
+    check(b?.damage === 7, 'Phase 1: eine fliegende Kugel aendert rueckwirkend ihren Schaden');
+  }
+
+  // (g) Ein Geschosstreffer wendet den Geschossschaden an (nicht pauschal 1).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const p = st.player;
+    const e = st.tanks.find((t) => t !== p && t.alive);
+    if (e) {
+      e.cfg.maxHp = 30;
+      e.hp = 30;
+      e.shieldReady = false;
+      e.cfg.armor = null;
+      e.cfg.requiresRicochet = false;
+      e.protect = 0;
+      st.bullets.length = 0;
+      // Kugel direkt auf den Gegner setzen, Besitzer ist ein Dritter (damit
+      // weder Selbst-Immunitaet noch die "erst nach Abpraller scharf"-Regel
+      // greift).
+      const shooter = st.tanks.find((t) => t !== p && t !== e) || p;
+      const b = createBullet(e.x, e.y, 0, {
+        speed: 1, radius: 3, ricochets: 1, owner: shooter, kind: 'bullet', damage: 12,
+      });
+      b.age = 5;
+      st.bullets.push(b);
+      stepState(st, { move: { x: 0, y: 0 }, aim: { x: e.x, y: e.y }, fire: false, mine: false, dash: false }, 1 / 60);
+      check(e.hp === 18, `Phase 1: Geschosstreffer zieht nicht den Geschossschaden ab (hp=${e.hp}, erwartet 18)`);
+      check(e.alive, 'Phase 1: 12 Schaden auf 30 LP haben getoetet');
+    }
+  }
+
+  // (h) Explosionen ziehen den Explosionsschaden aus balance.json.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const e = st.tanks.find((t) => t !== st.player && t.alive);
+    if (e) {
+      e.cfg.maxHp = 100;
+      e.hp = 100;
+      e.shieldReady = false;
+      e.protect = 0;
+      explodeAt(st, e.x, e.y, 40, null, {}, 35);
+      check(e.hp === 65, `Phase 1: Explosion zieht den uebergebenen Schaden nicht ab (hp=${e.hp})`);
+      const erwartet = 65 - (tanksData.balance?.damage?.explosion ?? 1);
+      explodeAt(st, e.x, e.y, 40, null, {});
+      check(e.hp === erwartet, `Phase 1: Explosion ohne Angabe nutzt nicht balance.damage.explosion (hp=${e.hp})`);
+    }
+  }
+
+  // (i) killTank() bleibt der Trichter fuer den Tod und ist direkt
+  // aufrufbar -- unabhaengig von den Lebenspunkten (Tests/Cheats raeumen
+  // damit Raeume ab). Doppelaufruf darf die Statistik nicht doppelt zaehlen.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const e = st.tanks.find((t) => t !== st.player && t.alive);
+    if (e) {
+      e.cfg.maxHp = 999;
+      e.hp = 999;
+      const kills = st.enemyKills;
+      st.killTank(e, 'test');
+      check(!e.alive, 'Phase 1: killTank() toetet nicht mehr direkt');
+      check(st.enemyKills === kills + 1, 'Phase 1: killTank() zaehlt den Kill nicht');
+      st.killTank(e, 'test');
+      check(st.enemyKills === kills + 1, 'Phase 1: doppelter killTank() zaehlt den Kill zweimal');
+    }
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;

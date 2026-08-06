@@ -31,6 +31,7 @@ export function createBullet(
     homing,
     friendly,
     burstDistance,
+    damage,
   },
 ) {
   return {
@@ -51,6 +52,12 @@ export function createBullet(
     homing: homing || 0, // Zielsucher: rad/s Lenkrate (0 = aus)
     friendly: friendly || false, // trifft den eigenen Besitzer NIE (Drohne/Splitter)
     burstDistance: burstDistance || 0, // Flak (Phase 18): zuendet nach kurzer Reichweite in der Luft, unabhaengig von Wand-/Zielkontakt
+    // Schaden dieses Geschosses (UMBAUPLAN-LP Phase 1). Wird vom Erzeuger
+    // mitgegeben (cfg.damage des Schuetzen), nicht beim Treffer aus dem
+    // Besitzer gelesen: ein Geschoss soll den Wert tragen, der beim ABSCHUSS
+    // galt -- sonst wuerde eine Kugel, die noch fliegt, waehrend ihr
+    // Besitzer stirbt oder ein Upgrade bekommt, rueckwirkend anders treffen.
+    damage: damage ?? 1,
     detonated: false,
     // Aasgeier (state.js: killTank): true = zaehlt nicht mehr gegen das
     // Magazin des Schuetzen, fliegt und toetet aber normal weiter.

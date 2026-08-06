@@ -422,7 +422,22 @@ export function createState(data, tiles, opts) {
       state.sounds.push({ name: 'mine', x: state.movingWalls[0].x + CELL / 2 });
       state.addShake(2);
     },
-    killTank(tank, cause, meta) {
+    // Schaden zufuegen (UMBAUPLAN-LP Phase 1). Hier sitzt alles, was einen
+    // Treffer ABWEHREN kann (Unverwundbarkeit, Schilde) -- danach wird
+    // abgezogen und erst bei hp <= 0 die Todeslogik in killTank() gerufen.
+    //
+    // Warum die Abwehr-Gatter hierher und nicht in killTank() gehoeren:
+    // Sie verhindern SCHADEN, nicht den Tod. Solange maxHp und damage
+    // ueberall 1 sind, ist das exakt dasselbe Verhalten wie vorher (jeder
+    // Treffer ist toedlich, also faengt ein Schild zwangslaeufig einen
+    // toedlichen Treffer ab). Mit echten Lebenspunkten ab Phase 2/3 waere
+    // die alte Platzierung dagegen falsch: ein Schild, das nur bei
+    // toedlichen Treffern greift, waere eine zweite Lebensleiste.
+    //
+    // killTank() bleibt daneben als eigener, direkt aufrufbarer Trichter
+    // fuer den Tod bestehen -- Kettenreaktionen, Statistik, Telemetrie und
+    // Geisterpanzer haengen daran und bleiben unangetastet.
+    applyDamage(tank, amount, cause, meta) {
       // Reaktorkern (Phase 14): unverwundbar, solange mindestens ein
       // Generator steht -- keine Ladung, kein Verbrauch, verfaellt nie von
       // selbst. Reiner Feedback-Ablehner wie die Schildladungen unten.
@@ -471,6 +486,16 @@ export function createState(data, tiles, opts) {
         if (tank.cfg.shieldRegenS) tank.regenShieldTimer = tank.cfg.shieldRegenS;
         return;
       }
+      // Kein Gatter hat gegriffen -> der Treffer geht durch.
+      tank.hp -= amount ?? 1;
+      if (tank.hp > 0) return;
+      state.killTank(tank, cause, meta);
+    },
+    // Reine Todeslogik -- ab hier ist der Panzer tot, es gibt keine
+    // Abwehr mehr. Bewusst weiterhin direkt aufrufbar (Tests raeumen damit
+    // Raeume ab), aber im Spielcode ruft sie nur noch applyDamage().
+    killTank(tank, cause, meta) {
+      if (!tank.alive) return; // doppelter Tod im selben Frame (Kettenreaktion)
       tank.alive = false;
       // Phase 7b (Abnahmekriterium aus PLAN.md): bis hierher spielte JEDER
       // Tod denselben 'death'-Ton -- ein Gegner-Kill klang identisch zum
@@ -583,6 +608,7 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
         owner,
         kind: 'bullet',
         friendly: true, // Splitter/Kranz treffen den Leger nie
+        damage: owner?.cfg?.damage,
       }),
     );
   }
@@ -881,7 +907,7 @@ export function stepState(state, cmd, dt) {
         const cause = own
           ? 'die eigene Kugel'
           : `${state.data.types[b.owner?.type]?.label || '?'} (${WEAPON_LABEL[b.kind] || b.kind})`;
-        state.killTank(t, cause, {
+        state.applyDamage(t, b.damage ?? 1, cause, {
           code: own ? 'own_bullet' : 'enemy_bullet',
           enemyType: own ? null : b.owner?.type || null,
           bulletOwner: own ? 'player' : 'enemy',
