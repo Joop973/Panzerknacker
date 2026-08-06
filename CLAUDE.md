@@ -112,14 +112,14 @@ Bedarf neu messen statt den alten Wert zu glauben. (2) Phase 7 spricht von
 einem „Umbau" eines bestehenden 5-%-Krit-Systems — es gibt aktuell **gar
 kein** Krit-System im Code (keine Treffer für `crit`/`critChance` in
 `data/*.json` oder `src/game/*.js`); Phase 7 baut es komplett neu, nicht um.
-**Phase 1 (Schadensmodell), Phase 2 (Gegner-LP), Phase 3 (Spieler-LP) und
-Phase 4 (Abprall-Bonus) sind gebaut** (s. eigene Abschnitte unten). Damit
-steht das Grundgerüst: alle Panzer haben Lebenspunkte, der Spieler hält vier
-Gegnertreffer aus, startet jeden Raum mit vollen LP, und ein Wandabpraller
-verdoppelt den Schaden — beidseitig. **Nächste Sitzung: Phase 5
-(Statuseffekt-System: Feuer/Gift/Frost, gemeinsames Regelwerk vor den
-Elementen).** `PLAN.md`/die Telemetrie-Auswertung bleibt parallel offen
-(s. To-do-Liste unten).
+**Phase 1–5 sind gebaut** (s. eigene Abschnitte unten): Schadensmodell,
+Gegner-LP, Spieler-LP, Abprall-Bonus und das Statuseffekt-System. Damit steht
+das Grundgerüst — alle Panzer haben Lebenspunkte, der Spieler hält vier
+Gegnertreffer aus, startet jeden Raum mit vollen LP, ein Wandabpraller
+verdoppelt den Schaden (beidseitig), und Feuer/Gift/Frost haben ein
+gemeinsames Regelwerk (noch ohne Quelle). **Nächste Sitzung: Phase 6 (die
+sechs Schadenstypen an Quellen hängen).** `PLAN.md`/die Telemetrie-Auswertung
+bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -1867,6 +1867,54 @@ keine Klassenregel — der Abprall wird belohnt statt erzwungen.
   Er setzt jetzt `wallBounces: 0` und für die eigene Kugel stattdessen
   `reflected`.
 
+### UMBAUPLAN-LP Phase 5 (Statuseffekt-System) — gemergt
+Gemeinsames Regelwerk für Effekte über Zeit, gebaut **bevor** es die Elemente
+gibt. Neu: `src/game/status.js` + `data/status.json` (Feuer 4 Schaden/Takt für
+3 s, Gift 2 für 6 s, Frost −40 % Tempo für 2 s; ein Takt für alles: 0,5 s).
+- **Wie vom Plan verlangt hängt KEINE Quelle daran** — kein Geschoss, keine
+  Mine, keine Karte. Erreichbar nur über `state.applyStatus()`, im Spiel über
+  die Debugtasten **1/2/3** und die nur bei `?debug=1`. Phase 6 hängt dann die
+  Schadenstypen an.
+- **Ticks werden GEZÄHLT, nicht heruntergezählt.** Der erste Entwurf hatte
+  zwei unabhängige Countdowns (Takt + Restdauer); die driften bei
+  1/60-Schritten gegeneinander — der erste Tick fiel einen Frame zu spät, und
+  bei 144 FPS gingen Ticks ganz verloren (20 statt 24 Schaden, per Gegenprobe
+  bestätigt). Jetzt läuft `tickElapsed` gegen `floor(tickElapsed / tickS)`:
+  bei 3 s Dauer und 0,5 s Takt **immer exakt 6 Ticks**, unabhängig von
+  Bildrate und Zeitlupe. Dasselbe Muster wie der Minen-Warnpuls (Phase 7b).
+- **Erneutes Auftragen erneuert nur die Dauer, nicht die Takt-Buchhaltung** —
+  sonst könnte eine schnell feuernde Quelle den Tick endlos hinausschieben
+  und der Effekt wäre schadlos.
+- **Frost-Erstarrung löst nur beim ÜBERGANG auf den Deckel aus** (<3 → 3),
+  nicht bei jedem weiteren Auftragen; sonst Stunlock. Der Plan sagt dazu
+  nichts. Frost nutzt den vorhandenen `stunTimer` (Krallenfalle) und reiht
+  die Verlangsamung als weiteren Multiplikator in `moveTank()` ein — gilt
+  dadurch automatisch für Spieler und Gegner.
+- **Schaden über Zeit umgeht auch die SCHILDE**, nicht nur Panzerung/Prisma
+  (die ergeben sich von selbst, weil `armorBlocks()` nur in der
+  Geschoss-Trefferschleife geprüft wird). Ein 4-Punkte-Brandtick würde sonst
+  eine ganze Schildladung verbrauchen — sechs Ticks also drei Ladungen in
+  anderthalb Sekunden. Umgesetzt über `meta.overTime` in `applyDamage()`.
+  **Die Boss-Unverwundbarkeit gilt weiter** — sonst wäre das
+  Generator-Rätsel des Reaktors mit einem Brandpfeil umgehbar.
+- **Anzeige**: Farbkacheln unter der Lebensleiste, Breite = Stufenzahl
+  (bewusst Flächen statt Emoji — bei 4 px wäre ein Emoji auf dem Handy
+  Matsch). Die Elite-Affix-Punkte rücken dafür von `r+12` auf `r+26`; die
+  drei Schichten stapeln sich jetzt von oben nach unten: **Affixe,
+  Lebensleiste, Statuseffekte.**
+- **Neue Dauertests** (Abschnitt 13, Gegenprobe für jeden bestanden): exakte
+  Tickzahl bei 30/60/144 FPS, Stapelung/Deckel/Dauererneuerung, dauerhaft
+  nachgelegter Effekt macht trotzdem Schaden, Frost verlangsamt ohne Schaden
+  und erstarrt nur beim Übergang, Ticks umgehen Panzerung und Schilde aber
+  nicht die Boss-Unverwundbarkeit, ein Effekt kann töten (durch `killTank()`),
+  Anzeige-Deckel + Dominanz-Sortierung, frischer Raum ohne Alt-Status.
+- **Zwei Tests waren zuerst wirkungslos**: (1) die Schadensmessung fing
+  gegnerisches Eigenfeuer mit ein (eine Bildratenprobe sah 74 statt 24
+  Schaden) — die Tests laufen jetzt in einem isolierten Raum mit nur zwei
+  Panzern; (2) „höchstens 3 Symbole" ist bei genau drei Effekten trivial wahr,
+  ein ausgebauter Deckel rutschte durch — jetzt mit temporärem Deckel 1
+  geprüft.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1900,7 +1948,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
   `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`,
   `transformations.json`, `secondaries.json`, `modifiers.json`,
-  `limits.json`, `sounds.json`).
+  `limits.json`, `sounds.json`, `status.json`).
   `balance.json` enthält auch Rarity-Gewichte,
   `legendary.minRoom` + die `scrap`-Werte; `difficulty.json` die `doors`/
   `elite`/`treasure`-Konfiguration (Phase 4).
@@ -1919,6 +1967,11 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `reflectBullet`, `hasWallBounced`, `isLive`.
 - `src/game/tank.js` — Feuern, Minen legen/werfen, `useSecondary()`
   (Phase 6: generischer Sekundärwaffen-Dispatch inkl. Enterhaken/Sperrmauer).
+- `src/game/status.js` — Statuseffekte ueber Zeit (UMBAUPLAN-LP Phase 5):
+  `applyStatus`, `updateStatus`, `statusSpeedMult`, `visibleStatus`. Ticks
+  werden gezaehlt, nicht heruntergezaehlt (bildratenunabhaengig). Werte in
+  `data/status.json`. Haengt bis Phase 6 an keiner Quelle — nur
+  `state.applyStatus()` (Debugtasten 1/2/3 bei `?debug=1`).
 - `src/game/ghost.js` — Geisterpanzer (Phase 7): `createGhost`,
   `updateGhosts` (eigenes `state.ghosts`-Array, kein Eintrag in `state.tanks`).
 - `src/game/bossai.js` — Boss-Sonderbewegungen (Phase 14): `stepMirrorBoss`
@@ -1953,7 +2006,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v76`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v77`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

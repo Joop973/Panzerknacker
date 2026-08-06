@@ -14,6 +14,7 @@ import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
 import { createGhost, updateGhosts } from './ghost.js';
 import { updateEnemy, updateCoverPerception } from './ai.js';
+import { applyStatus, updateStatus } from './status.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
@@ -450,11 +451,24 @@ export function createState(data, tiles, opts) {
       // Reaktorkern (Phase 14): unverwundbar, solange mindestens ein
       // Generator steht -- keine Ladung, kein Verbrauch, verfaellt nie von
       // selbst. Reiner Feedback-Ablehner wie die Schildladungen unten.
+      // Gilt AUCH fuer Schaden ueber Zeit (Phase 5): sonst waere das
+      // Generator-Raetsel mit einem Brandpfeil umgehbar.
       if (tank.cfg.bossInvincible && state.bossGeneratorsLeft > 0) {
         // Phase 7b: derselbe "Treffer wirkungslos abgewehrt"-Ton wie bei der
         // Panzerung -- nicht der Schildverlust-Ton, hier geht ja nichts verloren.
         state.sounds.push({ name: 'reflect', x: tank.x });
         state.spawnParticles(tank.x, tank.y, '#ffd23c', 6, 80);
+        return;
+      }
+      // Schaden ueber Zeit (Phase 5) ueberspringt ALLE Schild-Gatter
+      // darunter. Ein Schild, der "den naechsten Treffer abfaengt", darf
+      // nicht an einem 4-Punkte-Brandtick verpuffen -- sechs Ticks wuerden
+      // sonst drei Ladungen in anderthalb Sekunden verbrauchen. Die
+      // Boss-Unverwundbarkeit oben gilt dagegen weiter.
+      if (meta?.overTime) {
+        tank.hp -= amount ?? 1;
+        if (tank.hp > 0) return;
+        state.killTank(tank, cause, meta);
         return;
       }
       // Notschild-Ladung faengt genau einen Treffer ab (raumuebergreifend,
@@ -578,6 +592,13 @@ export function createState(data, tiles, opts) {
           }
         }
       }
+    },
+    // Statuseffekt auftragen (Phase 5). In dieser Phase der EINZIGE Weg,
+    // einen Status zu erzeugen -- es haengt noch keine Quelle daran
+    // (Debug-Tasten 1/2/3 bei ?debug=1, Tests). Phase 6 haengt die
+    // Schadenstypen an.
+    applyStatus(tank, id, stacks) {
+      return applyStatus(state, tank, id, stacks);
     },
     addShake(amount) {
       state.shake = Math.min(10, state.shake + amount);
@@ -755,6 +776,11 @@ export function stepState(state, cmd, dt) {
       if (t.regenShieldTimer <= 0) t.shieldReady = true;
     }
   }
+
+  // Statuseffekte ueber Zeit (Phase 5): eigener Durchlauf NACH der
+  // Timer-Schleife, weil ein Tick toeten kann und die Schleife oben sonst
+  // ueber einen gerade gestorbenen Panzer weiterliefe.
+  updateStatus(state, dt);
 
   // Rauchwolken altern unabhaengig von Panzern (einmal pro Schritt).
   for (const c of state.smokeClouds) c.age += dt;

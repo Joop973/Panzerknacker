@@ -10,8 +10,8 @@ Fertig-Bedingung. Alle Stellwerte gehören in JSON, nicht in den Code.
 Umfang: 28 Sitzungen. Phasen 1 bis 9 sind das Fundament — solange die nicht
 stehen, ist jede Karte Spekulation.
 
-**Fortschritt:** Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ · Phase 4 ✅ gebaut.
-**Nächste Sitzung: Phase 5 (Statuseffekt-System).**
+**Fortschritt:** Phase 1–5 ✅ gebaut. **Nächste Sitzung: Phase 6 (die sechs
+Schadenstypen an Quellen hängen).**
 
 Damit steht das Grundgerüst des LP-Modells: alle Panzer haben Lebenspunkte,
 der Spieler hält vier Gegnertreffer aus und startet jeden Raum mit vollen LP.
@@ -408,7 +408,7 @@ zählen.
 
 ---
 
-## Phase 5 — Statuseffekt-System
+## Phase 5 — Statuseffekt-System ✅ gebaut
 
 **Ziel: ein gemeinsames Regelwerk, bevor irgendein Element existiert.**
 
@@ -440,6 +440,65 @@ Debugbefehl, der Status von Hand aufträgt.
 3. Feuer viermal auftragen — bleibt bei 3 Stufen, Dauer startet neu.
 4. Frost dreifach — Gegner steht 1 s still.
 5. Gift auf einen gepanzerten Gegner von vorn — wirkt trotz Panzerung.
+
+### Umsetzung (gebaut)
+
+Alle fünf Testschritte nachgestellt: Feuer macht genau 6 Ticks à 4 Schaden;
+dreifach gestapelt 12 je Takt; viermal aufgetragen bleibt es bei 3 Stufen mit
+neu gestarteter Dauer; Frost erstarrt bei 3 Stufen für 1 s; Gift wirkt durch
+die Panzerung.
+
+- **Neues Modul `src/game/status.js` + `data/status.json`.** Wie vom Plan
+  verlangt hängt **keine Quelle** daran: kein Geschoss, keine Mine und keine
+  Karte trägt einen Status auf. Erreichbar ist das System nur über
+  `state.applyStatus()` — im Spiel über die Debugtasten **1/2/3** (Feuer/
+  Gift/Frost auf den nächsten Gegner), und die nur bei `?debug=1`.
+- **Ticks werden GEZÄHLT, nicht heruntergezählt.** Der erste Entwurf hatte
+  zwei unabhängige Countdowns (Takt und Restdauer); bei 1/60-Schritten
+  driften die gegeneinander — gemessen fiel der erste Tick einen Frame zu
+  spät, und bei 144 FPS gingen Ticks ganz verloren (20 statt 24 Schaden,
+  per Gegenprobe bestätigt). Jetzt läuft ein `tickElapsed`-Zähler gegen
+  `floor(tickElapsed / tickS)`: bei 3 s Dauer und 0,5 s Takt sind es
+  **immer exakt 6 Ticks**, unabhängig von Bildrate und Zeitlupe. Dasselbe
+  Muster nutzt der Minen-Warnpuls (Phase 7b) aus genau diesem Grund.
+- **Erneutes Auftragen erneuert nur die Dauer, nicht die Takt-Buchhaltung.**
+  Sonst könnte eine schnell feuernde Quelle den Tick endlos hinausschieben
+  und der Effekt wäre komplett schadlos — eigener Test dafür.
+- **Frost-Erstarrung löst nur beim ÜBERGANG auf den Deckel aus** (von <3 auf
+  3), nicht bei jedem weiteren Auftragen. Andernfalls wäre ein Gegner mit
+  einer Frostquelle dauerhaft handlungsunfähig (Stunlock). Der Plan sagt dazu
+  nichts; die Entscheidung ist im Datenkommentar und im Test festgehalten.
+  Frost nutzt den vorhandenen `stunTimer` (Krallenfalle) statt eines zweiten
+  Bewegungsstopps, und die Verlangsamung reiht sich als weiterer Multiplikator
+  in `moveTank()` ein — dadurch gilt sie automatisch für Spieler und Gegner.
+- **Schaden über Zeit umgeht auch die SCHILDE, nicht nur Panzerung und
+  Prisma.** Der Plan nennt nur Panzerung/Prisma — die ergeben sich von
+  selbst, weil `armorBlocks()` ausschließlich in der Geschoss-Trefferschleife
+  geprüft wird. Die Schilde liegen dagegen in `applyDamage()` und würden
+  sonst greifen: ein 4-Punkte-Brandtick verbrauchte eine ganze Schildladung,
+  sechs Ticks also drei Ladungen in anderthalb Sekunden. Umgesetzt über
+  `meta.overTime`. **Die Boss-Unverwundbarkeit gilt dagegen weiter** — sonst
+  wäre das Generator-Rätsel des Reaktors mit einem Brandpfeil umgehbar.
+- **Anzeige**: kleine Farbkacheln unter der Lebensleiste, Breite = Stufenzahl.
+  Bewusst Farbflächen statt Emoji — bei 4 px Kantenlänge ist ein Emoji auf
+  dem Handy Matsch. Dafür rücken die Elite-Affix-Punkte von `r+12` auf
+  `r+26`; die drei Informationsschichten stapeln sich jetzt von oben nach
+  unten: **Affixe, Lebensleiste, Statuseffekte.**
+
+**Neue Dauertests** (`regression.mjs` Abschnitt 13, Gegenprobe für jeden
+bestanden): exakte Tickzahl bei 30/60/144 FPS, Stapelung und Deckel mit
+Dauererneuerung, dauerhaft nachgelegter Effekt macht trotzdem Schaden, Frost
+verlangsamt ohne Schaden und erstarrt nur beim Übergang, Ticks umgehen
+Panzerung und Schilde aber nicht die Boss-Unverwundbarkeit, ein Effekt kann
+töten (durch `killTank()`), Anzeige-Deckel und Dominanz-Sortierung, frischer
+Raum ohne Alt-Status.
+**Zwei Tests waren zuerst wirkungslos** und wurden nachgeschärft: (1) die
+Schadensmessung fing gegnerisches Eigenfeuer mit ein (eine Bildratenprobe sah
+74 statt 24 Schaden, weil ein zweiter Gegner dazwischenfunkte) — die Tests
+laufen jetzt in einem isolierten Raum mit nur zwei Panzern; (2) „höchstens 3
+Symbole" ist bei genau drei existierenden Effekten trivial wahr, ein
+ausgebauter Deckel rutschte glatt durch — jetzt wird mit einem temporären
+Deckel von 1 der Mechanismus statt der Datenlage geprüft.
 
 ---
 

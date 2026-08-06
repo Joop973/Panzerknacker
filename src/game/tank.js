@@ -8,6 +8,7 @@
 import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
 import { createMine } from './mine.js';
+import { statusSpeedMult } from './status.js';
 import { CELL } from '../config.js';
 
 let nextTankId = 1;
@@ -125,10 +126,14 @@ export function moveTank(tank, axis, state, dt) {
     dx /= len;
     dy /= len;
   }
-  // Effektives Tempo: Basis * Berserker * Nachbrenner * Blutrausch.
+  // Effektives Tempo: Basis * Berserker * Nachbrenner * Blutrausch * Frost.
+  // Frost (Phase 5) reiht sich als weiterer Multiplikator ein, statt cfg.speed
+  // anzufassen -- so gilt er automatisch fuer Spieler UND Gegner und ist beim
+  // Ablaufen des Effekts von selbst wieder weg.
   const boost = tank.boostTimer > 0 ? tank.cfg.afterburnerMult || 1 : 1;
   const blood = tank.bloodTimer > 0 ? tank.cfg.bloodlustSpeed || 1 : 1;
-  const spd = tank.cfg.speed * (tank.berserkerSpeed || 1) * boost * blood;
+  const spd =
+    tank.cfg.speed * (tank.berserkerSpeed || 1) * boost * blood * statusSpeedMult(state, tank);
   const mod = state.modifier;
   // Oelpfuetze (Phase 15): dieselbe Grip-Physik wie das raumweite Glatteis
   // (Phase 10), nur ausgeloest durch die aktuelle Kachel statt durch einen

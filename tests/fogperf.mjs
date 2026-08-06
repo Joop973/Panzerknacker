@@ -87,12 +87,12 @@ try {
       const { createBullet } = await import('/src/game/bullet.js');
 
       const j = async (n) => (await fetch('/data/' + n + '.json')).json();
-      const [tanks, tiles, diff, ups, bal, ev, inp, opt, ar, tr, sec, mod, lim, snd] = await Promise.all(
+      const [tanks, tiles, diff, ups, bal, ev, inp, opt, ar, tr, sec, mod, lim, snd, stt] = await Promise.all(
         ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas',
-          'transformations', 'secondaries', 'modifiers', 'limits', 'sounds'].map(j),
+          'transformations', 'secondaries', 'modifiers', 'limits', 'sounds', 'status'].map(j),
       );
       Object.assign(tanks, { balance: bal, events: ev, arenas: ar, transformations: tr, secondaries: sec,
-        modifiers: mod, limits: lim, sounds: snd, input: inp });
+        modifiers: mod, limits: lim, sounds: snd, input: inp, status: stt });
 
       const run = createRun(tanks, tiles, diff, ups, 42);
       const st = run.state;

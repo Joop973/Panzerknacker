@@ -1,0 +1,37 @@
+{
+  "_comment": "UMBAUPLAN-LP Phase 5: gemeinsames Regelwerk fuer Statuseffekte ueber Zeit, gebaut BEVOR es die Elemente gibt. In dieser Phase haengt bewusst keine Quelle daran (kein Geschoss, keine Mine, keine Karte setzt einen Status) -- nur das System selbst und ein Debug-Weg zum Auftragen von Hand. Phase 6 haengt dann die Schadenstypen an. Blitz, Sprengstoff und Physisch brauchen keinen Status, sie wirken sofort.",
+  "_comment_tickS": "EIN Takt fuer alle Effekte. Bewusst ein gemeinsamer Wert und kein Takt je Effekt: sonst waeren zwei gleichzeitige Effekte unlesbar (der Spieler soll den Rhythmus als EINEN Puls wahrnehmen). Der erste Tick faellt auf 0,5 s, nicht auf 0 -- ein Effekt mit 3 s Dauer macht damit genau 6 Ticks.",
+  "tickS": 0.5,
+  "_comment_maxIcons": "Anzeige: hoechstens drei Symbole gleichzeitig unter der Lebensleiste. Bei mehr wird nur der dominante Effekt gezeigt (der mit den meisten Stufen, bei Gleichstand der zuerst in dieser Datei stehende).",
+  "maxIcons": 3,
+  "effects": {
+    "fire": {
+      "name": "Feuer",
+      "damagePerTick": 4,
+      "durationS": 3,
+      "maxStacks": 3,
+      "color": "#ff8a3c",
+      "symbol": "🔥"
+    },
+    "poison": {
+      "name": "Gift",
+      "damagePerTick": 2,
+      "durationS": 6,
+      "maxStacks": 5,
+      "color": "#8ad14a",
+      "symbol": "☠"
+    },
+    "frost": {
+      "_comment": "Frost macht keinen Schaden, sondern verlangsamt. Die Verlangsamung ist bewusst NICHT je Stufe kumulativ (drei Stufen waeren sonst -120 % und damit Rueckwaertsfahren), sondern ein fester Wert; die Stufen fuehren stattdessen zur Erstarrung. freezeAtStacks loest EINMALIG beim Erreichen der Stufe aus (Uebergang von <3 auf 3), nicht bei jedem weiteren Auftragen -- sonst waere ein Gegner mit einer Frostquelle dauerhaft handlungsunfaehig.",
+      "name": "Frost",
+      "damagePerTick": 0,
+      "durationS": 2,
+      "maxStacks": 3,
+      "speedMult": 0.6,
+      "freezeAtStacks": 3,
+      "freezeS": 1,
+      "color": "#7fd8ff",
+      "symbol": "❄"
+    }
+  }
+}

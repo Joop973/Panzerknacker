@@ -21,6 +21,7 @@ import {
   drawThreatRings,
 } from './effects.js';
 import { traceTrajectory } from '../game/bullet.js';
+import { visibleStatus } from '../game/status.js';
 
 initSprites(); // Grafiken sofort vorladen (async, Fallback bleibt aktiv)
 
@@ -650,8 +651,12 @@ export function createRenderer(ctx) {
       t.affixes.forEach((id, i) => {
         const spread = 0.5;
         const a = -Math.PI / 2 + (i - (n - 1) / 2) * spread;
-        const dotX = x + Math.cos(a) * (r + 12);
-        const dotY = y + Math.sin(a) * (r + 12);
+        // Phase 5: von r+12 auf r+26 gehoben. Darunter liegen jetzt die
+        // Lebensleiste (r+18) und die Statussymbole (r+11) -- die drei
+        // Informationsschichten stapeln sich von oben nach unten:
+        // Affixe, Lebensleiste, Statuseffekte.
+        const dotX = x + Math.cos(a) * (r + 26);
+        const dotY = y + Math.sin(a) * (r + 26);
         ctx.fillStyle = AFFIX_COLORS[id] || '#e8e4d8';
         ctx.beginPath();
         ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
@@ -682,6 +687,29 @@ export function createRenderer(ctx) {
       ctx.fillRect(bx - 1, by - 1, w + 2, 5);
       ctx.fillStyle = TANK_COLORS[t.type] || '#ffffff';
       ctx.fillRect(bx, by, Math.max(1, Math.round(w * frac)), 3);
+    }
+
+    // Statuseffekte (UMBAUPLAN-LP Phase 5): kleine Farbkacheln UNTER der
+    // Lebensleiste, hoechstens drei (visibleStatus() kuerzt und sortiert
+    // nach Dominanz). Bewusst Farbflaechen statt Emoji-Symbole: die
+    // Kachel ist bei 4 px Kantenlaenge auf einem Handydisplay noch
+    // erkennbar, ein Emoji waere dort Matsch. Die Stufenzahl steckt in der
+    // Breite -- eine dreifach brennende Kachel ist dreimal so breit.
+    const stat = visibleStatus(state, t);
+    if (stat.length) {
+      const h = 4;
+      const gap = 2;
+      const breiten = stat.map((s) => 3 * s.stacks);
+      const gesamt = breiten.reduce((a, b) => a + b, 0) + gap * (stat.length - 1);
+      let sx = Math.round(x - gesamt / 2);
+      const sy = Math.round(y - r - 11);
+      for (let i = 0; i < stat.length; i++) {
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(sx - 1, sy - 1, breiten[i] + 2, h + 2);
+        ctx.fillStyle = stat[i].def.color || '#ffffff';
+        ctx.fillRect(sx, sy, breiten[i], h);
+        sx += breiten[i] + gap;
+      }
     }
 
     ctx.globalAlpha = 1;
