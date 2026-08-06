@@ -2340,6 +2340,176 @@ function check(ok, msg) {
   }
 }
 
+// ---- 14. UMBAUPLAN-LP Phase 6: die sechs Schadenstypen ------------------
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { explodeAt } = await import('../src/game/mine.js');
+  const { stepState } = await import('../src/game/state.js');
+  const { statusOf } = await import('../src/game/damagetypes.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+  const DT = tanksData.status.damageTypes;
+
+  // Testraum mit n Zielen in einer Reihe, alle unverwundbar hoch, ohne
+  // Panzerung/Schild -- so misst jede Pruefung nur den Schadenstyp.
+  const raum = (n, abstand = 60) => {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const ziele = [];
+    for (let i = 0; i < n; i++) {
+      const z = {
+        ...proto,
+        x: 200 + i * abstand, y: 250, prevX: 200 + i * abstand, prevY: 250,
+        alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+        cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+      };
+      st.tanks.push(z);
+      ziele.push(z);
+    }
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    return { st, ziele };
+  };
+  const schuss = (st, ziel, typ, opt = {}) => {
+    const b = createBullet(ziel.x, ziel.y, 0, {
+      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet',
+      damage: st.player.cfg.damage, damageType: typ,
+    });
+    b.age = 5;
+    b.wallBounces = opt.bounces ?? 0;
+    st.bullets.length = 0;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+  };
+
+  // (a) Struktur: es gibt genau die sechs Typen des Plans, und jeder
+  // `status`-Verweis zeigt auf einen existierenden Effekt. Faengt einen
+  // Tippfehler, der den Statuseffekt sonst lautlos verschluckt.
+  {
+    for (const id of ['physical', 'explosive', 'fire', 'frost', 'poison', 'lightning']) {
+      check(!!DT[id], `Phase 6: Schadenstyp "${id}" fehlt in status.json`);
+    }
+    for (const [id, def] of Object.entries(DT)) {
+      if (!def.status) continue;
+      check(
+        !!tanksData.status.effects[def.status],
+        `Phase 6: Schadenstyp "${id}" verweist auf unbekannten Statuseffekt "${def.status}"`,
+      );
+    }
+  }
+
+  // (b) Ein Treffer traegt den Statuseffekt seines Typs auf -- und die
+  // Sofort-Typen (physisch/Sprengstoff/Blitz) hinterlassen nichts.
+  {
+    for (const [typ, erwartet] of Object.entries(DT).map(([k, v]) => [k, v.status || null])) {
+      const { st, ziele } = raum(1);
+      schuss(st, ziele[0], typ);
+      const aktiv = Object.keys(ziele[0].status).filter((k) => ziele[0].status[k].stacks > 0);
+      if (erwartet) {
+        check(aktiv.includes(erwartet), `Phase 6: ${typ} traegt "${erwartet}" nicht auf (aktiv: ${aktiv})`);
+      } else {
+        check(aktiv.length === 0, `Phase 6: ${typ} hinterlaesst einen Status (${aktiv}), soll aber sofort wirken`);
+      }
+      check(statusOf(st, typ) === erwartet, `Phase 6: statusOf("${typ}") stimmt nicht`);
+    }
+  }
+
+  // (c) Blitzkette: maxTargets Ziele insgesamt, jeder Sprung mit falloff.
+  {
+    const L = DT.lightning;
+    const { st, ziele } = raum(L.maxTargets + 1, Math.round(L.jumpRangePx * 0.5));
+    const vor = ziele.map((z) => z.hp);
+    schuss(st, ziele[0], 'lightning');
+    const schaden = ziele.map((z, i) => vor[i] - z.hp);
+    const grund = st.player.cfg.damage;
+    check(schaden[0] === grund, `Phase 6: Blitz-Aufschlag ${schaden[0]} statt ${grund}`);
+    for (let i = 1; i < L.maxTargets; i++) {
+      const erwartet = Math.max(1, Math.round(schaden[i - 1] * L.falloff));
+      check(schaden[i] === erwartet, `Phase 6: Blitzsprung ${i} macht ${schaden[i]} statt ${erwartet}`);
+    }
+    check(
+      schaden[L.maxTargets] === 0,
+      `Phase 6: Blitz trifft ${L.maxTargets + 1} Ziele statt ${L.maxTargets} (Deckel greift nicht)`,
+    );
+  }
+
+  // (d) Ein einzelner Gegner: kein Sprung, voller Schaden, kein Bogen.
+  {
+    const { st, ziele } = raum(1);
+    const vor = ziele[0].hp;
+    schuss(st, ziele[0], 'lightning');
+    check(vor - ziele[0].hp === st.player.cfg.damage, 'Phase 6: Blitz auf einzelnen Gegner nicht voller Schaden');
+    check(st.lightningArcs.length === 0, 'Phase 6: Blitz zeichnet einen Bogen ohne zweites Ziel');
+  }
+
+  // (e) Die Kette springt vom ZULETZT getroffenen Panzer weiter, nicht vom
+  // Einschlagpunkt. Aufbau: Ziel 3 liegt ausserhalb der Sprungreichweite um
+  // Ziel 1, aber innerhalb um Ziel 2 -- eine Kette "um den Einschlag herum"
+  // wuerde es nie erreichen.
+  {
+    const L = DT.lightning;
+    const { st, ziele } = raum(3, Math.round(L.jumpRangePx * 0.7));
+    const abstand13 = Math.abs(ziele[2].x - ziele[0].x);
+    check(abstand13 > L.jumpRangePx, `Phase 6: Testaufbau untauglich -- Ziel 3 liegt nur ${abstand13} px von Ziel 1`);
+    const vor = ziele.map((z) => z.hp);
+    schuss(st, ziele[0], 'lightning');
+    check(
+      vor[2] - ziele[2].hp > 0,
+      'Phase 6: die Blitzkette springt vom Einschlagpunkt statt vom zuletzt getroffenen Panzer',
+    );
+  }
+
+  // (f) Der Abprall-Bonus (Phase 4) verdoppelt den AUFSCHLAG, nicht die
+  // Statusstufen -- "gebandetes Feuergeschoss: doppelter Aufschlagschaden,
+  // Brand unveraendert".
+  {
+    const a = raum(1);
+    schuss(a.st, a.ziele[0], 'fire');
+    const direktAufschlag = 9999 - a.ziele[0].hp;
+    const direktStufen = a.ziele[0].status.fire.stacks;
+    const b = raum(1);
+    schuss(b.st, b.ziele[0], 'fire', { bounces: 1 });
+    const bankAufschlag = 9999 - b.ziele[0].hp;
+    const bankStufen = b.ziele[0].status.fire.stacks;
+    check(
+      bankAufschlag === direktAufschlag * tanksData.balance.bullet.wallBounceDamageMult,
+      `Phase 6: gebandetes Feuergeschoss macht ${bankAufschlag} statt ${direktAufschlag * tanksData.balance.bullet.wallBounceDamageMult} Aufschlag`,
+    );
+    check(bankStufen === direktStufen, `Phase 6: der Abprall verdoppelt die Brandstufen (${direktStufen} -> ${bankStufen})`);
+  }
+
+  // (g) Standard ist physisch: ein Geschoss ohne Angabe traegt nichts auf.
+  {
+    const { st, ziele } = raum(1);
+    const b = createBullet(ziele[0].x, ziele[0].y, 0, {
+      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10,
+    });
+    check(b.damageType === 'physical', `Phase 6: Standard-Schadenstyp ist "${b.damageType}" statt "physical"`);
+    b.age = 5;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+    check(
+      Object.keys(ziele[0].status).every((k) => ziele[0].status[k].stacks === 0),
+      'Phase 6: ein physisches Geschoss traegt einen Status auf',
+    );
+  }
+
+  // (h) Explosionen tragen einen Typ und koennen einen eigenen bekommen.
+  {
+    const { st, ziele } = raum(1);
+    explodeAt(st, ziele[0].x, ziele[0].y, 60, null, {}, 20, 'fire');
+    check(ziele[0].status.fire?.stacks > 0, 'Phase 6: eine Feuer-Explosion entzuendet nicht');
+    const { st: st2, ziele: z2 } = raum(1);
+    explodeAt(st2, z2[0].x, z2[0].y, 60, null, {}, 20); // ohne Angabe -> explosive
+    check(
+      Object.keys(z2[0].status).every((k) => z2[0].status[k].stacks === 0),
+      'Phase 6: eine normale Explosion hinterlaesst einen Status',
+    );
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;

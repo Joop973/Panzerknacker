@@ -10,8 +10,8 @@ Fertig-Bedingung. Alle Stellwerte gehören in JSON, nicht in den Code.
 Umfang: 28 Sitzungen. Phasen 1 bis 9 sind das Fundament — solange die nicht
 stehen, ist jede Karte Spekulation.
 
-**Fortschritt:** Phase 1–5 ✅ gebaut. **Nächste Sitzung: Phase 6 (die sechs
-Schadenstypen an Quellen hängen).**
+**Fortschritt:** Phase 1–6 ✅ gebaut. **Nächste Sitzung: Phase 7
+(Krit-Umbau).**
 
 Damit steht das Grundgerüst des LP-Modells: alle Panzer haben Lebenspunkte,
 der Spieler hält vier Gegnertreffer aus und startet jeden Raum mit vollen LP.
@@ -502,7 +502,7 @@ Deckel von 1 der Mechanismus statt der Datenlage geprüft.
 
 ---
 
-## Phase 6 — Die sechs Schadenstypen an Quellen hängen
+## Phase 6 — Die sechs Schadenstypen an Quellen hängen ✅ gebaut
 
 **Dateien:** `src/game/bullet.js`, `src/game/mine.js`, `src/game/cfg.js`,
 `data/status.json`
@@ -520,6 +520,53 @@ nächste Ziel innerhalb von 160 px, das noch nicht getroffen wurde.
 3. Blitzgeschoss auf einen einzelnen Gegner — kein Sprung, voller Schaden.
 4. Frostgeschoss — Gegner wird langsamer, sichtbar an der Fahrspur.
 5. Gebandetes Feuergeschoss — doppelter Aufschlagschaden, Brand unverändert.
+
+### Umsetzung (gebaut)
+
+Alle fünf Testschritte nachgestellt: Feuergeschoss entzündet (4 Schaden je
+Takt); Blitz in eine Dreiergruppe trifft alle drei mit **10 / 7 / 5**
+(Faktor 0,7); Blitz auf einen einzelnen Gegner springt nicht und macht vollen
+Schaden; Frostgeschoss senkt das Tempo auf 0,6; ein gebandetes Feuergeschoss
+macht doppelten Aufschlag (20 statt 10) bei **unveränderter** Brandstufe.
+
+- **Neues Modul `src/game/damagetypes.js`** (Muster wie `armor.js`/`status.js`)
+  statt weiterer Zeilen in `state.js`: es besitzt die Typtabelle, das
+  Auftragen des Statuseffekts und die Blitzkette. `state.js` und `mine.js`
+  rufen nur `applyTypeEffects()` nach dem eigentlichen Trefferschaden.
+- **Abweichung vom Plan bei den ids**: der Plan schreibt `damageType: "feuer"`,
+  hier stehen englische ids (`fire`). Grund: die Statuseffekt-ids aus Phase 5
+  sind bereits englisch — wie alle ids im Projekt (`t_brown`, `emp_mine`,
+  `hook`) — und weil damageType-id und Statuseffekt-id damit **identisch**
+  sind, braucht es gar keine Zuordnungstabelle: ein Treffer schlägt seinen
+  Statuseffekt direkt unter demselben Schlüssel nach. Ein Strukturtest wacht
+  darüber, dass kein `status`-Verweis ins Leere zeigt.
+- **Die Blitzkette springt vom ZULETZT getroffenen Panzer weiter**, nicht vom
+  Einschlagpunkt — so läuft der Blitz eine Kette entlang, statt einen Kreis um
+  den Einschlag abzuräumen. Eigener Test mit einem Aufbau, in dem Ziel 3
+  außerhalb der Sprungreichweite um Ziel 1, aber innerhalb um Ziel 2 liegt;
+  eine „Kreis"-Umsetzung fliegt damit auf.
+- **Kettenglieder umgehen die Panzerung** — dasselbe Prinzip wie Explosionen
+  (`armor.js`: „Explosionen ignorieren die Panzerung"). Ein Übersprung hat
+  keine Geschossrichtung, gegen die ein Frontsektor sinnvoll prüfbar wäre.
+- **Statusstufen hängen am TREFFER, nicht am Schadensbetrag.** Deshalb
+  verdoppelt der Abprall-Bonus aus Phase 4 zwar den Aufschlag, aber nicht den
+  Brand — genau wie Testschritt 5 verlangt. Eine Umsetzung „Stufen aus dem
+  Schaden ableiten" fliegt in der Gegenprobe auf.
+- **Sichtbares Gegenstück zur Kette**: ein kurzer Blitzbogen zwischen den
+  getroffenen Panzern (`renderer.js: drawLightning`). Ohne ihn wäre nicht
+  nachvollziehbar, warum ein nie beschossener Gegner Schaden nimmt —
+  dieselbe Auflage wie beim Reflexions-Blitz aus Phase 7b. Zusätzlich färbt
+  der Schadenstyp das Geschoss ein.
+- **Wie in Phase 5 hängt noch keine Karte daran**: Klassen kommen in Phase 9,
+  Karten in den Phasen 11–16. Ausprobieren geht über die Debugtaste **4**
+  (schaltet den Schadenstyp des Spielers durch), nur bei `?debug=1`.
+
+**Neue Dauertests** (`regression.mjs` Abschnitt 14, Gegenprobe für jeden
+bestanden): alle sechs Typen vorhanden und `status`-Verweise gültig, jeder
+Typ trägt seinen Effekt auf (bzw. die Sofort-Typen keinen), Blitzkette mit
+Zieldeckel und Abfall, Blitz einzeln ohne Sprung, Kette springt vom letzten
+Ziel, Abprall verdoppelt Aufschlag aber nicht Stufen, Standard ist physisch,
+Explosionen tragen ihren Typ.
 
 ---
 

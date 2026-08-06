@@ -22,6 +22,7 @@ import {
 } from './effects.js';
 import { traceTrajectory } from '../game/bullet.js';
 import { visibleStatus } from '../game/status.js';
+import { typeColor } from '../game/damagetypes.js';
 
 initSprites(); // Grafiken sofort vorladen (async, Fallback bleibt aktiv)
 
@@ -762,11 +763,18 @@ export function createRenderer(ctx) {
 
       // Reflektierte Kugeln wechseln die Farbe (E3), Wolframkern-Kugeln
       // sind kalt-blau (durchschlagen breakable).
+      // Schadenstyp (Phase 6) faerbt das Geschoss ein -- sonst waere nicht
+      // erkennbar, womit gerade geschossen wird. Reflexion und Wolframkern
+      // behalten Vorrang: das sind Zustaende der EINZELNEN Kugel, der
+      // Schadenstyp gilt fuer alle Schuesse gleichermassen.
+      const typFarbe = typeColor(renderState, b.damageType);
       const c = b.reflected
         ? { fill: '#c8f4ff', edge: '#3aa8c8' }
         : b.tungsten
           ? { fill: '#d9e2ff', edge: '#6a7adf' }
-          : BULLET_COLORS[b.kind] || BULLET_COLORS.bullet;
+          : typFarbe && b.damageType !== 'physical'
+            ? { fill: typFarbe, edge: typFarbe }
+            : BULLET_COLORS[b.kind] || BULLET_COLORS.bullet;
 
       // Raketen bekommen einen kurzen Schweif entgegen der Flugrichtung.
       if (b.kind !== 'bullet') {
@@ -887,6 +895,29 @@ export function createRenderer(ctx) {
   // Rauchgranate (Phase 6, Sekundärslot): halbtransparente Wolken, die mit
   // ihrem Alter ausblenden. Blockiert nur die KI-Sicht (state.blocksSight),
   // rein optisch hier ueber allem gezeichnet.
+  // Blitzkette (Phase 6): kurzer Bogen zwischen zwei getroffenen Panzern.
+  // Sichtbares Gegenstueck zum Kettenschaden -- ohne ihn waere nicht
+  // nachvollziehbar, warum ein nie beschossener Gegner Schaden nimmt
+  // (dieselbe Auflage wie beim Reflexions-Blitz aus Phase 7b).
+  function drawLightning(ctx, state) {
+    const farbe = state.data.status?.damageTypes?.lightning?.color || '#b28dff';
+    for (const a of state.lightningArcs || []) {
+      const t = 1 - a.age / 0.18;
+      ctx.strokeStyle = farbe;
+      ctx.globalAlpha = Math.max(0, t);
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(a.x1, a.y1);
+      // Ein Knick in der Mitte -- eine gerade Linie sieht nach Laser aus.
+      const mx = (a.x1 + a.x2) / 2 + (a.y2 - a.y1) * 0.12;
+      const my = (a.y1 + a.y2) / 2 - (a.x2 - a.x1) * 0.12;
+      ctx.lineTo(mx, my);
+      ctx.lineTo(a.x2, a.y2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
   function drawSmoke(ctx, state) {
     for (const c of state.smokeClouds) {
       const frac = 1 - c.age / c.life;
@@ -1080,6 +1111,7 @@ export function createRenderer(ctx) {
       drawParticles(ctx, state);
       drawExplosions(ctx, state);
       drawSmoke(ctx, state);
+      drawLightning(ctx, state);
 
       drawTexts(ctx, state);
       drawFog(ctx, state, alpha);

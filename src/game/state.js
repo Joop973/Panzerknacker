@@ -15,6 +15,7 @@ import { updateTraps } from './trap.js';
 import { createGhost, updateGhosts } from './ghost.js';
 import { updateEnemy, updateCoverPerception } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
+import { applyTypeEffects } from './damagetypes.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
@@ -225,6 +226,8 @@ export function createState(data, tiles, opts) {
     roomContext: roomContext || null, // { elite, boss } -- raumabhaengige Karten
     // LP-Skalierung dieses Raums (Phase 2) -- gemerkt, damit die zweite
     // Welle (updateWave) dieselben Werte bekommt wie die erste.
+    // Blitzketten-Bogen (Phase 6): reine Anzeige, altert in stepState().
+    lightningArcs: [],
     hpScale: hpScale ?? 1,
     hpSkipBosses: !!hpSkipBosses,
     rng: mulberry32((aiSeed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
@@ -639,6 +642,7 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
         kind: 'bullet',
         friendly: true, // Splitter/Kranz treffen den Leger nie
         damage: owner?.cfg?.damage,
+        damageType: owner?.cfg?.damageType,
       }),
     );
   }
@@ -784,6 +788,9 @@ export function stepState(state, cmd, dt) {
 
   // Rauchwolken altern unabhaengig von Panzern (einmal pro Schritt).
   for (const c of state.smokeClouds) c.age += dt;
+  // Blitzbogen (Phase 6): kurzlebige Anzeige der Kettensprünge.
+  for (const a of state.lightningArcs) a.age += dt;
+  state.lightningArcs = state.lightningArcs.filter((a) => a.age < 0.18);
   state.smokeClouds = state.smokeClouds.filter((c) => c.age < c.life);
 
   // Bewegliche Wand (Phase 15): eigener Bewegungstakt, unabhaengig davon,
@@ -973,13 +980,18 @@ export function stepState(state, cmd, dt) {
         // Schadensquellen verdoppeln.
         const abprallMult = bounced ? state.data.balance?.bullet?.wallBounceDamageMult ?? 1 : 1;
         const schaden = Math.round(basisSchaden * abprallMult);
-        state.applyDamage(t, schaden, cause, {
+        const trefferMeta = {
           code: own ? 'own_bullet' : 'enemy_bullet',
           enemyType: own ? null : b.owner?.type || null,
           bulletOwner: own ? 'player' : 'enemy',
           bulletRicochets: b.wallBounces || 0,
           bulletDistance: Math.round(b.distance || 0),
-        });
+        };
+        state.applyDamage(t, schaden, cause, trefferMeta);
+        // Schadenstyp (Phase 6): Statuseffekt auftragen bzw. Blitzkette
+        // weiterspringen lassen. NACH dem eigentlichen Treffer, damit die
+        // Kette vom bereits geschaedigten Ziel ausgeht.
+        applyTypeEffects(state, t, b.damageType, schaden, trefferMeta);
         // Geisterpanzer (Phase 7): eigener Kill-Zaehler statt Spieler-
         // Trickshot/Ricochet -- verlaengert die eigene Restzeit
         // (Kettenreaktionen sind das Ziel).

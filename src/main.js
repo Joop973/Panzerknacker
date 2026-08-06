@@ -1000,6 +1000,22 @@ async function init() {
     // 1 = Feuer, 2 = Gift, 3 = Frost, jeweils eine Stufe auf den dem
     // Spieler naechsten lebenden Gegner (ohne Gegner: auf den Spieler).
     if (telemetry.isDebugEnabled() && run.phase === 'playing' && !pause.isPaused()) {
+      // Taste 4 schaltet den Schadenstyp des Spielers durch (Phase 6) --
+      // in dieser Phase setzt ihn sonst nichts, Klassen und Karten kommen
+      // erst spaeter.
+      if (e.code === 'Digit4') {
+        const typen = Object.keys(run.state.data.status?.damageTypes || {});
+        if (typen.length) {
+          const p = run.state.player;
+          const next = typen[(typen.indexOf(p.cfg.damageType || 'physical') + 1) % typen.length];
+          p.cfg.damageType = next;
+          run.state.texts.push({
+            x: p.x, y: p.y - 30,
+            text: `Schadenstyp: ${run.state.data.status.damageTypes[next].name}`,
+            age: 0, life: 1.2, color: run.state.data.status.damageTypes[next].color || '#fff',
+          });
+        }
+      }
       const STATUS_KEYS = { Digit1: 'fire', Digit2: 'poison', Digit3: 'frost' };
       const id = STATUS_KEYS[e.code];
       if (id) {
