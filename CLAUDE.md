@@ -112,12 +112,14 @@ Bedarf neu messen statt den alten Wert zu glauben. (2) Phase 7 spricht von
 einem „Umbau" eines bestehenden 5-%-Krit-Systems — es gibt aktuell **gar
 kein** Krit-System im Code (keine Treffer für `crit`/`critChance` in
 `data/*.json` oder `src/game/*.js`); Phase 7 baut es komplett neu, nicht um.
-**Phase 1 (Schadensmodell), Phase 2 (Gegner-LP) und Phase 3 (Spieler-LP)
-sind gebaut** (s. eigene Abschnitte unten). Damit steht das Grundgerüst:
-alle Panzer haben Lebenspunkte, der Spieler hält vier Gegnertreffer aus und
-startet jeden Raum mit vollen LP. **Nächste Sitzung: Phase 4
-(Abprall-Bonus — doppelter Schaden nach Wandkontakt).** `PLAN.md`/die
-Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
+**Phase 1 (Schadensmodell), Phase 2 (Gegner-LP), Phase 3 (Spieler-LP) und
+Phase 4 (Abprall-Bonus) sind gebaut** (s. eigene Abschnitte unten). Damit
+steht das Grundgerüst: alle Panzer haben Lebenspunkte, der Spieler hält vier
+Gegnertreffer aus, startet jeden Raum mit vollen LP, und ein Wandabpraller
+verdoppelt den Schaden — beidseitig. **Nächste Sitzung: Phase 5
+(Statuseffekt-System: Feuer/Gift/Frost, gemeinsames Regelwerk vor den
+Elementen).** `PLAN.md`/die Telemetrie-Auswertung bleibt parallel offen
+(s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -1827,6 +1829,44 @@ mit vollen LP. Damit ist die Zwischenlage aus Phase 2 aufgelöst.
   (Gegenprobe „Minenschaden auf 25" blieb grün). Jetzt prüft sie zusätzlich
   die beiden zahlenunabhängigen Design-Aussagen des Plans.
 
+### UMBAUPLAN-LP Phase 4 (Abprall-Bonus) — gemergt
+Ein Geschoss mit Wandkontakt (`wallBounces > 0`) richtet **doppelten
+Schaden** an (`balance.json: bullet.wallBounceDamageMult`). Kein Upgrade,
+keine Klassenregel — der Abprall wird belohnt statt erzwungen.
+- **Eine Zeile in der Trefferschleife** (`state.js`): `bounced` wurde dort
+  ohnehin schon für die Trickshot-Belohnung berechnet.
+- **Gilt ausdrücklich für BEIDE Seiten**, auch gegnerische Geschosse — sonst
+  lernt der Spieler, dass gebandete Kugeln nur für ihn gefährlich sind. Ein
+  gegnerischer Bankschuss macht damit 50 statt 25 (Spieler stirbt an zweien
+  statt vieren). Ein eigener Test lässt eine einseitige Umsetzung auffliegen.
+- **Nur der AUFSCHLAG wird verdoppelt, nicht die Explosion**: ein gebandetes
+  Sprenggeschoss richtet doppelten Trefferschaden an, seine Explosion läuft
+  unverändert über `damage.explosion` — sonst würde ein einziger Wandkontakt
+  gleich zwei Schadensquellen verdoppeln.
+- **Eine Reflexion (Prisma/Panzerung, E3) zählt bewusst NICHT als
+  Wandkontakt.** Der Code zählt Reflexionen seit jeher nicht in
+  `wallBounces` (sonst ließen sich zwei Prismen gegeneinander ausspielen,
+  ohne je eine Bande zu spielen); diese Trennung gilt jetzt auch beim
+  Schaden. Konkret: eine vom Prisma zurückgeworfene eigene Kugel trifft mit
+  dem Grundwert 15, eine an der Wand gebandete mit 30.
+- **Die Plan-Alternative (`perBounce: 1.5`, Deckel 3,0) ist bewusst NICHT als
+  Datenfeld angelegt**, sondern im `_comment_`-Eintrag beschrieben — zwei
+  Faktor-Felder, von denen nur eines wirkt, wären eine Stolperfalle. Der Plan
+  verlangt, den Wert „vorzusehen", nicht ihn scharf zu schalten.
+- **Gemessen**: Spielertode praktisch unverändert (8 → 9), Räume deutlich
+  schneller geräumt (Median 125 s → 87 s). Die Symmetrie gleicht sich also
+  weitgehend aus. Der Wert **unterschätzt den Spielervorteil eher** — der Bot
+  zielt nie absichtlich über Bande, die Gegner banden dagegen systematisch.
+- **Neue Dauertests** (Abschnitt 12, Gegenprobe für jeden bestanden):
+  Verdopplung gegen Gegner, derselbe Bonus für gegnerische Geschosse,
+  Reflexion verdoppelt nicht, Explosion wird nicht mitverdoppelt, Faktor
+  stammt wirklich aus `balance.json`.
+- **Angepasst**: der Testhelfer aus Phase 3 gab jeder Kugel einen
+  Wandabpraller mit (damals nötig, damit die eigene Kugel scharf ist) — damit
+  wären ab Phase 4 alle Grundwerte verdoppelt und nicht mehr messbar gewesen.
+  Er setzt jetzt `wallBounces: 0` und für die eigene Kugel stattdessen
+  `reflected`.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1913,7 +1953,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v75`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v76`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
