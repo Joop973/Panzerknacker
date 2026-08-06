@@ -112,11 +112,11 @@ Bedarf neu messen statt den alten Wert zu glauben. (2) Phase 7 spricht von
 einem „Umbau" eines bestehenden 5-%-Krit-Systems — es gibt aktuell **gar
 kein** Krit-System im Code (keine Treffer für `crit`/`critChance` in
 `data/*.json` oder `src/game/*.js`); Phase 7 baut es komplett neu, nicht um.
-**Noch nicht gestartet** — `UMBAUPLAN-LP.md` selbst schreibt „eine Phase pro
-Sitzung" vor, Phase 1 beginnt erst mit einer expliziten Aufforderung dazu.
-Bis dahin bleibt `PLAN.md`/die Telemetrie-Auswertung parallel offen (s.
-To-do-Liste unten) — welcher der beiden Pläne zuerst weiterläuft, entscheidet
-der Nutzer.
+**Phase 1 (Schadensmodell) ist gebaut** — reiner Umbau, das Spiel verhält
+sich nachweislich identisch (s. eigenen Abschnitt unten). **Nächste Sitzung:
+Phase 2 (Gegner-Lebenspunkte, Anzeige, Skalierung)** — ab da ändert sich das
+Spielgefühl wirklich. `PLAN.md`/die Telemetrie-Auswertung bleibt parallel
+offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -1679,6 +1679,58 @@ gemeinsam, statt dass nur der Spieler-Kreis zählt.
   Einzelpixel kann rein zufällig auf eine dunkle Stelle treffen, ganz ohne
   Nebel.
 
+### UMBAUPLAN-LP Phase 1 (Schadensmodell im Code) — gemergt
+Erste Phase des LP-Umbaus. **Reiner Umbau: das Spiel verhält sich exakt wie
+vorher** — `maxHp` und `damage` stehen überall auf 1, jeder Treffer tötet
+weiterhin sofort. Die Phase trennt bewusst den Umbau von der Balance.
+- **`state.js: applyDamage(tank, amount, cause, meta)` neu**, `killTank()`
+  bleibt daneben bestehen. Der Schnitt: **alles, was einen Treffer ABWEHRT**
+  (Reaktorkern-Unverwundbarkeit, Schildladung, Gegnerschild, Spielerschild)
+  ist von `killTank()` nach `applyDamage()` gewandert; danach wird abgezogen
+  und erst bei `hp <= 0` die reine Todeslogik gerufen. Grund: die Gatter
+  verhindern *Schaden*, nicht *den Tod*. Bei `maxHp`/`damage` = 1 ist das
+  exakt dasselbe Verhalten, mit echten LP wäre die alte Platzierung falsch
+  (ein Schild, das nur tödliche Treffer abfängt, wäre eine zweite
+  Lebensleiste — genau das, was Plan-Phase 8 vermeiden will).
+- **`killTank()` bleibt der Trichter für den Tod** (Kettenreaktionen,
+  Statistik, Telemetrie, Geisterpanzer hängen daran) und ist weiterhin
+  direkt aufrufbar — Tests/Cheats räumen damit Räume ab. Neu: Doppeltod-
+  Schutz (`if (!tank.alive) return`), weil eine Kettenreaktion ihn sonst
+  zweimal im selben Frame treffen kann.
+- **Nur zwei echte Aufrufer** mussten umgestellt werden: die Geschoss-
+  Treffer-Schleife in `state.js` und `explodeAt()` in `mine.js`. Beide
+  prüfen `protect` schon vorher selbst — `applyDamage()` braucht deshalb
+  keine eigene Spawnschutz-Prüfung.
+- **Geschosse tragen ihren Schaden** (`createBullet({ damage })`, Standard 1)
+  vom Erzeuger aus `cfg.damage`. Bewusst **beim Abschuss eingefroren** statt
+  beim Treffer aus `b.owner` gelesen: sonst würde eine noch fliegende Kugel
+  rückwirkend stärker, wenn ihr Besitzer zwischendurch ein Upgrade bekommt.
+- **Explosionsschaden in `balance.json: damage.explosion`**, nicht bei einem
+  Panzertyp — eine Mine hat keinen `cfg.damage`. `explodeAt()` bekam dafür
+  einen optionalen letzten Parameter (Phase 3: Bossangriff), alle
+  Bestandsaufrufe bleiben unverändert.
+- **`createTank()` setzt `hp = cfg.maxHp`.** Weil es bei jedem Raumwechsel,
+  Respawn und Wellen-Spawn ohnehin läuft, braucht die „volle LP je Raum"-
+  Regel aus Plan-Phase 3 später **keinen eigenen Hook**.
+- **Verhaltensbeweis statt „fühlt sich gleich an"**: ein Wegwerf-Werkzeug
+  spielte 5 Seeds mit je 240 Ticks echter Simulation pro Raum durch und
+  protokollierte **506 vollständige Zustandsproben** (Panzerpositionen auf
+  3 Nachkommastellen, Kugel-/Minen-/Partikelzahlen, alle Zähler, Endstand).
+  Alter und neuer Stand sind **zeilenweise identisch**. Gegenprobe: ein
+  einziges `t_brown: maxHp 2` erzeugt sofort 15 abweichende Zeilen.
+- **Neun neue Dauertests** (`regression.mjs` Abschnitt 9). Sie prüfen den
+  **Mechanismus mit eigenen Zahlen**, nicht die aktuellen JSON-Werte — sonst
+  wären sie schon durch Phase 2 rot, ohne dass etwas kaputt ist. Darunter ein
+  Strukturwächter „jeder Typ hat `maxHp`/`damage`", der einen in Phase 2
+  vergessenen Typ fängt (ein Gegner ohne `maxHp` fiele sonst still auf 1
+  zurück und stürbe mitten im LP-Spiel weiter am ersten Treffer).
+- **Gegenprobe für alle neun bestanden — und dabei ein blinder Test
+  gefunden**: die erste Fassung von „Panzer starten mit vollen LP" prüfte
+  `hp === cfg.maxHp` im echten Raum, was bei `maxHp: 1` überall **trivial
+  wahr** ist; ein hartkodiertes `hp: 1` in `createTank()` rutschte glatt
+  durch. Jetzt wird zusätzlich mit einem synthetischen `cfg.maxHp = 42`
+  geprüft.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1765,7 +1817,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v72`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v73`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

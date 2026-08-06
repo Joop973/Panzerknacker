@@ -8,6 +8,14 @@ export function resolveCfg(data, type) {
   return {
     radius: data.physics.tankRadius,
     bulletRadius: data.physics.bulletRadius,
+    // Lebenspunkte + Schadenswert (UMBAUPLAN-LP Phase 1). Beide stehen in
+    // tanks.json und sind dort vorerst ueberall 1 -- damit toetet jeder
+    // Treffer weiterhin sofort, das Spiel verhaelt sich identisch zum
+    // Ein-Treffer-Modell. Erst Phase 2/3 setzen echte Zahlen ein. Die
+    // Fallbacks (?? 1) sind bewusst da: ein Typ ohne die Felder (z. B. aus
+    // einem alten gespeicherten Run oder einer Testfixture) bleibt spielbar.
+    maxHp: t.maxHp ?? 1,
+    damage: t.damage ?? 1,
     // Typ-eigene Feuerrate (t_green: 2 s) vor globalem Standard.
     fireCooldown: t.fireRate ?? data.physics.fireCooldownS,
     speed: data.speeds[t.speed],

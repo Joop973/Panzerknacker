@@ -90,6 +90,8 @@ export function updateGhosts(state, dt) {
           ricochets: g.cfg.ricochets,
           owner: g,
           kind: g.cfg.weapon,
+          // Der Geist kaempft weiter, wie er lebte -- auch beim Schaden.
+          damage: g.cfg.damage,
         }),
       );
       g.cooldown = g.cfg.fireCooldown;
