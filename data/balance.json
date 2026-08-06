@@ -7,9 +7,10 @@
     "maxActiveCap": 8,
     "selfImmunity": 0.35
   },
-  "_comment_damage": "UMBAUPLAN-LP: Schaden von Quellen ohne eigenen Panzer als Urheber (Explosionen). Panzer-/Geschossschaden steht dagegen beim Typ in tanks.json (cfg.damage). Phase 2 hebt den Wert von 1 auf 40 -- mit Gegner-LP von 20-50 waere eine Mine bei 1 Schaden sonst voellig wirkungslos geworden. 40 raeumt wie bisher fast alles aus (nur der Gepanzerte mit 50 ueberlebt knapp) und ist zugleich schon der Wert, den Plan-Phase 3 fuer Minenschaden GEGEN den Spieler vorsieht.",
+  "_comment_damage": "UMBAUPLAN-LP: Schaden von Quellen ohne eigenen Panzer als Urheber bzw. mit zielabhaengigem Wert. Panzer-/Geschossschaden steht sonst beim Typ in tanks.json (cfg.damage). explosion 40 gilt in BEIDE Richtungen (Phase 2 gegen Gegner, Phase 3 gegen den Spieler -- der Plan nennt fuer beides 40). ownBullet: die eigene, zurueckgekommene Kugel tut dem Spieler 15 statt der 10, die sie einem Gegner zufuegt -- sie soll wehtun, aus voller Gesundheit aber nie toeten, damit der Bankschuss eine Entscheidung bleibt und kein Todesurteil.",
   "damage": {
-    "explosion": 40
+    "explosion": 40,
+    "ownBullet": 15
   },
   "enemyBullet": {
     "maxActive": 24

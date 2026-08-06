@@ -10,15 +10,13 @@ Fertig-Bedingung. Alle Stellwerte gehören in JSON, nicht in den Code.
 Umfang: 28 Sitzungen. Phasen 1 bis 9 sind das Fundament — solange die nicht
 stehen, ist jede Karte Spekulation.
 
-**Fortschritt:** Phase 1 ✅ · Phase 2 ✅ gebaut. **Nächste Sitzung: Phase 3
-(Spieler-Lebenspunkte, Heilung, Schadenszahlen).**
+**Fortschritt:** Phase 1 ✅ · Phase 2 ✅ · Phase 3 ✅ gebaut. **Nächste
+Sitzung: Phase 4 (Abprall-Bonus).**
 
-⚠️ **Zwischen Phase 2 und 3 ist das Spiel absichtlich unausgewogen**: Gegner
-haben seit Phase 2 zwei bis fünf Mal so viel Aushaltevermögen, der Spieler
-stirbt aber weiter am ersten Treffer (seine LP kommen erst in Phase 3).
-Gemessen mit einem Bot: die Räume dauern *nicht* länger, aber es gibt
-deutlich mehr Spielertode. Das ist eine Folge der Phasenreihenfolge, kein
-Balancefehler — Phase 3 stellt das Gleichgewicht wieder her.
+Damit steht das Grundgerüst des LP-Modells: alle Panzer haben Lebenspunkte,
+der Spieler hält vier Gegnertreffer aus und startet jeden Raum mit vollen LP.
+Die Zwischenlage aus Phase 2 (Gegner zäh, Spieler stirbt am ersten Treffer)
+ist aufgelöst.
 
 ---
 
@@ -236,7 +234,7 @@ festzustellen. Genau die Lücke, aus der seinerzeit der Ziellinien-Crash kam.
 
 ---
 
-## Phase 3 — Spieler-Lebenspunkte, Heilung, Schadenszahlen
+## Phase 3 — Spieler-Lebenspunkte, Heilung, Schadenszahlen ✅ gebaut
 
 **Dateien:** `data/tanks.json`, `data/balance.json`, `src/game/run.js`,
 `src/render/renderer.js`
@@ -267,6 +265,64 @@ Telefon schaut niemand in die Ecke, während er zielt.
 3. Mit 20 LP in den nächsten Raum gehen — dort startet man bei voll.
 4. Ein Leben verlieren und respawnen — LP voll, Raum neu.
 5. In die eigene Mine fahren — 40 Schaden.
+
+### Umsetzung (gebaut)
+
+Alle fünf Testschritte nachgestellt und bestätigt: 100 → 75 → 50 → 25 → tot
+(der vierte Treffer, nicht früher); eigene Kugel 15 Schaden und aus voller
+Gesundheit überlebt; Raum 1 mit 20 LP verlassen → Raum 2 mit 100/100;
+Respawn mit 100/100; eigene Mine 40 Schaden.
+
+- **Die Heilung brauchte keine Zeile Code.** `createTank()` setzt seit
+  Phase 1 `hp = cfg.maxHp` und läuft bei jedem Raumaufbau, Respawn und
+  Wellen-Spawn ohnehin — „volle LP je Raum" ergibt sich damit von selbst.
+  Genau die Ersparnis, die in Phase 1 angelegt wurde. Ein Test sichert
+  beide Wege ab (Raumwechsel und Respawn), damit die Regel nicht später
+  unbemerkt verloren geht.
+- **Die eigene Kugel hängt am ZIEL, nicht am Geschoss.** Sie trägt
+  `damage: 10` (der Spielerschaden gegen Gegner), soll dem Spieler selbst
+  aber 15 zufügen. Deshalb steht der Wert in
+  `balance.json: damage.ownBullet` und wird in der Trefferschleife
+  angewandt, wenn Ziel und Besitzer beide der Spieler sind — nicht in
+  `b.damage`. (Eine eigene Kugel wird ohnehin erst nach einem Abpraller für
+  den Schützen scharf, `isLive()`.)
+- **Gegnerschaden 25 für alle Typen, 34 für die drei Bosse** — der Plan
+  differenziert Gegner untereinander nicht, nur Boss gegen Normal. Damit
+  tötet ein Boss in 3 statt 4 Treffern.
+- **`damage.explosion` (40) gilt in beide Richtungen**: Phase 2 hat den Wert
+  für Gegner gesetzt, Phase 3 nennt für den Spieler dieselbe Zahl — ein Feld
+  genügt, keine Verdopplung.
+- **Die Lebensleiste des Spielers ist IMMER sichtbar**, die der Gegner
+  weiterhin nur bei Schaden. Bewusste Asymmetrie: von Gegnern gibt es acht
+  gleichzeitig (Dauerbalken unlesbar, Phase 2), vom Spieler genau einen — und
+  die eigene Gesundheit ist die Zahl, nach der man *während* des Zielens
+  entscheidet. Genau das meint der Plan mit „am Panzer, nicht nur am
+  Bildschirmrand".
+
+**Lesart von „Schadenszahlen" im Phasentitel:** die Schadens*werte* aus der
+Tabelle, keine aufsteigenden Schadenszahlen über getroffenen Panzern — der
+Abschnittstext listet ausschließlich Werte und nennt keine Anzeige dieser Art.
+
+**Messung, und was sie nicht hergibt:** Ein Bot mit Sichtlinienprüfung zeigt
+gegenüber Phase 2 **weniger Spielertode (15 → 8) bei mehr erreichten
+Kampfräumen (5 → 7)** — die Zwischenlage ist also aufgelöst. Die
+*Raumdauer* lässt sich mit diesem Bot dagegen **nicht** belastbar messen: er
+bleibt stehen, sobald die Mitte-zu-Mitte-Sichtlinie frei ist, und verkantet
+sich in Geometrien, in denen die Kugel (Radius 3) an einer Ecke stirbt — er
+feuert dann endlos ins Leere. Dieselben Seeds/Räume hingen bereits im
+Ursprungscode vor dem ganzen Umbau. Die Raumdauer ist ohnehin erst in
+Phase 28 als eigener Test vorgesehen.
+
+**Neue Dauertests** (`regression.mjs` Abschnitt 11, Gegenprobe für jeden
+bestanden): vier Gegnertreffer töten (der vierte, nicht früher), eigene Kugel
+trifft schwächer als ein Gegnerschuss und ist aus voller Gesundheit nie
+tödlich, Mine trifft härter als ein Gegnerschuss und tötet trotzdem nicht aus
+vollem Stand, Boss tötet in 3 Treffern, volle LP nach Raumwechsel **und**
+nach Respawn, Spielerleiste immer sichtbar.
+**Ein Test war zuerst zu schwach:** die Minen-Prüfung verglich nur das
+Spielverhalten gegen den JSON-Wert und hätte deshalb jede Wertänderung
+mitgemacht (Gegenprobe „Minenschaden auf 25" blieb grün). Jetzt prüft sie
+zusätzlich die beiden zahlenunabhängigen Design-Aussagen des Plans.
 
 ---
 

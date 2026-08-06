@@ -1765,20 +1765,210 @@ function check(ok, msg) {
         renderer.render(st, 0, tracks, null, null);
         return ctx.calls.filter((c) => c.fn === 'fillRect' && c.args[3] === 3).length;
       };
+      // Der Spieler zeigt seine Leiste seit Phase 3 IMMER (siehe unten) --
+      // die Gegner-Leisten sind also alles darueber hinaus.
+      const SPIELER = 1;
       if (e) {
         e.cfg.maxHp = 40;
         e.hp = 40;
-        check(balken() === 0, 'Phase 2: unbeschaedigter Gegner zeigt bereits eine Lebensleiste');
+        check(balken() === SPIELER + 0, 'Phase 2: unbeschaedigter Gegner zeigt bereits eine Lebensleiste');
         e.hp = 20;
-        check(balken() === 1, 'Phase 2: angeschlagener Gegner zeigt keine Lebensleiste');
+        check(balken() === SPIELER + 1, 'Phase 2: angeschlagener Gegner zeigt keine Lebensleiste');
         // Zweiter angeschlagener Gegner -> zwei Leisten.
         const e2 = st.tanks.find((t) => t !== st.player && t !== e && t.alive);
         if (e2) {
           e2.cfg.maxHp = 40;
           e2.hp = 10;
-          check(balken() === 2, 'Phase 2: zweiter angeschlagener Gegner bekommt keine eigene Leiste');
+          check(balken() === SPIELER + 2, 'Phase 2: zweiter angeschlagener Gegner bekommt keine eigene Leiste');
         }
       }
+    } finally {
+      restore();
+    }
+  }
+}
+
+// ---- 11. UMBAUPLAN-LP Phase 3: Spieler-LP, Heilung, Schadenszahlen ------
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { explodeAt } = await import('../src/game/mine.js');
+  const { stepState } = await import('../src/game/state.js');
+  const T = tanksData.types;
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  // Frischer Raum ohne jeden Schutz -- Spawnschutz und Schilde wuerden die
+  // Schadenspruefung sonst verschlucken.
+  const blank = () => {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    st.player.protect = 0;
+    st.player.shieldReady = false;
+    st.shieldCharges = [];
+    return { run, st };
+  };
+  // Einen Treffer zustellen: Kugel des Schuetzen direkt auf dem Spieler.
+  const treffer = (st, owner, dmg) => {
+    const p = st.player;
+    p.protect = 0;
+    const b = createBullet(p.x, p.y, 0, {
+      speed: 1, radius: 3, ricochets: 1, owner, kind: 'bullet', damage: dmg ?? owner.cfg.damage,
+    });
+    b.age = 5;
+    b.wallBounces = 1; // eine eigene Kugel wird erst nach dem Abpraller scharf
+    st.bullets.length = 0;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+  };
+
+  // (a) Vier Gegnertreffer toeten den Spieler -- der vierte, nicht frueher.
+  // Wertepruefung: die Tabelle in Phase 3 IST hier die Zusage. (Plan-Phase 9
+  // gibt den Klassen 90-115 LP, dann wird daraus ein Band von 4-5 Treffern.)
+  {
+    const { st } = blank();
+    const e = st.tanks.find((t) => t !== st.player && t.alive);
+    if (e) {
+      for (let i = 1; i <= 3; i++) {
+        treffer(st, e);
+        check(st.player.alive, `Phase 3: Spieler stirbt schon am ${i}. Gegnertreffer (hp=${st.player.hp})`);
+      }
+      treffer(st, e);
+      check(!st.player.alive, `Phase 3: Spieler ueberlebt den 4. Gegnertreffer (hp=${st.player.hp})`);
+    }
+  }
+
+  // (b) Die eigene, zurueckgekommene Kugel tut weniger weh als ein
+  // Gegnerschuss und ist aus voller Gesundheit NIE toedlich -- der Kern der
+  // Phase ("der Bankschuss bleibt eine Entscheidung, wird aber kein
+  // Todesurteil mehr").
+  {
+    const { st } = blank();
+    const p = st.player;
+    const voll = p.hp;
+    treffer(st, p);
+    const eigen = voll - p.hp;
+    check(p.alive, 'Phase 3: die eigene Kugel toetet aus voller Gesundheit');
+    check(
+      eigen === tanksData.balance.damage.ownBullet,
+      `Phase 3: eigene Kugel macht ${eigen} statt ${tanksData.balance.damage.ownBullet} Schaden`,
+    );
+    check(
+      eigen < T.t_brown.damage,
+      `Phase 3: die eigene Kugel (${eigen}) tut nicht weniger weh als ein Gegnerschuss (${T.t_brown.damage})`,
+    );
+    check(
+      eigen < T.player.maxHp,
+      'Phase 3: die eigene Kugel ist aus voller Gesundheit toedlich',
+    );
+  }
+
+  // (c) Minenexplosion. Geprueft wird beides: dass der Wert aus balance.json
+  // beim Spieler ankommt UND die beiden Design-Aussagen des Plans, die von
+  // der konkreten Zahl unabhaengig sind -- eine Mine ist der haerteste
+  // Einzelschlag (haerter als ein Gegnerschuss), toetet aus voller
+  // Gesundheit aber nicht. Ohne die zweite Haelfte wuerde der Test nur den
+  // Code gegen die JSON vergleichen und jede Wertaenderung mitmachen.
+  {
+    const { st } = blank();
+    const p = st.player;
+    const voll = p.hp;
+    explodeAt(st, p.x, p.y, 60, null, { code: 'own_mine' });
+    const mine = voll - p.hp;
+    check(
+      mine === tanksData.balance.damage.explosion,
+      `Phase 3: Minenexplosion macht ${mine} statt ${tanksData.balance.damage.explosion} Schaden`,
+    );
+    check(
+      mine > T.t_brown.damage,
+      `Phase 3: die Mine (${mine}) trifft nicht haerter als ein Gegnerschuss (${T.t_brown.damage})`,
+    );
+    check(p.alive, 'Phase 3: eine einzelne Mine toetet aus voller Gesundheit');
+  }
+
+  // (d) Bossangriff trifft haerter als ein normaler Gegner.
+  {
+    check(
+      T.t_reactor.damage > T.t_brown.damage,
+      `Phase 3: Bossangriff (${T.t_reactor.damage}) trifft nicht haerter als ein normaler Gegner (${T.t_brown.damage})`,
+    );
+    const { st } = blank();
+    const e = st.tanks.find((t) => t !== st.player && t.alive);
+    if (e) {
+      let n = 0;
+      while (st.player.alive && n < 10) {
+        treffer(st, e, T.t_reactor.damage);
+        n++;
+      }
+      check(n === 3, `Phase 3: Boss toetet nach ${n} statt 3 Treffern`);
+    }
+  }
+
+  // (e) Heilung: JEDER neue Raum startet mit vollen LP -- ohne eigenen Hook,
+  // weil createTank() (das hp = cfg.maxHp setzt) bei jedem Raumaufbau,
+  // Respawn und Wellen-Spawn ohnehin laeuft. Genau die Ersparnis, die
+  // Phase 1 angelegt hat.
+  {
+    // Raumwechsel.
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    enterRoom(run);
+    let g = 0;
+    while (run.phase !== 'playing' && g++ < 300) stepRun(run, CMD0, 1 / 60);
+    run.state.player.hp = 20; // angeschlagen in den naechsten Raum
+    const st = run.state;
+    for (const t of st.tanks) if (t !== st.player && t.alive) st.killTank(t, 'test');
+    g = 0;
+    while (run.phase !== 'upgrade' && run.phase !== 'map' && g++ < 900) stepRun(run, CMD0, 1 / 60);
+    if (run.phase === 'upgrade') chooseUpgrade(run, 0);
+    if (run.phase === 'map') {
+      const c = run.map.byId.get(run.mapCurrentId);
+      for (const id of c?.next || []) if (chooseMapNode(run, id)) break;
+    }
+    if (run.phase === 'preview') enterRoom(run);
+    g = 0;
+    while (run.phase !== 'playing' && g++ < 300) stepRun(run, CMD0, 1 / 60);
+    check(
+      run.state.player.hp === run.state.player.cfg.maxHp,
+      `Phase 3: neuer Raum startet mit ${run.state.player.hp}/${run.state.player.cfg.maxHp} LP statt voll`,
+    );
+
+    // Respawn nach dem Tod.
+    const r2 = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    r2.phase = 'playing';
+    r2.state.player.hp = 5;
+    r2.state.killTank(r2.state.player, 'test');
+    g = 0;
+    while (g++ < 600 && !r2.state.player.alive) stepRun(r2, CMD0, 1 / 60);
+    check(r2.state.player.alive, 'Phase 3: Spieler ist nach dem Respawn-Fenster nicht zurueck');
+    check(
+      r2.state.player.hp === r2.state.player.cfg.maxHp,
+      `Phase 3: Respawn mit ${r2.state.player.hp} statt vollen LP`,
+    );
+  }
+
+  // (f) Die Lebensleiste des Spielers ist IMMER sichtbar, auch unbeschaedigt
+  // (anders als bei Gegnern, siehe Abschnitt 10). Ohne sie muesste man
+  // waehrend des Zielens in die Bildschirmecke schauen -- genau das, was der
+  // Plan mit "am Panzer, nicht nur am Bildschirmrand" ausschliesst.
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { createRenderer } = await import('../src/render/renderer.js');
+      const { createTracks } = await import('../src/render/tracks.js');
+      const ctx = document.createElement('canvas').getContext('2d');
+      const renderer = createRenderer(ctx);
+      const tracks = createTracks();
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+      const st = run.state;
+      // Alle Gegner unbeschaedigt -> jede gezeichnete Leiste ist die des Spielers.
+      for (const t of st.tanks) t.hp = t.cfg.maxHp;
+      const balken = () => {
+        ctx.calls.length = 0;
+        renderer.render(st, 0, tracks, null, null);
+        return ctx.calls.filter((c) => c.fn === 'fillRect' && c.args[3] === 3).length;
+      };
+      check(balken() === 1, 'Phase 3: unbeschaedigter Spieler zeigt keine Lebensleiste');
+      st.player.hp = Math.round(st.player.cfg.maxHp / 2);
+      check(balken() === 1, 'Phase 3: angeschlagener Spieler zeigt keine Lebensleiste');
     } finally {
       restore();
     }
