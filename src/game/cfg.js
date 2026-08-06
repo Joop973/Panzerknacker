@@ -16,6 +16,9 @@ export function resolveCfg(data, type) {
     // einem alten gespeicherten Run oder einer Testfixture) bleibt spielbar.
     maxHp: t.maxHp ?? 1,
     damage: t.damage ?? 1,
+    // Schadenstyp (Phase 6). Standard physisch; Klassen (Phase 9) und
+    // Karten (Phasen 11-16) setzen die anderen fuenf.
+    damageType: t.damageType ?? 'physical',
     // Typ-eigene Feuerrate (t_green: 2 s) vor globalem Standard.
     fireCooldown: t.fireRate ?? data.physics.fireCooldownS,
     speed: data.speeds[t.speed],

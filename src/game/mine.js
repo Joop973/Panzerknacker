@@ -13,6 +13,7 @@
 //    inklusive Leger und zerstoert zerstoerbare Waende im Radius.
 
 import { circlesOverlap, circleOverlapsAABB } from './collision.js';
+import { applyTypeEffects } from './damagetypes.js';
 
 let nextMineId = 1;
 
@@ -41,7 +42,7 @@ export function isArmed(mine, mcfg) {
 // Allgemeine Explosion an einer Position (Minen, Sprengschuss-Upgrade):
 // toetet Panzer im Radius, zerstoert breakable-Waende, zuendet scharfe
 // Minen als Kettenreaktion.
-export function explodeAt(state, x, y, R, spare, meta, damage) {
+export function explodeAt(state, x, y, R, spare, meta, damage, damageType) {
   const mcfg = state.data.mine;
   // UMBAUPLAN-LP Phase 1: Explosionsschaden hat keinen Panzer als Urheber
   // (eine Mine ist kein Geschoss mit cfg.damage), deshalb ein eigener Wert
@@ -49,6 +50,9 @@ export function explodeAt(state, x, y, R, spare, meta, damage) {
   // abweichendem Schaden vorgesehen (Phase 3: Bossangriff), Bestandsaufrufe
   // bleiben unveraendert.
   const dmg = damage ?? state.data.balance?.damage?.explosion ?? 1;
+  // Schadenstyp der Explosion (Phase 6). Standard 'explosive'; eine
+  // Feuermine o. ae. reicht spaeter ihren eigenen Typ durch.
+  const dtyp = damageType || 'explosive';
   state.explosions.push({ x, y, age: 0 });
   state.sounds.push({ name: 'boom', x });
   state.addShake?.(6);
@@ -62,6 +66,7 @@ export function explodeAt(state, x, y, R, spare, meta, damage) {
     if (pionier && t === state.player) continue;
     if (circlesOverlap(x, y, R, t.x, t.y, t.cfg.radius)) {
       state.applyDamage(t, dmg, 'eine Explosion', meta);
+      applyTypeEffects(state, t, dtyp, dmg, meta);
     }
   }
 

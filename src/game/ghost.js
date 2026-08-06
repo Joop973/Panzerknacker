@@ -92,6 +92,7 @@ export function updateGhosts(state, dt) {
           kind: g.cfg.weapon,
           // Der Geist kaempft weiter, wie er lebte -- auch beim Schaden.
           damage: g.cfg.damage,
+          damageType: g.cfg.damageType,
         }),
       );
       g.cooldown = g.cfg.fireCooldown;

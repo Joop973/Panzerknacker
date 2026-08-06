@@ -112,14 +112,16 @@ Bedarf neu messen statt den alten Wert zu glauben. (2) Phase 7 spricht von
 einem „Umbau" eines bestehenden 5-%-Krit-Systems — es gibt aktuell **gar
 kein** Krit-System im Code (keine Treffer für `crit`/`critChance` in
 `data/*.json` oder `src/game/*.js`); Phase 7 baut es komplett neu, nicht um.
-**Phase 1–5 sind gebaut** (s. eigene Abschnitte unten): Schadensmodell,
-Gegner-LP, Spieler-LP, Abprall-Bonus und das Statuseffekt-System. Damit steht
-das Grundgerüst — alle Panzer haben Lebenspunkte, der Spieler hält vier
-Gegnertreffer aus, startet jeden Raum mit vollen LP, ein Wandabpraller
-verdoppelt den Schaden (beidseitig), und Feuer/Gift/Frost haben ein
-gemeinsames Regelwerk (noch ohne Quelle). **Nächste Sitzung: Phase 6 (die
-sechs Schadenstypen an Quellen hängen).** `PLAN.md`/die Telemetrie-Auswertung
-bleibt parallel offen (s. To-do-Liste unten).
+**Phase 1–6 sind gebaut** (s. eigene Abschnitte unten): Schadensmodell,
+Gegner-LP, Spieler-LP, Abprall-Bonus, Statuseffekt-System und die sechs
+Schadenstypen. Damit steht das Grundgerüst — alle Panzer haben Lebenspunkte,
+der Spieler hält vier Gegnertreffer aus, startet jeden Raum mit vollen LP,
+ein Wandabpraller verdoppelt den Schaden (beidseitig), und jedes Geschoss
+trägt einen Schadenstyp, der Feuer/Frost/Gift aufträgt bzw. als Blitz auf
+drei Ziele springt. **Karten und Klassen setzen die Typen noch nicht** (Phase
+9 bzw. 11–16) — Debugtaste 4 schaltet sie bei `?debug=1` durch.
+**Nächste Sitzung: Phase 7 (Krit-Umbau).** `PLAN.md`/die
+Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -1915,6 +1917,40 @@ gibt. Neu: `src/game/status.js` + `data/status.json` (Feuer 4 Schaden/Takt für
   ein ausgebauter Deckel rutschte durch — jetzt mit temporärem Deckel 1
   geprüft.
 
+### UMBAUPLAN-LP Phase 6 (die sechs Schadenstypen) — gemergt
+Jedes Geschoss und jede Explosion trägt ein `damageType`
+(`physical`/`explosive`/`fire`/`frost`/`poison`/`lightning`, Werte in
+`data/status.json: damageTypes`). Feuer/Frost/Gift tragen ihren Statuseffekt
+aus Phase 5 auf, Blitz springt auf drei Ziele mit −30 % je Sprung.
+- **Neues Modul `src/game/damagetypes.js`** (Muster wie `armor.js`/`status.js`)
+  statt weiterer Zeilen in `state.js`: Typtabelle, Statusauftrag und
+  Blitzkette an einer Stelle. `state.js`/`mine.js` rufen nur
+  `applyTypeEffects()` nach dem Trefferschaden.
+- **Abweichung vom Plan bei den ids**: der Plan schreibt `"feuer"`, hier
+  stehen englische ids (`fire`) — wie alle ids im Projekt und wie die
+  Statuseffekte aus Phase 5. Der Gewinn: damageType-id und Statuseffekt-id
+  sind **identisch**, es braucht also gar keine Zuordnungstabelle. Ein
+  Strukturtest wacht darüber, dass kein `status`-Verweis ins Leere zeigt.
+- **Die Blitzkette springt vom ZULETZT getroffenen Panzer weiter**, nicht vom
+  Einschlagpunkt — sonst räumt der Blitz einen Kreis um den Einschlag ab
+  statt eine Kette entlangzulaufen. Eigener Test mit einem Aufbau, in dem
+  Ziel 3 nur über Ziel 2 erreichbar ist.
+- **Kettenglieder umgehen die Panzerung** (Prinzip wie Explosionen): ein
+  Übersprung hat keine Geschossrichtung, gegen die ein Frontsektor prüfbar
+  wäre.
+- **Statusstufen hängen am TREFFER, nicht am Schadensbetrag** — deshalb
+  verdoppelt der Abprall-Bonus (Phase 4) den Aufschlag, aber nicht den Brand.
+- **Sichtbares Gegenstück**: kurzer Blitzbogen zwischen den getroffenen
+  Panzern (`renderer.js: drawLightning`) — ohne ihn wäre nicht
+  nachvollziehbar, warum ein nie beschossener Gegner Schaden nimmt. Dazu
+  färbt der Schadenstyp das Geschoss ein.
+- **Neue Dauertests** (Abschnitt 14, Gegenprobe für jeden bestanden): alle
+  sechs Typen vorhanden + `status`-Verweise gültig, jeder Typ trägt seinen
+  Effekt auf (Sofort-Typen keinen), Blitzkette mit Zieldeckel und Abfall,
+  Blitz einzeln ohne Sprung, Kette springt vom letzten Ziel, Abprall
+  verdoppelt Aufschlag aber nicht Stufen, Standard ist physisch, Explosionen
+  tragen ihren Typ.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -1967,6 +2003,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `reflectBullet`, `hasWallBounced`, `isLive`.
 - `src/game/tank.js` — Feuern, Minen legen/werfen, `useSecondary()`
   (Phase 6: generischer Sekundärwaffen-Dispatch inkl. Enterhaken/Sperrmauer).
+- `src/game/damagetypes.js` — Schadenstypen (Phase 6): `applyTypeEffects`
+  (Statusauftrag + Blitzkette), `statusOf`, `typeColor`. Die damageType-ids
+  sind absichtlich identisch mit den Statuseffekt-ids, deshalb ohne
+  Zuordnungstabelle. Werte in `data/status.json: damageTypes`.
 - `src/game/status.js` — Statuseffekte ueber Zeit (UMBAUPLAN-LP Phase 5):
   `applyStatus`, `updateStatus`, `statusSpeedMult`, `visibleStatus`. Ticks
   werden gezaehlt, nicht heruntergezaehlt (bildratenunabhaengig). Werte in
@@ -2006,7 +2046,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v77`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v78`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

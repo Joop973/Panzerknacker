@@ -32,6 +32,7 @@ export function createBullet(
     friendly,
     burstDistance,
     damage,
+    damageType,
   },
 ) {
   return {
@@ -58,6 +59,8 @@ export function createBullet(
     // galt -- sonst wuerde eine Kugel, die noch fliegt, waehrend ihr
     // Besitzer stirbt oder ein Upgrade bekommt, rueckwirkend anders treffen.
     damage: damage ?? 1,
+    // Schadenstyp (Phase 6) -- wie damage beim Abschuss eingefroren.
+    damageType: damageType || 'physical',
     detonated: false,
     // Aasgeier (state.js: killTank): true = zaehlt nicht mehr gegen das
     // Magazin des Schuetzen, fliegt und toetet aber normal weiter.

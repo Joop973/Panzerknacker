@@ -1,12 +1,47 @@
 {
-  "_comment": "UMBAUPLAN-LP Phase 5: gemeinsames Regelwerk fuer Statuseffekte ueber Zeit, gebaut BEVOR es die Elemente gibt. In dieser Phase haengt bewusst keine Quelle daran (kein Geschoss, keine Mine, keine Karte setzt einen Status) -- nur das System selbst und ein Debug-Weg zum Auftragen von Hand. Phase 6 haengt dann die Schadenstypen an. Blitz, Sprengstoff und Physisch brauchen keinen Status, sie wirken sofort.",
+  "_comment": "UMBAUPLAN-LP Phase 5+6: Schadenstypen und die Statuseffekte ueber Zeit, die manche von ihnen ausloesen. Phase 5 hat das Regelwerk gebaut, Phase 6 haengt es an Quellen (Geschosse, Explosionen). Die ids der Statuseffekte sind ABSICHTLICH identisch mit den damageType-ids: so braucht es keine Zuordnungstabelle -- ein Treffer mit damageType 'fire' schlaegt den Statuseffekt 'fire' nach und traegt ihn auf, ein Typ ohne Eintrag (physical/explosive/lightning) wirkt sofort und hinterlaesst nichts.",
   "_comment_tickS": "EIN Takt fuer alle Effekte. Bewusst ein gemeinsamer Wert und kein Takt je Effekt: sonst waeren zwei gleichzeitige Effekte unlesbar (der Spieler soll den Rhythmus als EINEN Puls wahrnehmen). Der erste Tick faellt auf 0,5 s, nicht auf 0 -- ein Effekt mit 3 s Dauer macht damit genau 6 Ticks.",
   "tickS": 0.5,
   "_comment_maxIcons": "Anzeige: hoechstens drei Symbole gleichzeitig unter der Lebensleiste. Bei mehr wird nur der dominante Effekt gezeigt (der mit den meisten Stufen, bei Gleichstand der zuerst in dieser Datei stehende).",
   "maxIcons": 3,
+  "_comment_damageTypes": "Phase 6: die sechs Schadenstypen. Standard ist 'physical'. 'status' nennt den Statuseffekt, den ein Treffer auftraegt (leer = keiner; Blitz, Sprengstoff und Physisch wirken sofort). 'color' faerbt das Geschoss ein, sonst waere im Debug nicht erkennbar, womit man gerade schiesst.",
+  "damageTypes": {
+    "physical": {
+      "name": "Physisch",
+      "color": "#e8e4d8"
+    },
+    "explosive": {
+      "name": "Sprengstoff",
+      "color": "#ffb347"
+    },
+    "fire": {
+      "name": "Feuer",
+      "status": "fire",
+      "color": "#ff8a3c"
+    },
+    "frost": {
+      "name": "Frost",
+      "status": "frost",
+      "color": "#7fd8ff"
+    },
+    "poison": {
+      "name": "Gift",
+      "status": "poison",
+      "color": "#8ad14a"
+    },
+    "lightning": {
+      "_comment": "Springt auf maxTargets Ziele INSGESAMT (der Aufschlag zaehlt als erstes Ziel), jeder Sprung traegt falloff des vorigen Schadens. Der Sprung sucht das naechste noch nicht getroffene Ziel innerhalb von jumpRangePx um das ZULETZT getroffene, nicht um den Aufschlagpunkt -- so laeuft der Blitz eine Kette entlang statt einen Kreis um den Einschlag abzuraeumen.",
+      "name": "Blitz",
+      "color": "#b28dff",
+      "maxTargets": 3,
+      "falloff": 0.7,
+      "jumpRangePx": 160
+    }
+  },
   "effects": {
     "fire": {
       "name": "Feuer",
+      "stacksPerHit": 1,
       "damagePerTick": 4,
       "durationS": 3,
       "maxStacks": 3,
@@ -15,6 +50,7 @@
     },
     "poison": {
       "name": "Gift",
+      "stacksPerHit": 1,
       "damagePerTick": 2,
       "durationS": 6,
       "maxStacks": 5,
@@ -24,6 +60,7 @@
     "frost": {
       "_comment": "Frost macht keinen Schaden, sondern verlangsamt. Die Verlangsamung ist bewusst NICHT je Stufe kumulativ (drei Stufen waeren sonst -120 % und damit Rueckwaertsfahren), sondern ein fester Wert; die Stufen fuehren stattdessen zur Erstarrung. freezeAtStacks loest EINMALIG beim Erreichen der Stufe aus (Uebergang von <3 auf 3), nicht bei jedem weiteren Auftragen -- sonst waere ein Gegner mit einer Frostquelle dauerhaft handlungsunfaehig.",
       "name": "Frost",
+      "stacksPerHit": 1,
       "damagePerTick": 0,
       "durationS": 2,
       "maxStacks": 3,

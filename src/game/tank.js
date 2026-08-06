@@ -288,6 +288,7 @@ export function fireBullet(tank, state, pressed) {
         homing: tank.cfg.homing || 0,
         burstDistance: tank.cfg.burstRangePx || 0,
         damage: tank.cfg.damage,
+        damageType: tank.cfg.damageType,
       }),
     );
     // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.
