@@ -44,6 +44,7 @@ tanksData.secondaries = load('secondaries');
 tanksData.modifiers = load('modifiers');
 tanksData.limits = load('limits');
 tanksData.sounds = load('sounds');
+tanksData.status = load('status'); // UMBAUPLAN-LP Phase 5
 tanksData.input = load('input'); // P9: Tastencodes fuer getMenuState()-Tests
 
 let failures = 0;
@@ -2121,6 +2122,220 @@ function check(ok, msg) {
     check(
       dreifach === st.player.cfg.damage * 3,
       `Phase 4: Faktor wird nicht aus balance.json gelesen (${dreifach} statt ${st.player.cfg.damage * 3})`,
+    );
+  }
+}
+
+// ---- 13. UMBAUPLAN-LP Phase 5: Statuseffekt-System ----------------------
+// Das gemeinsame Regelwerk fuer Effekte ueber Zeit, gebaut BEVOR es die
+// Elemente gibt. In dieser Phase haengt bewusst keine Quelle daran --
+// erreichbar ist es nur ueber state.applyStatus().
+{
+  const { stepState } = await import('../src/game/state.js');
+  const { statusSpeedMult, visibleStatus, hasStatus } = await import('../src/game/status.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+  const S = tanksData.status;
+
+  // Isolierter Raum: nur Spieler + EIN Gegner, keine Geschosse, keine Minen.
+  // Ohne das messen die Tests unbeabsichtigt gegnerisches Eigenfeuer mit
+  // (in der Vorabmessung sah eine Bildraten-Probe deshalb 74 statt 24
+  // Schaden -- ein zweiter Gegner hatte dazwischengefunkt).
+  const isoliert = () => {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const e = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    st.tanks.push(st.player, e);
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.player.protect = 0;
+    st.player.shieldReady = false;
+    st.shieldCharges = [];
+    e.protect = 0;
+    e.shieldReady = false;
+    e.cfg.maxHp = 9999;
+    e.hp = 9999;
+    return { st, e };
+  };
+  const laufe = (st, sek, fps = 60) => {
+    for (let i = 0; i < Math.round(sek * fps); i++) stepState(st, CMD0, 1 / fps);
+  };
+
+  // (a) Ein Effekt macht genau durationS / tickS Ticks -- und zwar
+  // unabhaengig von der Bildrate. Der Takt wird GEZAEHLT statt
+  // heruntergezaehlt; zwei unabhaengige Countdowns driften bei 1/60-Schritten
+  // sonst gegeneinander (gemessen: erster Tick einen Frame zu spaet).
+  {
+    for (const id of ['fire', 'poison']) {
+      const def = S.effects[id];
+      if (!def.damagePerTick) continue;
+      const erwarteteTicks = Math.round(def.durationS / S.tickS);
+      for (const fps of [30, 60, 144]) {
+        const { st, e } = isoliert();
+        st.applyStatus(e, id, 1);
+        const vor = e.hp;
+        laufe(st, def.durationS + 2, fps);
+        check(
+          vor - e.hp === erwarteteTicks * def.damagePerTick,
+          `Phase 5: ${id} macht bei ${fps} FPS ${vor - e.hp} statt ${erwarteteTicks * def.damagePerTick} Schaden (${erwarteteTicks} Ticks a ${def.damagePerTick})`,
+        );
+        check(!hasStatus(e), `Phase 5: ${id} laeuft nach ${def.durationS}s nicht ab`);
+      }
+    }
+  }
+
+  // (b) Stapeln vervielfacht den Schaden je Takt, der Deckel haelt, und die
+  // Dauer erneuert sich auch am Deckel ("bleibt bei 3 Stufen, Dauer startet
+  // neu").
+  {
+    const def = S.effects.fire;
+    const { st, e } = isoliert();
+    st.applyStatus(e, 'fire', def.maxStacks);
+    const vor = e.hp;
+    laufe(st, S.tickS + 0.02);
+    check(
+      vor - e.hp === def.damagePerTick * def.maxStacks,
+      `Phase 5: ${def.maxStacks} Stufen machen ${vor - e.hp} statt ${def.damagePerTick * def.maxStacks} Schaden je Takt`,
+    );
+    // Ueber den Deckel hinaus auftragen: Stufen bleiben, Dauer startet neu.
+    laufe(st, 1.0);
+    const restVor = e.status.fire.timeLeft;
+    for (let i = 0; i < 3; i++) st.applyStatus(e, 'fire', 1);
+    check(e.status.fire.stacks === def.maxStacks, `Phase 5: Stufen ueber den Deckel (${e.status.fire.stacks})`);
+    check(
+      e.status.fire.timeLeft > restVor,
+      `Phase 5: erneutes Auftragen erneuert die Dauer nicht (${restVor.toFixed(2)} -> ${e.status.fire.timeLeft.toFixed(2)})`,
+    );
+  }
+
+  // (c) Eine schnell feuernde Quelle darf den Tick nicht endlos
+  // hinausschieben. Deshalb wird beim Auftragen NUR die Dauer erneuert,
+  // nicht die Takt-Buchhaltung -- sonst waere ein dauerhaft nachgeladener
+  // Effekt komplett schadlos.
+  {
+    const { st, e } = isoliert();
+    const vor = e.hp;
+    for (let i = 0; i < Math.round(60 * (S.effects.fire.durationS + 1)); i++) {
+      st.applyStatus(e, 'fire', 1); // jeden Frame nachlegen
+      stepState(st, CMD0, 1 / 60);
+    }
+    check(
+      vor - e.hp > 0,
+      'Phase 5: dauerhaft nachgelegter Effekt macht gar keinen Schaden (Takt wird beim Auftragen zurueckgesetzt)',
+    );
+  }
+
+  // (d) Frost: verlangsamt, macht keinen Schaden, und die Erstarrung loest
+  // NUR beim Uebergang auf den Deckel aus. Loeste sie bei jedem weiteren
+  // Auftragen erneut aus, waere ein Gegner mit einer Frostquelle dauerhaft
+  // handlungsunfaehig (Stunlock).
+  {
+    const def = S.effects.frost;
+    const { st, e } = isoliert();
+    check(statusSpeedMult(st, e) === 1, 'Phase 5: Tempo ist ohne Frost nicht 1');
+    st.applyStatus(e, 'frost', 1);
+    check(
+      statusSpeedMult(st, e) === def.speedMult,
+      `Phase 5: Frost verlangsamt nicht (${statusSpeedMult(st, e)})`,
+    );
+    const vor = e.hp;
+    laufe(st, S.tickS + 0.02);
+    check(vor === e.hp, 'Phase 5: Frost macht Schaden (soll nur verlangsamen)');
+
+    const { st: st2, e: e2 } = isoliert();
+    e2.stunTimer = 0;
+    for (let i = 1; i < def.freezeAtStacks; i++) {
+      st2.applyStatus(e2, 'frost', 1);
+      check(e2.stunTimer === 0, `Phase 5: Frost erstarrt schon bei ${i} Stufen`);
+    }
+    st2.applyStatus(e2, 'frost', 1);
+    check(e2.stunTimer === def.freezeS, `Phase 5: Frost erstarrt bei ${def.freezeAtStacks} Stufen nicht`);
+    // Erneut auf vollem Deckel: KEIN neuer Freeze (der Timer laeuft nur ab).
+    e2.stunTimer = 0.1;
+    st2.applyStatus(e2, 'frost', 1);
+    check(
+      e2.stunTimer === 0.1,
+      `Phase 5: erneutes Frost auf vollem Deckel erstarrt erneut (Stunlock, stun=${e2.stunTimer})`,
+    );
+  }
+
+  // (e) Schaden ueber Zeit umgeht Panzerung UND Schilde, respektiert aber
+  // die Boss-Unverwundbarkeit.
+  {
+    // Panzerung: ein Gegner mit Frontpanzerung nimmt Giftschaden.
+    const { st, e } = isoliert();
+    e.cfg.armor = { arc: 360, reflects: true }; // rundum gepanzert
+    st.applyStatus(e, 'poison', 1);
+    const vor = e.hp;
+    laufe(st, S.tickS + 0.02);
+    check(vor - e.hp === S.effects.poison.damagePerTick, `Phase 5: Panzerung blockt Giftschaden (${vor - e.hp})`);
+
+    // Schilde: ein 4-Punkte-Brandtick darf keine Schildladung verbrauchen.
+    const { st: st2 } = isoliert();
+    const p = st2.player;
+    st2.shieldCharges = [3, 3];
+    p.shieldReady = true;
+    st2.applyStatus(p, 'fire', 1);
+    const hpVor = p.hp;
+    laufe(st2, S.tickS + 0.02);
+    check(hpVor - p.hp === S.effects.fire.damagePerTick, `Phase 5: Brandtick kommt nicht durch (${hpVor - p.hp})`);
+    check(st2.shieldCharges.length === 2, `Phase 5: Brandtick hat eine Schildladung verbraucht (${st2.shieldCharges.length})`);
+    check(p.shieldReady, 'Phase 5: Brandtick hat das Schild verbraucht');
+
+    // Boss-Unverwundbarkeit gilt weiter -- sonst waere das Generator-
+    // Raetsel mit einem Brandpfeil umgehbar.
+    const { st: st3, e: e3 } = isoliert();
+    e3.cfg.bossInvincible = true;
+    st3.bossGeneratorsLeft = 1;
+    st3.applyStatus(e3, 'fire', 1);
+    const bossVor = e3.hp;
+    laufe(st3, S.tickS + 0.02);
+    check(bossVor === e3.hp, `Phase 5: unverwundbarer Reaktorkern nimmt Brandschaden (${bossVor - e3.hp})`);
+  }
+
+  // (f) Ein Effekt kann toeten, und der Tod laeuft durch killTank().
+  {
+    const { st, e } = isoliert();
+    e.cfg.maxHp = 8;
+    e.hp = 8;
+    const kills = st.enemyKills;
+    st.applyStatus(e, 'fire', 1);
+    laufe(st, S.effects.fire.durationS + 1);
+    check(!e.alive, `Phase 5: Brand toetet nicht (hp=${e.hp})`);
+    check(st.enemyKills === kills + 1, 'Phase 5: Tod durch Statuseffekt laeuft nicht durch killTank()');
+  }
+
+  // (g) Anzeige: hoechstens maxIcons Effekte, nach Dominanz sortiert.
+  {
+    const { st, e } = isoliert();
+    st.applyStatus(e, 'fire', 1);
+    st.applyStatus(e, 'poison', 3);
+    st.applyStatus(e, 'frost', 2);
+    const sicht = visibleStatus(st, e);
+    check(sicht[0]?.id === 'poison', `Phase 5: dominanter Effekt ist ${sicht[0]?.id} statt poison (meiste Stufen)`);
+    // Den Deckel mit EIGENER Zahl pruefen: es gibt aktuell genau drei
+    // Effekte und maxIcons steht auf 3 -- "hoechstens 3 von 3" waere trivial
+    // wahr, ein ausgebauter Deckel wuerde glatt durchrutschen (in der
+    // Gegenprobe genau so passiert). Mit einem temporaeren Deckel von 1
+    // misst der Test den Mechanismus statt der aktuellen Datenlage.
+    const echt = S.maxIcons;
+    S.maxIcons = 1;
+    const gedeckelt = visibleStatus(st, e);
+    S.maxIcons = echt;
+    check(gedeckelt.length === 1, `Phase 5: Symbol-Deckel greift nicht (${gedeckelt.length} statt 1)`);
+    check(gedeckelt[0]?.id === 'poison', 'Phase 5: bei Deckel 1 wird nicht der dominante Effekt gezeigt');
+  }
+
+  // (h) Ein frischer Raum bringt keinen Status mit (createTank() legt ein
+  // neues Panzerobjekt an -- kein eigener Aufraeum-Hook noetig).
+  {
+    const { st, e } = isoliert();
+    st.applyStatus(e, 'fire', 2);
+    check(hasStatus(e), 'Phase 5: Status wurde gar nicht aufgetragen (Vorbedingung)');
+    const frisch = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    check(
+      frisch.tanks.every((t) => !hasStatus(t)),
+      'Phase 5: ein frischer Raum bringt bereits Statuseffekte mit',
     );
   }
 }

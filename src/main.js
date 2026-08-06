@@ -55,7 +55,7 @@ import { createHud } from './ui/hud.js';
 import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
-  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations', 'secondaries', 'modifiers', 'limits', 'sounds'];
+  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations', 'secondaries', 'modifiers', 'limits', 'sounds', 'status'];
   const out = [];
   for (const n of names) {
     let res;
@@ -79,7 +79,7 @@ async function loadData() {
 }
 
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData, secondariesData, modifiersData, limitsData, soundsData] =
+  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData, secondariesData, modifiersData, limitsData, soundsData, statusData] =
     await loadData();
   // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
   // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
@@ -97,6 +97,8 @@ async function init() {
   // Phase 7b: Minen-Warnpuls braucht seinen Takt in der Spiellogik
   // (mine.js) -- der Rest von sounds.json geht direkt an das Audio-Modul.
   tanksData.sounds = soundsData;
+  // UMBAUPLAN-LP Phase 5: Statuseffekte ueber Zeit (Feuer/Gift/Frost).
+  tanksData.status = statusData;
   // P1: die Spiellogik braucht aus data/input.json nur den feedback-Block
   // (Rueckmeldung bei gesperrtem Schuss). Geraete-Events liest weiterhin
   // ausschliesslich src/core/input.js.
@@ -990,6 +992,30 @@ async function init() {
       } else if (e.code === 'KeyM') {
         pause.set(false);
         backToStart();
+      }
+    }
+    // UMBAUPLAN-LP Phase 5: Statuseffekte von Hand auftragen (NUR bei
+    // ?debug=1). In dieser Phase haengt bewusst keine Quelle am System --
+    // das ist der einzige Weg, es im laufenden Spiel auszuprobieren.
+    // 1 = Feuer, 2 = Gift, 3 = Frost, jeweils eine Stufe auf den dem
+    // Spieler naechsten lebenden Gegner (ohne Gegner: auf den Spieler).
+    if (telemetry.isDebugEnabled() && run.phase === 'playing' && !pause.isPaused()) {
+      const STATUS_KEYS = { Digit1: 'fire', Digit2: 'poison', Digit3: 'frost' };
+      const id = STATUS_KEYS[e.code];
+      if (id) {
+        const st = run.state;
+        const p = st.player;
+        let ziel = null;
+        let best = Infinity;
+        for (const t of st.tanks) {
+          if (t === p || !t.alive) continue;
+          const d = (t.x - p.x) ** 2 + (t.y - p.y) ** 2;
+          if (d < best) {
+            best = d;
+            ziel = t;
+          }
+        }
+        st.applyStatus(ziel || p, id, 1);
       }
     }
   });
