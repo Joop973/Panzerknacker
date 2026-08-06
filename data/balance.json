@@ -7,9 +7,9 @@
     "maxActiveCap": 8,
     "selfImmunity": 0.35
   },
-  "_comment_damage": "UMBAUPLAN-LP Phase 1: Schaden von Quellen, die keinen eigenen Panzer als Urheber haben (Explosionen). Panzer-/Geschossschaden steht dagegen beim Typ in tanks.json (cfg.damage). Vorerst 1 -- zusammen mit maxHp 1 ueberall toetet damit wie bisher jeder Treffer sofort. Phase 3 setzt hier echte Zahlen ein (Minenexplosion 40).",
+  "_comment_damage": "UMBAUPLAN-LP: Schaden von Quellen ohne eigenen Panzer als Urheber (Explosionen). Panzer-/Geschossschaden steht dagegen beim Typ in tanks.json (cfg.damage). Phase 2 hebt den Wert von 1 auf 40 -- mit Gegner-LP von 20-50 waere eine Mine bei 1 Schaden sonst voellig wirkungslos geworden. 40 raeumt wie bisher fast alles aus (nur der Gepanzerte mit 50 ueberlebt knapp) und ist zugleich schon der Wert, den Plan-Phase 3 fuer Minenschaden GEGEN den Spieler vorsieht.",
   "damage": {
-    "explosion": 1
+    "explosion": 40
   },
   "enemyBullet": {
     "maxActive": 24

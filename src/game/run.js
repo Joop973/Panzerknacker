@@ -408,6 +408,13 @@ function buildCombatRoom(run, type, isFinal) {
     // Raumkontext (Nutzer-Balancerunde): manche Karten wirken nur in
     // bestimmten Raumarten -- aktuell der Konterschild (nur Elite/Boss).
     roomContext: { elite: type === 'elite' || type === 'cursed', boss: !!isFinal },
+    // LP-Skalierung (UMBAUPLAN-LP Phase 2): Raumtiefe mal Elitezuschlag.
+    // Der Gegnerschaden skaliert bewusst NICHT mit -- spaetere Raeume
+    // werden zaeher, nicht toedlicher (Plan: "Gegnerschaden konstant").
+    hpScale:
+      (1 + (diff.hpScaling?.perRoom || 0) * (run.roomIndex - 1)) *
+      (type === 'elite' || type === 'cursed' ? diff.elite?.hpMult || 1 : 1),
+    hpSkipBosses: diff.hpScaling?.skipBosses !== false,
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.
