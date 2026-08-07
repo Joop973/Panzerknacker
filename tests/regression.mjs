@@ -382,40 +382,11 @@ function check(ok, msg) {
         st.player.powershotCharges === 1,
         `Doppelschlag wirkt nicht: powershotCharges = ${st.player.powershotCharges} (erwartet 1)`,
       );
-      // USP-Kennzahl 3 (PLAN.md): derselbe Kill zaehlt als FREIWILLIGER
-      // Bankshot -- der Gegner war ja auch direkt toetbar.
+      // Der Kill zaehlt als Abpraller-Kill (die freiwilligen Bankshots aus
+      // USP-Kennzahl 3 sind mit Phase 8 ausgemustert).
       check(
-        st.voluntaryRicochetKills === 1 && st.ricochetKills === 1,
-        `Kennzahl 3: freiwilliger Abpraller-Kill nicht gezählt (voluntary=${st.voluntaryRicochetKills}, ricochet=${st.ricochetKills})`,
-      );
-    }
-  }
-
-  // Gegenprobe zu Kennzahl 3: an einem Prisma ist der Bankshot ERZWUNGEN
-  // und darf die Freiwilligen-Quote nicht aufblaehen.
-  {
-    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1337);
-    const st = run.state;
-    const enemy = st.tanks.find((t) => t !== st.player && t.alive);
-    if (enemy) {
-      run.phase = 'playing';
-      enemy.cfg.armor = null;
-      enemy.cfg.requiresRicochet = true; // Prisma-Verhalten erzwingen
-      enemy.protect = 0;
-      st.bullets.push({
-        x: enemy.x, y: enemy.y, prevX: enemy.x, prevY: enemy.y, vx: 10, vy: 0,
-        radius: 3, owner: st.player, kind: 'bullet', age: 5, distance: 10,
-        wallBounces: 2, ricochetsLeft: 0, ricochetsStart: 2, dead: false,
-        reflected: false, reflectImmune: null, reflectImmuneT: 0, trail: [],
-        // Seit dem LP-Umbau (Phase 2) haben Gegner 20-50 LP: die Kugel muss
-        // ausdruecklich toedlich sein, sonst zaehlt kein Kill. Frueher war
-        // jeder Treffer toedlich, deshalb stand hier gar kein Schaden.
-        damage: enemy.cfg.maxHp,
-      });
-      stepRun(run, { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false }, 1 / 60);
-      check(
-        st.ricochetKills === 1 && st.voluntaryRicochetKills === 0,
-        `Kennzahl 3: Bankshot auf ein Prisma wurde als freiwillig gezählt (voluntary=${st.voluntaryRicochetKills})`,
+        st.ricochetKills === 1,
+        `Abpraller-Kill nicht gezählt (ricochet=${st.ricochetKills})`,
       );
     }
   }
@@ -2646,6 +2617,121 @@ function check(ok, msg) {
   }
 }
 
+// ---- 16. UMBAUPLAN-LP Phase 8: Altlasten abbauen -------------------------
+// Prisma nimmt normalen Direktschaden, aber 3x aus Bankshots; Schild ist ein
+// 40-Punkte-Absorber statt eines Ein-Treffer-Blocks. Mechanismus mit eigenen
+// Zahlen geprueft; Gegenprobe fuer jeden Punkt bestanden.
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { stepState } = await import('../src/game/state.js');
+  const { resolveCfg } = await import('../src/game/cfg.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  // Treffer auf ein Ziel mit gegebenem cfg; misst den hp-Abfall. Ziel
+  // unverwundbar hoch, ohne Schild -- so zaehlt nur der Abprall-Faktor.
+  const trefferAuf = (cfgTarget, opt) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const z = {
+      ...proto, x: 200, y: 250, prevX: 200, prevY: 250,
+      alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+      cfg: { ...cfgTarget, maxHp: 9999 },
+    };
+    st.tanks.push(z);
+    const b = createBullet(z.x, z.y, 0, {
+      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10,
+    });
+    b.age = 5;
+    b.wallBounces = opt.bounces ?? 0;
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(b);
+    const vor = z.hp;
+    stepState(st, CMD0, 1 / 60);
+    return vor - z.hp;
+  };
+
+  // (a) Struktur: t_prism hat weder Panzerung noch requiresRicochet, dafuer
+  //     den 3x-Abprallschaden. Der Spiegel-Boss behaelt requiresRicochet --
+  //     der Mechanismus darf nicht mitentfernt worden sein.
+  {
+    const P = tanksData.types.t_prism;
+    check(!P.armor && !P.requiresRicochet, 'Phase 8: t_prism traegt noch Panzerung/requiresRicochet');
+    check(P.bounceDamageTakenMult === 3, `Phase 8: t_prism hat bounceDamageTakenMult ${P.bounceDamageTakenMult} statt 3`);
+    check(tanksData.types.t_mirror.requiresRicochet === true, 'Phase 8: der Spiegel-Boss hat requiresRicochet verloren (Mechanismus kaputt)');
+    check(diffData.bankshotGuarantee.chance === 0, 'Phase 8: bankshotGuarantee.chance ist nicht 0 (Bankshot-Zwang noch aktiv)');
+  }
+
+  // (b) Prisma: direkter Schuss nimmt NORMALEN Schaden (Testschritt 2),
+  //     gebandeter Schuss den DREIFACHEN (Testschritt 3). Zum Vergleich ein
+  //     normaler Gegner: gebandet nur das Doppelte.
+  {
+    const prism = resolveCfg(tanksData, 't_prism');
+    const normal = resolveCfg(tanksData, 't_brown');
+    check(trefferAuf(prism, { bounces: 0 }) === 10, 'Phase 8: Prisma nimmt keinen normalen Direktschaden');
+    check(trefferAuf(prism, { bounces: 1 }) === 30, 'Phase 8: Prisma nimmt aus dem Bankshot nicht 3x (30)');
+    check(trefferAuf(normal, { bounces: 1 }) === 20, 'Phase 8: normaler Gegner nimmt aus dem Bankshot nicht 2x (20)');
+    check(trefferAuf(normal, { bounces: 0 }) === 10, 'Phase 8: normaler Direktschaden nicht 10');
+  }
+
+  // (c) Schild-Absorber (Testschritt 4): faengt die naechsten `absorb` Punkte
+  //     ab, Rest geht durch. absorb+20 Schaden -> 20 durch.
+  {
+    const A = tanksData.balance.shield.absorb;
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const p = st.player;
+    p.shieldReady = true;
+    p.shieldHp = A;
+    p.hp = 100;
+    p.protect = 0;
+    st.applyDamage(p, A + 20, 'test', {});
+    check(p.hp === 80, `Phase 8: Schild-Absorber -- hp ${p.hp} statt 80 (${A} abgefangen, 20 durch)`);
+    check(!p.shieldReady, 'Phase 8: der erschoepfte Absorber sollte den Schild brechen');
+  }
+
+  // (d) Kleiner Treffer wird ganz abgefangen, der Absorber behaelt seinen
+  //     Rest -- kein Ein-Treffer-Verbrauch mehr.
+  {
+    const A = tanksData.balance.shield.absorb;
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const p = st.player;
+    p.shieldReady = true;
+    p.shieldHp = A;
+    p.hp = 100;
+    p.protect = 0;
+    st.applyDamage(p, 25, 'test', {});
+    check(p.hp === 100, `Phase 8: kleiner Treffer nicht ganz abgefangen (hp ${p.hp})`);
+    check(p.shieldReady && p.shieldHp === A - 25, `Phase 8: Absorber-Rest ${p.shieldHp} statt ${A - 25}`);
+  }
+
+  // (e) Schaden je Schadenstyp: ein Feuertreffer des Spielers landet im
+  //     damageByType-Zaehler (die neue Telemetrie-Grundlage).
+  {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const z = {
+      ...proto, x: 200, y: 250, prevX: 200, prevY: 250,
+      alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+      cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+    };
+    st.tanks.push(z);
+    const b = createBullet(z.x, z.y, 0, {
+      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10, damageType: 'fire',
+    });
+    b.age = 5;
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+    check(st.damageByType.fire === 10, `Phase 8: Feuerschaden nicht im Zaehler (fire=${st.damageByType.fire})`);
+    check(st.damageByType.physical === 0, 'Phase 8: physischer Zaehler faelschlich erhoeht');
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
@@ -2750,24 +2836,6 @@ for (const seed of SEEDS) {
   }
   check(soundNamesSeen.has('kill'), 'Gegner-Kill meldet keinen "kill"-Sound');
   check(!soundNamesSeen.has('death'), 'Alter Sammel-Sound "death" wird noch gemeldet (Phase 7b trennt player_death/kill)');
-}
-
-// ---- 7. USP-Kennzahl 1 aus PLAN.md haelt den Zielwert -------------------
-// "Erzwungene Bankshots -- Anteil der Raeume ab Raum 5 mit mindestens einem
-// nicht direkt toetbaren Gegner. Zielwert 60 %." Die Messung ist ueber feste
-// Seeds deterministisch, also ein echter Waechter: faellt der Wert (z. B.
-// weil jemand difficulty.json: bankshotGuarantee anfasst oder t_prism
-// teurer macht), wird die Suite rot statt dass der USP still verwaessert.
-{
-  const { measure } = await import('./uspcheck.mjs');
-  const s = measure(40);
-  const share = s.withBankshot / s.rooms;
-  check(
-    share >= 0.6,
-    `USP-Kennzahl 1 verfehlt: nur ${(100 * share).toFixed(1)} % der Kampfräume ab Raum 5 ` +
-      `erzwingen einen Bankshot (Zielwert 60 %, siehe PLAN.md Prüfpunkte / tests/uspcheck.mjs)`,
-  );
-  console.log(`USP-Kennzahl 1: ${(100 * share).toFixed(1)} % erzwungene Bankshots (Ziel 60 %)`);
 }
 
 // ---- 4. Determinismus: gleiche Karte + gleicher Raum bei gleichem Seed ---

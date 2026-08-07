@@ -24,8 +24,10 @@
   "enemyBullet": {
     "maxActive": 24
   },
+  "_comment_shield": "UMBAUPLAN-LP Phase 8: der Spieler-Schild (Upgrade 'schild', counterShield, nachladeschild) ist kein Ein-Treffer-Block mehr, sondern ein Schadensabsorber ueber `absorb` Punkte. Ein 60er-Treffer wird also zu 40 abgefangen + 20 durch, statt komplett geschluckt -- drei aufeinandergestapelte Ein-Treffer-Bloecke waeren eine zweite Lebensleiste gewesen. Gegnerschilde (Elite-Affix, Regenerierschild) bleiben bewusst Ein-Treffer-Abwehr; die Notschild-Ladungen (emergency_shield, state.shieldCharges) ebenfalls -- der Plan meint mit 'Schild aufnehmen' das schild-Upgrade. roomLifetime: Restlaufzeit einer Notschild-Ladung in geraeumten Raeumen (E2).",
   "shield": {
-    "roomLifetime": 3
+    "roomLifetime": 3,
+    "absorb": 40
   },
   "reflect": {
     "ricochetsLeft": 0,

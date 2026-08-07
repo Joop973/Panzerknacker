@@ -146,7 +146,13 @@ drei Ziele springt. **Karten und Klassen setzen die Typen noch nicht** (Phase
 **Phase 7 (Krit-Umbau) ist gebaut** (s. eigener Abschnitt unten): ein
 kritischer Treffer macht 2× Schaden UND setzt das Nachladen sofort zurück —
 vorerst spielerseitig, Grundchance 5 %, gedeckelt bei 35 %.
-**Nächste Sitzung: Phase 8 (Altlasten abbauen).** `PLAN.md`/die
+**Phase 8 (Altlasten abbauen) ist gebaut** (s. eigener Abschnitt unten): die
+erzwungenen Bankshots (`bankshotGuarantee.chance`) sind auf 0, das Prisma
+verliert `requiresRicochet` und nimmt stattdessen 3× Schaden aus Bankshots,
+der Spieler-Schild ist ein 40-Punkte-Absorber statt eines Ein-Treffer-Blocks,
+`tests/uspcheck.mjs` ist gelöscht und die USP-Kennzahlen in der Telemetrie
+sind durch „Schaden je Schadenstyp pro Run" ersetzt.
+**Nächste Sitzung: Phase 9 (Die zehn Klassen als Werte).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2022,6 +2028,63 @@ Deshalb ist ein Krit ein spürbares **Ereignis**: `balance.json: crit`
   **Mechanismus mit eigenen Zahlen** (gestellter RNG, synthetische Chance),
   nicht die aktuellen JSON-Werte.
 
+### UMBAUPLAN-LP Phase 8 (Altlasten abbauen) — gemergt
+Der LP-Umbau zieht mehrere gerade erst vermessene Systeme des Ein-Treffer-
+Spiels bewusst zurück (im Plan so entschieden, kein Widerspruch).
+- **Erzwungene Bankshots aus** (`difficulty.json: bankshotGuarantee.chance
+  0.58 → 0`): einen Panzer in 58 % der Räume zu einem Gegner zu zwingen, den
+  seine Klasse nicht spielt, ist im LP-Modell unfair. Der Tausch-Mechanismus
+  `run.js: ensureBankshotEnemy()` bleibt erhalten (bei `chance 0` ein No-op),
+  damit Phase 9 ihn als Eigenschaft des Abprallpanzers ohne Code-Neubau
+  wieder scharf schalten kann. **RNG-Verbrauch unverändert** (Zeile
+  `run.rng.enemies() >= chance` lief vorher wie nachher).
+- **Prisma: Zwang → Anreiz.** `t_prism` verliert `armor` UND
+  `requiresRicochet` und bekommt `bounceDamageTakenMult: 3`. Ein **direkter**
+  Schuss trifft es jetzt ganz normal (nimmt Schaden), ein **gebandeter**
+  dreifach statt doppelt. Der neue Faktor ist **ziel-seitig** in der
+  Schadenszeile (`state.js`): `bounced ? t.cfg.bounceDamageTakenMult ??
+  wallBounceDamageMult : 1` — er **ersetzt** den globalen 2×-Bonus (Phase 4),
+  staffelt sich also nicht mit ihm (3×, nicht 6×). `cfg.js` reicht das Feld
+  als Whitelist durch.
+  - **Der `requiresRicochet`-Mechanismus bleibt im Code** (`armor.js`,
+    `state.js`, Renderer): der **Spiegel-Boss** (`t_mirror`) nutzt ihn
+    weiterhin 1:1. Nur die Zuweisung an `t_prism` fällt weg. Ein
+    Struktur-Test bewacht, dass der Boss ihn behält.
+  - **Visuelle Folge** (bewusst, Phase 9 macht Klassen-Optik): ohne
+    `armor`/`requiresRicochet` zeichnet `renderer.js` den Prisma-Rautenkranz
+    nicht mehr — das Prisma sieht über `SPRITE_ALIAS` aus wie ein schlichter
+    türkiser Panzer.
+- **Schild = Absorber statt Ein-Treffer-Block** (`balance.json: shield.absorb
+  40`). Der **Spieler**-Schild (`schild`-Upgrade, Konterschild,
+  Nachladeschild) fängt jetzt die nächsten 40 Punkte ab, Rest geht durch
+  (60er-Treffer → 40 abgefangen, 20 durch) — drei gestapelte Ein-Treffer-
+  Blöcke wären eine zweite Lebensleiste gewesen. `tank.shieldHp` ist der
+  Pool (aus `cfg.shieldAbsorb`, in `createTank()` und beim Nachladen
+  gefüllt); **kein `protect`-Fenster mehr, solange der Absorber Punkte hat**
+  (sonst schluckte ein Treffer 0,6 s lang allen Folgeschaden). Bricht der
+  Pool, greifen Konterschild-Kranz und Nachladeschild-Regen wie bisher.
+  **Gegnerschilde** (Elite-Affix, Regenerierschild) und die **Notschild-
+  Ladungen** (`emergency_shield`, `state.shieldCharges`) bleiben bewusst
+  Ein-Treffer-Abwehr — der Plan meint mit „Schild aufnehmen" das
+  `schild`-Upgrade.
+- **`tests/uspcheck.mjs` gelöscht** und der USP-Kennzahl-1-Test (Abschnitt 7)
+  aus `regression.mjs` entfernt — sie messen ein Spiel, das es nicht mehr
+  gibt. Der Bankshot-**Gegner**-Test (Abschnitt 7c, `t_green`-Solver +
+  Frame-Budget) bleibt: er misst die KI/Leistung, nicht die USP-Quote.
+- **Telemetrie: USP-Kennzahlen → Schaden je Schadenstyp.**
+  `state.damageByType` (physical/explosive/fire/frost/poison/lightning) zählt
+  den vom **Spieler** an Gegnern angerichteten Aufschlag; `main.js` reicht es
+  je Raum durch, `telemetry.js: computeMetrics` summiert und zeigt „Schaden/
+  Typ pro Run" statt der freiwilligen Bankshots (`voluntaryRicochetKills`
+  komplett entfernt). **Bekannte Untererfassung**: DOT-Ticks/Explosionen
+  zählen (noch) nicht mit, nur der direkte Trefferwert.
+- **Neue Dauertests** (Abschnitt 16, Gegenprobe für jeden Kernpunkt
+  bestanden): Struktur (Prisma ohne Panzerung/`requiresRicochet`, mit 3×;
+  Boss behält `requiresRicochet`; `chance` = 0), Prisma direkt = normal /
+  gebandet = 3× vs. normaler Gegner 2×, Schild-Absorber 40/20, kleiner
+  Treffer ganz abgefangen mit Rest-Pool, `damageByType`-Zählung. Mechanismus
+  mit **eigenen Zahlen** geprüft.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2117,7 +2180,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v79`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v80`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2154,7 +2217,6 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 python3 -m http.server 8099        # dann http://localhost:8099/index.html
 node --check src/<datei>.js         # Syntax
 node tests/regression.mjs           # Regressionssuite (eingecheckt!)
-node tests/uspcheck.mjs 40           # USP-Kennzahl 1 messen (PLAN.md-Pruefpunkt)
 node tests/uilayout.mjs             # Overlay-Layout (braucht Playwright)
 node tests/viewport.mjs             # DPR/Viewport + Zielkoordinaten (Playwright, braucht eigenen Server auf :8099)
 node tests/fogperf.mjs              # Additive Lichtmaske: Korrektheit + Renderzeit (Playwright, P11)
@@ -2166,5 +2228,7 @@ Regressions-Standard: `tests/regression.mjs` muss grün sein (~1 s). Enthält:
 crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
-`tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) und der
-USP-Bankshot-Quote (≥ 60 %).
+`tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
+LP-Umbau-Abschnitte 9–16 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+Krit, Phase-8-Prisma/Schild). Die frühere USP-Bankshot-Quote ist mit Phase 8
+entfallen.
