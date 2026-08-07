@@ -251,15 +251,11 @@
       "role": "sapper",
       "aggression": 0.17,
       "accuracy": 0.2,
-      "armor": {
-        "arc": 360,
-        "reflects": true
-      },
-      "requiresRicochet": true,
+      "bounceDamageTakenMult": 3,
       "label": "Prisma",
       "maxHp": 40,
       "damage": 25,
-      "desc": "Wirft jeden direkten Schuss zurück. Nur eine an einer Wand abgeprallte Kugel tötet ihn (Explosionen ebenfalls)."
+      "desc": "Nimmt normalen Schaden — aber ein an einer Wand abgeprallter Schuss trifft ihn dreifach statt doppelt. Der Bankshot lohnt sich, ist aber nicht mehr Pflicht."
     },
     "t_black": {
       "speed": "veryfast",

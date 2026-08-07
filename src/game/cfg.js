@@ -59,6 +59,15 @@ export function resolveCfg(data, type) {
     // Gerichtete Panzerung (Phase 4) -- reine Datenuebernahme.
     armor: t.armor || null,
     requiresRicochet: t.requiresRicochet || false,
+    // Ziel-seitige Verwundbarkeit gegen Wandabpraller (UMBAUPLAN-LP Phase 8,
+    // t_prism): ein gebandeter Treffer richtet diesen Faktor statt des
+    // globalen wallBounceDamageMult an -- "dreifach statt doppelt". Ersetzt
+    // den frueheren requiresRicochet-Zwang durch einen Anreiz.
+    bounceDamageTakenMult: t.bounceDamageTakenMult ?? null,
+    // Punkte, die der Spieler-Schild als Absorber auffaengt (Phase 8).
+    // Konstante aus balance.json, damit createTank() die shieldHp ohne
+    // Balance-Zugriff aus dem cfg fuellen kann.
+    shieldAbsorb: data.balance?.shield?.absorb ?? 40,
     // Boss-Sonderfaelle (Phase 14) -- reine Datenuebernahme, ebenso
     // orthogonal wie armor/miner. bossInvincible gated killTank() (Reaktor);
     // mirrorBoss/phalanx schalten in stepState() auf die Boss-Fahrfunktionen

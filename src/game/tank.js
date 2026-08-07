@@ -48,6 +48,9 @@ export function createTank(type, cfg, x, y) {
     berserkerSpeed: 1, // dynamischer Tempo-Multiplikator (Berserker)
     magazineBonus: 0, // dynamischer Magazin-Bonus (Uebermacht)
     shieldReady: (cfg && (cfg.shield || cfg.counterShield)) || false, // Schild geladen?
+    // Absorber-Punkte des Spieler-Schilds (Phase 8). Bei Gegnern ungenutzt
+    // (deren Schild faengt einen Treffer ab, siehe state.js: applyDamage).
+    shieldHp: (cfg && (cfg.shield || cfg.counterShield)) ? (cfg.shieldAbsorb || 0) : 0,
     // Powershot-Ladungen (Phase 5): frisch pro Raum, weil createTank() bei
     // jedem neuen Raum (und Respawn) ohnehin neu aufgerufen wird -- kein
     // eigener "Raum betreten"-Hook noetig.

@@ -240,12 +240,10 @@ export function createState(data, tiles, opts) {
     // Kills mit abgeprallter vs. direkter Spielerkugel + Zweitwaffen-Einsatz.
     ricochetKills: 0,
     directKills: 0,
-    // USP-Kennzahl 3 aus PLAN.md ("Freiwillige Bankshots -- die einzige
-    // Zahl, die wirklich misst, ob der USP traegt"): von den Abpraller-Kills
-    // die Teilmenge an Gegnern, die AUCH direkt toetbar gewesen waeren. Ein
-    // Prisma zwingt zum Bankshot und sagt daher nichts ueber die Vorliebe
-    // des Spielers aus -- nur der freiwillige Bankshot tut das.
-    voluntaryRicochetKills: 0,
+    // UMBAUPLAN-LP Phase 8: Schaden je Schadenstyp, den der SPIELER an Gegnern
+    // anrichtet -- die neue Telemetrie-Grundlage, die die ausgemusterten
+    // USP-Kennzahlen (u. a. die freiwilligen Bankshots) ersetzt.
+    damageByType: { physical: 0, explosive: 0, fire: 0, frost: 0, poison: 0, lightning: 0 },
     secondaryUses: 0,
     gadgetUses: 0, // P4: Nutzungen des zweiten Slots (Telemetrie)
     powershotsFired: 0,
@@ -495,21 +493,39 @@ export function createState(data, tiles, opts) {
         state.spawnParticles(tank.x, tank.y, '#8ecaf0', 8, 100);
         return;
       }
-      // Schild faengt genau einen toedlichen Treffer ab (laedt pro Leben).
+      // Spieler-Schild = Schadensabsorber (UMBAUPLAN-LP Phase 8): faengt die
+      // naechsten shieldHp Punkte ab, Rest geht durch. Bewusst KEIN
+      // protect-Fenster mehr, solange der Absorber noch Punkte hat -- sonst
+      // schluckte ein einziger Treffer 0,6 s lang allen weiteren Schaden und
+      // der Schild waere wieder eine zweite Lebensleiste statt eines Puffers.
       if (tank === state.player && tank.shieldReady) {
-        tank.shieldReady = false;
-        tank.protect = Math.max(tank.protect, 0.6);
+        const absorbed = Math.min(tank.shieldHp || 0, amount ?? 1);
+        tank.shieldHp = (tank.shieldHp || 0) - absorbed;
+        amount = (amount ?? 1) - absorbed;
         state.sounds.push({ name: 'shield', x: tank.x });
-        state.spawnParticles(tank.x, tank.y, '#8ecaf0', 12, 130);
-        // Konterschild: feuert beim Bruch einen Kugelkranz.
-        if (tank.cfg.counterShield) {
-          spawnRadialBullets(state, tank, tank.x, tank.y, tank.cfg.counterShieldCount, 150);
+        state.spawnParticles(tank.x, tank.y, '#8ecaf0', 8, 110);
+        if (tank.shieldHp <= 0) {
+          // Absorber erschoepft -> Schild bricht.
+          tank.shieldReady = false;
+          tank.protect = Math.max(tank.protect, 0.6);
+          state.spawnParticles(tank.x, tank.y, '#8ecaf0', 12, 130);
+          // Konterschild: feuert beim Bruch einen Kugelkranz.
+          if (tank.cfg.counterShield) {
+            spawnRadialBullets(state, tank, tank.x, tank.y, tank.cfg.counterShieldCount, 150);
+          }
+          // Nachladeschild-Upgrade (Phase 18): laedt sich nach shieldRegenS
+          // von selbst neu -- wiederverwendet denselben regenShieldTimer/
+          // shieldReady-Tick, den das Regenerierschild-Elite-Affix (Phase 9)
+          // schon fuer Gegner nutzt (Tick-Schleife unten, kein neuer Code).
+          if (tank.cfg.shieldRegenS) tank.regenShieldTimer = tank.cfg.shieldRegenS;
         }
-        // Nachladeschild-Upgrade (Phase 18): laedt sich nach shieldRegenS
-        // von selbst neu -- wiederverwendet denselben regenShieldTimer/
-        // shieldReady-Tick, den das Regenerierschild-Elite-Affix (Phase 9)
-        // schon fuer Gegner nutzt (Tick-Schleife unten, kein neuer Code).
-        if (tank.cfg.shieldRegenS) tank.regenShieldTimer = tank.cfg.shieldRegenS;
+        // Vollstaendig abgefangen -> fertig. Sonst faellt der Restschaden
+        // unten durch die normale hp-Verrechnung (kann bei grossem Treffer
+        // trotz Schild toeten).
+        if (amount <= 0) return;
+        tank.hp -= amount;
+        if (tank.hp > 0) return;
+        state.killTank(tank, cause, meta);
         return;
       }
       // Kein Gatter hat gegriffen -> der Treffer geht durch.
@@ -777,7 +793,13 @@ export function stepState(state, cmd, dt) {
     // Schild-Verfall des Spielers (E2).
     if (t.regenShieldTimer > 0) {
       t.regenShieldTimer -= dt;
-      if (t.regenShieldTimer <= 0) t.shieldReady = true;
+      if (t.regenShieldTimer <= 0) {
+        t.shieldReady = true;
+        // Phase 8: der Spieler-Schild ist ein Absorber -- beim Nachladen die
+        // Punkte wieder auffuellen. Gegnerschilde ignorieren shieldHp (sie
+        // fangen einen Treffer ab, siehe applyDamage).
+        if (t === state.player) t.shieldHp = t.cfg.shieldAbsorb || 0;
+      }
     }
   }
 
@@ -978,7 +1000,14 @@ export function stepState(state, cmd, dt) {
         // Sprenggeschosses laeuft ueber balance.damage.explosion und bleibt
         // unveraendert -- sonst wuerde ein einziger Wandkontakt gleich zwei
         // Schadensquellen verdoppeln.
-        const abprallMult = bounced ? state.data.balance?.bullet?.wallBounceDamageMult ?? 1 : 1;
+        // UMBAUPLAN-LP Phase 8: der Abprall-Bonus ist ZIEL-abhaengig. Ein
+        // Prisma (cfg.bounceDamageTakenMult) nimmt aus gebandeten Schuessen
+        // dreifachen STATT doppelten Schaden -- der Wert ersetzt den globalen
+        // wallBounceDamageMult, staffelt sich also nicht mit ihm. Ein direkter
+        // Schuss (bounced === false) trifft das Prisma dagegen ganz normal.
+        const abprallMult = bounced
+          ? t.cfg.bounceDamageTakenMult ?? state.data.balance?.bullet?.wallBounceDamageMult ?? 1
+          : 1;
         // Kritischer Treffer (UMBAUPLAN-LP Phase 7): der Aufschlag traegt den
         // balance.crit.mult. Der Krit ist beim Abschuss ausgewuerfelt und am
         // Geschoss eingefroren (b.crit, tank.js). Faktoren MULTIPLIZIEREN
@@ -995,6 +1024,14 @@ export function stepState(state, cmd, dt) {
           bulletDistance: Math.round(b.distance || 0),
         };
         state.applyDamage(t, schaden, cause, trefferMeta);
+        // UMBAUPLAN-LP Phase 8: Schaden je Schadenstyp (nur der vom SPIELER an
+        // Gegnern angerichtete Aufschlag) -- ersetzt die ausgemusterten
+        // USP-Kennzahlen als Telemetrie-Grundlage. Bewusst nur der Trefferwert;
+        // DOT-Ticks/Explosionen sind eine bekannte Untererfassung.
+        if (own && t !== state.player) {
+          const dt = b.damageType || 'physical';
+          state.damageByType[dt] = (state.damageByType[dt] || 0) + schaden;
+        }
         // Schadenstyp (Phase 6): Statuseffekt auftragen bzw. Blitzkette
         // weiterspringen lassen. NACH dem eigentlichen Treffer, damit die
         // Kette vom bereits geschaedigten Ziel ausgeht.
@@ -1006,17 +1043,13 @@ export function stepState(state, cmd, dt) {
           state.ghostKills++;
           b.owner.timeLeft += state.data.balance.ghost.killBonus;
         }
-        // Telemetrie: zaehlt nur Kills des Spielers an Gegnern (Kernfrage
-        // der USP -- wie oft toetet wirklich ein Abpraller?).
+        // Telemetrie: Abpraller- vs. Direkt-Kills des Spielers an Gegnern.
+        // Die freiwilligen Bankshots (USP-Kennzahl 3) sind mit Phase 8
+        // ausgemustert -- das LP-Modell belohnt den Abprall ueber Schaden,
+        // nicht mehr ueber einen Kill-Zaehler.
         if (own && t !== state.player && !t.alive) {
-          if (bounced) {
-            state.ricochetKills++;
-            // Freiwillig = das Ziel haette auch direkt getoetet werden
-            // koennen (kein requiresRicochet). Frontpanzerung zaehlt hier
-            // NICHT als Zwang: der Gepanzerte ist von der Flanke direkt
-            // toetbar, ein Bankshot auf ihn bleibt eine echte Wahl.
-            if (!t.cfg.requiresRicochet) state.voluntaryRicochetKills++;
-          } else state.directKills++;
+          if (bounced) state.ricochetKills++;
+          else state.directKills++;
         }
         break;
       }
