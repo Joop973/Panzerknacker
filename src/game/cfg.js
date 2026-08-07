@@ -350,6 +350,14 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   let dmgMult = 1;
   let spdMult = 1;
   let magFixed = null;
+  // UMBAUPLAN-LP Phase 12 (Sprengstoff-Topf): Explosions-Effekte werden
+  // gesammelt und nach der Schleife angewandt (Radius/Damage sind
+  // multiplikativ, der Explosiv-Schalter setzt ggf. erst den Basisradius).
+  let grantExplosive = false;
+  let explBaseRadius = 0;
+  let explRadMult = 1;
+  let explDmgMult = 1;
+  let schrapCount = 0;
   for (const id in U) {
     const c = U[id].core;
     const lvl = l(id);
@@ -380,10 +388,30 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.critMultBonus) cfg.critMultBonus = (cfg.critMultBonus || 0) + c.critMultBonus * lvl;
     if (c.critExecute) cfg.critExecute = true;
     if (c.bounceDamageBonus) cfg.bounceDamageBonus = (cfg.bounceDamageBonus || 0) + c.bounceDamageBonus * lvl;
+    // Phase 12 (Sprengstoff-Topf):
+    if (c.allExplosive) grantExplosive = true;
+    if (c.shotExplosionRadius) explBaseRadius = Math.max(explBaseRadius, c.shotExplosionRadius);
+    if (c.explosionRadiusMult) explRadMult *= Math.pow(c.explosionRadiusMult, lvl);
+    if (c.explosionDamageMult) explDmgMult *= Math.pow(c.explosionDamageMult, lvl);
+    if (c.schrapnellCount) schrapCount = Math.max(schrapCount, c.schrapnellCount);
   }
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;
   if (magFixed != null) cfg.magazine = magFixed; // Railgun: nach magAdd, gewinnt
+  // Sprengstoff-Topf: Schuesse zuenden lassen (Basisradius setzen, falls noch
+  // keiner steht), dann Radius/Schaden multiplizieren (gilt fuer Schuss UND
+  // Mine -- mineRadiusMult wurde oben schon gesetzt). explosionDamageMult liest
+  // explodeAt (state.js/mine.js) beim Zuenden aus b.owner/mine.owner.
+  if (grantExplosive) {
+    cfg.allExplosive = true;
+    cfg.shotExplosionRadius = cfg.shotExplosionRadius || explBaseRadius || 50;
+  }
+  if (explRadMult !== 1) {
+    if (cfg.shotExplosionRadius) cfg.shotExplosionRadius *= explRadMult;
+    cfg.mineRadiusMult = (cfg.mineRadiusMult || 1) * explRadMult;
+  }
+  if (explDmgMult !== 1) cfg.explosionDamageMult = (cfg.explosionDamageMult || 1) * explDmgMult;
+  if (schrapCount) cfg.schrapnell = Math.max(cfg.schrapnell || 0, schrapCount);
   // Ausweichen-Kernkarten schalten den Dash frei (unabhaengig von der alten
   // dash-Karte) und verkuerzen die Abklingzeit. Reusen dieselbe dash-Definition.
   if (coreDashGrant) {

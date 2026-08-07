@@ -3095,6 +3095,96 @@ function check(ok, msg) {
   }
 }
 
+// ---- 20. UMBAUPLAN-LP Phase 12: Sprengstoff-Topf -------------------------
+// 12 explosive Karten (4/4/4), Explosionsradius/-schaden-Effekte + der
+// Explosionsschaden-Multiplikator im Zuendpfad. Gegenprobe bestanden.
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { stepState } = await import('../src/game/state.js');
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+  const U = upgradesData.upgrades;
+  const expl = Object.entries(U).filter(([, d]) => d.damageType === 'explosive');
+
+  // (a) Struktur: 12 explosive Karten, 4/4/4, Tag+damageType explosive.
+  {
+    check(expl.length === 12, `Phase 12: ${expl.length} explosive Karten statt 12`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of expl) rar[d.rarity]++;
+    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 12: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(expl.every(([, d]) => d.tag === 'explosive'), 'Phase 12: nicht alle explosiven Karten tragen Tag explosive');
+  }
+
+  // (b) Filter: der Sprengpanzer (Element explosive) sieht sie, ein physischer
+  //     Panzer NICHT.
+  {
+    const sieht = (element) => {
+      const rng = mulberry32(3);
+      for (let i = 0; i < 300; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(), elements: [element],
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('expl_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('explosive'), 'Phase 12: Sprengpanzer sieht keine explosiven Karten');
+    check(!sieht('physical'), 'Phase 12: physische Klasse sieht explosive Karten (Filter greift nicht)');
+  }
+
+  // (c) Applier: Explosiv-Schalter setzt Radius; explosionRadiusMult wirkt auf
+  //     Schuss UND Mine; explosionDamageMult + Schrapnell landen im cfg.
+  {
+    const cfg = applyUpgrades(resolveCfg(tanksData, 'c_blast'), { expl_shots: 1, expl_radius: 3, expl_power: 3 }, upgradesData, 'mine', null);
+    check(cfg.allExplosive === true, 'Phase 12: Sprengmunition schaltet allExplosive nicht');
+    const rmult = Math.pow(1.12, 3);
+    check(Math.abs(cfg.shotExplosionRadius - 50 * rmult) < 1e-6, `Phase 12: Schussradius ${cfg.shotExplosionRadius} statt ${50 * rmult}`);
+    // c_blast-Passiv (classMineRadiusMult 1.2) * explosionRadiusMult:
+    check(Math.abs(cfg.mineRadiusMult - 1.2 * rmult) < 1e-6, `Phase 12: mineRadiusMult ${cfg.mineRadiusMult} statt ${1.2 * rmult}`);
+    check(Math.abs(cfg.explosionDamageMult - Math.pow(1.12, 3)) < 1e-6, `Phase 12: explosionDamageMult ${cfg.explosionDamageMult}`);
+    const clu = applyUpgrades(resolveCfg(tanksData, 'c_blast'), { expl_clusterbomb: 1 }, upgradesData, 'mine', null);
+    check(clu.schrapnell === 8, `Phase 12: Streubombe setzt Schrapnell ${clu.schrapnell} statt 8`);
+  }
+
+  // (d) Zündpfad: ein Sprenggeschoss mit explosionDamageMult richtet den
+  //     skalierten Explosionsschaden an (Testschritt 2, am Ziel gemessen). Der
+  //     Bankschuss-Faktor beruehrt die EXPLOSION bewusst nicht (Testschritt 3).
+  const explDmg = (fields, bounces = 0) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    Object.assign(st.player.cfg, fields);
+    const z = {
+      ...proto, x: 300, y: 250, prevX: 300, prevY: 250,
+      alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+      cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+    };
+    st.tanks.push(z);
+    // Bereits totes Sprenggeschoss GENAU am Ziel -> nur die Explosion wirkt.
+    const b = createBullet(z.x, z.y, 0, { speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10, damageType: 'explosive' });
+    b.explosive = true;
+    b.explosionRadius = 60;
+    b.dead = true;
+    b.wallBounces = bounces;
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(b);
+    const vor = z.hp;
+    stepState(st, CMD0, 1 / 60);
+    return vor - z.hp;
+  };
+  {
+    const base = tanksData.balance.damage.explosion; // 40
+    check(explDmg({}) === base, `Phase 12: Standard-Explosionsschaden ${explDmg({})} statt ${base}`);
+    check(explDmg({ explosionDamageMult: 1.5 }) === Math.round(base * 1.5), `Phase 12: skalierter Explosionsschaden ${explDmg({ explosionDamageMult: 1.5 })} statt ${Math.round(base * 1.5)}`);
+    // Der Bankschuss verdoppelt den AUFSCHLAG, nicht die Explosion:
+    check(explDmg({ explosionDamageMult: 1.5 }, 2) === Math.round(base * 1.5), 'Phase 12: der Abpraller verdoppelt faelschlich die Explosion');
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
