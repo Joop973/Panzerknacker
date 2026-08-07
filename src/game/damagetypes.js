@@ -37,21 +37,36 @@ export function applyTypeEffects(state, ziel, damageType, basisSchaden, meta) {
   // 1. Statuseffekt (Feuer/Frost/Gift). Der Wandabprall-Bonus aus Phase 4
   // verdoppelt bewusst NUR den Aufschlag, nicht den Brand: die Stufenzahl
   // haengt am Treffer, nicht am Schadensbetrag.
+  // Klassen-Passive (Phase 9): der Schuetze (meta.ownerCfg) kann die Dauer
+  // (Flammen-/Radioaktiv-Panzer) bzw. die Frost-Verlangsamung (Frostpanzer)
+  // verstaerken -- an genau dieser Stelle in die applyStatus-Optionen gefaltet.
   if (def.status) {
     const eff = state.data.status.effects?.[def.status];
-    state.applyStatus?.(ziel, def.status, eff?.stacksPerHit ?? 1);
+    const oc = meta?.ownerCfg;
+    const opts = {};
+    if (def.status === 'fire') opts.durationMult = oc?.fireDurationMult ?? 1;
+    else if (def.status === 'poison') opts.durationMult = oc?.poisonDurationMult ?? 1;
+    else if (def.status === 'frost' && oc?.frostSlowBonus) {
+      // "Verlangsamung +20 %": die Verlangsamung (1 - speedMult) waechst um den
+      // Bonus, nicht der Multiplikator selbst. 0.6 -> 1 - (0.4 * 1.2) = 0.52.
+      const base = eff?.speedMult ?? 1;
+      opts.speedMultOverride = 1 - (1 - base) * (1 + oc.frostSlowBonus);
+    }
+    state.applyStatus?.(ziel, def.status, eff?.stacksPerHit ?? 1, opts);
   }
 
   // 2. Blitz-Kette. Sie springt vom ZULETZT getroffenen Panzer weiter (nicht
   // vom Einschlagpunkt), damit der Blitz eine Kette entlanglaeuft statt einen
-  // Kreis um den Aufschlag abzuraeumen.
-  if (!def.maxTargets || def.maxTargets < 2) return;
+  // Kreis um den Aufschlag abzuraeumen. Teslapanzer-Passiv (Phase 9):
+  // meta.lightningBonus erhoeht die Zielzahl (3 -> 4).
+  const maxTargets = (def.maxTargets || 0) + (meta?.lightningBonus || 0);
+  if (maxTargets < 2) return;
   const reichweite = def.jumpRangePx ?? 160;
   const falloff = def.falloff ?? 0.7;
   const getroffen = new Set([ziel]);
   let letzter = ziel;
   let schaden = basisSchaden;
-  for (let sprung = 1; sprung < def.maxTargets; sprung++) {
+  for (let sprung = 1; sprung < maxTargets; sprung++) {
     let naechster = null;
     let best = Infinity;
     for (const t of state.tanks) {

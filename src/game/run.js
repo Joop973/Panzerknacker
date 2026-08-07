@@ -250,6 +250,7 @@ export function runSnapshot(run) {
     schema: 1,
     seed: run.seed,
     modeKey: run.modeKey,
+    starterTank: run.starterTank, // Phase 9: die Klasse gehoert in die Seed-Wiedergabe
     roomIndex: run.roomIndex,
     roomType: run.roomType,
     mapCurrentId: run.mapCurrentId, // Phase 12: Position auf der Karte (Wahl, nicht ableitbar)
@@ -381,6 +382,8 @@ function buildCombatRoom(run, type, isFinal) {
     aiSeed: hashSeed(run.seed, run.roomIndex, 'ai'),
     fixedRoom,
     weights,
+    starterTank: run.starterTank, // Phase 9: gewaehlte Klasse
+    starterScrap: run.scrap, // Phase 9: Schrottpanzer-Passiv (pro Raum gebacken)
     playerUpgrades: run.upgrades,
     upgradesData: run.upgradesData,
     equippedSecondary: run.equippedSecondary,
@@ -622,6 +625,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     mode: mode.label,
     modeKey,
     budgetMult: mode.budgetMult,
+    starterTank: opts.starterTank || 'player', // Phase 9: gewaehlte Klasse (Default: Standard). Gehoert in die Seed-Wiedergabe.
     upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}. Die Bombe ist seit P4 keine Karte mehr, sondern fester Slot.
     equippedSecondary: 'mine', // Phase 6/P4: fester Bombenslot, nicht tauschbar
     equippedGadget: null, // P4: zweiter, tauschbarer Slot -- Start: keines
@@ -678,6 +682,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
   // denselben Raum wie beim Abbruch erzeugt (Seed + Raumnummer genuegen).
   if (opts.resume) {
     const r = opts.resume;
+    run.starterTank = r.starterTank || run.starterTank; // Phase 9: Klasse aus dem Snapshot
     run.roomIndex = r.roomIndex;
     run.lives = r.lives;
     run.shieldCharges = (r.shieldCharges || []).slice();

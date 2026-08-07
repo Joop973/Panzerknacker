@@ -32,6 +32,10 @@
         <button data-mode="normal" class="active">Normal</button>
         <button data-mode="schwer">Schwer</button>
       </div>
+      <!-- Phase 9: Klassenwahl. Button oeffnet eine eigene Seite (Muster wie
+           Ausruestung/Einstellungen aus P8/P9), damit die zehn Klassen mit
+           Werten den Startbildschirm im Handy-Querformat nicht sprengen. -->
+      <button id="classOpen" class="secondary">Klasse: Standard &#9656;</button>
       <label for="seedInput">Seed (leer = zufällig)</label>
       <input id="seedInput" inputmode="numeric" autocomplete="off" placeholder="z.B. 4711" />
       <button id="resumeBtn" class="hidden">Run fortsetzen</button>
@@ -74,6 +78,13 @@
       <button id="resetBtn" class="linklike">Bestwerte zur&uuml;cksetzen</button>
       <button id="quitBtn" class="linklike">Spiel beenden</button>
       <button id="settingsBack">Zur&uuml;ck</button>
+    </div>
+    <!-- Phase 9: Klassenauswahl -- die zehn spielbaren Panzer mit Werten.
+         main.js fuellt #classList aus tanks.json (player:true). -->
+    <div id="classScreen" class="overlay hidden">
+      <h1>Klasse w&auml;hlen</h1>
+      <div id="classList" class="classlist"></div>
+      <button id="classBack">Zur&uuml;ck</button>
     </div>
   </main>
   <!-- Inline-Guard laeuft auch bei file:// (wo Modul-Skripte blockiert

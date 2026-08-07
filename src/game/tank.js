@@ -581,5 +581,8 @@ function placeTrapWall(tank, state, scfg) {
   const dist = scfg.placeDistPx ?? 48;
   const x = tank.x + Math.cos(tank.turret) * dist;
   const y = tank.y + Math.sin(tank.turret) * dist;
-  return state.placeTrapWall(x, y, scfg.hits ?? 3);
+  // Ingenieur-Passiv (UMBAUPLAN-LP Phase 9): Gebautes haelt builtHpMult mehr
+  // Treffer aus (aufgerundet, mindestens die Grundhaltbarkeit).
+  const hits = Math.max(scfg.hits ?? 3, Math.round((scfg.hits ?? 3) * (tank.cfg.builtHpMult || 1)));
+  return state.placeTrapWall(x, y, hits);
 }

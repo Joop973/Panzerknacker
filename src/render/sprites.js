@@ -74,6 +74,18 @@ const SPRITE_ALIAS = {
   t_reactor: 't_green',
   t_mirror: 't_teal',
   t_phalanx: 't_grey',
+  // UMBAUPLAN-LP Phase 9: die zehn Klassen teilen sich das Spieler-Sprite --
+  // ihre Identitaet traegt (vorerst) die Elementfarbe/der Wert, kein eigenes
+  // Asset. 'player' selbst ist die Standard-Klasse und braucht keinen Alias.
+  c_blast: 'player',
+  c_frost: 'player',
+  c_tesla: 'player',
+  c_toxic: 'player',
+  c_scrap: 'player',
+  c_ricochet: 'player',
+  c_necro: 'player',
+  c_engineer: 'player',
+  c_flame: 'player',
 };
 
 // Einzelnes Sprite, oder null wenn (noch) nicht ladbar.

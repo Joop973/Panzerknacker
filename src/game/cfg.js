@@ -5,6 +5,12 @@
 export function resolveCfg(data, type) {
   const t = data.types[type];
   const bbullet = data.balance?.bullet;
+  // UMBAUPLAN-LP Phase 9: spielbare Klasse? Frueher haengte die Sonderbehandlung
+  // (Magazin/Deckel/Kugeltempo aus balance.json) fest an type === 'player' --
+  // die Werte im Panzertyp wurden nie gelesen (der Blocker der Phase). Jetzt
+  // markiert das Datenfeld player:true die Klasse, und der Typ DARF die Werte
+  // ueberschreiben; fehlen sie, greifen die Player-Defaults aus balance.json.
+  const isPlayerClass = t.player === true || type === 'player';
   return {
     radius: data.physics.tankRadius,
     bulletRadius: data.physics.bulletRadius,
@@ -29,17 +35,20 @@ export function resolveCfg(data, type) {
     critChance: t.crit ?? (data.balance?.crit?.baseChance ?? 0),
     // Typ-eigene Feuerrate (t_green: 2 s) vor globalem Standard.
     fireCooldown: t.fireRate ?? data.physics.fireCooldownS,
-    speed: data.speeds[t.speed],
-    // Spieler-Basismagazin (gleichzeitig aktive Kugeln) aus balance.json;
-    // harter Deckel selbst mit Magazin-Upgrades (Lesbarkeit).
-    magazine: type === 'player' && bbullet ? bbullet.maxActive : t.magazine,
-    magazineCap: type === 'player' && bbullet ? bbullet.maxActiveCap : Infinity,
-    ricochets: t.ricochets,
+    // Phase 9: Klassen skalieren das Basistempo ('normal') ueber speedMult.
+    speed: data.speeds[t.speed] * (t.speedMult ?? 1),
+    // Magazin/Deckel/Kugeltempo: fuer spielbare Klassen aus dem Typ, sonst aus
+    // den Player-Defaults in balance.json (Blocker-Fix, s. o.). Gegner behalten
+    // Typmagazin, unbegrenzten Deckel und die weapon-Geschwindigkeitstabelle.
+    magazine: isPlayerClass ? (t.magazine ?? bbullet?.maxActive) : t.magazine,
+    magazineCap: isPlayerClass ? (t.magazineCap ?? bbullet?.maxActiveCap ?? Infinity) : Infinity,
+    // Phase 9: Abprallpanzer bekommt +bonusRicochets auf die Basis.
+    ricochets: (t.ricochets ?? 0) + (t.bonusRicochets ?? 0),
     mines: t.mines,
     weapon: t.weapon,
-    // Spieler: Geschwindigkeit aus balance.json (v2), Gegner aus tanks.json.
-    bulletSpeed:
-      type === 'player' && bbullet?.speed ? bbullet.speed : data.bulletSpeeds[t.weapon],
+    bulletSpeed: isPlayerClass
+      ? (t.bulletSpeed ?? bbullet?.speed ?? data.bulletSpeeds[t.weapon])
+      : data.bulletSpeeds[t.weapon],
     // Gegner-Rolle statt Gegner-Typ (Phase 8): vier Rollen (guardian/
     // sapper/hunter/sieger), parametrisiert statt pro Typ eigener
     // Turm-/Fahrfunktion. Rolle und Panzerung bleiben frei kombinierbar.
@@ -64,6 +73,16 @@ export function resolveCfg(data, type) {
     // globalen wallBounceDamageMult an -- "dreifach statt doppelt". Ersetzt
     // den frueheren requiresRicochet-Zwang durch einen Anreiz.
     bounceDamageTakenMult: t.bounceDamageTakenMult ?? null,
+    // Klassen-Passive (UMBAUPLAN-LP Phase 9). Reine Datenuebernahme; jeder
+    // Wert wird an genau EINER Stelle ausgewertet (s. Kommentar dort).
+    classMineRadiusMult: t.classMineRadiusMult ?? 1, // Sprengpanzer: Bombenradius (mine.js via mineRadiusMult)
+    lightningBonusTargets: t.lightningBonusTargets ?? 0, // Teslapanzer: +Blitzziele (damagetypes.js)
+    fireDurationMult: t.fireDurationMult ?? 1, // Flammenpanzer: Branddauer (status.js via applyTypeEffects)
+    poisonDurationMult: t.poisonDurationMult ?? 1, // Radioaktiv: Giftdauer
+    frostSlowBonus: t.frostSlowBonus ?? 0, // Frostpanzer: staerkere Verlangsamung
+    scrapDamagePer100: t.scrapDamagePer100 ?? 0, // Schrottpanzer: +Schaden je 100 Schrott (pro Raum gebacken)
+    reviveChance: t.reviveChance ?? 0, // Nekromant: toedlichen Treffer ueberleben (state.js: applyDamage)
+    builtHpMult: t.builtHpMult ?? 1, // Ingenieur: Gebautes haelt mehr aus (tank.js: placeTrapWall)
     // Punkte, die der Spieler-Schild als Absorber auffaengt (Phase 8).
     // Konstante aus balance.json, damit createTank() die shieldHp ohne
     // Balance-Zugriff aus dem cfg fuellen kann.
@@ -78,6 +97,17 @@ export function resolveCfg(data, type) {
   };
 }
 
+// Schrottpanzer-Passiv (UMBAUPLAN-LP Phase 9): +scrapDamagePer100 Schaden je
+// 100 gehaltenem Schrott. Pro Raum gebacken (wie hpScaling/Modifikatoren) --
+// ein mitten im Raum verdienter Schrott wirkt erst im naechsten. Wirkt nur bei
+// Klassen mit dem Passiv, sonst ein No-op.
+export function applyScrapDamage(cfg, scrap) {
+  if (cfg.scrapDamagePer100 && scrap > 0) {
+    cfg.damage = Math.round(cfg.damage * (1 + cfg.scrapDamagePer100 * Math.floor(scrap / 100)));
+  }
+  return cfg;
+}
+
 // Upgrade-Level auf das Spieler-cfg anwenden (Spec Abschnitt 8 +
 // Erweiterungen). Die Stellwerte der neuen Upgrades kommen aus
 // upgrades.json (upsData).
@@ -88,7 +118,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   cfg.ricochets += l('abpraller'); // Basis 1, max +1 => harte Grenze 2
   cfg.bulletSpeed *= Math.pow(1.2, l('ladung'));
   cfg.mines += l('kettenglied');
-  cfg.mineRadiusMult = Math.pow(upsData?.upgrades?.sprengkraft?.radiusMult ?? 1.25, l('sprengkraft'));
+  cfg.mineRadiusMult =
+    Math.pow(upsData?.upgrades?.sprengkraft?.radiusMult ?? 1.25, l('sprengkraft')) *
+    (cfg.classMineRadiusMult || 1); // Phase 9: Sprengpanzer-Passiv multipliziert mit
   cfg.speed *= Math.pow(1.12, l('kettenantrieb'));
   cfg.tungsten = l('wolframkern') > 0;
   const U = upsData ? upsData.upgrades : {};

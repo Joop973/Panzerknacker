@@ -152,7 +152,12 @@ verliert `requiresRicochet` und nimmt stattdessen 3× Schaden aus Bankshots,
 der Spieler-Schild ist ein 40-Punkte-Absorber statt eines Ein-Treffer-Blocks,
 `tests/uspcheck.mjs` ist gelöscht und die USP-Kennzahlen in der Telemetrie
 sind durch „Schaden je Schadenstyp pro Run" ersetzt.
-**Nächste Sitzung: Phase 9 (Die zehn Klassen als Werte).** `PLAN.md`/die
+**Phase 9 (Die zehn Klassen als Werte) ist gebaut** (s. eigener Abschnitt
+unten): zehn spielbare Klassen mit eigenen LP/Schaden/Tempo/Krit + je einem
+Passiv, wählbar über einen neuen Auswahlbildschirm; der Blocker (`'player'`
+fest verdrahtet) ist über `player:true` + `run.starterTank` aufgelöst, die
+Klasse steht im Snapshot (Fortsetzen/Seed-Wiedergabe).
+**Nächste Sitzung: Phase 10 (Kernpool, 30 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2085,6 +2090,58 @@ Spiels bewusst zurück (im Plan so entschieden, kein Widerspruch).
   Treffer ganz abgefangen mit Rest-Pool, `damageByType`-Zählung. Mechanismus
   mit **eigenen Zahlen** geprüft.
 
+### UMBAUPLAN-LP Phase 9 (Die zehn Klassen als Werte) — gemergt
+Zehn spielbare Klassen mit eigenen Werten + je einem Passiv, wählbar über einen
+neuen Auswahlbildschirm. Werte in `data/tanks.json` (alle mit `player: true`).
+- **Blocker aufgelöst**: `cfg.js` zog Magazin/Deckel/Kugeltempo fest aus
+  `balance.json`, sobald `type === 'player'` — die Typwerte wurden nie
+  gelesen. Jetzt markiert `player: true` die Klasse, der Typ **darf** die Werte
+  überschreiben, sonst greifen die Player-Defaults aus `balance.json`. Und der
+  hart verdrahtete String `'player'` in `state.js` (createState + respawnPlayer)
+  kommt jetzt aus **`run.starterTank`** (Default `'player'` = Standard-Klasse,
+  damit Altpfade wie `resolveCfg(data, 'player')` gültig bleiben).
+- **Die zehn Klassen** (`c_blast/c_frost/c_tesla/c_toxic/c_scrap/c_ricochet/
+  c_necro/c_engineer/c_flame` + `player` = Standard): eigene `maxHp`/`damage`/
+  `speedMult`/`crit`/`damageType`. Die fünf elementaren Klassen schießen ihr
+  Element von Anfang an (Feuer/Frost/Gift/Blitz/Sprengstoff).
+- **Passive** — jeweils an genau EINER Stelle ausgewertet, als Whitelist über
+  `cfg.js: resolveCfg()` durchgereicht: Sprengpanzer `classMineRadiusMult 1.2`
+  (in `applyUpgrades()` in `mineRadiusMult` gefaltet), Teslapanzer
+  `lightningBonusTargets 1` (3→4 Blitzziele, über `meta.lightningBonus` in
+  `damagetypes.js`), Flammen-/Radioaktiv-Panzer `fire-|poisonDurationMult 1.25`
+  (über `applyStatus(…, opts.durationMult)`), Frostpanzer `frostSlowBonus 0.2`
+  (stärkere Verlangsamung, als `eintrag.speedMult`-Override am Status), Abprall-
+  panzer `bonusRicochets 1`, Nekromant `reviveChance 0.25` (neuer
+  `state.tryRevive()` vor jedem tödlichen Spielertreffer — deterministisch über
+  `state.rng`, **kein RNG-Verbrauch** ohne das Passiv), Schrottpanzer
+  `scrapDamagePer100 0.05` (neuer `cfg.js: applyScrapDamage()`, **pro Raum
+  gebacken** aus `run.scrap`), Ingenieur `builtHpMult 1.2` (Sperrmauer-
+  Haltbarkeit in `tank.js: placeTrapWall()`).
+- **`run.starterTank` gehört in die Seed-Wiedergabe**: im `runSnapshot()` und
+  beim `resume`; `state.starterTank`/`state.starterScrap` gemerkt, damit
+  `respawnPlayer()` dieselbe Klasse baut.
+- **Auswahlbildschirm** (`index.html` `#classScreen`, verdrahtet in `main.js`,
+  Muster wie die Einstellungsseite aus P9): Knopf „Klasse: … ▸" öffnet eine
+  Seite mit allen zehn Klassen (Name/Werte/Beschreibung), Wahl in
+  `getPref/setPref('starterTank')` persistiert. Auf flachen Handy-Querformaten
+  verdichtet eine erweiterte `max-height: 500px`-Media-Query den
+  Startbildschirm (sonst rutschte `settingsOpen` heraus, per `uilayout.mjs`
+  gefangen).
+- **Darstellung**: die Klassen teilen sich das Spieler-Sprite
+  (`sprites.js: SPRITE_ALIAS` c_*→`player`); `renderer.js` erkennt den Spieler
+  jetzt über `t === state.player` statt `t.type === 'player'` (sonst hätten die
+  neun neuen Klassen Glow/Ziellinie verloren). `hud.js: drawStats()` bezieht
+  die Werte-Abweichung auf die **gewählte** Klasse.
+- **Bestandstests angepasst**: die Gegnerhärte-Bänder (Phase 1/2) schließen
+  jetzt `player`-Klassen aus (`!t.player`); der Klassen-Kommentar liegt außerhalb
+  von `types`, damit die Struktur-Iteration ihn nicht als Typ liest.
+- **Neue Dauertests** (Abschnitt 17, Gegenprobe für die Kernpunkte bestanden):
+  Struktur (10 Klassen, `player:true`), Blocker-Fix (Magazin/Deckel/Tempo aus
+  balance, `speedMult`, `crit`/`damageType`), +1 Abpraller, Sprengradius,
+  Tesla-Blitz auf 4 Ziele, Feuer-/Giftdauer + Frost-Verlangsamung, Nekromant-
+  Revive (Wurf + Fehlwurf), Schrott-Schaden, Klasse im Snapshot + Fortsetzen.
+  Zusätzlich ein Playwright-Smoke (Auswahl → Start → Snapshot-Klasse).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2180,7 +2237,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v80`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v81`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
