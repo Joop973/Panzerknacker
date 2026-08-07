@@ -24,12 +24,26 @@ const EXCLUDED_TAGS = new Set(['weapon', 'elite']);
 // Karten sind fertig gebaut und duerfen trotzdem erscheinen.
 const WEAPON_ALLOWLIST = new Set(['doppelrohr', 'flak']);
 
-function weightedPick(list, rng, weights) {
+// UMBAUPLAN-LP Phase 10: die Seltenheit soll mit dem KONFIGURIERTEN Gewicht
+// gezogen werden (balance.rarity: 60/30/10), unabhaengig davon, wie viele
+// Karten je Seltenheit gerade ziehbar sind. Die alte Fassung summierte das
+// Gewicht PRO KARTE -> P(Stufe) ~ Poolgroesse x Gewicht, also verzerrt, sobald
+// eine Seltenheit mehr Karten hat als eine andere (der Bug aus PLAN-UPGRADES).
+// Fix: jede Karte bekommt Gewicht `weight[rarity] / (Karten dieser Seltenheit)`
+// -> die Summe je Seltenheit ist wieder genau `weight[rarity]`, die Verteilung
+// also groessenunabhaengig. Der Plan nennt als Alternative "gleich grosse
+// Stufen (10/10/10)"; die Normierung erfuellt dasselbe Ziel auch bei ungleichen
+// Poolgroessen (die spaeteren Element-Filter erzeugen zwangslaeufig ungleiche).
+// EIN rng()-Aufruf wie bisher -- der RNG-Verbrauch je Zug bleibt unveraendert.
+export function weightedPick(list, rng, weights) {
+  const count = {};
+  for (const d of list) count[d.rarity] = (count[d.rarity] || 0) + 1;
+  const w = (d) => (weights[d.rarity] || 1) / count[d.rarity];
   let total = 0;
-  for (const d of list) total += weights[d.rarity] || 1;
+  for (const d of list) total += w(d);
   let r = rng() * total;
   for (const d of list) {
-    r -= weights[d.rarity] || 1;
+    r -= w(d);
     if (r < 0) return d;
   }
   return list[list.length - 1];

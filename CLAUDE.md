@@ -157,7 +157,12 @@ unten): zehn spielbare Klassen mit eigenen LP/Schaden/Tempo/Krit + je einem
 Passiv, wählbar über einen neuen Auswahlbildschirm; der Blocker (`'player'`
 fest verdrahtet) ist über `player:true` + `run.starterTank` aufgelöst, die
 Klasse steht im Snapshot (Fortsetzen/Seed-Wiedergabe).
-**Nächste Sitzung: Phase 10 (Kernpool, 30 Karten).** `PLAN.md`/die
+**Phase 10 (Kernpool, 30 Karten) ist gebaut** (s. eigener Abschnitt unten):
+30 klassenunabhängige Kernkarten (10 Kategorien × common/rare/legendary =
+10/10/10, eigener Tag je Kategorie) mit generischem `core`-Applier in `cfg.js`,
+plus der `weightedPick`-Fix aus `PLAN-UPGRADES.md` — die Seltenheitsverteilung
+ist jetzt größenunabhängig 60/30/10 (gemessen: 62/29/9 in echten Angeboten).
+**Nächste Sitzung: Phase 11 (Physisch-Topf, 12 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2142,6 +2147,40 @@ neuen Auswahlbildschirm. Werte in `data/tanks.json` (alle mit `player: true`).
   Revive (Wurf + Fehlwurf), Schrott-Schaden, Klasse im Snapshot + Fortsetzen.
   Zusätzlich ein Playwright-Smoke (Auswahl → Start → Snapshot-Klasse).
 
+### UMBAUPLAN-LP Phase 10 (Kernpool + Verteilungs-Fix) — gemergt
+30 klassenunabhängige Kernkarten + der Verteilungs-Fix aus `PLAN-UPGRADES.md`.
+- **30 Kernkarten** in `data/upgrades.json` (Tag = Kategorie): 10 Kategorien
+  (`damage`/`reload`/`speed`/`health`/`magazine`/`ricochet`/`crit`/`scavenge`/
+  `mines`/`dodge`), je eine `common`/`rare`/`legendary` → **10/10/10**. **Jede
+  Kategorie ein eigener Tag** — sonst würde die „kein doppelter Tag pro
+  Angebot"-Regel den ganzen Kern auf **eine** Karte pro Angebot zusammenfalten.
+- **Generischer `core`-Applier** (`cfg.js: applyUpgrades()`): jede Kernkarte
+  trägt ein `core`-Effektobjekt (`damageAdd`/`reloadMult`/`speedMult`/`hpAdd`/
+  `magAdd`/`ricochetAdd`/`critAdd`/`scrapAdd`/`mineAdd`/`dashGrant`+`dashCdMult`),
+  **eine Schleife statt 30 Zweige** — eine neue Kernkarte braucht keine
+  Codezeile. Die Ausweichen-Karten schalten den Dash frei (unabhängig von der
+  alten `dash`-Karte) und verkürzen die Abklingzeit multiplikativ. Der
+  Krit-Deckel greift bewusst weiter am Roll-Ort (`tank.js`), nicht im Applier.
+- **`weightedPick`-Fix** (`upgradepool.js`): die alte Fassung summierte das
+  Gewicht **pro Karte** → `P(Stufe) ∝ Poolgröße × Gewicht`, also verzerrt,
+  sobald eine Seltenheit mehr Karten hat (gemessen: 88/11/1 statt 60/30/10).
+  Neu: jede Karte bekommt `weight[rarity] / (Karten dieser Seltenheit)` → die
+  Summe je Seltenheit ist wieder exakt das konfigurierte Gewicht,
+  **größenunabhängig** (wichtig, weil die Element-Filter ab Phase 11
+  zwangsläufig ungleiche Poolgrößen erzeugen). **Ein `rng()`-Aufruf** wie
+  bisher — kein RNG-Drift. Der Plan nannte als Alternative „gleich große
+  Stufen (10/10/10)"; die Normierung erfüllt dasselbe Ziel robuster.
+- **Transitional**: die alten Karten bleiben (Sekundär/Gadget/Elite/Weapon +
+  Transformations-Tags hängen daran) — der Kern kommt **additiv** dazu, nicht
+  ersetzend. Die neuen Kategorien `damage`/`reload`/`health`/`crit` schließen
+  echte Lücken (die gab es als Karte noch nicht), die übrigen sechs überlappen
+  leicht mit Altkarten (bewusst hingenommen, spätere Phasen prunen).
+- **Neue Dauertests** (Abschnitt 18, Gegenprobe für die Kernpunkte bestanden):
+  Struktur (30, 10/10/10, 10 Tags), Verteilungs-Fix an einer **ungleichen**
+  Liste (60/30/10 ±2 %, Gegenprobe zeigt 88/11/1), Schadenskarten-Arithmetik +
+  Trefferzahl gegen den Braunen, Krit über den Deckel + Klemme, Ausweichen
+  schaltet Dash frei, Ersatzeintrag bei erschöpftem Pool.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2237,7 +2276,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v81`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v82`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2286,6 +2325,6 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–16 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
-Krit, Phase-8-Prisma/Schild). Die frühere USP-Bankshot-Quote ist mit Phase 8
-entfallen.
+LP-Umbau-Abschnitte 9–18 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
+Verteilungs-Fix). Die frühere USP-Bankshot-Quote ist mit Phase 8 entfallen.
