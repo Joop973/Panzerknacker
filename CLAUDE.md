@@ -162,7 +162,12 @@ Klasse steht im Snapshot (Fortsetzen/Seed-Wiedergabe).
 10/10/10, eigener Tag je Kategorie) mit generischem `core`-Applier in `cfg.js`,
 plus der `weightedPick`-Fix aus `PLAN-UPGRADES.md` — die Seltenheitsverteilung
 ist jetzt größenunabhängig 60/30/10 (gemessen: 62/29/9 in echten Angeboten).
-**Nächste Sitzung: Phase 11 (Physisch-Topf, 12 Karten).** `PLAN.md`/die
+**Phase 11 (Physisch-Topf, 12 Karten) ist gebaut** (s. eigener Abschnitt
+unten): 12 physische Karten (4/4/4) plus die **Angebotsfilterung nach
+`damageType`** (typgebundene Karten erscheinen nur bei passendem Klassen-
+Element) und die physischen Trefferregeln (Kaltschütze/Splittergeschoss/
+Fangschuss/Abprallkönig/Kopfschuss/Railgun).
+**Nächste Sitzung: Phase 12 (Sprengstoff-Topf, 12 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2181,6 +2186,39 @@ neuen Auswahlbildschirm. Werte in `data/tanks.json` (alle mit `player: true`).
   Trefferzahl gegen den Braunen, Krit über den Deckel + Klemme, Ausweichen
   schaltet Dash frei, Ersatzeintrag bei erschöpftem Pool.
 
+### UMBAUPLAN-LP Phase 11 (Physisch-Topf + Element-Filter) — gemergt
+Erster von sechs Schadenstyp-Töpfen (je 12 Karten, 4/4/4). Baut zugleich die
+**Angebotsfilterung nach `damageType`**, die alle Töpfe brauchen.
+- **Element-Filter** (`upgradepool.js: buildCandidates()`): eine typgebundene
+  Karte (`damageType`-Feld) erscheint nur, wenn ihr Typ im **Element-Set der
+  Klasse** liegt (`opts.elements`). Karten OHNE `damageType` (Kernpool,
+  Altkarten) bleiben universell. `run.js: elementsOf(run)` liefert vorerst nur
+  das Primärelement (`data.types[starterTank].damageType`); Phase 17 mischt das
+  Zweitelement bei. Elite-/Treasure-Belohnungen (`includeTag`/`onlyRarity`)
+  lassen den Filter bewusst aus.
+- **12 physische Karten** (`data/upgrades.json`, alle Tag **und** `damageType`
+  `physical` → höchstens eine pro Angebot): 4 common (kleine Stat-Boosts über
+  den generischen `core`-Applier), 4 rare (Regeländerungen), 4 legendär (zwei
+  Richtungen: Scharfschütze/Abpraller).
+- **Neue Effekt-Schlüssel im `core`-Applier** (`cfg.js`): `bulletSpeedMult`,
+  `damageMult`, `magazineFixed` (multiplikative erst NACH den additiven, sonst
+  reihenfolgeabhängig) plus die Trefferregel-Flags `executeThreshold`/
+  `executeMult`, `critOnBounce`, `critMultBonus`, `critExecute`,
+  `bounceDamageBonus`.
+- **Trefferregeln im Schadensschritt** (`state.js`, aus `b.owner.cfg`):
+  Kaltschütze macht **gebandete** Schüsse kritisch, Splittergeschoss erhöht den
+  Krit-Faktor (+0,5×), Fangschuss trifft Ziele unter 30 % LP +40 %, Abprallkönig
+  gibt gebandeten Schüssen Extra-Schaden (×2 zusätzlich zum Abprall-×2 = ×4),
+  Kopfschuss lässt einen Krit einen Nicht-Boss sofort töten. `isBossCfg()` aus
+  `cfg.js` importiert. Faktoren multiplizieren sich sauber mit Abprall/Krit.
+- **Keine Karte schaltet einen anderen Typ ab** (Plan-Auflage): die
+  physischen Karten setzen nur Schützen-cfg-Felder, kein Bullet-`damageType`.
+- **Neue Dauertests** (Abschnitt 19, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (12, 4/4/4), Filter (physische Klasse sieht sie, Frostklasse nicht),
+  Applier-Arithmetik + Railgun, Kaltschütze/Splittergeschoss/Fangschuss/
+  Abprallkönig/Kopfschuss. Der Phase-10-Kerntest zählt jetzt „`core` **ohne**
+  `damageType`", damit die Topf-Karten nicht als Kernkarten mitgezählt werden.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2276,7 +2314,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v82`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v83`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2325,6 +2363,7 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–18 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–19 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
-Verteilungs-Fix). Die frühere USP-Bankshot-Quote ist mit Phase 8 entfallen.
+Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter). Die frühere
+USP-Bankshot-Quote ist mit Phase 8 entfallen.

@@ -2904,7 +2904,10 @@ function check(ok, msg) {
   const { weightedPick, rollOffers } = await import('../src/game/upgradepool.js');
   const { mulberry32 } = await import('../src/core/rng.js');
   const U = upgradesData.upgrades;
-  const core = Object.entries(U).filter(([, d]) => d.core);
+  // Kernkarten = generischer Effekt (core) OHNE Element (damageType) -- die
+  // Element-Toepfe ab Phase 11 tragen ebenfalls ein core-Objekt, sind aber
+  // typgebunden und gehoeren nicht in den Kern.
+  const core = Object.entries(U).filter(([, d]) => d.core && !d.damageType);
 
   // (a) Struktur: genau 30 Kernkarten, 10/10/10 nach Seltenheit, 10 verschiedene
   //     Tags (sonst begrenzt die Tag-Regel den Kern auf 1 Karte pro Angebot).
@@ -2976,6 +2979,119 @@ function check(ok, msg) {
       chosen: allChosen, roomIndex: 20, rng: mulberry32(7), balance: tanksData.balance, count: 3, banned: new Set(),
     });
     check(offers.length === 3 && offers.every((o) => o.fallback), 'Phase 10: der Ersatzeintrag greift nicht bei erschoepftem Pool');
+  }
+}
+
+// ---- 19. UMBAUPLAN-LP Phase 11: Physisch-Topf + Element-Filter ------------
+// 12 physische Karten (4/4/4), Angebotsfilterung nach damageType, plus die
+// physischen Trefferregeln. Mechanismus mit eigenen Zahlen; Gegenprobe best.
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { stepState } = await import('../src/game/state.js');
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+  const U = upgradesData.upgrades;
+  const phys = Object.entries(U).filter(([, d]) => d.damageType === 'physical');
+
+  // (a) Struktur: 12 physische Karten, 4/4/4, alle Tag+damageType 'physical'.
+  {
+    check(phys.length === 12, `Phase 11: ${phys.length} physische Karten statt 12`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of phys) rar[d.rarity]++;
+    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 11: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(phys.every(([, d]) => d.tag === 'physical'), 'Phase 11: nicht alle physischen Karten tragen Tag physical');
+  }
+
+  // (b) Angebotsfilter (Testschritt 5): eine physische Klasse sieht physische
+  //     Karten, eine Frostklasse NICHT.
+  {
+    const sieht = (element) => {
+      const rng = mulberry32(1);
+      for (let i = 0; i < 300; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(), elements: [element],
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('phys_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('physical'), 'Phase 11: physische Klasse sieht keine physischen Karten');
+    check(!sieht('frost'), 'Phase 11: Frostklasse sieht physische Karten (Element-Filter greift nicht)');
+  }
+
+  // (c) Applier: Stat-Karten (Testschritt 1/2), mit eigenen Zahlen.
+  {
+    const base = resolveCfg(tanksData, 'player').damage;
+    const ap = applyUpgrades(resolveCfg(tanksData, 'player'), { phys_ap: 3 }, upgradesData, 'mine', null);
+    check(ap.damage === base + 6, `Phase 11: Panzerbrechend x3 ergibt ${ap.damage} statt ${base + 6}`);
+    const rg = applyUpgrades(resolveCfg(tanksData, 'player'), { phys_railgun: 1 }, upgradesData, 'mine', null);
+    check(rg.magazine === 1, `Phase 11: Railgun-Magazin ${rg.magazine} statt 1`);
+    check(rg.damage === Math.round(base * 3), `Phase 11: Railgun-Schaden ${rg.damage} statt ${Math.round(base * 3)}`);
+  }
+
+  // Feuert eine physische Kugel vom Spieler (mit gesetzten cfg-Feldern) auf ein
+  // Ziel; misst den hp-Abfall. Ziel ohne Panzerung/Schild.
+  const treffer = (ownerFields, { damage = 10, bounces = 0, crit = false, hp = 9999, maxHp = 9999 } = {}) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    Object.assign(st.player.cfg, ownerFields);
+    const z = {
+      ...proto, x: 200, y: 250, prevX: 200, prevY: 250,
+      alive: true, hp, protect: 0, shieldReady: false, status: {},
+      cfg: { ...proto.cfg, maxHp, armor: null, requiresRicochet: false, bounceDamageTakenMult: null },
+    };
+    st.tanks.push(z);
+    const b = createBullet(z.x, z.y, 0, {
+      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage, damageType: 'physical', crit,
+    });
+    b.age = 5;
+    b.wallBounces = bounces;
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(b);
+    const vor = z.hp;
+    stepState(st, CMD0, 1 / 60);
+    return { dmg: vor - z.hp, tot: !z.alive };
+  };
+
+  // (d) Kaltschütze: gebandeter Schuss ist kritisch (×2) trotz crit=false.
+  //     Testschritt 3 (Zusammenspiel mit dem Bankschuss-Faktor).
+  {
+    const plain = treffer({}, { damage: 10, bounces: 1 }).dmg; // Abprall ×2 = 20
+    const cold = treffer({ critOnBounce: true }, { damage: 10, bounces: 1 }).dmg; // ×2 Abprall × ×2 Krit = 40
+    check(plain === 20, `Phase 11: Vorbedingung Bankschaden ${plain} statt 20`);
+    check(cold === 40, `Phase 11: Kaltschütze macht gebandeten Schuss nicht kritisch (${cold} statt 40)`);
+  }
+
+  // (e) Splittergeschoss: Krit-Faktor +0,5 -> ×2,5.
+  {
+    const base = treffer({}, { damage: 10, crit: true }).dmg; // ×2 = 20
+    const boost = treffer({ critMultBonus: 0.5 }, { damage: 10, crit: true }).dmg; // ×2,5 = 25
+    check(base === 20 && boost === 25, `Phase 11: Splittergeschoss ${boost} statt 25 (Basis ${base})`);
+  }
+
+  // (f) Fangschuss: +40 % gegen Ziele unter 30 % LP, sonst nichts.
+  {
+    const low = treffer({ executeThreshold: 0.3, executeMult: 1.4 }, { damage: 10, hp: 20, maxHp: 100 }).dmg;
+    const high = treffer({ executeThreshold: 0.3, executeMult: 1.4 }, { damage: 10, hp: 90, maxHp: 100 }).dmg;
+    check(low === 14, `Phase 11: Fangschuss gegen angeschlagenes Ziel ${low} statt 14`);
+    check(high === 10, `Phase 11: Fangschuss trifft volles Ziel faelschlich haerter (${high} statt 10)`);
+  }
+
+  // (g) Abprallkönig: gebandet Abprall ×2 UND Bonus ×2 = ×4.
+  {
+    const king = treffer({ bounceDamageBonus: 1.0 }, { damage: 10, bounces: 1 }).dmg;
+    check(king === 40, `Phase 11: Abprallkönig gebandet ${king} statt 40`);
+  }
+
+  // (h) Kopfschuss: ein Krit tötet einen Nicht-Boss sofort.
+  {
+    const r = treffer({ critExecute: true }, { damage: 10, crit: true, hp: 300, maxHp: 300 });
+    check(r.tot, `Phase 11: Kopfschuss tötet den Nicht-Boss nicht (Schaden ${r.dmg} bei 300 LP)`);
   }
 }
 

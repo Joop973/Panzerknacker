@@ -19,7 +19,7 @@ import { applyTypeEffects } from './damagetypes.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
-import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage } from './cfg.js';
+import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, isBossCfg } from './cfg.js';
 import { armorBlocks, reflectBullet, reflectFromAim, hasWallBounced, isLive } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
@@ -1032,14 +1032,27 @@ export function stepState(state, cmd, dt) {
         const abprallMult = bounced
           ? t.cfg.bounceDamageTakenMult ?? state.data.balance?.bullet?.wallBounceDamageMult ?? 1
           : 1;
+        // UMBAUPLAN-LP Phase 11 (Physisch-Topf): Trefferregeln des Schuetzen.
+        // Kaltschuetze macht gebandete Schuesse kritisch; Splittergeschoss
+        // verstaerkt den Krit-Faktor; Abprallkoenig gibt gebandeten Schuessen
+        // Extra-Schaden; Fangschuss trifft angeschlagene Ziele haerter. Alle
+        // aus b.owner.cfg -- nur der Spieler traegt diese physischen Karten.
+        const oc = b.owner?.cfg;
+        const isCrit = b.crit || (bounced && !!oc?.critOnBounce);
         // Kritischer Treffer (UMBAUPLAN-LP Phase 7): der Aufschlag traegt den
-        // balance.crit.mult. Der Krit ist beim Abschuss ausgewuerfelt und am
-        // Geschoss eingefroren (b.crit, tank.js). Faktoren MULTIPLIZIEREN
-        // sich: ein gebandeter Krit macht abprallMult * critMult = 2 * 2 = 4
-        // (Testschritt 3). Nur der Trefferschaden, nicht die Explosion eines
-        // Sprenggeschosses (die laeuft ueber damage.explosion).
-        const critMult = b.crit ? state.data.balance?.crit?.mult ?? 1 : 1;
-        const schaden = Math.round(basisSchaden * abprallMult * critMult);
+        // balance.crit.mult (+ Splittergeschoss-Bonus). Faktoren MULTIPLIZIEREN
+        // sich: ein gebandeter Krit macht abprallMult * critMult = 2 * 2 = 4.
+        const critMult = isCrit ? (state.data.balance?.crit?.mult ?? 1) + (oc?.critMultBonus || 0) : 1;
+        const shooterBounceBonus = bounced ? 1 + (oc?.bounceDamageBonus || 0) : 1;
+        const execMult =
+          oc?.executeThreshold && t !== state.player && t.hp / (t.cfg.maxHp || 1) < oc.executeThreshold
+            ? oc.executeMult || 1
+            : 1;
+        let schaden = Math.round(basisSchaden * abprallMult * critMult * shooterBounceBonus * execMult);
+        // Kopfschuss (Phase 11): ein Krit toetet einen Nicht-Boss-Gegner sofort.
+        if (isCrit && oc?.critExecute && t !== state.player && !isBossCfg(t.cfg)) {
+          schaden = Math.max(schaden, t.hp);
+        }
         const trefferMeta = {
           code: own ? 'own_bullet' : 'enemy_bullet',
           enemyType: own ? null : b.owner?.type || null,

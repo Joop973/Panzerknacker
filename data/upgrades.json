@@ -1164,6 +1164,191 @@
         "dashGrant": true,
         "dashCdMult": 0.5
       }
+    },
+    "phys_ap": {
+      "id": "phys_ap",
+      "name": "Panzerbrechend",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "phys_scope": {
+      "id": "phys_scope",
+      "name": "Feinvisier",
+      "description": "Kritchance +4 %",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.04
+      }
+    },
+    "phys_pressure": {
+      "id": "phys_pressure",
+      "name": "Hochdruck",
+      "description": "Kugeltempo +12 %",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💨",
+      "core": {
+        "bulletSpeedMult": 1.12
+      }
+    },
+    "phys_spin": {
+      "id": "phys_spin",
+      "name": "Drall",
+      "description": "+1 Wandabpraller",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "↩",
+      "core": {
+        "ricochetAdd": 1
+      }
+    },
+    "phys_execute": {
+      "id": "phys_execute",
+      "name": "Fangschuss",
+      "description": "+40 % Schaden gegen Gegner unter 30 % LP",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔪",
+      "core": {
+        "executeThreshold": 0.3,
+        "executeMult": 1.4
+      }
+    },
+    "phys_coldshot": {
+      "id": "phys_coldshot",
+      "name": "Kaltschütze",
+      "description": "Gebandete Schüsse sind immer kritisch",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "critOnBounce": true
+      }
+    },
+    "phys_splinter": {
+      "id": "phys_splinter",
+      "name": "Splittergeschoss",
+      "description": "Kritische Treffer machen +0,5× Schaden",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "critMultBonus": 0.5
+      }
+    },
+    "phys_heavy": {
+      "id": "phys_heavy",
+      "name": "Schwere Munition",
+      "description": "Schaden ×1,2",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "damageMult": 1.2
+      }
+    },
+    "phys_railgun": {
+      "id": "phys_railgun",
+      "name": "Railgun",
+      "description": "Magazin 1 — dafür Schaden ×3",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🚄",
+      "core": {
+        "magazineFixed": 1,
+        "damageMult": 3
+      }
+    },
+    "phys_headshot": {
+      "id": "phys_headshot",
+      "name": "Kopfschuss",
+      "description": "Ein kritischer Treffer tötet einen Nicht-Boss sofort",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "critExecute": true
+      }
+    },
+    "phys_ricochetking": {
+      "id": "phys_ricochetking",
+      "name": "Abprallkönig",
+      "description": "+2 Abpraller, gebandete Schüsse doppelter Schaden",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎱",
+      "core": {
+        "ricochetAdd": 2,
+        "bounceDamageBonus": 1.0
+      }
+    },
+    "phys_arsenal": {
+      "id": "phys_arsenal",
+      "name": "Arsenal",
+      "description": "+4 Schaden, +2 Magazin, +10 % Krit",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔫",
+      "core": {
+        "damageAdd": 4,
+        "magAdd": 2,
+        "critAdd": 0.1
+      }
     }
   },
   "fallback": {
