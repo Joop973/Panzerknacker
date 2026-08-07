@@ -33,6 +33,7 @@ export function createBullet(
     burstDistance,
     damage,
     damageType,
+    crit,
   },
 ) {
   return {
@@ -61,6 +62,12 @@ export function createBullet(
     damage: damage ?? 1,
     // Schadenstyp (Phase 6) -- wie damage beim Abschuss eingefroren.
     damageType: damageType || 'physical',
+    // Kritischer Treffer (UMBAUPLAN-LP Phase 7): beim Abschuss ausgewuerfelt
+    // (tank.js), traegt der Aufschlag beim Treffer den balance.crit.mult.
+    // Wie damage/damageType am Geschoss eingefroren, nicht beim Treffer neu
+    // gewuerfelt -- eine Kugel, die mehrere Ziele streift, bleibt kritisch
+    // oder nicht.
+    crit: crit || false,
     detonated: false,
     // Aasgeier (state.js: killTank): true = zaehlt nicht mehr gegen das
     // Magazin des Schuetzen, fliegt und toetet aber normal weiter.

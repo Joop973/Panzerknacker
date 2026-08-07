@@ -2510,6 +2510,142 @@ function check(ok, msg) {
   }
 }
 
+// ---- 15. UMBAUPLAN-LP Phase 7: Krit-Umbau --------------------------------
+// Prueft den MECHANISMUS mit eigenen Zahlen (nicht die aktuellen JSON-Werte):
+// Roll (spielerseitig), Nachlade-Reset, Schadensmultiplikation, Deckel,
+// hoer-/sichtbares Feedback. Gegenprobe fuer jeden Punkt bestanden.
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { stepState } = await import('../src/game/state.js');
+  const { fireBullet } = await import('../src/game/tank.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+  const CRIT = tanksData.balance.crit;
+
+  check(CRIT && CRIT.cap < 1, 'Phase 7: balance.crit fehlt oder cap ist nicht < 1 (Deckeltest untauglich)');
+
+  // Frischer, spielbereiter Spieler in einem echten Raum. critChance und der
+  // RNG werden gestellt, damit der Krit deterministisch schaltbar ist.
+  const spieler = (critChance) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    st.player.cooldown = 0;
+    st.player.cfg.critChance = critChance;
+    return st;
+  };
+
+  // (a) Krit garantiert (Chance 1, rng klein): der Schuss ist kritisch UND das
+  //     Nachladen ist sofort zurueckgesetzt (Testschritt 1).
+  {
+    const st = spieler(1);
+    st.rng = () => 0;
+    check(st.player.cfg.fireCooldown > 0, 'Phase 7: Vorbedingung -- fireCooldown ist 0, Reset-Test untauglich');
+    check(fireBullet(st.player, st, true), 'Phase 7: Schuss ging nicht raus');
+    check(st.bullets.length > 0 && st.bullets.every((b) => b.crit), 'Phase 7: garantierter Krit setzt b.crit nicht');
+    check(st.player.cooldown === 0, `Phase 7: Krit setzt das Nachladen nicht zurueck (cooldown ${st.player.cooldown})`);
+  }
+
+  // (b) Krit unmoeglich (Chance 0): normaler Schuss, normales Nachladen
+  //     (Testschritt 2).
+  {
+    const st = spieler(0);
+    st.rng = () => 0;
+    fireBullet(st.player, st, true);
+    check(st.bullets.every((b) => !b.crit), 'Phase 7: bei Chance 0 ist ein Schuss kritisch');
+    check(st.player.cooldown > 0, 'Phase 7: bei Chance 0 wird das Nachladen zurueckgesetzt');
+  }
+
+  // (c) Der Deckel greift: eine Chance ueber cap wird auf cap geklemmt. Bei
+  //     rng zwischen cap und Chance darf KEIN Krit fallen (Testschritt 4).
+  {
+    const st = spieler(1);
+    st.rng = () => (CRIT.cap + 1) / 2; // zwischen cap und 1
+    fireBullet(st.player, st, true);
+    check(
+      st.bullets.every((b) => !b.crit),
+      `Phase 7: der Deckel greift nicht -- rng ${(CRIT.cap + 1) / 2} liegt ueber cap ${CRIT.cap}, loeste aber Krit aus`,
+    );
+    const st2 = spieler(1);
+    st2.rng = () => Math.max(0, CRIT.cap - 0.01); // knapp unter cap
+    fireBullet(st2.player, st2, true);
+    check(st2.bullets.every((b) => b.crit), 'Phase 7: knapp unter dem Deckel faellt kein Krit');
+  }
+
+  // (d) Schadensmultiplikation im Treffer. Ein Ziel exakt unter der Kugel,
+  //     unverwundbar hoch, ohne Panzerung/Schild -- so misst der hp-Abfall nur
+  //     die Faktoren. Krit und Bankschuss MULTIPLIZIEREN sich (Testschritt 3).
+  const treffer = (opt) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const z = {
+      ...proto, x: 200, y: 250, prevX: 200, prevY: 250,
+      alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+      cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+    };
+    st.tanks.push(z);
+    const b = createBullet(z.x, z.y, 0, {
+      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10, crit: opt.crit,
+    });
+    b.age = 5;
+    b.wallBounces = opt.bounces ?? 0;
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(b);
+    const vor = z.hp;
+    stepState(st, CMD0, 1 / 60);
+    return vor - z.hp;
+  };
+  {
+    const grund = 10;
+    const bounce = tanksData.balance.bullet.wallBounceDamageMult;
+    check(treffer({ crit: false, bounces: 0 }) === grund, 'Phase 7: Vorbedingung -- Grundtreffer nicht 10');
+    check(treffer({ crit: true, bounces: 0 }) === Math.round(grund * CRIT.mult), 'Phase 7: Krit verdoppelt den Aufschlag nicht');
+    check(treffer({ crit: false, bounces: 1 }) === Math.round(grund * bounce), 'Phase 7: Vorbedingung -- Bankschuss-Bonus stimmt nicht');
+    check(
+      treffer({ crit: true, bounces: 1 }) === Math.round(grund * CRIT.mult * bounce),
+      `Phase 7: Krit und Bankschuss multiplizieren sich nicht (${grund}x${CRIT.mult}x${bounce})`,
+    );
+  }
+
+  // (e) Feedback: der Krit spielt einen eigenen Ton, ruettelt den Bildschirm
+  //     und zeigt Text -- der Normaltreffer nichts davon (Testschritt 5).
+  {
+    const st = spieler(1);
+    st.rng = () => 0;
+    st.sounds.length = 0;
+    st.texts.length = 0;
+    st.shake = 0;
+    fireBullet(st.player, st, true);
+    const namen = st.sounds.map((s) => (typeof s === 'string' ? s : s.name));
+    check(namen.includes('crit'), 'Phase 7: Krit spielt keinen eigenen Ton');
+    check(st.shake > 0, 'Phase 7: Krit ohne Bildschirmausschlag');
+    check(st.texts.some((t) => /KRIT/i.test(t.text)), 'Phase 7: Krit ohne sichtbaren Text');
+
+    const st2 = spieler(0);
+    st2.rng = () => 0;
+    st2.sounds.length = 0;
+    st2.shake = 0;
+    fireBullet(st2.player, st2, true);
+    const namen2 = st2.sounds.map((s) => (typeof s === 'string' ? s : s.name));
+    check(!namen2.includes('crit'), 'Phase 7: Normaltreffer spielt den Krit-Ton');
+    check(st2.shake === 0, 'Phase 7: Normaltreffer loest Bildschirmausschlag aus');
+  }
+
+  // (f) Gegner kritten (vorerst) nicht -- der Roll haengt an tank ===
+  //     state.player. Sonst wuerde resetsReload zu Doppelfeuer fuehren.
+  {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const gegner = st.tanks.find((t) => t !== st.player && t.alive);
+    gegner.cooldown = 0;
+    gegner.cfg.critChance = 1;
+    st.rng = () => 0;
+    st.bullets.length = 0;
+    fireBullet(gegner, st, true);
+    check(st.bullets.length > 0, 'Phase 7: Vorbedingung -- Gegner hat nicht gefeuert');
+    check(st.bullets.every((b) => !b.crit), 'Phase 7: ein Gegnerschuss ist kritisch (Krit soll spielerseitig sein)');
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;

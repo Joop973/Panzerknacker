@@ -979,7 +979,14 @@ export function stepState(state, cmd, dt) {
         // unveraendert -- sonst wuerde ein einziger Wandkontakt gleich zwei
         // Schadensquellen verdoppeln.
         const abprallMult = bounced ? state.data.balance?.bullet?.wallBounceDamageMult ?? 1 : 1;
-        const schaden = Math.round(basisSchaden * abprallMult);
+        // Kritischer Treffer (UMBAUPLAN-LP Phase 7): der Aufschlag traegt den
+        // balance.crit.mult. Der Krit ist beim Abschuss ausgewuerfelt und am
+        // Geschoss eingefroren (b.crit, tank.js). Faktoren MULTIPLIZIEREN
+        // sich: ein gebandeter Krit macht abprallMult * critMult = 2 * 2 = 4
+        // (Testschritt 3). Nur der Trefferschaden, nicht die Explosion eines
+        // Sprenggeschosses (die laeuft ueber damage.explosion).
+        const critMult = b.crit ? state.data.balance?.crit?.mult ?? 1 : 1;
+        const schaden = Math.round(basisSchaden * abprallMult * critMult);
         const trefferMeta = {
           code: own ? 'own_bullet' : 'enemy_bullet',
           enemyType: own ? null : b.owner?.type || null,

@@ -143,7 +143,10 @@ ein Wandabpraller verdoppelt den Schaden (beidseitig), und jedes Geschoss
 trägt einen Schadenstyp, der Feuer/Frost/Gift aufträgt bzw. als Blitz auf
 drei Ziele springt. **Karten und Klassen setzen die Typen noch nicht** (Phase
 9 bzw. 11–16) — Debugtaste 4 schaltet sie bei `?debug=1` durch.
-**Nächste Sitzung: Phase 7 (Krit-Umbau).** `PLAN.md`/die
+**Phase 7 (Krit-Umbau) ist gebaut** (s. eigener Abschnitt unten): ein
+kritischer Treffer macht 2× Schaden UND setzt das Nachladen sofort zurück —
+vorerst spielerseitig, Grundchance 5 %, gedeckelt bei 35 %.
+**Nächste Sitzung: Phase 8 (Altlasten abbauen).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -1974,6 +1977,51 @@ aus Phase 5 auf, Blitz springt auf drei Ziele mit −30 % je Sprung.
   verdoppelt Aufschlag aber nicht Stufen, Standard ist physisch, Explosionen
   tragen ihren Typ.
 
+### UMBAUPLAN-LP Phase 7 (Krit-Umbau) — gemergt
+5 % auf doppelten Schaden wären +5 % Gesamtschaden und damit unsichtbar.
+Deshalb ist ein Krit ein spürbares **Ereignis**: `balance.json: crit`
+(`baseChance: 0.05`, `mult: 2.0`, `cap: 0.35`, `resetsReload: true`).
+- **Krit macht 2× Schaden UND setzt das Nachladen sofort zurück** — man darf
+  sofort wieder feuern (nur noch vom Magazin/aktiven Kugeln begrenzt). Das
+  Nachlade-Reset ist der spürbare Tempo-Ausschlag und hängt am **Abschuss**
+  (`tank.js: fireBullet()`), nicht am Treffer: „schießen → jeder Schuss lädt
+  sofort nach" (Testschritt 1) verlangt keinen Kill. Die 2×-Verdopplung
+  dagegen liegt am **Treffer** (`state.js`, Schadenszeile) — sie greift nur,
+  wenn die Kugel wirklich einschlägt.
+- **Der Krit wird EINMAL pro Abzug ausgewürfelt** (nicht je Kugel — alle
+  Kugeln eines Streuschuss-/Doppelrohr-Abzugs teilen ihn) und am Geschoss
+  eingefroren (`bullet.js: b.crit`, Muster wie `damage`/`damageType` aus
+  Phase 1/6). Eine Kugel, die mehrere Ziele streift, bleibt kritisch oder
+  nicht — kein Neu-Würfeln beim Treffer.
+- **Faktoren multiplizieren sich**: ein gebandeter Krit macht
+  `abprallMult × critMult = 2 × 2 = 4` (Phase-4-Abprall-Bonus × Krit,
+  Testschritt 3). Nur der Aufschlag, nicht die Explosion eines
+  Sprenggeschosses (die läuft weiter über `damage.explosion`).
+- **Vorerst spielerseitig**: der Roll hängt an `tank === state.player`.
+  Gegner-Krit ist im Plan nicht spezifiziert und würde über `resetsReload`
+  zu erratischem Doppelfeuer führen — bewusst nicht gebaut. `cfg.critChance`
+  wird für alle aufgelöst (`resolveCfg`: `t.crit ?? balance.crit.baseChance`,
+  damit Phase 9 die klassenspezifischen Krit-Werte per `tanks.json: crit`
+  ohne Code einhängen kann, Muster wie `maxHp`), ist bei Gegnern aber
+  wirkungslos. Zufall über den Seed-RNG (`state.rng`) → Run bleibt
+  deterministisch.
+- **Der Deckel greift am Roll-Ort** (`Math.min(cap, critChance)`), nicht erst
+  in `cfg.js` — so klemmt er auch, wenn spätere Karten/Klassen `critChance`
+  über 35 % treiben (Testschritt 4). Krit-Karten gibt es in Phase 7 noch
+  keine; der Cap-Mechanismus ist deshalb mit einer synthetischen Chance > cap
+  geprüft (gleiches Muster wie der `maxHp = 42`-Test aus Phase 1).
+- **Sicht-/Hörbares Gegenstück** (Testschritt 5, Auflage aus Phase 7b): der
+  Krit spielt einen eigenen scharfen Ton (`sounds.json: crit`), rüttelt den
+  Bildschirm (`state.addShake(6)`) und zeigt „KRITISCH!" am Panzer — der
+  Normaltreffer nichts davon.
+- **Neue Dauertests** (Abschnitt 15, Gegenprobe für jeden bestanden):
+  garantierter Krit setzt `b.crit` + Nachladen 0, Chance 0 lässt beides
+  normal, Deckel klemmt eine Chance > cap, Schadensmultiplikation
+  (Krit / Bank / beide = 2 / 2 / 4), Krit-Feedback vorhanden und beim
+  Normaltreffer abwesend, Gegnerschuss nie kritisch. Die Tests prüfen den
+  **Mechanismus mit eigenen Zahlen** (gestellter RNG, synthetische Chance),
+  nicht die aktuellen JSON-Werte.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2069,7 +2117,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v78`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v79`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

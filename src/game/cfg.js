@@ -19,6 +19,14 @@ export function resolveCfg(data, type) {
     // Schadenstyp (Phase 6). Standard physisch; Klassen (Phase 9) und
     // Karten (Phasen 11-16) setzen die anderen fuenf.
     damageType: t.damageType ?? 'physical',
+    // Kritische-Treffer-Chance (UMBAUPLAN-LP Phase 7). Grundwert aus
+    // balance.json; ein Typ darf ihn per tanks.json: crit ueberschreiben
+    // (Phase 9 haengt so die klassenspezifischen Krit-Werte ein, ohne
+    // Code zu aendern -- gleiches Muster wie maxHp/damage). Karten addieren
+    // spaeter einen Bonus (applyUpgrades), gedeckelt an balance.crit.cap.
+    // Gerollt wird nur fuer den Spieler (tank.js), daher ist der Wert bei
+    // Gegnern vorerst wirkungslos.
+    critChance: t.crit ?? (data.balance?.crit?.baseChance ?? 0),
     // Typ-eigene Feuerrate (t_green: 2 s) vor globalem Standard.
     fireCooldown: t.fireRate ?? data.physics.fireCooldownS,
     speed: data.speeds[t.speed],
