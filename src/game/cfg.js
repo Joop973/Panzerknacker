@@ -345,6 +345,11 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   // mehrere Kern-Kritkarten cfg.critChance ueber den Cap treiben (Phase 7).
   let coreDashGrant = false;
   let coreDashCdMult = 1;
+  // Multiplikative Effekte werden gesammelt und ERST NACH den additiven
+  // angewandt (sonst haengt das Ergebnis von der Kartenreihenfolge ab).
+  let dmgMult = 1;
+  let spdMult = 1;
+  let magFixed = null;
   for (const id in U) {
     const c = U[id].core;
     const lvl = l(id);
@@ -362,7 +367,23 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       coreDashGrant = true;
       coreDashCdMult *= Math.pow(c.dashCdMult ?? 1, lvl);
     }
+    // UMBAUPLAN-LP Phase 11 (Physisch-Topf): weitere generische Effektschluessel.
+    if (c.bulletSpeedMult) spdMult *= Math.pow(c.bulletSpeedMult, lvl);
+    if (c.damageMult) dmgMult *= Math.pow(c.damageMult, lvl);
+    if (c.magazineFixed) magFixed = c.magazineFixed;
+    // Trefferregeln, im Schadensschritt (state.js) ausgewertet:
+    if (c.executeThreshold) {
+      cfg.executeThreshold = c.executeThreshold;
+      cfg.executeMult = (cfg.executeMult || 1) * Math.pow(c.executeMult ?? 1, lvl);
+    }
+    if (c.critOnBounce) cfg.critOnBounce = true;
+    if (c.critMultBonus) cfg.critMultBonus = (cfg.critMultBonus || 0) + c.critMultBonus * lvl;
+    if (c.critExecute) cfg.critExecute = true;
+    if (c.bounceDamageBonus) cfg.bounceDamageBonus = (cfg.bounceDamageBonus || 0) + c.bounceDamageBonus * lvl;
   }
+  cfg.damage = Math.round(cfg.damage * dmgMult);
+  cfg.bulletSpeed *= spdMult;
+  if (magFixed != null) cfg.magazine = magFixed; // Railgun: nach magAdd, gewinnt
   // Ausweichen-Kernkarten schalten den Dash frei (unabhaengig von der alten
   // dash-Karte) und verkuerzen die Abklingzeit. Reusen dieselbe dash-Definition.
   if (coreDashGrant) {

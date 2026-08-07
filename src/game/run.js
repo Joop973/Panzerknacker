@@ -890,7 +890,18 @@ function poolOpts(run) {
     balance: run.data.balance,
     count: run.upgradesData.offersPerScreen,
     banned: run.bannedUpgrades,
+    // UMBAUPLAN-LP Phase 11: Element-Filter. Typgebundene Karten (damageType)
+    // erscheinen nur, wenn ihr Typ zum Element der gewaehlten Klasse passt --
+    // ein Frostpanzer sieht keine reinen Feuerkarten. Phase 17 mischt spaeter
+    // ein Zweitelement bei; bis dahin ist es genau das Klassen-Element.
+    elements: elementsOf(run),
   };
+}
+
+// Die Schadenstypen, deren typgebundene Karten die Klasse ziehen darf.
+// Vorerst nur das Primaerelement der Klasse (Phase 17: + Zweitelement).
+function elementsOf(run) {
+  return [run.data.types[run.starterTank]?.damageType || 'physical'];
 }
 
 // Belohnungs-Angebote je nach Raumtyp (Seed-RNG -> deterministisch):

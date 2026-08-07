@@ -82,7 +82,7 @@ function fallbackOffer(upgradesData) {
 //   onlyRarity     -- nur diese Seltenheit (z. B. 'legendary' fuer Treasure)
 //   bypassRoomGate -- minRoom + legendary.minRoom ignorieren
 function buildCandidates(upgradesData, opts) {
-  const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate } = opts;
+  const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate, elements } = opts;
   const legMinRoom = balance.legendary?.minRoom ?? 0;
   const bannedSet = banned || new Set();
   const defs = upgradesData.upgrades;
@@ -92,6 +92,12 @@ function buildCandidates(upgradesData, opts) {
     if (includeTag) {
       if (def.tag !== includeTag) continue; // nur dieser Tag (bypass EXCLUDED)
     } else if (EXCLUDED_TAGS.has(def.tag) && !(def.tag === 'weapon' && WEAPON_ALLOWLIST.has(id))) continue;
+    // UMBAUPLAN-LP Phase 11: typgebundene Karten nur, wenn ihr damageType zum
+    // Element (Primaer + spaeter Zweit) der Klasse passt. Karten OHNE damageType
+    // (Kernpool, Altkarten) sind universell und bleiben immer sichtbar. Der
+    // Filter greift nur beim normalen Angebot (elements gesetzt) -- Elite-/
+    // Treasure-Belohnungen (includeTag/onlyRarity) lassen ihn bewusst aus.
+    if (elements && def.damageType && !elements.includes(def.damageType)) continue;
     if (onlyRarity && def.rarity !== onlyRarity) continue;
     if (bannedSet.has(id)) continue;
     // P4: Die frueher noetige Minen-Sperre (MINE_ONLY_IDS) ist entfallen.
