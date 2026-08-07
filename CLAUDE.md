@@ -16,6 +16,29 @@ Bei Service-Worker-relevanten Änderungen den Cache-Namen in `sw.js` erhöhen
 - Vor dem Push testen (Node-Syntaxcheck + kurzer Playwright-Smoke, s. u.).
 - Commit-/PR-Texte auf Deutsch. Kein Modell-Identifier in Commits/PRs.
 
+## ⚠️ Gegenprobe für jeden neuen Test (Pflicht)
+Ein neuer Test ist erst fertig, wenn er **nachweislich rot wird**. Also: den
+Fehler, den er bewachen soll, absichtlich einbauen (Wert ändern, Zeile
+auskommentieren, Bedingung umdrehen), Suite laufen lassen, Meldung prüfen,
+Änderung zurücknehmen. Ein grüner Test ohne diesen Nachweis ist wertlos —
+er kann aus dem falschen Grund grün sein.
+
+Das ist keine Theorie: In diesem Projekt sind so schon mehrere stille
+Blindgänger aufgefallen, u. a.
+- „Panzer starten mit vollen LP" prüfte `hp === cfg.maxHp`, was bei
+  `maxHp: 1` überall **trivial wahr** war — ein hartkodiertes `hp: 1`
+  rutschte durch (LP-Phase 1);
+- „höchstens 3 Statussymbole" bei genau drei existierenden Effekten — der
+  ausgebaute Deckel rutschte durch (LP-Phase 5);
+- eine Schadensmessung fing gegnerisches Eigenfeuer mit ein und zeigte 74
+  statt 24 Schaden (LP-Phase 5);
+- eine Minen-Prüfung verglich nur Code gegen JSON und hätte jede
+  Wertänderung mitgemacht (LP-Phase 3).
+
+Faustregel daraus: **den Mechanismus mit eigenen Zahlen prüfen, nicht die
+aktuelle Datenlage** — sonst ist der Test entweder trivial wahr oder er
+wandert bei der nächsten Balance-Änderung grundlos auf Rot.
+
 ## ⚠️ Diese Datei aktuell halten (Pflicht)
 Am Ende **jeder** abgeschlossenen Aufgabe **diese `CLAUDE.md` mit
 aktualisieren** und im selben PR mitmergen. So kann der Nutzer jederzeit den
