@@ -19,7 +19,7 @@ import { applyTypeEffects } from './damagetypes.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
-import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling } from './cfg.js';
+import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage } from './cfg.js';
 import { armorBlocks, reflectBullet, reflectFromAim, hasWallBounced, isLive } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
@@ -118,7 +118,8 @@ function applyAffixByIndex(t, index, eliteAffixes) {
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
-    destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses } = opts;
+    destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses,
+    starterTank = 'player', starterScrap = 0 } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
@@ -163,10 +164,13 @@ export function createState(data, tiles, opts) {
       : [];
 
   const player = createTank(
-    'player',
+    starterTank,
     applyRoomContext(
       applyRoomModifier(
-        applyUpgrades(resolveCfg(data, 'player'), playerUpgrades, upgradesData, equippedSecondary, equippedGadget),
+        applyScrapDamage(
+          applyUpgrades(resolveCfg(data, starterTank), playerUpgrades, upgradesData, equippedSecondary, equippedGadget),
+          starterScrap,
+        ),
         modifier,
         true,
       ),
@@ -223,6 +227,8 @@ export function createState(data, tiles, opts) {
     upgradesData,
     equippedSecondary: equippedSecondary || 'mine', // Phase 6: fuer respawnPlayer()
     equippedGadget: equippedGadget || null, // P4: zweiter Slot, ebenfalls fuer respawnPlayer()
+    starterTank, // Phase 9: gewaehlte Klasse -- respawnPlayer() baut denselben Panzer
+    starterScrap, // Phase 9: Schrottstand fuer das Schrottpanzer-Passiv (pro Raum gebacken)
     roomContext: roomContext || null, // { elite, boss } -- raumabhaengige Karten
     // LP-Skalierung dieses Raums (Phase 2) -- gemerkt, damit die zweite
     // Welle (updateWave) dieselben Werte bekommt wie die erste.
@@ -469,7 +475,7 @@ export function createState(data, tiles, opts) {
       if (meta?.overTime) {
         tank.hp -= amount ?? 1;
         if (tank.hp > 0) return;
-        state.killTank(tank, cause, meta);
+        if (!state.tryRevive(tank)) state.killTank(tank, cause, meta);
         return;
       }
       // Notschild-Ladung faengt genau einen Treffer ab (raumuebergreifend,
@@ -525,13 +531,28 @@ export function createState(data, tiles, opts) {
         if (amount <= 0) return;
         tank.hp -= amount;
         if (tank.hp > 0) return;
-        state.killTank(tank, cause, meta);
+        if (!state.tryRevive(tank)) state.killTank(tank, cause, meta);
         return;
       }
       // Kein Gatter hat gegriffen -> der Treffer geht durch.
       tank.hp -= amount ?? 1;
       if (tank.hp > 0) return;
-      state.killTank(tank, cause, meta);
+      if (!state.tryRevive(tank)) state.killTank(tank, cause, meta);
+    },
+    // Nekromant-Passiv (UMBAUPLAN-LP Phase 9): reviveChance, einen toedlichen
+    // Treffer mit voller Gesundheit zu ueberleben. Nur der Spieler, nur mit dem
+    // Passiv (sonst returnt es VOR state.rng() -- keine RNG-Drift fuer andere
+    // Klassen). Deterministisch ueber den Seed-RNG. Gilt fuer jeden toedlichen
+    // Treffer neu (auch DOT), 25 % je Mal.
+    tryRevive(tank) {
+      if (tank !== state.player || !(tank.cfg.reviveChance > 0)) return false;
+      if (state.rng() >= tank.cfg.reviveChance) return false;
+      tank.hp = tank.cfg.maxHp;
+      tank.protect = Math.max(tank.protect || 0, 0.8);
+      state.sounds.push({ name: 'shield', x: tank.x });
+      state.spawnParticles(tank.x, tank.y, '#8ad14a', 16, 160);
+      state.texts.push({ x: tank.x, y: tank.y - 24, text: 'WIEDERBELEBT!', age: 0, life: 0.9, color: '#8ad14a' });
+      return true;
     },
     // Reine Todeslogik -- ab hier ist der Panzer tot, es gibt keine
     // Abwehr mehr. Bewusst weiterhin direkt aufrufbar (Tests raeumen damit
@@ -616,8 +637,8 @@ export function createState(data, tiles, opts) {
     // einen Status zu erzeugen -- es haengt noch keine Quelle daran
     // (Debug-Tasten 1/2/3 bei ?debug=1, Tests). Phase 6 haengt die
     // Schadenstypen an.
-    applyStatus(tank, id, stacks) {
-      return applyStatus(state, tank, id, stacks);
+    applyStatus(tank, id, stacks, opts) {
+      return applyStatus(state, tank, id, stacks, opts);
     },
     addShake(amount) {
       state.shake = Math.min(10, state.shake + amount);
@@ -670,15 +691,18 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
 // zerstoert.
 function respawnPlayer(state) {
   const fresh = createTank(
-    'player',
+    state.starterTank,
     applyRoomContext(
       applyRoomModifier(
-        applyUpgrades(
-          resolveCfg(state.data, 'player'),
-          state.playerUpgrades,
-          state.upgradesData,
-          state.equippedSecondary,
-          state.equippedGadget,
+        applyScrapDamage(
+          applyUpgrades(
+            resolveCfg(state.data, state.starterTank),
+            state.playerUpgrades,
+            state.upgradesData,
+            state.equippedSecondary,
+            state.equippedGadget,
+          ),
+          state.starterScrap,
         ),
         state.modifier,
         true,
@@ -1022,6 +1046,11 @@ export function stepState(state, cmd, dt) {
           bulletOwner: own ? 'player' : 'enemy',
           bulletRicochets: b.wallBounces || 0,
           bulletDistance: Math.round(b.distance || 0),
+          // Klassen-Passive (Phase 9): der Schuetze bestimmt Blitzziele +
+          // Status-Dauer/Verlangsamung. Ueber die Kugel statt global, damit
+          // applyTypeEffects()/applyStatus() sie beim Auftragen kennt.
+          lightningBonus: b.owner?.cfg?.lightningBonusTargets || 0,
+          ownerCfg: b.owner?.cfg || null,
         };
         state.applyDamage(t, schaden, cause, trefferMeta);
         // UMBAUPLAN-LP Phase 8: Schaden je Schadenstyp (nur der vom SPIELER an

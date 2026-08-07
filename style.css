@@ -634,6 +634,49 @@ html, body {
   color: #9aa0a8;
 }
 
+/* Phase 9: Klassenauswahl -- Liste von Karten mit Name/Werten/Beschreibung. */
+.classlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 520px;
+}
+
+.classlist button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: #1b1b22;
+  border: 2px solid #4a4a5a;
+  color: #cdd2da;
+  font-family: monospace;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.classlist button.active {
+  border-color: #c8b24a;
+  background: #26241a;
+}
+
+.classlist .cl-name {
+  font-weight: bold;
+  color: #eaf2ff;
+  font-size: 15px;
+}
+
+.classlist .cl-stats {
+  font-size: 12px;
+  color: #9aa0a8;
+}
+
+.classlist .cl-desc {
+  font-size: 12px;
+  color: #8a9099;
+  margin-top: 2px;
+}
+
 .opts label {
   cursor: pointer;
 }
@@ -1035,6 +1078,27 @@ body.touch-on .throwstick.slot-empty {
   }
   .cards .card .cardmeta {
     font-size: 10px;
+  }
+  /* Phase 9: der zusaetzliche Klassen-Button macht den Startbildschirm eine
+     Zeile hoeher -- auf flachen Handy-Querformaten die Bedienelemente
+     verdichten, damit nichts (settingsOpen) unter den Rand rutscht. */
+  .overlay button {
+    padding: 6px 24px;
+    font-size: 15px;
+  }
+  .overlay button.secondary {
+    padding: 5px 18px;
+    font-size: 13px;
+  }
+  .overlay input {
+    padding: 5px 8px;
+  }
+  .modes button {
+    padding: 5px 16px;
+    font-size: 13px;
+  }
+  .beststats {
+    font-size: 11px;
   }
 }
 

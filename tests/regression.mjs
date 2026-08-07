@@ -1619,8 +1619,10 @@ function check(ok, msg) {
   // Festlegungstabelle des Plans sagt "Gegnerhaerte 2-5 Treffer, Elite 10,
   // Boss 50" -- das ist die Design-Zusage, nicht die einzelne Zahl.
   {
+    // Spielbare Klassen (player:true, Phase 9) sind KEINE Gegner und fallen
+    // aus der Gegnerhaerte-Pruefung heraus.
     for (const [id, t] of Object.entries(T)) {
-      if (id === 'player' || BOSSE.includes(id)) continue;
+      if (t.player || BOSSE.includes(id)) continue;
       const treffer = Math.ceil(t.maxHp / dmg);
       check(
         treffer >= 2 && treffer <= 5,
@@ -1629,7 +1631,7 @@ function check(ok, msg) {
     }
     // Elite verdoppelt -> hoechstens 10 Treffer.
     const haertester = Math.max(
-      ...Object.entries(T).filter(([id]) => id !== 'player' && !BOSSE.includes(id)).map(([, t]) => t.maxHp),
+      ...Object.entries(T).filter(([id, t]) => !t.player && !BOSSE.includes(id)).map(([, t]) => t.maxHp),
     );
     check(
       Math.ceil((haertester * diffData.elite.hpMult) / dmg) === 10,
@@ -2729,6 +2731,168 @@ function check(ok, msg) {
     stepState(st, CMD0, 1 / 60);
     check(st.damageByType.fire === 10, `Phase 8: Feuerschaden nicht im Zaehler (fire=${st.damageByType.fire})`);
     check(st.damageByType.physical === 0, 'Phase 8: physischer Zaehler faelschlich erhoeht');
+  }
+}
+
+// ---- 17. UMBAUPLAN-LP Phase 9: die zehn Klassen als Werte -----------------
+// Blocker-Fix (Player-Defaults per player:true), Klassenwerte, Passive,
+// Seed-Wiedergabe. Mechanismus mit eigenen Zahlen; Gegenprobe bestanden.
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { stepState } = await import('../src/game/state.js');
+  const { resolveCfg, applyUpgrades, applyScrapDamage } = await import('../src/game/cfg.js');
+  const { applyTypeEffects } = await import('../src/game/damagetypes.js');
+  const { runSnapshot } = await import('../src/game/run.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+  const T = tanksData.types;
+
+  // (a) Struktur: genau zehn spielbare Klassen (player:true), jede mit
+  //     LP/Schaden; 'player' IST die Standard-Klasse.
+  {
+    const klassen = Object.entries(T).filter(([, t]) => t.player);
+    check(klassen.length === 10, `Phase 9: ${klassen.length} Klassen statt 10`);
+    check(T.player.player === true, 'Phase 9: Standard-Klasse (player) nicht als player markiert');
+    for (const [id, t] of klassen) {
+      check(typeof t.maxHp === 'number' && typeof t.damage === 'number', `Phase 9: Klasse ${id} ohne LP/Schaden`);
+    }
+  }
+
+  // (b) Blocker-Fix: Magazin/Deckel/Kugeltempo einer Klasse kommen aus den
+  //     Player-Defaults (balance.json), NICHT aus dem undefinierten Typwert;
+  //     speedMult skaliert das Basistempo; crit/damageType aus dem Typ.
+  {
+    const bb = tanksData.balance.bullet;
+    const cfg = resolveCfg(tanksData, 'c_tesla');
+    check(cfg.magazine === bb.maxActive, `Phase 9: Klassenmagazin ${cfg.magazine} statt Player-Default ${bb.maxActive}`);
+    check(cfg.magazineCap === bb.maxActiveCap, `Phase 9: Magazindeckel ${cfg.magazineCap} statt ${bb.maxActiveCap}`);
+    check(cfg.bulletSpeed === bb.speed, `Phase 9: Kugeltempo ${cfg.bulletSpeed} statt ${bb.speed}`);
+    check(Math.abs(cfg.speed - tanksData.speeds.normal * 1.05) < 1e-6, `Phase 9: speedMult greift nicht (speed ${cfg.speed})`);
+    check(cfg.critChance === 0.05, `Phase 9: Klassen-Krit ${cfg.critChance} statt 0.05`);
+    check(cfg.damageType === 'lightning', `Phase 9: Teslapanzer schiesst ${cfg.damageType} statt lightning`);
+  }
+
+  // (c) Abprallpanzer: +1 Abpraller auf die Basis.
+  {
+    check(resolveCfg(tanksData, 'c_ricochet').ricochets === 2, 'Phase 9: Abprallpanzer nicht 2 Abpraller');
+    check(resolveCfg(tanksData, 'player').ricochets === 1, 'Phase 9: Standard nicht 1 Abpraller');
+  }
+
+  // (d) Sprengpanzer: +20 % Bombenradius, in mineRadiusMult gefaltet (Test-
+  //     schritt 2). Mit eigenen Zahlen, nicht dem aktuellen JSON-Wert allein.
+  {
+    const cfg = applyUpgrades(resolveCfg(tanksData, 'c_blast'), {}, upgradesData, 'mine', null);
+    check(Math.abs(cfg.mineRadiusMult - 1.2) < 1e-6, `Phase 9: Sprengpanzer mineRadiusMult ${cfg.mineRadiusMult} statt 1.2`);
+    const std = applyUpgrades(resolveCfg(tanksData, 'player'), {}, upgradesData, 'mine', null);
+    check(Math.abs(std.mineRadiusMult - 1) < 1e-6, `Phase 9: Standard mineRadiusMult ${std.mineRadiusMult} statt 1`);
+  }
+
+  // Testraum mit n Zielen in einer Reihe (Spieler weit weg geparkt, damit er
+  // nicht selbst in eine Blitzkette geraet).
+  const reihe = (n, abstand) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.player.x = 2000;
+    st.player.y = 2000;
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const ziele = [];
+    for (let i = 0; i < n; i++) {
+      const z = {
+        ...proto, x: 200 + i * abstand, y: 250, prevX: 200 + i * abstand, prevY: 250,
+        alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+        cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+      };
+      st.tanks.push(z);
+      ziele.push(z);
+    }
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    return { st, ziele };
+  };
+
+  // (e) Teslapanzer: Blitz springt auf 4 statt 3 Ziele (Testschritt 3).
+  {
+    const L = tanksData.status.damageTypes.lightning;
+    const { st, ziele } = reihe(5, Math.round(L.jumpRangePx * 0.5));
+    st.player.cfg.lightningBonusTargets = 1;
+    const b = createBullet(ziele[0].x, ziele[0].y, 0, {
+      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10, damageType: 'lightning',
+    });
+    b.age = 5;
+    st.bullets.push(b);
+    const vor = ziele.map((z) => z.hp);
+    stepState(st, CMD0, 1 / 60);
+    const getroffen = ziele.filter((z, i) => vor[i] - z.hp > 0).length;
+    check(getroffen === 4, `Phase 9: Teslapanzer trifft ${getroffen} statt 4 Ziele`);
+  }
+
+  // (f) Flammen-/Radioaktiv-Panzer: Status haelt laenger. Frostpanzer:
+  //     staerkere Verlangsamung. Mit eigenen Faktoren geprueft.
+  {
+    const { st, ziele } = reihe(1, 60);
+    const fire = tanksData.status.effects.fire;
+    applyTypeEffects(st, ziele[0], 'fire', 10, { ownerCfg: { fireDurationMult: 1.25 } });
+    check(Math.abs(ziele[0].status.fire.timeLeft - fire.durationS * 1.25) < 1e-6, `Phase 9: Branddauer ${ziele[0].status.fire.timeLeft} statt ${fire.durationS * 1.25}`);
+
+    const { ziele: z2 } = reihe(1, 60);
+    applyTypeEffects(st, z2[0], 'fire', 10, {});
+    check(Math.abs(z2[0].status.fire.timeLeft - fire.durationS) < 1e-6, 'Phase 9: Branddauer ohne Passiv verlaengert');
+
+    const { st: st3, ziele: z3 } = reihe(1, 60);
+    const frostBase = tanksData.status.effects.frost.speedMult;
+    applyTypeEffects(st3, z3[0], 'frost', 10, { ownerCfg: { frostSlowBonus: 0.2 } });
+    const erwartet = 1 - (1 - frostBase) * 1.2;
+    check(Math.abs(z3[0].status.frost.speedMult - erwartet) < 1e-6, `Phase 9: Frost-Verlangsamung ${z3[0].status.frost.speedMult} statt ${erwartet}`);
+  }
+
+  // (g) Nekromant: reviveChance ueberlebt einen toedlichen Treffer (RNG < c),
+  //     stirbt bei Fehlwurf; ohne das Passiv wird kein RNG verbraucht.
+  {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const p = st.player;
+    p.cfg.reviveChance = 0.25;
+    p.cfg.maxHp = 100;
+    p.hp = 10;
+    p.protect = 0;
+    p.shieldReady = false;
+    st.shieldCharges.length = 0;
+    st.rng = () => 0; // < 0.25 -> Wiederbelebung
+    st.applyDamage(p, 50, 'test', {});
+    check(p.alive && p.hp === 100, `Phase 9: Nekromant wiederbelebt nicht (alive=${p.alive}, hp=${p.hp})`);
+
+    const st2 = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const p2 = st2.player;
+    p2.cfg.reviveChance = 0.25;
+    p2.hp = 10;
+    p2.protect = 0;
+    p2.shieldReady = false;
+    st2.shieldCharges.length = 0;
+    st2.rng = () => 0.9; // >= 0.25 -> stirbt
+    st2.applyDamage(p2, 50, 'test', {});
+    check(!p2.alive, 'Phase 9: Nekromant ueberlebt trotz Fehlwurf');
+  }
+
+  // (h) Schrottpanzer: +5 % Schaden je 100 Schrott, pro Raum gebacken.
+  {
+    const cfg = resolveCfg(tanksData, 'c_scrap');
+    const grund = cfg.damage;
+    applyScrapDamage(cfg, 250); // floor(250/100)=2 -> *1.10
+    check(cfg.damage === Math.round(grund * (1 + 0.05 * 2)), `Phase 9: Schrottpanzer-Schaden ${cfg.damage} statt ${Math.round(grund * 1.1)}`);
+    const std = resolveCfg(tanksData, 'player');
+    applyScrapDamage(std, 250);
+    check(std.damage === 10, `Phase 9: Standard skaliert faelschlich mit Schrott (${std.damage})`);
+  }
+
+  // (i) Seed-Wiedergabe: die Klasse steht im Run UND im Snapshot und ueberlebt
+  //     das Fortsetzen (Testschritt 4/5).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42, 'normal', { starterTank: 'c_tesla' });
+    check(run.starterTank === 'c_tesla', 'Phase 9: starterTank nicht im Run gesetzt');
+    const snap = runSnapshot(run);
+    check(snap.starterTank === 'c_tesla', 'Phase 9: starterTank fehlt im Snapshot');
+    const resumed = createRun(tanksData, tilesData, diffData, upgradesData, 42, 'normal', { resume: snap });
+    check(resumed.starterTank === 'c_tesla', 'Phase 9: Klasse geht beim Fortsetzen verloren');
+    check(resumed.state.starterTank === 'c_tesla', 'Phase 9: state.starterTank nicht gesetzt (Respawn baut falsche Klasse)');
   }
 }
 

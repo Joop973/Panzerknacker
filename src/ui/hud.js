@@ -193,7 +193,9 @@ export function createHud(ctx) {
     const st = run.state;
     const p = st.player;
     if (!p) return;
-    const base = resolveCfg(run.data, 'player');
+    // Phase 9: Basis der GEWAEHLTEN Klasse -- die Abweichung soll sich auf die
+    // eigene Klasse beziehen, nicht auf die Standard-Klasse.
+    const base = resolveCfg(run.data, run.starterTank || 'player');
     const bmine = run.data.balance.mine;
   
     // Abweichung in Prozent, nur wenn es eine gibt.

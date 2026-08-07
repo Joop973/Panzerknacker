@@ -28,7 +28,11 @@
 
 // Effekt auf einen Panzer auftragen. stacks = wie viele Stufen auf einmal.
 // Gibt die neue Stufenzahl zurueck (0, wenn der Effekt unbekannt ist).
-export function applyStatus(state, tank, id, stacks = 1) {
+// opts (UMBAUPLAN-LP Phase 9, Klassen-Passive): durationMult skaliert die
+// Effektdauer (Flammen-/Radioaktiv-Panzer), speedMultOverride ersetzt die
+// Frost-Verlangsamung dieses Eintrags (Frostpanzer). Beide optional -- ohne
+// sie verhaelt sich applyStatus wie vor Phase 9.
+export function applyStatus(state, tank, id, stacks = 1, opts = {}) {
   const def = state.data.status?.effects?.[id];
   if (!def || !tank || !tank.alive) return 0;
   tank.status ||= {};
@@ -48,7 +52,10 @@ export function applyStatus(state, tank, id, stacks = 1) {
   // Die TAKT-Buchhaltung wird dabei bewusst NICHT zurueckgesetzt: sonst
   // koennte eine schnell feuernde Quelle den Tick endlos hinausschieben
   // und der Effekt wuerde nie Schaden machen.
-  eintrag.timeLeft = def.durationS;
+  eintrag.timeLeft = def.durationS * (opts.durationMult ?? 1);
+  // Phase 9: eine staerkere Frost-Verlangsamung wird am Eintrag gemerkt (der
+  // def-Wert bleibt unangetastet -- gilt also nur fuer diese Quelle).
+  if (opts.speedMultOverride != null) eintrag.speedMult = opts.speedMultOverride;
 
   // Frost-Erstarrung: NUR beim Uebergang unter den Deckel -> auf den
   // Deckel. Wuerde sie bei jedem Auftragen auf voller Stufe erneut
@@ -76,7 +83,10 @@ export function statusSpeedMult(state, tank) {
   for (const id of Object.keys(eff)) {
     if (eff[id].stacks <= 0) continue;
     const def = state.data.status?.effects?.[id];
-    if (def?.speedMult) m *= def.speedMult;
+    // Phase 9: ein am Eintrag gemerkter speedMult (staerkere Frost-Quelle)
+    // hat Vorrang vor dem def-Standardwert.
+    const sm = eff[id].speedMult ?? def?.speedMult;
+    if (sm) m *= sm;
   }
   return m;
 }

@@ -469,8 +469,12 @@ export function createRenderer(ctx) {
     }
 
     ctx.globalAlpha = bodyAlpha;
-    const body = TANK_COLORS[t.type] || '#ffffff';
-    const isPlayer = t.type === 'player';
+    // Phase 9: alle zehn Klassen sind der Spieler -- ueber die Objektidentitaet
+    // erkannt, nicht mehr ueber t.type === 'player' (das gaelte nur fuer die
+    // Standard-Klasse). Body-Farbe faellt fuer die neuen Klassen auf die
+    // Spielerfarbe zurueck (sie teilen sich das Sprite via SPRITE_ALIAS).
+    const isPlayer = t === state.player;
+    const body = TANK_COLORS[t.type] || (isPlayer ? TANK_COLORS.player : '#ffffff');
     const edge = t.type === 't_black' ? '#8a8a99' : isPlayer ? '#eaf2ff' : COLORS.outline;
 
     // Spieler: sanfter Glow + pulsierender Ring, damit er in jedem
@@ -512,7 +516,7 @@ export function createRenderer(ctx) {
     // Ziellinie des Spielers mit EINEM Abpraller-Vorgriff: Ray-March
     // wie ein Geschoss (achsweise Reflexion) -- man sieht die erste
     // Bande. Wichtig fuer Touch/Gamepad ohne Cursor.
-    if (t.type === 'player') {
+    if (isPlayer) {
       let dx = Math.cos(t.turret);
       let dy = Math.sin(t.turret);
       let lx = x + dx * (r + 10);

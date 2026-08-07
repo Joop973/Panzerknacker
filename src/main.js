@@ -175,6 +175,11 @@ async function init() {
   let toast = null;
   let lastSeed = 0;
   let mode = getPref('mode', 'normal');
+  // Phase 9: gewaehlte Klasse (Default: Standard = 'player'). Persistiert, damit
+  // die Auswahl ueber Sitzungen erhalten bleibt; der laufende Run traegt sie
+  // ausserdem im Snapshot (run.js), sodass "Fortsetzen" dieselbe Klasse laedt.
+  let starterTank = getPref('starterTank', 'player');
+  if (!tanksData.types[starterTank]?.player) starterTank = 'player';
 
   // ---- Telemetrie-Tracking (nur beobachtend, keine Spiellogik) ----
   let teleRoom = 0; // aktuell getimter Raum-Index
@@ -382,6 +387,7 @@ async function init() {
     run = createRun(tanksData, tilesData, diffData, upgradesData, seed, modeKey, {
       roomSpec: arenaSpec,
       resume: resume || null,
+      starterTank, // Phase 9: bei Resume ueberschreibt der Snapshot (run.js)
     });
     lastSeed = seed;
     updateSecondaryLabel();
@@ -933,6 +939,59 @@ async function init() {
   const startMenuNav = createMenuNav(focusablesIn(startOverlay));
   const settingsMenuNav = createMenuNav(focusablesIn(settingsOverlay));
   let activeMenuNav = startMenuNav;
+
+  // Phase 9: Klassenauswahl-Seite. Fuellt sich aus tanks.json (player:true),
+  // zeigt Name/Werte/Beschreibung, merkt die Wahl in den Prefs.
+  const classScreen = document.getElementById('classScreen');
+  const classListEl = document.getElementById('classList');
+  const classOpenBtn = document.getElementById('classOpen');
+  const playerClasses = Object.entries(tanksData.types).filter(([, t]) => t.player);
+  const refreshClassBtn = () => {
+    classOpenBtn.textContent = `Klasse: ${tanksData.types[starterTank]?.label || 'Standard'} ▸`;
+  };
+  const fmtClassStats = (t) =>
+    `LP ${t.maxHp} · Schaden ${t.damage} · Tempo ${Math.round((t.speedMult ?? 1) * 100)} % · Krit ${Math.round((t.crit ?? 0.05) * 100)} %`;
+  function buildClassList() {
+    classListEl.innerHTML = '';
+    for (const [id, t] of playerClasses) {
+      const b = document.createElement('button');
+      b.dataset.class = id;
+      b.classList.toggle('active', id === starterTank);
+      const name = document.createElement('div');
+      name.className = 'cl-name';
+      name.textContent = t.label || id;
+      const stats = document.createElement('div');
+      stats.className = 'cl-stats';
+      stats.textContent = fmtClassStats(t);
+      const desc = document.createElement('div');
+      desc.className = 'cl-desc';
+      desc.textContent = t.desc || '';
+      b.append(name, stats, desc);
+      b.addEventListener('click', () => {
+        starterTank = id;
+        setPref('starterTank', id);
+        for (const btn of classListEl.querySelectorAll('button'))
+          btn.classList.toggle('active', btn.dataset.class === id);
+        refreshClassBtn();
+      });
+      classListEl.appendChild(b);
+    }
+  }
+  buildClassList();
+  refreshClassBtn();
+  const classMenuNav = createMenuNav(focusablesIn(classScreen));
+  classOpenBtn.addEventListener('click', () => {
+    startOverlay.classList.add('hidden');
+    classScreen.classList.remove('hidden');
+    activeMenuNav = classMenuNav;
+    classMenuNav.reset();
+  });
+  document.getElementById('classBack').addEventListener('click', () => {
+    classScreen.classList.add('hidden');
+    startOverlay.classList.remove('hidden');
+    activeMenuNav = startMenuNav;
+    startMenuNav.reset();
+  });
   // Tages-Seed: fuer alle Spieler am selben Tag derselbe Run.
   document.getElementById('dailyBtn').addEventListener('click', () => {
     const d = new Date();
@@ -951,6 +1010,7 @@ async function init() {
     refreshResumeBtn(); // abgebrochener Run bleibt fortsetzbar
     startOverlay.classList.remove('hidden');
     settingsOverlay.classList.add('hidden'); // P9: falls noch offen -- defensiv
+    classScreen.classList.add('hidden'); // Phase 9: Klassenseite ebenfalls schliessen
     seedInput.select();
     hideRoomScreens();
     endlessBtn.classList.add('hidden');
