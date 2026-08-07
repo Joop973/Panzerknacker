@@ -741,6 +741,429 @@
       "requires": [],
       "minRoom": 1,
       "symbol": "👻"
+    },
+    "core_damage_c": {
+      "id": "core_damage_c",
+      "name": "Panzerbrechend",
+      "description": "+1 Schaden pro Treffer",
+      "tag": "damage",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 1
+      }
+    },
+    "core_damage_r": {
+      "id": "core_damage_r",
+      "name": "Wuchtgeschoss",
+      "description": "+3 Schaden pro Treffer",
+      "tag": "damage",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 3
+      }
+    },
+    "core_damage_l": {
+      "id": "core_damage_l",
+      "name": "Durchschlag",
+      "description": "+6 Schaden pro Treffer",
+      "tag": "damage",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 6
+      }
+    },
+    "core_reload_c": {
+      "id": "core_reload_c",
+      "name": "Schnelllader",
+      "description": "Nachladen −6 %",
+      "tag": "reload",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⏱",
+      "core": {
+        "reloadMult": 0.94
+      }
+    },
+    "core_reload_r": {
+      "id": "core_reload_r",
+      "name": "Doppelhänder",
+      "description": "Nachladen −15 %",
+      "tag": "reload",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⏱",
+      "core": {
+        "reloadMult": 0.85
+      }
+    },
+    "core_reload_l": {
+      "id": "core_reload_l",
+      "name": "Trommelmagazin",
+      "description": "Nachladen −30 %",
+      "tag": "reload",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⏱",
+      "core": {
+        "reloadMult": 0.7
+      }
+    },
+    "core_speed_c": {
+      "id": "core_speed_c",
+      "name": "Laufwerk",
+      "description": "Fahrtempo +8 %",
+      "tag": "speed",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "speedMult": 1.08
+      }
+    },
+    "core_speed_r": {
+      "id": "core_speed_r",
+      "name": "Rennkette",
+      "description": "Fahrtempo +15 %",
+      "tag": "speed",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "speedMult": 1.15
+      }
+    },
+    "core_speed_l": {
+      "id": "core_speed_l",
+      "name": "Düsenantrieb",
+      "description": "Fahrtempo +35 %",
+      "tag": "speed",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "speedMult": 1.35
+      }
+    },
+    "core_hp_c": {
+      "id": "core_hp_c",
+      "name": "Panzerplatte",
+      "description": "+10 Lebenspunkte",
+      "tag": "health",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❤",
+      "core": {
+        "hpAdd": 10
+      }
+    },
+    "core_hp_r": {
+      "id": "core_hp_r",
+      "name": "Verbundpanzerung",
+      "description": "+25 Lebenspunkte",
+      "tag": "health",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❤",
+      "core": {
+        "hpAdd": 25
+      }
+    },
+    "core_hp_l": {
+      "id": "core_hp_l",
+      "name": "Bunkerstahl",
+      "description": "+50 Lebenspunkte",
+      "tag": "health",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❤",
+      "core": {
+        "hpAdd": 50
+      }
+    },
+    "core_mag_c": {
+      "id": "core_mag_c",
+      "name": "Magazin",
+      "description": "+1 gleichzeitige Kugel",
+      "tag": "magazine",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔢",
+      "core": {
+        "magAdd": 1
+      }
+    },
+    "core_mag_r": {
+      "id": "core_mag_r",
+      "name": "Doppelmagazin",
+      "description": "+1 gleichzeitige Kugel",
+      "tag": "magazine",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔢",
+      "core": {
+        "magAdd": 1
+      }
+    },
+    "core_mag_l": {
+      "id": "core_mag_l",
+      "name": "Endlosgurt",
+      "description": "+2 gleichzeitige Kugeln",
+      "tag": "magazine",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔢",
+      "core": {
+        "magAdd": 2
+      }
+    },
+    "core_ric_c": {
+      "id": "core_ric_c",
+      "name": "Abpraller",
+      "description": "+1 Wandabpraller",
+      "tag": "ricochet",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "↩",
+      "core": {
+        "ricochetAdd": 1
+      }
+    },
+    "core_ric_r": {
+      "id": "core_ric_r",
+      "name": "Querschläger",
+      "description": "+1 Wandabpraller",
+      "tag": "ricochet",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "↩",
+      "core": {
+        "ricochetAdd": 1
+      }
+    },
+    "core_ric_l": {
+      "id": "core_ric_l",
+      "name": "Billardkugel",
+      "description": "+2 Wandabpraller",
+      "tag": "ricochet",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "↩",
+      "core": {
+        "ricochetAdd": 2
+      }
+    },
+    "core_crit_c": {
+      "id": "core_crit_c",
+      "name": "Zielfernrohr",
+      "description": "Kritchance +3 %",
+      "tag": "crit",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.03
+      }
+    },
+    "core_crit_r": {
+      "id": "core_crit_r",
+      "name": "Schwachstellenscanner",
+      "description": "Kritchance +6 %",
+      "tag": "crit",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.06
+      }
+    },
+    "core_crit_l": {
+      "id": "core_crit_l",
+      "name": "Präzisionskern",
+      "description": "Kritchance +12 %",
+      "tag": "crit",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.12
+      }
+    },
+    "core_scrap_c": {
+      "id": "core_scrap_c",
+      "name": "Sammler",
+      "description": "+1 Schrott pro Raum",
+      "tag": "scavenge",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 1
+      }
+    },
+    "core_scrap_r": {
+      "id": "core_scrap_r",
+      "name": "Verwerter",
+      "description": "+2 Schrott pro Raum",
+      "tag": "scavenge",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 2
+      }
+    },
+    "core_scrap_l": {
+      "id": "core_scrap_l",
+      "name": "Schrottmagnet",
+      "description": "+4 Schrott pro Raum",
+      "tag": "scavenge",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 4
+      }
+    },
+    "core_mine_c": {
+      "id": "core_mine_c",
+      "name": "Minenvorrat",
+      "description": "+1 gleichzeitige Mine",
+      "tag": "mines",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💣",
+      "core": {
+        "mineAdd": 1
+      }
+    },
+    "core_mine_r": {
+      "id": "core_mine_r",
+      "name": "Minengürtel",
+      "description": "+2 gleichzeitige Minen",
+      "tag": "mines",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💣",
+      "core": {
+        "mineAdd": 2
+      }
+    },
+    "core_mine_l": {
+      "id": "core_mine_l",
+      "name": "Minenleger",
+      "description": "+3 gleichzeitige Minen",
+      "tag": "mines",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💣",
+      "core": {
+        "mineAdd": 3
+      }
+    },
+    "core_dodge_c": {
+      "id": "core_dodge_c",
+      "name": "Ausweichschritt",
+      "description": "Schaltet den Dash frei (Umschalt / B)",
+      "tag": "dodge",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💨",
+      "core": {
+        "dashGrant": true,
+        "dashCdMult": 1.0
+      }
+    },
+    "core_dodge_r": {
+      "id": "core_dodge_r",
+      "name": "Seitwärtsroller",
+      "description": "Dash freigeschaltet, Abklingzeit −30 %",
+      "tag": "dodge",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💨",
+      "core": {
+        "dashGrant": true,
+        "dashCdMult": 0.7
+      }
+    },
+    "core_dodge_l": {
+      "id": "core_dodge_l",
+      "name": "Phasensprung",
+      "description": "Dash freigeschaltet, Abklingzeit −50 %",
+      "tag": "dodge",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💨",
+      "core": {
+        "dashGrant": true,
+        "dashCdMult": 0.5
+      }
     }
   },
   "fallback": {

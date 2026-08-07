@@ -317,7 +317,7 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   // Pluenderer (Phase 18, erste Tag-resource-Karte): flacher Bonus pro
   // geraeumtem Raum, angewandt in run.js NACH dem Elite-Multiplikator
   // (wie die einmalige Kriegsbeute-Belohnung auch kein Vielfaches ist).
-  if (l('pluenderer')) cfg.scrapBonusPerRoom = U.pluenderer.scrapPerLevel * l('pluenderer');
+  cfg.scrapBonusPerRoom = (cfg.scrapBonusPerRoom || 0) + (l('pluenderer') ? U.pluenderer.scrapPerLevel * l('pluenderer') : 0);
   // Beutejagd (Phase 18, zweite Tag-resource-Karte): Bonus-Schrott fuer den
   // ERSTEN Kill in jedem Raum (state.js: firstKillGiven-Zaehler).
   if (l('beutejagd')) cfg.firstKillScrap = U.beutejagd.scrapPerLevel * l('beutejagd');
@@ -335,6 +335,40 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   cfg.gadget = equippedGadget || null;
   // Geisterbesatzung (Phase 7): einfacher Ein/Aus-Schalter, kein Stufenwert.
   cfg.ghostCrew = l('ghost_crew') > 0;
+
+  // Kernpool (UMBAUPLAN-LP Phase 10): 30 klassenunabhaengige Stat-Karten mit
+  // je einem `core`-Effektobjekt. EINE generische Schleife statt 30 Zweige --
+  // eine neue Kernkarte braucht dadurch keine Codezeile mehr, nur ihren
+  // core-Eintrag in upgrades.json. Additiv/multiplikativ wie die jeweilige
+  // Stat es verlangt. Der Krit-Deckel greift bewusst NICHT hier, sondern am
+  // Roll-Ort (tank.js: Math.min(cap, critChance)) -- so klemmt er auch, wenn
+  // mehrere Kern-Kritkarten cfg.critChance ueber den Cap treiben (Phase 7).
+  let coreDashGrant = false;
+  let coreDashCdMult = 1;
+  for (const id in U) {
+    const c = U[id].core;
+    const lvl = l(id);
+    if (!c || !lvl) continue;
+    if (c.damageAdd) cfg.damage += c.damageAdd * lvl;
+    if (c.reloadMult) cfg.fireCooldown *= Math.pow(c.reloadMult, lvl);
+    if (c.speedMult) cfg.speed *= Math.pow(c.speedMult, lvl);
+    if (c.hpAdd) cfg.maxHp += c.hpAdd * lvl;
+    if (c.magAdd) cfg.magazine += c.magAdd * lvl;
+    if (c.ricochetAdd) cfg.ricochets += c.ricochetAdd * lvl;
+    if (c.critAdd) cfg.critChance += c.critAdd * lvl;
+    if (c.scrapAdd) cfg.scrapBonusPerRoom = (cfg.scrapBonusPerRoom || 0) + c.scrapAdd * lvl;
+    if (c.mineAdd) cfg.mines += c.mineAdd * lvl;
+    if (c.dashGrant) {
+      coreDashGrant = true;
+      coreDashCdMult *= Math.pow(c.dashCdMult ?? 1, lvl);
+    }
+  }
+  // Ausweichen-Kernkarten schalten den Dash frei (unabhaengig von der alten
+  // dash-Karte) und verkuerzen die Abklingzeit. Reusen dieselbe dash-Definition.
+  if (coreDashGrant) {
+    const base = cfg.dash || { dist: U.dash.distancePx, iframe: U.dash.iframeS, cooldown: U.dash.cooldownS };
+    cfg.dash = { ...base, cooldown: base.cooldown * coreDashCdMult };
+  }
   return cfg;
 }
 

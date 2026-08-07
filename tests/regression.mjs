@@ -2896,6 +2896,89 @@ function check(ok, msg) {
   }
 }
 
+// ---- 18. UMBAUPLAN-LP Phase 10: Kernpool + Verteilungs-Fix ----------------
+// 30 klassenunabhaengige Kernkarten (10/10/10) + weightedPick liefert die
+// konfigurierte Seltenheitsverteilung unabhaengig von der Poolgroesse.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { weightedPick, rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const core = Object.entries(U).filter(([, d]) => d.core);
+
+  // (a) Struktur: genau 30 Kernkarten, 10/10/10 nach Seltenheit, 10 verschiedene
+  //     Tags (sonst begrenzt die Tag-Regel den Kern auf 1 Karte pro Angebot).
+  {
+    check(core.length === 30, `Phase 10: ${core.length} Kernkarten statt 30`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of core) rar[d.rarity]++;
+    check(rar.common === 10 && rar.rare === 10 && rar.legendary === 10, `Phase 10: Seltenheitsverteilung ${JSON.stringify(rar)} statt 10/10/10`);
+    const tags = new Set(core.map(([, d]) => d.tag));
+    check(tags.size === 10, `Phase 10: ${tags.size} Kern-Tags statt 10 (Tag-Regel wuerde den Kern sonst zusammenfalten)`);
+  }
+
+  // (b) Der eigentliche Fix: weightedPick zieht die SELTENHEIT mit dem
+  //     konfigurierten Gewicht (60/30/10), egal wie viele Karten je Seltenheit
+  //     ziehbar sind. Bewusst mit einer UNGLEICHEN Liste geprueft -- genau da
+  //     lag der Bug. Gegenprobe: die alte Pro-Karte-Summierung ergaebe ~88/11/1.
+  {
+    const weights = tanksData.balance.rarity; // 60/30/10
+    const liste = [];
+    for (let i = 0; i < 20; i++) liste.push({ rarity: 'common' });
+    for (let i = 0; i < 5; i++) liste.push({ rarity: 'rare' });
+    for (let i = 0; i < 2; i++) liste.push({ rarity: 'legendary' });
+    const rng = mulberry32(12345);
+    const zieh = { common: 0, rare: 0, legendary: 0 };
+    const N = 60000;
+    for (let i = 0; i < N; i++) zieh[weightedPick(liste, rng, weights).rarity]++;
+    const pct = (k) => (100 * zieh[k]) / N;
+    check(Math.abs(pct('common') - 60) < 2, `Phase 10: common ${pct('common').toFixed(1)} % statt ~60 %`);
+    check(Math.abs(pct('rare') - 30) < 2, `Phase 10: rare ${pct('rare').toFixed(1)} % statt ~30 %`);
+    check(Math.abs(pct('legendary') - 10) < 2, `Phase 10: legendary ${pct('legendary').toFixed(1)} % statt ~10 %`);
+  }
+
+  // (c) Schadenskarte (Testschritt 2): +damageAdd pro Stufe, nachgerechnet mit
+  //     eigenen Zahlen (nicht dem aktuellen JSON-Wert allein).
+  {
+    const base = resolveCfg(tanksData, 'player').damage;
+    const cfg = applyUpgrades(resolveCfg(tanksData, 'player'), { core_damage_c: 3, core_damage_r: 2 }, upgradesData, 'mine', null);
+    const erwartet = base + U.core_damage_c.core.damageAdd * 3 + U.core_damage_r.core.damageAdd * 2;
+    check(cfg.damage === erwartet, `Phase 10: Schadenskarte ergibt ${cfg.damage} statt ${erwartet}`);
+    // Treffer gegen den Braunen (20 LP): ceil(20/Schaden).
+    const brownHp = tanksData.types.t_brown.maxHp;
+    check(Math.ceil(brownHp / cfg.damage) === Math.ceil(brownHp / erwartet), 'Phase 10: Trefferzahl gegen den Braunen stimmt nicht');
+  }
+
+  // (d) Kritkarte (Testschritt 3): stapelt critChance ueber den Deckel, der
+  //     Roll klemmt trotzdem am Cap (die Klemme sitzt in tank.js).
+  {
+    const cap = tanksData.balance.crit.cap;
+    const cfg = applyUpgrades(resolveCfg(tanksData, 'player'), { core_crit_c: 3, core_crit_r: 2, core_crit_l: 1 }, upgradesData, 'mine', null);
+    check(cfg.critChance > cap, `Phase 10: Kernkritkarten treiben critChance nicht ueber den Cap (${cfg.critChance} <= ${cap})`);
+    check(Math.min(cap, cfg.critChance) === cap, 'Phase 10: der Deckel klemmt die gestapelte Kritchance nicht');
+  }
+
+  // (e) Ausweichen-Kernkarte schaltet den Dash frei und verkuerzt die
+  //     Abklingzeit (multiplikativ), ohne die alte dash-Karte.
+  {
+    const cfg = applyUpgrades(resolveCfg(tanksData, 'player'), { core_dodge_r: 1 }, upgradesData, 'mine', null);
+    check(!!cfg.dash, 'Phase 10: Ausweichen-Kernkarte schaltet den Dash nicht frei');
+    const baseCd = U.dash.cooldownS;
+    check(Math.abs(cfg.dash.cooldown - baseCd * U.core_dodge_r.core.dashCdMult) < 1e-6, `Phase 10: Dash-Abklingzeit ${cfg.dash.cooldown} statt ${baseCd * U.core_dodge_r.core.dashCdMult}`);
+  }
+
+  // (f) Ersatzeintrag (Testschritt 4): ist der ganze Pool ausgereizt, liefert
+  //     rollOffers Fallback-Karten statt zu crashen.
+  {
+    const allChosen = {};
+    for (const id in U) allChosen[id] = U[id].maxStacks;
+    const offers = rollOffers(upgradesData, {
+      chosen: allChosen, roomIndex: 20, rng: mulberry32(7), balance: tanksData.balance, count: 3, banned: new Set(),
+    });
+    check(offers.length === 3 && offers.every((o) => o.fallback), 'Phase 10: der Ersatzeintrag greift nicht bei erschoepftem Pool');
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
