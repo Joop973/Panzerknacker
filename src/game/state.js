@@ -1109,10 +1109,14 @@ export function stepState(state, cmd, dt) {
     if (b.dead && b.explosive && !b.detonated) {
       b.detonated = true;
       const own = b.owner === state.player;
+      // Phase 12 (Sprengstoff-Topf): der Schuetze kann den Explosionsschaden
+      // per explosionDamageMult skalieren (sonst der Standardwert aus balance).
+      const explDmg =
+        (state.data.balance?.damage?.explosion ?? 1) * (b.owner?.cfg?.explosionDamageMult || 1);
       explodeAt(state, b.x, b.y, b.explosionRadius, undefined, {
         code: own ? 'own_bullet' : 'enemy_bullet',
         enemyType: own ? null : b.owner?.type || null,
-      });
+      }, explDmg);
       // Schrapnell: Splitterkugeln in alle Richtungen.
       const n = b.owner?.cfg?.schrapnell;
       if (n && b.owner.alive) spawnRadialBullets(state, b.owner, b.x, b.y, n);

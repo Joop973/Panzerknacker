@@ -126,7 +126,11 @@ function explode(mine, state) {
   // Todesursache fuer die Telemetrie: eigene vs. gegnerische Mine.
   const own = mine.owner === state.player;
   const meta = { code: own ? 'own_mine' : 'enemy_mine', enemyType: own ? null : mine.owner?.type || null };
-  explodeAt(state, mine.x, mine.y, R, null, meta);
+  // Phase 12 (Sprengstoff-Topf): auch Minen skalieren mit explosionDamageMult
+  // des Legers.
+  const mineDmg =
+    (state.data.balance?.damage?.explosion ?? 1) * (mine.owner?.cfg?.explosionDamageMult || 1);
+  explodeAt(state, mine.x, mine.y, R, null, meta, mineDmg);
   // Streumine-Upgrade: schleudert kleine Splitterminen (die nicht
   // weiter splittern -> keine Endloskette).
   const sub = mine.owner?.cfg?.clusterMine;

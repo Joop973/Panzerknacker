@@ -167,7 +167,11 @@ unten): 12 physische Karten (4/4/4) plus die **Angebotsfilterung nach
 `damageType`** (typgebundene Karten erscheinen nur bei passendem Klassen-
 Element) und die physischen Trefferregeln (Kaltschütze/Splittergeschoss/
 Fangschuss/Abprallkönig/Kopfschuss/Railgun).
-**Nächste Sitzung: Phase 12 (Sprengstoff-Topf, 12 Karten).** `PLAN.md`/die
+**Phase 12 (Sprengstoff-Topf, 12 Karten) ist gebaut** (s. eigener Abschnitt
+unten): 12 explosive Karten (4/4/4), die Schüsse zünden lassen und
+Explosionsradius/-schaden/Splitter skalieren; neuer
+`explosionDamageMult`-Multiplikator im Zündpfad (Schuss + Mine).
+**Nächste Sitzung: Phase 13 (Feuer-Topf, 12 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2219,6 +2223,34 @@ Erster von sechs Schadenstyp-Töpfen (je 12 Karten, 4/4/4). Baut zugleich die
   Abprallkönig/Kopfschuss. Der Phase-10-Kerntest zählt jetzt „`core` **ohne**
   `damageType`", damit die Topf-Karten nicht als Kernkarten mitgezählt werden.
 
+### UMBAUPLAN-LP Phase 12 (Sprengstoff-Topf) — gemergt
+Zweiter Element-Topf (12 Karten, 4/4/4, Tag+`damageType` `explosive`). Nutzt
+den Element-Filter und den `core`-Applier aus Phase 10/11; neu ist der
+Explosionsschaden-Multiplikator im Zündpfad.
+- **Neue `core`-Applier-Schlüssel** (`cfg.js`): `allExplosive` (schaltet
+  zündende Schüsse frei, setzt sonst fehlenden Basisradius auf 50),
+  `shotExplosionRadius`, `explosionRadiusMult` (wirkt auf **Schuss UND Mine** —
+  `shotExplosionRadius` × und `mineRadiusMult` ×), `explosionDamageMult`,
+  `schrapnellCount` (reuse des bestehenden Schrapnell-Mechanismus). Radius-/
+  Schaden-Multiplikatoren werden gesammelt und nach der Applier-Schleife
+  angewandt (reihenfolgeunabhängig).
+- **`explosionDamageMult` im Zündpfad**: `explodeAt()` bekam den Schadenswert
+  schon in Phase 1 als optionalen Parameter — jetzt reichen die beiden
+  Aufrufstellen (`state.js` Sprenggeschoss, `mine.js` Minenzündung) ihn als
+  `balance.damage.explosion × owner.cfg.explosionDamageMult` durch. Der
+  **Abprall-Bonus verdoppelt bewusst nur den Aufschlag, nicht die Explosion**
+  (Phase-4-Regel, per Test bewacht).
+- **12 Karten**: 4 common (Radius/Schaden/Schaden/Minen), 4 rare
+  (Sprengmunition = zündende Schüsse, Splitterbombe, Fassbombe, Minenfeld),
+  4 legendär (Sprengkopf/Sperrfeuer = große-Knall-Richtung, Streubombe/
+  Sprengarsenal = Ketten-/Splitter-Richtung). Die Legendaries schalten alle
+  `allExplosive` frei.
+- **Neue Dauertests** (Abschnitt 20, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (12, 4/4/4), Filter (Sprengpanzer sieht sie, physische Klasse
+  nicht), Applier (allExplosive/Radius×Schuss+Mine/Schaden/Schrapnell), der
+  **Zündpfad** (skalierter Explosionsschaden am Ziel gemessen, Abprall
+  verdoppelt die Explosion nicht).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2314,7 +2346,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v83`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v84`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2363,7 +2395,7 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–19 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–20 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.

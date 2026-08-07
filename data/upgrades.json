@@ -1349,6 +1349,201 @@
         "magAdd": 2,
         "critAdd": 0.1
       }
+    },
+    "expl_radius": {
+      "id": "expl_radius",
+      "name": "Sprengkraft II",
+      "description": "Explosionsradius +12 % (Schuss & Mine)",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "explosionRadiusMult": 1.12
+      }
+    },
+    "expl_power": {
+      "id": "expl_power",
+      "name": "Nitro",
+      "description": "Explosionsschaden +12 %",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧨",
+      "core": {
+        "explosionDamageMult": 1.12
+      }
+    },
+    "expl_ammo": {
+      "id": "expl_ammo",
+      "name": "Sprengladung",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "expl_fuse": {
+      "id": "expl_fuse",
+      "name": "Minengürtel II",
+      "description": "+1 gleichzeitige Mine",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💣",
+      "core": {
+        "mineAdd": 1
+      }
+    },
+    "expl_shots": {
+      "id": "expl_shots",
+      "name": "Sprengmunition II",
+      "description": "Deine Schüsse explodieren beim Aufschlag",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "allExplosive": true,
+        "shotExplosionRadius": 50
+      }
+    },
+    "expl_cluster": {
+      "id": "expl_cluster",
+      "name": "Splitterbombe",
+      "description": "Explosionen schleudern 4 Splitterkugeln",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "✳️",
+      "core": {
+        "schrapnellCount": 4
+      }
+    },
+    "expl_bigblast": {
+      "id": "expl_bigblast",
+      "name": "Fassbombe",
+      "description": "Explosionsradius +25 %, Explosionsschaden +20 %",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🛢️",
+      "core": {
+        "explosionRadiusMult": 1.25,
+        "explosionDamageMult": 1.2
+      }
+    },
+    "expl_minefield": {
+      "id": "expl_minefield",
+      "name": "Minenfeld",
+      "description": "+2 Minen, Explosionsradius +20 %",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🕳️",
+      "core": {
+        "mineAdd": 2,
+        "explosionRadiusMult": 1.2
+      }
+    },
+    "expl_nuke": {
+      "id": "expl_nuke",
+      "name": "Sprengkopf",
+      "description": "Explosive Schüsse mit +60 % Radius und +50 % Schaden",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☢️",
+      "core": {
+        "allExplosive": true,
+        "shotExplosionRadius": 50,
+        "explosionRadiusMult": 1.6,
+        "explosionDamageMult": 1.5
+      }
+    },
+    "expl_barrage": {
+      "id": "expl_barrage",
+      "name": "Sperrfeuer",
+      "description": "Explosive Schüsse, +3 Magazin, Nachladen −30 %",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎆",
+      "core": {
+        "allExplosive": true,
+        "shotExplosionRadius": 50,
+        "magAdd": 3,
+        "reloadMult": 0.7
+      }
+    },
+    "expl_clusterbomb": {
+      "id": "expl_clusterbomb",
+      "name": "Streubombe",
+      "description": "Explosive Schüsse schleudern 8 Splitterkugeln",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎇",
+      "core": {
+        "allExplosive": true,
+        "shotExplosionRadius": 50,
+        "schrapnellCount": 8
+      }
+    },
+    "expl_arsenal": {
+      "id": "expl_arsenal",
+      "name": "Sprengarsenal",
+      "description": "Explosive Schüsse: +30 % Radius, +30 % Schaden, 4 Splitter",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💼",
+      "core": {
+        "allExplosive": true,
+        "shotExplosionRadius": 50,
+        "explosionRadiusMult": 1.3,
+        "explosionDamageMult": 1.3,
+        "schrapnellCount": 4
+      }
     }
   },
   "fallback": {
