@@ -93,6 +93,13 @@
         { "freq": 1200, "dur": 0.12, "vol": 0.11, "wave": "triangle", "at": 0.06 }
       ]
     },
+    "crit": {
+      "_comment": "UMBAUPLAN-LP Phase 7: kritischer Schuss. Scharfer, heller Doppelschlag mit Rauschanteil -- muss sich klar vom normalen 'shoot' und vom 'trickshot' abheben (Testschritt 5). Sichtbares Gegenstueck: Bildschirmausschlag (addShake) + 'KRITISCH!'-Text am Panzer.",
+      "steps": [
+        { "freq": 1000, "slideTo": 1600, "dur": 0.06, "vol": 0.12, "wave": "square" },
+        { "freq": 1500, "slideTo": 900, "dur": 0.1, "vol": 0.11, "wave": "sawtooth", "at": 0.05 }
+      ]
+    },
     "wave": {
       "_comment": "Zweite Welle spawnt: zwei kurze, drohende Toene -- bewusst kein Jingle wie 'clear'.",
       "steps": [

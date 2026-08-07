@@ -262,6 +262,19 @@ export function fireBullet(tank, state, pressed) {
   // o. ae. bekommen den Bonus dann auf beide Kugeln).
   const boosted = tank.powershotCharges > 0;
 
+  // Kritischer Treffer (UMBAUPLAN-LP Phase 7): EINMAL pro Abzug ausgewuerfelt
+  // (alle Kugeln eines Schusses teilen ihn -- "jeder Schuss", nicht jede
+  // Kugel). Vorerst nur spielerseitig; Gegner-Krit ist nicht spezifiziert und
+  // wuerde ueber resetsReload zu Doppelfeuer fuehren. Der Zufall laeuft ueber
+  // den Seed-RNG (state.rng), damit der Run deterministisch bleibt. Die
+  // Chance ist an balance.crit.cap gedeckelt -- so greift der Deckel auch,
+  // wenn Karten/Klassen (Phase 9) cfg.critChance ueber den Cap treiben.
+  const critCfg = state.data.balance?.crit;
+  const isCrit =
+    tank === state.player &&
+    !!critCfg &&
+    state.rng() < Math.min(critCfg.cap ?? 1, tank.cfg.critChance ?? 0);
+
   const muzzle = tank.cfg.radius + 8; // Spitze des Rohrs
   let fired = false;
   for (let i = 0; i < angles.length; i++) {
@@ -289,6 +302,7 @@ export function fireBullet(tank, state, pressed) {
         burstDistance: tank.cfg.burstRangePx || 0,
         damage: tank.cfg.damage,
         damageType: tank.cfg.damageType,
+        crit: isCrit,
       }),
     );
     // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.
@@ -315,6 +329,25 @@ export function fireBullet(tank, state, pressed) {
   // x-Position im Stereobild geortet -- "wer schiesst woher?" ohne Hinsehen.
   state.sounds.push({ name: tank === state.player ? 'shoot' : 'shoot_enemy', x: tank.x });
   tank.cooldown = tank.cfg.fireCooldown * (tank.berserkerFire || 1);
+  // Krit (Phase 7): setzt das Nachladen SOFORT zurueck -- man darf sofort
+  // wieder feuern (nur noch vom Magazin/aktiven Kugeln begrenzt). Das ist der
+  // spuerbare Ausschlag des Ereignisses; die 2x-Schadensverdopplung selbst
+  // liegt am Treffer (state.js). Dazu ein eigener Ton + Bildschirmausschlag +
+  // sichtbarer Text -- damit der Krit hoer- UND sichtbar vom Normaltreffer
+  // unterscheidbar ist (Testschritt 5).
+  if (isCrit) {
+    if (critCfg.resetsReload) tank.cooldown = 0;
+    state.sounds.push({ name: 'crit', x: tank.x });
+    state.addShake?.(6);
+    state.texts.push({
+      x: tank.x,
+      y: tank.y - 22,
+      text: 'KRITISCH!',
+      age: 0,
+      life: 0.7,
+      color: '#ff4d4d',
+    });
+  }
   return true;
 }
 
