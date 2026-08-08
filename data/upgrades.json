@@ -2389,6 +2389,104 @@
         "magAdd": 2,
         "hpAdd": 40
       }
+    },
+    "sig_blast_zuender": {
+      "id": "sig_blast_zuender",
+      "name": "Zünder",
+      "description": "+1 Bombe und +8% Explosionsradius pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧨",
+      "core": {
+        "mineAdd": 1,
+        "explosionRadiusMult": 1.08
+      }
+    },
+    "sig_blast_kompression": {
+      "id": "sig_blast_kompression",
+      "name": "Kompression",
+      "description": "+6% Explosionsschaden und -6% Nachladen pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧨",
+      "core": {
+        "explosionDamageMult": 1.06,
+        "reloadMult": 0.94
+      }
+    },
+    "sig_blast_splittermantel": {
+      "id": "sig_blast_splittermantel",
+      "name": "Splittermantel",
+      "description": "+2 Splitter und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧨",
+      "core": {
+        "schrapnellCount": 2,
+        "damageAdd": 4
+      }
+    },
+    "sig_blast_druckwelle": {
+      "id": "sig_blast_druckwelle",
+      "name": "Druckwelle",
+      "description": "+15% Explosionsradius und +10% Explosionsschaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧨",
+      "core": {
+        "explosionRadiusMult": 1.15,
+        "explosionDamageMult": 1.1
+      }
+    },
+    "sig_blast_sprengmeister": {
+      "id": "sig_blast_sprengmeister",
+      "name": "Sprengmeister",
+      "description": "Jeder Schuss zündet, +10% Explosionsradius, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "allExplosive": true,
+        "explosionRadiusMult": 1.1,
+        "damageAdd": 8
+      }
+    },
+    "sig_blast_arsenal": {
+      "id": "sig_blast_arsenal",
+      "name": "Sprengarsenal",
+      "description": "+2 Bomben, +3 Splitter und +12% Explosionsschaden",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "mineAdd": 2,
+        "schrapnellCount": 3,
+        "explosionDamageMult": 1.12
+      }
     }
   },
   "fallback": {
