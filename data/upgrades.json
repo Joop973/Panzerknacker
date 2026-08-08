@@ -2104,6 +2104,192 @@
         "statusMaxStacksBonus": 2,
         "damageAdd": 3
       }
+    },
+    "light_dmg": {
+      "id": "light_dmg",
+      "name": "Hochspannung",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "light_range": {
+      "id": "light_range",
+      "name": "Leitfähigkeit",
+      "description": "Blitz-Sprungreichweite +30",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningRangeBonus": 30
+      }
+    },
+    "light_ion": {
+      "id": "light_ion",
+      "name": "Ionisator",
+      "description": "Kritchance +4 %",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.04
+      }
+    },
+    "light_fast": {
+      "id": "light_fast",
+      "name": "Blitzgeschwindigkeit",
+      "description": "Kugeltempo +12 %",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💨",
+      "core": {
+        "bulletSpeedMult": 1.12
+      }
+    },
+    "light_chain": {
+      "id": "light_chain",
+      "name": "Kettenreaktion",
+      "description": "Blitz springt auf +1 Ziel",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningBonusTargets": 1
+      }
+    },
+    "light_amp": {
+      "id": "light_amp",
+      "name": "Verstärker",
+      "description": "Blitz verliert weniger Schaden je Sprung",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningFalloffBonus": 0.2
+      }
+    },
+    "light_stun": {
+      "id": "light_stun",
+      "name": "Überschlag",
+      "description": "Kettenglieder werden kurz betäubt",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningStun": 0.4
+      }
+    },
+    "light_heavy": {
+      "id": "light_heavy",
+      "name": "Starkstrom",
+      "description": "Schaden ×1,2",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "damageMult": 1.2
+      }
+    },
+    "light_storm": {
+      "id": "light_storm",
+      "name": "Gewittersturm",
+      "description": "Blitz springt auf +3 Ziele, +60 Reichweite",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌩️",
+      "core": {
+        "lightningBonusTargets": 3,
+        "lightningRangeBonus": 60
+      }
+    },
+    "light_super": {
+      "id": "light_super",
+      "name": "Supraleiter",
+      "description": "Blitz verliert fast keinen Schaden je Sprung, +1 Ziel",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningFalloffBonus": 0.28,
+        "lightningBonusTargets": 1
+      }
+    },
+    "light_bolt": {
+      "id": "light_bolt",
+      "name": "Donnerkeil",
+      "description": "Schaden ×1,5, Kettenglieder länger betäubt",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "damageMult": 1.5,
+        "lightningStun": 0.6
+      }
+    },
+    "light_arsenal": {
+      "id": "light_arsenal",
+      "name": "Blitzarsenal",
+      "description": "+2 Kettenziele, +40 Reichweite, +3 Schaden, +5 % Krit",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💼",
+      "core": {
+        "lightningBonusTargets": 2,
+        "lightningRangeBonus": 40,
+        "damageAdd": 3,
+        "critAdd": 0.05
+      }
     }
   },
   "fallback": {

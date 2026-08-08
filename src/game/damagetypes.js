@@ -93,8 +93,11 @@ export function applyTypeEffects(state, ziel, damageType, basisSchaden, meta) {
   // meta.lightningBonus erhoeht die Zielzahl (3 -> 4).
   const maxTargets = (def.maxTargets || 0) + (meta?.lightningBonus || 0);
   if (maxTargets < 2) return;
-  const reichweite = def.jumpRangePx ?? 160;
-  const falloff = def.falloff ?? 0.7;
+  // Blitz-Topf (Phase 16): der Schuetze (meta.ownerCfg) kann die Sprungreichweite
+  // erhoehen, den Abfall abschwaechen und die Kettenglieder betaeuben.
+  const oc = meta?.ownerCfg;
+  const reichweite = (def.jumpRangePx ?? 160) + (oc?.lightningRangeBonus || 0);
+  const falloff = Math.min(0.95, (def.falloff ?? 0.7) + (oc?.lightningFalloffBonus || 0));
   const getroffen = new Set([ziel]);
   let letzter = ziel;
   let schaden = basisSchaden;
@@ -119,6 +122,10 @@ export function applyTypeEffects(state, ziel, damageType, basisSchaden, meta) {
     // sinnvoll pruefbar waere. Der Statuseffekt gilt auch hier nicht: Blitz
     // hat keinen.
     state.applyDamage(naechster, schaden, 'ein Blitzschlag', { ...meta, code: 'lightning' });
+    // Ueberschlag (Phase 16): das getroffene Kettenglied wird kurz betaeubt.
+    if (oc?.lightningStun && naechster.alive) {
+      naechster.stunTimer = Math.max(naechster.stunTimer || 0, oc.lightningStun);
+    }
     letzter = naechster;
   }
 }

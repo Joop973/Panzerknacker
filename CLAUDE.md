@@ -185,7 +185,13 @@ zum Klassen-Passiv), früherem/längerem Einfrieren (`frostFreezeReduction`/
 12 Giftkarten (4/4/4) über die generischen Status-Boosts (Stufen/Dauer/Tick/
 Deckel 5→7) plus eine **Gift-Ausbreitung** (`poisonSpreadRadius`); der
 Feuer-Ausbreitungsblock ist zu einem status-agnostischen Zweig verallgemeinert.
-**Nächste Sitzung: Phase 16 (Blitz-Topf, 12 Karten).** `PLAN.md`/die
+**Phase 16 (Blitz-Topf, 12 Karten) ist gebaut** (s. eigener Abschnitt unten):
+12 Blitzkarten (4/4/4), die die Blitzkette steuern — mehr Kettenziele
+(`lightningBonusTargets` additiv zum Klassen-Passiv), weitere Sprünge
+(`lightningRangeBonus`), schwächerer Abfall (`lightningFalloffBonus`) und
+Betäubung je Sprung (`lightningStun`). **Damit sind alle sechs Element-Töpfe
+(Phasen 11–16) fertig.**
+**Nächste Sitzung: Phase 17 (Zweitelement).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2340,6 +2346,32 @@ Gift-Ausbreitung.
   Applier (Boosts + `poisonSpreadRadius`, Passiv getrennt), Deckel 5 + angehoben
   auf 7, Dauer/Tickschaden, Gift-Ausbreitung inner-/außerhalb der Reichweite.
 
+### UMBAUPLAN-LP Phase 16 (Blitz-Topf) — gemergt
+Sechster und letzter Element-Topf (12 Karten, 4/4/4, Tag+`damageType`
+`lightning`). Blitz kettet (keine DOT) — die Karten steuern die Kette in
+`damagetypes.js`.
+- **Neue Owner-Overrides im Kettenpfad** (`damagetypes.js`, aus `meta.ownerCfg`):
+  `lightningRangeBonus` (Sprungreichweite +px), `lightningFalloffBonus`
+  (schwächerer Abfall, gedeckelt bei 0,95), `lightningStun` (Kettenglieder
+  werden kurz betäubt). Die Zielzahl läuft weiter über `meta.lightningBonus`
+  = `cfg.lightningBonusTargets` (Klassen-Passiv **+** Karten, additiv im
+  Applier).
+- **`core`-Applier-Schlüssel** (`cfg.js`): `lightningBonusTargets`/
+  `lightningRangeBonus`/`lightningFalloffBonus` (additiv), `lightningStun`
+  (Max). Reuse von `damageAdd`/`damageMult`/`critAdd`/`bulletSpeedMult`.
+- **12 Karten**: 4 common (Schaden/Reichweite/Krit/Kugeltempo), 4 rare
+  (Kettenreaktion = +Ziel, Verstärker = weniger Abfall, Überschlag = Betäubung,
+  Starkstrom = ×Schaden), 4 legendär (Gewittersturm/Supraleiter =
+  Ketten-Richtung, Donnerkeil/Blitzarsenal = Einschlag-/Allrounder-Richtung).
+- **Neue Dauertests** (Abschnitt 24, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (12, 4/4/4), Filter (Teslapanzer sieht sie, physische Klasse nicht),
+  Applier (Kettenziele additiv zum Passiv), mehr Kettenziele (+2 → 5/6),
+  weitere Sprünge (fernes Ziel erst mit Bonus), schwächerer Abfall
+  (Sprungschaden 14→18), Betäubung je Sprung. **Wichtig beim Testaufbau:**
+  `applyTypeEffects` schädigt das EINSCHLAGZIEL selbst nicht (das macht die
+  Trefferschleife) — der Test wendet den Aufschlag deshalb erst per
+  `applyDamage` an, dann die Kette.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2435,7 +2467,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v87`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v88`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2484,7 +2516,7 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–23 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–24 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.

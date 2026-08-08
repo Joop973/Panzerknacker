@@ -3544,6 +3544,136 @@ function check(ok, msg) {
   }
 }
 
+// ---- 24. UMBAUPLAN-LP Phase 16: Blitz-Topf -------------------------------
+// 12 Blitzkarten (4/4/4): Kette (mehr Ziele, weitere Sprünge, schwächerer
+// Abfall) + Betäubung. Mechanismus mit eigenen Zahlen; Gegenprobe bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { applyTypeEffects } = await import('../src/game/damagetypes.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const light = Object.entries(U).filter(([, d]) => d.damageType === 'lightning');
+  const L = tanksData.status.damageTypes.lightning; // maxTargets 3, jumpRangePx 160, falloff 0.7
+
+  // (a) Struktur: 12 Blitzkarten, 4/4/4, Tag+damageType lightning.
+  {
+    check(light.length === 12, `Phase 16: ${light.length} Blitzkarten statt 12`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of light) rar[d.rarity]++;
+    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 16: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(light.every(([, d]) => d.tag === 'lightning'), 'Phase 16: nicht alle Blitzkarten tragen Tag lightning');
+  }
+
+  // (b) Filter: Teslapanzer sieht sie, physische Klasse NICHT.
+  {
+    const sieht = (element) => {
+      const rng = mulberry32(13);
+      for (let i = 0; i < 300; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(), elements: [element],
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('light_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('lightning'), 'Phase 16: Teslapanzer sieht keine Blitzkarten');
+    check(!sieht('physical'), 'Phase 16: physische Klasse sieht Blitzkarten (Filter greift nicht)');
+  }
+
+  // (c) Applier: Kettenziele ADDITIV zum Klassen-Passiv; Reichweite/Abfall/
+  //     Betäubung landen im cfg.
+  {
+    const ch = applyUpgrades(resolveCfg(tanksData, 'c_tesla'), { light_chain: 2 }, upgradesData, 'mine', null);
+    check(ch.lightningBonusTargets === 3, `Phase 16: Kettenziele ${ch.lightningBonusTargets} statt 3 (Passiv 1 + 2)`);
+    const rg = applyUpgrades(resolveCfg(tanksData, 'c_tesla'), { light_range: 3 }, upgradesData, 'mine', null);
+    check(rg.lightningRangeBonus === 90, `Phase 16: lightningRangeBonus ${rg.lightningRangeBonus} statt 90`);
+    const am = applyUpgrades(resolveCfg(tanksData, 'c_tesla'), { light_amp: 1 }, upgradesData, 'mine', null);
+    check(Math.abs(am.lightningFalloffBonus - 0.2) < 1e-6, `Phase 16: lightningFalloffBonus ${am.lightningFalloffBonus} statt 0.2`);
+    const su = applyUpgrades(resolveCfg(tanksData, 'c_tesla'), { light_stun: 1 }, upgradesData, 'mine', null);
+    check(Math.abs(su.lightningStun - 0.4) < 1e-6, `Phase 16: lightningStun ${su.lightningStun} statt 0.4`);
+  }
+
+  const reihe = (n, abstand) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.player.x = 4000;
+    st.player.y = 4000;
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const ziele = [];
+    for (let i = 0; i < n; i++) {
+      const z = {
+        ...proto, x: 200 + i * abstand, y: 250, prevX: 200 + i * abstand, prevY: 250,
+        alive: true, hp: 9999, protect: 0, shieldReady: false, status: {}, stunTimer: 0,
+        cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+      };
+      st.tanks.push(z);
+      ziele.push(z);
+    }
+    return { st, ziele };
+  };
+  // Blitz mit gesetzten Owner-cfg-Feldern auslösen. Wie in der echten
+  // Trefferschleife wird ERST der Aufschlag am Einschlagziel angewandt, DANN
+  // die Kette (applyTypeEffects schaedigt das Einschlagziel selbst nicht).
+  const blitz = (st, ziel, oc, dmg = 20) => {
+    st.applyDamage(ziel, dmg, 'test', {});
+    applyTypeEffects(st, ziel, 'lightning', dmg, { lightningBonus: oc.lightningBonusTargets || 0, ownerCfg: oc });
+  };
+
+  // (d) Mehr Kettenziele: Basis 3, mit +2 -> 5 von 6 getroffen.
+  {
+    const abstand = Math.round(L.jumpRangePx * 0.5);
+    const a = reihe(6, abstand);
+    const vorA = a.ziele.map((z) => z.hp);
+    blitz(a.st, a.ziele[0], {});
+    check(a.ziele.filter((z, i) => vorA[i] - z.hp > 0).length === L.maxTargets, `Phase 16: Basis-Kette trifft nicht ${L.maxTargets}`);
+
+    const b = reihe(6, abstand);
+    const vorB = b.ziele.map((z) => z.hp);
+    blitz(b.st, b.ziele[0], { lightningBonusTargets: 2 });
+    check(b.ziele.filter((z, i) => vorB[i] - z.hp > 0).length === L.maxTargets + 2, `Phase 16: +2 Kettenziele greifen nicht (${b.ziele.filter((z, i) => vorB[i] - z.hp > 0).length})`);
+  }
+
+  // (e) Weitere Sprünge: Ziel jenseits der Basisreichweite wird erst mit
+  //     Reichweiten-Bonus erreicht.
+  {
+    const a = reihe(2, L.jumpRangePx + 40); // 200 > 160
+    const vorA = a.ziele[1].hp;
+    blitz(a.st, a.ziele[0], {});
+    check(a.ziele[1].hp === vorA, `Phase 16: Vorbedingung -- Blitz erreicht das ferne Ziel schon ohne Bonus`);
+
+    const b = reihe(2, L.jumpRangePx + 40);
+    const vorB = b.ziele[1].hp;
+    blitz(b.st, b.ziele[0], { lightningRangeBonus: 80 });
+    check(b.ziele[1].hp < vorB, 'Phase 16: Reichweiten-Bonus erreicht das ferne Ziel nicht');
+  }
+
+  // (f) Schwächerer Abfall: der erste Sprung macht mehr Schaden.
+  {
+    const abstand = Math.round(L.jumpRangePx * 0.5);
+    const a = reihe(2, abstand);
+    const vorA = a.ziele[1].hp;
+    blitz(a.st, a.ziele[0], {}, 20);
+    const basisSprung = vorA - a.ziele[1].hp; // round(20 * 0.7) = 14
+
+    const b = reihe(2, abstand);
+    const vorB = b.ziele[1].hp;
+    blitz(b.st, b.ziele[0], { lightningFalloffBonus: 0.2 }, 20); // falloff 0.9 -> 18
+    const starkSprung = vorB - b.ziele[1].hp;
+    check(basisSprung === Math.round(20 * L.falloff), `Phase 16: Basis-Sprungschaden ${basisSprung} statt ${Math.round(20 * L.falloff)}`);
+    check(starkSprung === Math.round(20 * (L.falloff + 0.2)), `Phase 16: Verstärker-Sprungschaden ${starkSprung} statt ${Math.round(20 * (L.falloff + 0.2))}`);
+  }
+
+  // (g) Überschlag: das Kettenglied wird betäubt.
+  {
+    const abstand = Math.round(L.jumpRangePx * 0.5);
+    const { st, ziele } = reihe(2, abstand);
+    blitz(st, ziele[0], { lightningStun: 0.4 });
+    check(ziele[1].stunTimer >= 0.4, `Phase 16: Überschlag betäubt das Kettenglied nicht (${ziele[1].stunTimer})`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
