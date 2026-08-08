@@ -413,6 +413,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.frostFreezeReduction) cfg.frostFreezeReduction = (cfg.frostFreezeReduction || 0) + c.frostFreezeReduction * lvl;
     if (c.frostFreezeDurationBonus) cfg.frostFreezeDurationBonus = (cfg.frostFreezeDurationBonus || 0) + c.frostFreezeDurationBonus * lvl;
     if (c.shatterMult) cfg.shatterMult = (cfg.shatterMult || 0) + c.shatterMult * lvl;
+    // Phase 15 (Gift-Topf): Gift-Ausbreitung (Seuche). Dauer/Tick/Stufen laufen
+    // ueber die generischen Status-Boosts (Phase 13).
+    if (c.poisonSpreadRadius) cfg.poisonSpreadRadius = Math.max(cfg.poisonSpreadRadius || 0, c.poisonSpreadRadius);
   }
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;

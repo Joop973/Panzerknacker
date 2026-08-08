@@ -71,13 +71,18 @@ export function applyTypeEffects(state, ziel, damageType, basisSchaden, meta) {
     }
     const stacks = (eff?.stacksPerHit ?? 1) + (oc?.statusStackBonus ?? 0);
     state.applyStatus?.(ziel, def.status, stacks, opts);
-    // Feuer-Ausbreitung (Phase 13): der Treffer entzuendet nahe Gegner mit
-    // einer Grundstufe. Kein applyTypeEffects-Aufruf -> keine Rekursion.
-    if (def.status === 'fire' && oc?.fireSpreadRadius) {
-      const r2 = oc.fireSpreadRadius * oc.fireSpreadRadius;
+    // Ausbreitung (Feuer: Phase 13, Gift: Phase 15): der Treffer traegt den
+    // Status mit einer Grundstufe auf nahe Gegner. Bewusst per applyStatus statt
+    // applyTypeEffects -> keine Rekursion/Kettenausbreitung ins Unendliche.
+    const spreadR =
+      (def.status === 'fire' && oc?.fireSpreadRadius) ||
+      (def.status === 'poison' && oc?.poisonSpreadRadius) ||
+      0;
+    if (spreadR) {
+      const r2 = spreadR * spreadR;
       for (const t of state.tanks) {
         if (t === ziel || !t.alive || t === state.player || t.protect > 0) continue;
-        if ((t.x - ziel.x) ** 2 + (t.y - ziel.y) ** 2 <= r2) state.applyStatus?.(t, 'fire', 1, opts);
+        if ((t.x - ziel.x) ** 2 + (t.y - ziel.y) ** 2 <= r2) state.applyStatus?.(t, def.status, 1, opts);
       }
     }
   }

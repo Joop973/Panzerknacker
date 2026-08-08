@@ -181,7 +181,11 @@ Ausbreitung (`fireSpreadRadius`) steuern.
 zum Klassen-Passiv), früherem/längerem Einfrieren (`frostFreezeReduction`/
 `frostFreezeDurationBonus`) und Extra-Schaden gegen erstarrte Ziele
 (`shatterMult`).
-**Nächste Sitzung: Phase 15 (Gift-Topf, 12 Karten).** `PLAN.md`/die
+**Phase 15 (Gift-Topf, 12 Karten) ist gebaut** (s. eigener Abschnitt unten):
+12 Giftkarten (4/4/4) über die generischen Status-Boosts (Stufen/Dauer/Tick/
+Deckel 5→7) plus eine **Gift-Ausbreitung** (`poisonSpreadRadius`); der
+Feuer-Ausbreitungsblock ist zu einem status-agnostischen Zweig verallgemeinert.
+**Nächste Sitzung: Phase 16 (Blitz-Topf, 12 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2313,6 +2317,29 @@ verlangsamt statt zu ticken; die Karten nutzen die generischen Status-Boosts
   früheres Einfrieren (2 statt 3 Stufen), längeres Einfrieren, Splittern gegen
   erstarrte vs. freie Ziele.
 
+### UMBAUPLAN-LP Phase 15 (Gift-Topf) — gemergt
+Fünfter Element-Topf (12 Karten, 4/4/4, Tag+`damageType` `poison`). Gift tickt
+wie Feuer (`damagePerTick 2`, `durationS 6`, Deckel 5) — die Karten nutzen die
+**generischen Status-Boosts** aus Phase 13 (Stufen/Dauer/Tick/Deckel) plus eine
+Gift-Ausbreitung.
+- **Reine Reuse für die Stat-/Status-Skalierung**: `statusStackBonus`/
+  `statusMaxStacksBonus` (5→7)/`statusTickMult`/`statusDurationMult` und das
+  Klassen-Passiv `poisonDurationMult` (Phase 9) — keine neue Applier-Logik.
+- **Gift-Ausbreitung (`poisonSpreadRadius`)**: der Feuer-Ausbreitungsblock in
+  `damagetypes.js` ist zu einem **status-agnostischen** Zweig verallgemeinert
+  (`spreadR` je nach `def.status` aus `fireSpreadRadius`/`poisonSpreadRadius`),
+  der den jeweiligen Status auf nahe Gegner mit einer Grundstufe aufträgt —
+  weiterhin per `applyStatus` statt `applyTypeEffects` (keine Rekursion). Neuer
+  `core`-Schlüssel `poisonSpreadRadius` (Max) in `cfg.js`.
+- **12 Karten**: 4 common (Dauer/Tick/Direktschaden/Krit), 4 rare (Nervengift =
+  +Stufe, Überdosis = Deckel 5→7, Seuche = Ausbreitung, Konzentrat = Tick),
+  4 legendär (Pandemie/Toxinbombe = Superstack-Richtung, Kontamination/
+  Giftarsenal = Ausbreitungs-/Allrounder-Richtung).
+- **Neue Dauertests** (Abschnitt 23, Gegenprobe für die neuen Bits bestanden):
+  Struktur (12, 4/4/4), Filter (Radioaktiv sieht sie, physische Klasse nicht),
+  Applier (Boosts + `poisonSpreadRadius`, Passiv getrennt), Deckel 5 + angehoben
+  auf 7, Dauer/Tickschaden, Gift-Ausbreitung inner-/außerhalb der Reichweite.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2408,7 +2435,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v86`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v87`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2457,7 +2484,7 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–22 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–23 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.
