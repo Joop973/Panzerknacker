@@ -358,6 +358,11 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   let explRadMult = 1;
   let explDmgMult = 1;
   let schrapCount = 0;
+  // UMBAUPLAN-LP Phase 13 (Feuer-Topf) -- generische Status-Boosts (gelten fuer
+  // den Status des Klassen-Elements) + elementspezifische Dauer.
+  let sDurMult = 1;
+  let sTickMult = 1;
+  let fireDurMult = 1;
   for (const id in U) {
     const c = U[id].core;
     const lvl = l(id);
@@ -394,6 +399,13 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.explosionRadiusMult) explRadMult *= Math.pow(c.explosionRadiusMult, lvl);
     if (c.explosionDamageMult) explDmgMult *= Math.pow(c.explosionDamageMult, lvl);
     if (c.schrapnellCount) schrapCount = Math.max(schrapCount, c.schrapnellCount);
+    // Phase 13 (Feuer-Topf):
+    if (c.statusDurationMult) sDurMult *= Math.pow(c.statusDurationMult, lvl);
+    if (c.statusTickMult) sTickMult *= Math.pow(c.statusTickMult, lvl);
+    if (c.statusStackBonus) cfg.statusStackBonus = (cfg.statusStackBonus || 0) + c.statusStackBonus * lvl;
+    if (c.statusMaxStacksBonus) cfg.statusMaxStacksBonus = (cfg.statusMaxStacksBonus || 0) + c.statusMaxStacksBonus * lvl;
+    if (c.fireDurationMult) fireDurMult *= Math.pow(c.fireDurationMult, lvl);
+    if (c.fireSpreadRadius) cfg.fireSpreadRadius = Math.max(cfg.fireSpreadRadius || 0, c.fireSpreadRadius);
   }
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;
@@ -412,6 +424,11 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   }
   if (explDmgMult !== 1) cfg.explosionDamageMult = (cfg.explosionDamageMult || 1) * explDmgMult;
   if (schrapCount) cfg.schrapnell = Math.max(cfg.schrapnell || 0, schrapCount);
+  // Phase 13: generische Status-Multiplikatoren; fireDurationMult multipliziert
+  // das (evtl. schon vom Klassen-Passiv gesetzte) cfg.fireDurationMult.
+  if (sDurMult !== 1) cfg.statusDurationMult = (cfg.statusDurationMult || 1) * sDurMult;
+  if (sTickMult !== 1) cfg.statusTickMult = (cfg.statusTickMult || 1) * sTickMult;
+  if (fireDurMult !== 1) cfg.fireDurationMult = (cfg.fireDurationMult || 1) * fireDurMult;
   // Ausweichen-Kernkarten schalten den Dash frei (unabhaengig von der alten
   // dash-Karte) und verkuerzen die Abklingzeit. Reusen dieselbe dash-Definition.
   if (coreDashGrant) {

@@ -37,7 +37,9 @@ export function applyStatus(state, tank, id, stacks = 1, opts = {}) {
   if (!def || !tank || !tank.alive) return 0;
   tank.status ||= {};
   const vorher = tank.status[id]?.stacks || 0;
-  const max = def.maxStacks ?? 1;
+  // Phase 13 (Feuer-Topf): Karten koennen den Stufen-Deckel anheben
+  // (opts.maxStacksBonus) -- z. B. Hoellenglut 3 -> 5.
+  const max = (def.maxStacks ?? 1) + (opts.maxStacksBonus || 0);
   const neu = Math.min(max, vorher + stacks);
   const eintrag =
     tank.status[id] || (tank.status[id] = { stacks: 0, timeLeft: 0, tickElapsed: 0, ticksDone: 0 });
@@ -56,6 +58,9 @@ export function applyStatus(state, tank, id, stacks = 1, opts = {}) {
   // Phase 9: eine staerkere Frost-Verlangsamung wird am Eintrag gemerkt (der
   // def-Wert bleibt unangetastet -- gilt also nur fuer diese Quelle).
   if (opts.speedMultOverride != null) eintrag.speedMult = opts.speedMultOverride;
+  // Phase 13: ein Tickschaden-Multiplikator der Quelle (Brandbeschleuniger o.
+  // ae.) wird ebenfalls am Eintrag gemerkt und in updateStatus verrechnet.
+  if (opts.tickDamageMult != null) eintrag.tickDamageMult = opts.tickDamageMult;
 
   // Frost-Erstarrung: NUR beim Uebergang unter den Deckel -> auf den
   // Deckel. Wuerde sie bei jedem Auftragen auf voller Stufe erneut
@@ -128,7 +133,7 @@ export function updateStatus(state, dt) {
       if (faellig > e.ticksDone) {
         const n = faellig - e.ticksDone;
         e.ticksDone = faellig;
-        const dmg = (def.damagePerTick || 0) * e.stacks * n;
+        const dmg = (def.damagePerTick || 0) * e.stacks * n * (e.tickDamageMult ?? 1);
         if (dmg > 0 && t.alive) {
           // overTime: applyDamage ueberspringt die Schild-Gatter (siehe
           // Kopfkommentar), die Boss-Unverwundbarkeit gilt weiter.

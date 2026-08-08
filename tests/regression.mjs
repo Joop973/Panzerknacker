@@ -3185,6 +3185,125 @@ function check(ok, msg) {
   }
 }
 
+// ---- 21. UMBAUPLAN-LP Phase 13: Feuer-Topf -------------------------------
+// 12 Feuerkarten (4/4/4), Brand-Skalierung (Stufen/Dauer/Tickschaden/Deckel)
+// + Ausbreitung. Mechanismus mit eigenen Zahlen; Gegenprobe bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { applyTypeEffects } = await import('../src/game/damagetypes.js');
+  const { updateStatus } = await import('../src/game/status.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const fire = Object.entries(U).filter(([, d]) => d.damageType === 'fire');
+  const FX = tanksData.status.effects.fire; // damagePerTick 4, durationS 3, maxStacks 3
+
+  // (a) Struktur: 12 Feuerkarten, 4/4/4, Tag+damageType fire.
+  {
+    check(fire.length === 12, `Phase 13: ${fire.length} Feuerkarten statt 12`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of fire) rar[d.rarity]++;
+    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 13: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(fire.every(([, d]) => d.tag === 'fire'), 'Phase 13: nicht alle Feuerkarten tragen Tag fire');
+  }
+
+  // (b) Filter: Flammenpanzer (Element fire) sieht sie, physische Klasse NICHT.
+  {
+    const sieht = (element) => {
+      const rng = mulberry32(5);
+      for (let i = 0; i < 300; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(), elements: [element],
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('fire_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('fire'), 'Phase 13: Flammenpanzer sieht keine Feuerkarten');
+    check(!sieht('physical'), 'Phase 13: physische Klasse sieht Feuerkarten (Filter greift nicht)');
+  }
+
+  // (c) Applier: die Status-Boosts landen im cfg; das Klassen-Passiv
+  //     (fireDurationMult) bleibt getrennt von statusDurationMult.
+  {
+    const nap = applyUpgrades(resolveCfg(tanksData, 'c_flame'), { fire_napalm: 2 }, upgradesData, 'mine', null);
+    check(nap.statusStackBonus === 2, `Phase 13: Napalm statusStackBonus ${nap.statusStackBonus} statt 2`);
+    const hell = applyUpgrades(resolveCfg(tanksData, 'c_flame'), { fire_hellfire: 1 }, upgradesData, 'mine', null);
+    check(hell.statusMaxStacksBonus === 2, `Phase 13: Höllenglut statusMaxStacksBonus ${hell.statusMaxStacksBonus} statt 2`);
+    const dur = applyUpgrades(resolveCfg(tanksData, 'c_flame'), { fire_dur: 3 }, upgradesData, 'mine', null);
+    check(Math.abs(dur.statusDurationMult - Math.pow(1.2, 3)) < 1e-6, `Phase 13: statusDurationMult ${dur.statusDurationMult}`);
+    check(dur.fireDurationMult === 1.25, `Phase 13: Klassen-Passiv fireDurationMult ${dur.fireDurationMult} (soll unveraendert 1.25)`);
+    const spread = applyUpgrades(resolveCfg(tanksData, 'c_flame'), { fire_spread: 1 }, upgradesData, 'mine', null);
+    check(spread.fireSpreadRadius === 70, `Phase 13: fireSpreadRadius ${spread.fireSpreadRadius} statt 70`);
+  }
+
+  // Isolierter Raum mit n Zielen in einer Reihe.
+  const reihe = (n, abstand = 60) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.player.x = 2000;
+    st.player.y = 2000;
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const ziele = [];
+    for (let i = 0; i < n; i++) {
+      const z = {
+        ...proto, x: 200 + i * abstand, y: 250, prevX: 200 + i * abstand, prevY: 250,
+        alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+        cfg: { ...proto.cfg, maxHp: 9999 },
+      };
+      st.tanks.push(z);
+      ziele.push(z);
+    }
+    return { st, ziele };
+  };
+
+  // (d) Brandstufen: Grundtreffer 1 Stufe; Napalm (+1) => 2; Deckel greift.
+  {
+    const { st, ziele } = reihe(1);
+    applyTypeEffects(st, ziele[0], 'fire', 10, { ownerCfg: {} });
+    check(ziele[0].status.fire.stacks === FX.stacksPerHit, `Phase 13: Grundtreffer ${ziele[0].status.fire.stacks} statt ${FX.stacksPerHit}`);
+
+    const a = reihe(1);
+    applyTypeEffects(a.st, a.ziele[0], 'fire', 10, { ownerCfg: { statusStackBonus: 1 } });
+    check(a.ziele[0].status.fire.stacks === FX.stacksPerHit + 1, `Phase 13: Napalm ${a.ziele[0].status.fire.stacks} statt ${FX.stacksPerHit + 1}`);
+
+    // Deckel: 5 Stufen auf einmal, Standard-Deckel 3.
+    const b = reihe(1);
+    applyTypeEffects(b.st, b.ziele[0], 'fire', 10, { ownerCfg: { statusStackBonus: 4 } });
+    check(b.ziele[0].status.fire.stacks === FX.maxStacks, `Phase 13: Deckel greift nicht (${b.ziele[0].status.fire.stacks} statt ${FX.maxStacks})`);
+    // Höllenglut hebt ihn auf 5.
+    const c = reihe(1);
+    applyTypeEffects(c.st, c.ziele[0], 'fire', 10, { ownerCfg: { statusStackBonus: 4, statusMaxStacksBonus: 2 } });
+    check(c.ziele[0].status.fire.stacks === FX.maxStacks + 2, `Phase 13: angehobener Deckel (${c.ziele[0].status.fire.stacks} statt ${FX.maxStacks + 2})`);
+  }
+
+  // (e) Dauer und Tickschaden skalieren (mit eigenen Faktoren).
+  {
+    const { st, ziele } = reihe(1);
+    applyTypeEffects(st, ziele[0], 'fire', 10, { ownerCfg: { statusDurationMult: 2 } });
+    check(Math.abs(ziele[0].status.fire.timeLeft - FX.durationS * 2) < 1e-6, `Phase 13: Branddauer ${ziele[0].status.fire.timeLeft} statt ${FX.durationS * 2}`);
+
+    // Tickschaden: 1 Stufe, ×1,5 -> ein 0,5-s-Tick = 4*1*1,5 = 6.
+    const a = reihe(1);
+    applyTypeEffects(a.st, a.ziele[0], 'fire', 10, { ownerCfg: { statusTickMult: 1.5 } });
+    const vor = a.ziele[0].hp;
+    updateStatus(a.st, 0.5);
+    check(a.ziele[0].hp === vor - FX.damagePerTick * 1.5, `Phase 13: Brandtick ${vor - a.ziele[0].hp} statt ${FX.damagePerTick * 1.5}`);
+  }
+
+  // (f) Ausbreitung: ein Treffer entzündet einen nahen Gegner mit.
+  {
+    const { st, ziele } = reihe(2, 50); // 50 px < fireSpreadRadius 70
+    applyTypeEffects(st, ziele[0], 'fire', 10, { ownerCfg: { fireSpreadRadius: 70 } });
+    check(ziele[1].status.fire?.stacks > 0, 'Phase 13: Brandherd entzündet den nahen Gegner nicht');
+
+    const b = reihe(2, 200); // 200 px > 70 -> keine Ausbreitung
+    applyTypeEffects(b.st, b.ziele[0], 'fire', 10, { ownerCfg: { fireSpreadRadius: 70 } });
+    check(!(b.ziele[1].status.fire?.stacks > 0), 'Phase 13: Brand breitet sich über die Reichweite hinaus aus');
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
