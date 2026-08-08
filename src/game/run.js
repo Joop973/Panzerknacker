@@ -251,6 +251,8 @@ export function runSnapshot(run) {
     seed: run.seed,
     modeKey: run.modeKey,
     starterTank: run.starterTank, // Phase 9: die Klasse gehoert in die Seed-Wiedergabe
+    secondElement: run.secondElement, // Phase 17: aktuelles Zweitelement (nach Rerolls)
+    elementRerolls: run.elementRerolls || 0,
     roomIndex: run.roomIndex,
     roomType: run.roomType,
     mapCurrentId: run.mapCurrentId, // Phase 12: Position auf der Karte (Wahl, nicht ableitbar)
@@ -678,11 +680,21 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
   // GANZEN Run unveraendert -- "vollstaendig vorab einsehbar" (PLAN.md).
   run.map = generateMap(run.seed, difficulty);
   run.mapCurrentId = run.map.layers[0][0].id; // Startknoten (Raum 1)
+  // Zweitelement (UMBAUPLAN-LP Phase 17): beim Runstart deterministisch aus dem
+  // Seed gezogen (eigener run-weiter Strom), im Shop gegen Schrott neu
+  // wuerfelbar (elementRerolls zaehlt hoch -> anderer Strom, weiter
+  // deterministisch). Wird mit halber Gewichtung in die Angebote gemischt.
+  run.elementRerolls = 0;
+  run.secondElement = drawSecondElement(run.seed, primaryElementOf(run), run.elementRerolls);
   // Fortsetzen: Zustand vor dem Raumbau einspielen, damit startRoom()
   // denselben Raum wie beim Abbruch erzeugt (Seed + Raumnummer genuegen).
   if (opts.resume) {
     const r = opts.resume;
     run.starterTank = r.starterTank || run.starterTank; // Phase 9: Klasse aus dem Snapshot
+    // Phase 17: Zweitelement aus dem Snapshot (nach evtl. Shop-Rerolls). Fehlt
+    // es (Altstand), aus Seed + Reroll-Index deterministisch nachziehen.
+    run.elementRerolls = r.elementRerolls || 0;
+    run.secondElement = r.secondElement || drawSecondElement(run.seed, primaryElementOf(run), run.elementRerolls);
     run.roomIndex = r.roomIndex;
     run.lives = r.lives;
     run.shieldCharges = (r.shieldCharges || []).slice();
@@ -892,16 +904,49 @@ function poolOpts(run) {
     banned: run.bannedUpgrades,
     // UMBAUPLAN-LP Phase 11: Element-Filter. Typgebundene Karten (damageType)
     // erscheinen nur, wenn ihr Typ zum Element der gewaehlten Klasse passt --
-    // ein Frostpanzer sieht keine reinen Feuerkarten. Phase 17 mischt spaeter
-    // ein Zweitelement bei; bis dahin ist es genau das Klassen-Element.
+    // ein Frostpanzer sieht keine reinen Feuerkarten. Phase 17: das
+    // Zweitelement kommt mit halber Gewichtung dazu (secondElement + weight).
     elements: elementsOf(run),
+    secondElement: run.secondElement && run.secondElement !== primaryElementOf(run) ? run.secondElement : null,
+    secondWeight: run.data.balance.upgrades?.secondElementWeight ?? 0.5,
   };
 }
 
-// Die Schadenstypen, deren typgebundene Karten die Klasse ziehen darf.
-// Vorerst nur das Primaerelement der Klasse (Phase 17: + Zweitelement).
+// Alle Schadenstypen (Elemente), aus denen ein Zweitelement gezogen werden
+// kann. Reihenfolge fest, damit die Seed-Wiedergabe stabil bleibt.
+const ELEMENTS = ['physical', 'explosive', 'fire', 'frost', 'poison', 'lightning'];
+
+// Das Primaerelement der gewaehlten Klasse.
+function primaryElementOf(run) {
+  return run.data.types[run.starterTank]?.damageType || 'physical';
+}
+
+// Ein zufaelliges Zweitelement (!= Primaerelement), deterministisch aus Seed +
+// Reroll-Index (Phase 17). idx 0 = Runstart, jeder Shop-Reroll erhoeht ihn.
+function drawSecondElement(seed, primary, idx = 0) {
+  const rng = rngForRun(seed, `element_${idx}`);
+  const pool = ELEMENTS.filter((e) => e !== primary);
+  return pool[Math.floor(rng() * pool.length)];
+}
+
+// Die Schadenstypen, deren typgebundene Karten die Klasse ziehen darf: das
+// Primaerelement (volle Gewichtung) + das Zweitelement (halb, s. poolOpts).
 function elementsOf(run) {
-  return [run.data.types[run.starterTank]?.damageType || 'physical'];
+  const primary = primaryElementOf(run);
+  const els = [primary];
+  if (run.secondElement && run.secondElement !== primary) els.push(run.secondElement);
+  return els;
+}
+
+// Schrott-Reroll des Zweitelements im Shop (Phase 17). Aendert den Pool sofort
+// fuer das naechste Angebot.
+export function rerollSecondElement(run) {
+  const cost = run.data.balance.scrap.cost.rerollElement;
+  if (run.scrap < cost) return false;
+  run.scrap -= cost;
+  run.elementRerolls = (run.elementRerolls || 0) + 1;
+  run.secondElement = drawSecondElement(run.seed, primaryElementOf(run), run.elementRerolls);
+  return true;
 }
 
 // Belohnungs-Angebote je nach Raumtyp (Seed-RNG -> deterministisch):

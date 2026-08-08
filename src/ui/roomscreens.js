@@ -109,6 +109,17 @@ export function createShopScreen() {
     actions.appendChild(
       mk('Schildladung', ctx.costs.shieldCharge, scrap >= ctx.costs.shieldCharge, ctx.onBuyShield),
     );
+    // Zweitelement neu wuerfeln (Phase 17): aendert den Angebots-Pool sofort.
+    if (ctx.onRerollElement) {
+      actions.appendChild(
+        mk(
+          `Zweitelement (${ctx.getSecondElement()}) neu`,
+          ctx.costs.rerollElement,
+          scrap >= ctx.costs.rerollElement,
+          ctx.onRerollElement,
+        ),
+      );
+    }
     // Leben: teuer und nur einmal pro Shop -- danach dauerhaft ausgegraut.
     actions.appendChild(
       mk(

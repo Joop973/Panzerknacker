@@ -35,10 +35,16 @@ const WEAPON_ALLOWLIST = new Set(['doppelrohr', 'flak']);
 // Stufen (10/10/10)"; die Normierung erfuellt dasselbe Ziel auch bei ungleichen
 // Poolgroessen (die spaeteren Element-Filter erzeugen zwangslaeufig ungleiche).
 // EIN rng()-Aufruf wie bisher -- der RNG-Verbrauch je Zug bleibt unveraendert.
-export function weightedPick(list, rng, weights) {
-  const count = {};
-  for (const d of list) count[d.rarity] = (count[d.rarity] || 0) + 1;
-  const w = (d) => (weights[d.rarity] || 1) / count[d.rarity];
+// elementWeight(def) (UMBAUPLAN-LP Phase 17): eine Karte des Zweitelements
+// bekommt einen kleineren Faktor (0.5) -- die Normierung erfolgt PRO SELTENHEIT
+// ueber die SUMME der Element-Gewichte statt der Kartenzahl, so bleibt die
+// Rarity-Verteilung (60/30/10) exakt erhalten und nur INNERHALB einer Stufe
+// erscheint das Zweitelement halb so oft. Ohne elementWeight (alle 1) ist die
+// Summe gleich der Kartenzahl -> identisch zum Phase-10-Verhalten.
+export function weightedPick(list, rng, weights, elementWeight = () => 1) {
+  const tierSum = {};
+  for (const d of list) tierSum[d.rarity] = (tierSum[d.rarity] || 0) + elementWeight(d);
+  const w = (d) => (elementWeight(d) * (weights[d.rarity] || 1)) / tierSum[d.rarity];
   let total = 0;
   for (const d of list) total += w(d);
   let r = rng() * total;
@@ -47,6 +53,16 @@ export function weightedPick(list, rng, weights) {
     if (r < 0) return d;
   }
   return list[list.length - 1];
+}
+
+// Faktor je Karte fuer die Element-Gewichtung. Karten OHNE damageType
+// (Kernpool/Alt) und Karten des Primaerelements: 1; Karten des Zweitelements:
+// secondWeight. opts.secondElement/secondWeight kommen aus run.js: poolOpts.
+function makeElementWeight(opts) {
+  const second = opts.secondElement;
+  const secondWeight = opts.secondWeight ?? 0.5;
+  if (!second) return () => 1;
+  return (d) => (d.damageType === second ? secondWeight : 1);
 }
 
 function makeOffer(def, chosen) {
@@ -125,6 +141,7 @@ export function rollOffers(upgradesData, opts) {
   const weights = balance.rarity;
   const n = count || upgradesData.offersPerScreen || 3;
 
+  const elementWeight = makeElementWeight(opts);
   const offers = [];
   const usedTags = new Set();
   let pool = buildCandidates(upgradesData, opts).slice();
@@ -133,7 +150,7 @@ export function rollOffers(upgradesData, opts) {
     // haben denselben Tag bzw. dieselbe Seltenheit).
     const eligible = ignoreTagRule ? pool : pool.filter((d) => !usedTags.has(d.tag));
     if (!eligible.length) break; // kein neuer Tag mehr moeglich
-    const pick = weightedPick(eligible, rng, weights);
+    const pick = weightedPick(eligible, rng, weights, elementWeight);
     offers.push(makeOffer(pick, chosen));
     usedTags.add(pick.tag);
     pool = pool.filter((d) => d.id !== pick.id);
@@ -157,5 +174,5 @@ export function drawOne(upgradesData, opts, avoidTags, avoidIds) {
     (d) => !at.has(d.tag) && !ai.has(d.id),
   );
   if (!eligible.length) return fallbackOffer(upgradesData);
-  return makeOffer(weightedPick(eligible, rng, weights), chosen);
+  return makeOffer(weightedPick(eligible, rng, weights, makeElementWeight(opts)), chosen);
 }

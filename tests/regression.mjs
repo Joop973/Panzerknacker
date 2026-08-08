@@ -3674,6 +3674,88 @@ function check(ok, msg) {
   }
 }
 
+// ---- 25. UMBAUPLAN-LP Phase 17: Zweitelement -----------------------------
+// Zufaelliges Zweitelement (deterministisch aus Seed), halbe Gewichtung im
+// Angebot, kein drittes Element, im Shop neu wuerfelbar. Gegenprobe bestanden.
+{
+  const { rollOffers, rerollSecondElement, runSnapshot } = {
+    ...(await import('../src/game/upgradepool.js')),
+    ...(await import('../src/game/run.js')),
+  };
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const mk = (seed, klass = 'c_flame') =>
+    createRun(tanksData, tilesData, diffData, upgradesData, seed, 'normal', { starterTank: klass });
+
+  // (a) Determinismus + Variation (Testschritte 1/5).
+  {
+    const a = mk(42);
+    const b = mk(42);
+    check(a.secondElement === b.secondElement, `Phase 17: gleicher Seed -> anderes Zweitelement (${a.secondElement} vs ${b.secondElement})`);
+    check(a.secondElement && a.secondElement !== 'fire', `Phase 17: Zweitelement ${a.secondElement} == Primaerelement`);
+    const set = new Set([1, 7, 42, 1337, 20260729].map((s) => mk(s).secondElement));
+    check(set.size > 1, `Phase 17: Zweitelement variiert nicht über Seeds (${[...set]})`);
+  }
+
+  // (b) Gewichtung + kein drittes Element (Testschritte 2/3). Flammenpanzer
+  //     (Primaer fire) mit Frost: Frostkarten ~halb so oft wie Feuerkarten,
+  //     Gift/Blitz/Physisch/Sprengstoff nie.
+  {
+    const rng = mulberry32(1);
+    let fire = 0, frost = 0, dritt = 0;
+    const N = 3000;
+    for (let i = 0; i < N; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        elements: ['fire', 'frost'], secondElement: 'frost', secondWeight: 0.5,
+      });
+      for (const o of offers) {
+        const id = String(o.id || '');
+        if (id.startsWith('fire_')) fire++;
+        else if (id.startsWith('frost_')) frost++;
+        else if (/^(poison|light|phys|expl)_/.test(id)) dritt++;
+      }
+    }
+    check(dritt === 0, `Phase 17: Karten eines dritten Elements erscheinen (${dritt})`);
+    check(fire > 0 && frost > 0, `Phase 17: Vorbedingung -- fire ${fire}, frost ${frost}`);
+    const ratio = frost / fire;
+    check(ratio > 0.35 && ratio < 0.65, `Phase 17: Zweitelement-Anteil ${ratio.toFixed(2)} nicht ~0.5`);
+  }
+
+  // (c) Shop-Reroll (Testschritt 4): kostet Schrott, erhöht den Index, kann das
+  //     Element ändern; ohne Schrott passiert nichts.
+  {
+    const run = mk(42);
+    run.scrap = 0;
+    check(!rerollSecondElement(run), 'Phase 17: Reroll ohne Schrott ausgeführt');
+    run.scrap = 1000;
+    const start = run.secondElement;
+    check(rerollSecondElement(run), 'Phase 17: Reroll trotz Schrott nicht ausgeführt');
+    check(run.elementRerolls === 1, `Phase 17: elementRerolls ${run.elementRerolls} statt 1`);
+    check(run.secondElement !== 'fire', `Phase 17: Reroll ergibt das Primaerelement (${run.secondElement})`);
+    // Über weitere Rerolls muss sich das Element irgendwann ändern.
+    let changed = run.secondElement !== start;
+    for (let i = 0; i < 20 && !changed; i++) {
+      run.scrap = 1000;
+      rerollSecondElement(run);
+      if (run.secondElement !== start) changed = true;
+    }
+    check(changed, 'Phase 17: der Reroll ändert das Zweitelement nie');
+  }
+
+  // (d) Seed-Wiedergabe: Zweitelement + Reroll-Index im Snapshot, überlebt das
+  //     Fortsetzen.
+  {
+    const run = mk(42);
+    run.secondElement = 'poison';
+    run.elementRerolls = 3;
+    const snap = runSnapshot(run);
+    check(snap.secondElement === 'poison' && snap.elementRerolls === 3, `Phase 17: Zweitelement/Index fehlen im Snapshot`);
+    const resumed = createRun(tanksData, tilesData, diffData, upgradesData, 42, 'normal', { resume: snap });
+    check(resumed.secondElement === 'poison', `Phase 17: Zweitelement geht beim Fortsetzen verloren (${resumed.secondElement})`);
+    check(resumed.elementRerolls === 3, 'Phase 17: Reroll-Index geht beim Fortsetzen verloren');
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
