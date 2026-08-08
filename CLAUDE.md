@@ -195,7 +195,11 @@ Betäubung je Sprung (`lightningStun`). **Damit sind alle sechs Element-Töpfe
 Runstart wird deterministisch ein zufälliges zweites Element gezogen und mit
 halber Gewichtung in die Angebote gemischt (`weightedPick` tier-normiert), im
 Shop gegen Schrott neu würfelbar, in der Raumvorschau angezeigt.
-**Nächste Sitzung: Phase 18 (Signaturtopf Standard, 6 Karten).** `PLAN.md`/die
+**Phase 18 (Signaturtopf Standard) ist gebaut** (s. eigener Abschnitt unten):
+sechs klassenexklusive Karten für die Standard-Klasse + der `signatureClass`-
+Filter, den alle Signaturtöpfe (18–27) teilen — eine Karte mit `signatureClass`
+erscheint nur, wenn genau diese Klasse gespielt wird.
+**Nächste Sitzung: Phase 19 (Signaturtopf Sprengpanzer, 6 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2410,6 +2414,43 @@ zufälliges **Zweitelement** gezogen und mit halber Gewichtung beigemischt —
   Snapshot-Fortsetzen. Playwright-Smoke: Element-Zeile in der Vorschau,
   `uilayout.mjs` über alle Viewports grün.
 
+### UMBAUPLAN-LP Phase 18 (Signaturtopf Standard) — gemergt
+Erster von zehn Signaturtöpfen (Phasen 18–27, je eine Klasse). Elementklassen
+bekommen 6 Karten, Mechanikklassen 12. **Das eigentliche neue Stück ist der
+`signatureClass`-Filter**, den alle zehn Töpfe teilen — die sechs
+Standard-Karten selbst brauchen dank des generischen `core`-Appliers (Phase 10)
+keine Codezeile.
+- **`signatureClass`-Filter** (`upgradepool.js: buildCandidates()`): eine Karte
+  mit `signatureClass` gehört genau EINER Klasse und erscheint nur, wenn
+  `opts.starterTank` dieser Klasse entspricht. Karten OHNE `signatureClass`
+  bleiben universell (unverändert). `run.js: poolOpts()` reicht
+  `starterTank: run.starterTank` durch. Ohne gesetztes `starterTank` (z. B. eine
+  Belohnung ohne Klassenkontext) fällt **jede** Signaturkarte durch — so kann
+  eine fremde Klassensignatur nie in einer Elite-/Schatz-Belohnung auftauchen.
+  Der Filter sitzt bewusst neben dem Element-Filter aus Phase 11 (dasselbe
+  Muster, andere Achse: Element vs. Klasse).
+- **Sechs Standard-Karten** (`data/upgrades.json`, alle Tag `signature` +
+  `signatureClass: "player"`, Verteilung **2/2/2**): der gemeinsame Tag
+  `signature` bedeutet — wie bei einem Element-Topf — höchstens EINE
+  Signaturkarte pro Angebot. Die Standard-Klasse hat als einzige **kein**
+  Element und **kein** Passiv („keine", Phase 9); ihre Signatur ist deshalb
+  bewusst der beste reine **Grundlagen**-Topf: Mehrfach-Stat-Kombis, die kein
+  einzelner Kern-/Element-Eintrag bietet (Grundausbildung, Manöver,
+  Gefechtsdrill, Verstärkte Wanne, Alleskönner, Gardist) — alle über bestehende
+  `core`-Schlüssel, kein neues Engine-Verhalten.
+- **Zwei Bestandstests mussten den neuen Kartentyp kennen**: (1) der
+  Phase-10-Kernzähler (`d.core && !d.damageType`) zählte die Signaturkarten
+  mit — jetzt zusätzlich `&& !d.signatureClass`; (2) der „jede Karte ziehbar"-
+  Strukturtest zog ohne `starterTank` und hielt die klassengebundenen Karten
+  für tot — er zieht jetzt zusätzlich mit jeder vorkommenden `signatureClass`.
+- **Neue Dauertests** (Abschnitt 26, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (6, 2/2/2, Tag+`signatureClass`), **Filter** (Standard sieht sie,
+  `c_flame` nie, ohne `starterTank` keine), Applier-Arithmetik (Delta gegen eine
+  upgradelose Basis mit den Zahlen der Karte selbst), höchstens eine Signatur
+  pro Angebot. Gegenproben rot bestätigt: Filter aus → fremde Klasse sieht die
+  Karten; `damageAdd`-Pfad genullt → Applier-Delta falsch; Rarität verdreht →
+  Verteilung ≠ 2/2/2.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2505,7 +2546,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v89`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v90`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2554,7 +2595,8 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–25 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–26 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
-Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter). Die frühere
+Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
+Phase-18-Signaturtopf Standard + `signatureClass`-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.

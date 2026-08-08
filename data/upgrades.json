@@ -2290,6 +2290,105 @@
         "damageAdd": 3,
         "critAdd": 0.05
       }
+    },
+    "sig_std_drill": {
+      "id": "sig_std_drill",
+      "name": "Grundausbildung",
+      "description": "+2 Schaden und -5% Nachladzeit pro Stufe",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎖",
+      "core": {
+        "damageAdd": 2,
+        "reloadMult": 0.95
+      }
+    },
+    "sig_std_manoever": {
+      "id": "sig_std_manoever",
+      "name": "Manöver",
+      "description": "+8% Fahrtempo und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎖",
+      "core": {
+        "speedMult": 1.08,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_std_gefechtsdrill": {
+      "id": "sig_std_gefechtsdrill",
+      "name": "Gefechtsdrill",
+      "description": "+1 Magazin und +5% Kritchance pro Stufe",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎖",
+      "core": {
+        "magAdd": 1,
+        "critAdd": 0.05
+      }
+    },
+    "sig_std_wanne": {
+      "id": "sig_std_wanne",
+      "name": "Verstärkte Wanne",
+      "description": "+30 LP und +1 Abpraller pro Stufe",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎖",
+      "core": {
+        "hpAdd": 30,
+        "ricochetAdd": 1
+      }
+    },
+    "sig_std_alleskoenner": {
+      "id": "sig_std_alleskoenner",
+      "name": "Alleskönner",
+      "description": "+6 Schaden, -12% Nachladen, +8% Tempo, +20 LP pro Stufe",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "legendary",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏅",
+      "core": {
+        "damageAdd": 6,
+        "reloadMult": 0.88,
+        "speedMult": 1.08,
+        "hpAdd": 20
+      }
+    },
+    "sig_std_gardist": {
+      "id": "sig_std_gardist",
+      "name": "Gardist",
+      "description": "+8 Schaden, +2 Magazin und +40 LP",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏅",
+      "core": {
+        "damageAdd": 8,
+        "magAdd": 2,
+        "hpAdd": 40
+      }
     }
   },
   "fallback": {

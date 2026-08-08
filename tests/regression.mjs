@@ -239,7 +239,7 @@ function check(ok, msg) {
     }
   }
 
-  const drawAll = (chosen) =>
+  const drawAll = (chosen, starterTank) =>
     rollOffers(upgradesData, {
       chosen,
       roomIndex: 99, // alle minRoom-Gates offen
@@ -249,6 +249,7 @@ function check(ok, msg) {
       ignoreTagRule: true,
       equippedSecondary: 'mine',
       banned: new Set(),
+      starterTank, // Phase 18: nur so werden die klassengebundenen Signaturen sichtbar
     }).filter((o) => !o.fallback).map((o) => o.id);
 
   // Tag `weapon` ist grundsaetzlich gesperrt; Welle 1 hat genau diese zwei
@@ -257,7 +258,16 @@ function check(ok, msg) {
   // "weapon darf fehlen"-Ausnahme haette ihn fuer genau die Fehlerklasse
   // wirkungslos gemacht, gegen die er gebaut ist.
   const WEAPON_FREIGEGEBEN = new Set(['doppelrohr', 'flak']);
+  // Phase 18: Signaturkarten erscheinen nur bei ihrer Klasse -- die
+  // Erreichbarkeitsmenge muss deshalb auch mit jeder Signaturklasse gezogen
+  // werden, sonst gelten die klassengebundenen Karten faelschlich als "tot".
+  const sigClasses = new Set(
+    Object.values(defs).map((d) => d.signatureClass).filter(Boolean),
+  );
   const reachable = new Set([...drawAll({}), ...drawAll(reqTargets)]);
+  for (const klass of sigClasses) {
+    for (const id of drawAll({}, klass)) reachable.add(id);
+  }
   for (const id in defs) {
     if (defs[id].tag === 'elite') continue; // nur ueber Elite-Belohnung
     if (defs[id].tag === 'weapon' && !WEAPON_FREIGEGEBEN.has(id)) continue;
@@ -2904,10 +2914,11 @@ function check(ok, msg) {
   const { weightedPick, rollOffers } = await import('../src/game/upgradepool.js');
   const { mulberry32 } = await import('../src/core/rng.js');
   const U = upgradesData.upgrades;
-  // Kernkarten = generischer Effekt (core) OHNE Element (damageType) -- die
-  // Element-Toepfe ab Phase 11 tragen ebenfalls ein core-Objekt, sind aber
-  // typgebunden und gehoeren nicht in den Kern.
-  const core = Object.entries(U).filter(([, d]) => d.core && !d.damageType);
+  // Kernkarten = generischer Effekt (core) OHNE Element (damageType) UND ohne
+  // Klassenbindung (signatureClass) -- die Element-Toepfe ab Phase 11 tragen
+  // ebenfalls ein core-Objekt (aber typgebunden), die Signaturtoepfe ab
+  // Phase 18 ebenfalls (aber klassengebunden); beide gehoeren nicht in den Kern.
+  const core = Object.entries(U).filter(([, d]) => d.core && !d.damageType && !d.signatureClass);
 
   // (a) Struktur: genau 30 Kernkarten, 10/10/10 nach Seltenheit, 10 verschiedene
   //     Tags (sonst begrenzt die Tag-Regel den Kern auf 1 Karte pro Angebot).
@@ -3753,6 +3764,97 @@ function check(ok, msg) {
     const resumed = createRun(tanksData, tilesData, diffData, upgradesData, 42, 'normal', { resume: snap });
     check(resumed.secondElement === 'poison', `Phase 17: Zweitelement geht beim Fortsetzen verloren (${resumed.secondElement})`);
     check(resumed.elementRerolls === 3, 'Phase 17: Reroll-Index geht beim Fortsetzen verloren');
+  }
+}
+
+// ---- 26. UMBAUPLAN-LP Phase 18: Signaturtopf Standard --------------------
+// 6 klassenexklusive Karten (2/2/2) fuer die Standard-Klasse + der
+// signatureClass-Filter, den alle Signaturtoepfe (18-27) teilen: eine Karte
+// mit signatureClass erscheint nur, wenn genau diese Klasse gespielt wird.
+// Mechanismus mit eigenen Zahlen geprueft; Gegenprobe fuer jeden Kernpunkt
+// bestanden (Filter aus -> fremde Klasse sieht die Karten; Applier-Schluessel
+// ignoriert -> Delta stimmt nicht mehr).
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const sig = Object.entries(U).filter(([, d]) => d.tag === 'signature');
+  const std = sig.filter(([, d]) => d.signatureClass === 'player');
+
+  // (a) Struktur: 6 Standardsignaturen, 2/2/2, Tag+signatureClass gesetzt.
+  {
+    check(std.length === 6, `Phase 18: ${std.length} Standardsignaturen statt 6`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of std) rar[d.rarity]++;
+    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 18: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(std.every(([, d]) => d.tag === 'signature'), 'Phase 18: nicht alle Standardsignaturen tragen Tag signature');
+    check(std.every(([, d]) => d.core), 'Phase 18: eine Standardsignatur ohne core-Effekt');
+  }
+
+  // (b) Filter: die Standard-Klasse (player) sieht sie, eine andere Klasse
+  //     (c_flame) NIE. Der Filter ist der eigentliche neue Mechanismus.
+  {
+    const siehtSignatur = (klass) => {
+      const rng = mulberry32(29);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass,
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_std_'))) return true;
+      }
+      return false;
+    };
+    check(siehtSignatur('player'), 'Phase 18: Standard sieht die eigene Signatur nicht');
+    check(!siehtSignatur('c_flame'), 'Phase 18: fremde Klasse sieht die Standardsignatur (Filter greift nicht)');
+    // Ohne starterTank (z. B. eine Belohnung ohne Klassenkontext) darf keine
+    // Signaturkarte durchfallen.
+    {
+      const rng = mulberry32(5);
+      let seen = false;
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_std_'))) seen = true;
+      }
+      check(!seen, 'Phase 18: Signaturkarte erscheint ohne gesetztes starterTank');
+    }
+  }
+
+  // (c) Applier: die core-Schluessel wirken auf das aufgeloeste Standard-cfg.
+  //     Delta gegen eine upgradelose Basis, mit den Zahlen der Karte selbst --
+  //     so bleibt der Test von JSON-Balancewerten unabhaengig.
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'player'), {}, upgradesData, 'mine', null);
+    const drill = U.sig_std_drill.core; // { damageAdd, reloadMult }
+    const c2 = applyUpgrades(resolveCfg(tanksData, 'player'), { sig_std_drill: 2 }, upgradesData, 'mine', null);
+    check(c2.damage === base.damage + drill.damageAdd * 2, `Phase 18: Grundausbildung Schaden ${c2.damage} statt ${base.damage + drill.damageAdd * 2}`);
+    check(Math.abs(c2.fireCooldown - base.fireCooldown * Math.pow(drill.reloadMult, 2)) < 1e-6, 'Phase 18: Grundausbildung Nachladen falsch');
+    const wanne = U.sig_std_wanne.core; // { hpAdd, ricochetAdd }
+    const w2 = applyUpgrades(resolveCfg(tanksData, 'player'), { sig_std_wanne: 2 }, upgradesData, 'mine', null);
+    check(w2.maxHp === base.maxHp + wanne.hpAdd * 2, `Phase 18: Wanne LP ${w2.maxHp} statt ${base.maxHp + wanne.hpAdd * 2}`);
+    check(w2.ricochets === base.ricochets + wanne.ricochetAdd * 2, `Phase 18: Wanne Abpraller ${w2.ricochets} statt ${base.ricochets + wanne.ricochetAdd * 2}`);
+    const gard = U.sig_std_gardist.core; // { damageAdd, magAdd, hpAdd }, legendary maxStacks 1
+    const g1 = applyUpgrades(resolveCfg(tanksData, 'player'), { sig_std_gardist: 1 }, upgradesData, 'mine', null);
+    check(g1.damage === base.damage + gard.damageAdd && g1.magazine === base.magazine + gard.magAdd && g1.maxHp === base.maxHp + gard.hpAdd, 'Phase 18: Gardist-Kombiwerte falsch');
+  }
+
+  // (d) Der gemeinsame Tag `signature` bedeutet: hoechstens EINE Signaturkarte
+  //     pro Angebot (dieselbe Slot-Regel wie ein Element-Topf).
+  {
+    const rng = mulberry32(77);
+    let maxProAngebot = 0;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'player',
+      });
+      const n = offers.filter((o) => String(o.id || '').startsWith('sig_std_')).length;
+      if (n > maxProAngebot) maxProAngebot = n;
+    }
+    check(maxProAngebot === 1, `Phase 18: bis zu ${maxProAngebot} Signaturkarten pro Angebot (Tag-Regel greift nicht)`);
   }
 }
 
