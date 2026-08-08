@@ -909,6 +909,8 @@ function poolOpts(run) {
     elements: elementsOf(run),
     secondElement: run.secondElement && run.secondElement !== primaryElementOf(run) ? run.secondElement : null,
     secondWeight: run.data.balance.upgrades?.secondElementWeight ?? 0.5,
+    // Phase 18: Signaturkarten der gewaehlten Klasse (signatureClass-Filter).
+    starterTank: run.starterTank,
   };
 }
 

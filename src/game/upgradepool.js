@@ -98,7 +98,7 @@ function fallbackOffer(upgradesData) {
 //   onlyRarity     -- nur diese Seltenheit (z. B. 'legendary' fuer Treasure)
 //   bypassRoomGate -- minRoom + legendary.minRoom ignorieren
 function buildCandidates(upgradesData, opts) {
-  const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate, elements } = opts;
+  const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate, elements, starterTank } = opts;
   const legMinRoom = balance.legendary?.minRoom ?? 0;
   const bannedSet = banned || new Set();
   const defs = upgradesData.upgrades;
@@ -114,6 +114,13 @@ function buildCandidates(upgradesData, opts) {
     // Filter greift nur beim normalen Angebot (elements gesetzt) -- Elite-/
     // Treasure-Belohnungen (includeTag/onlyRarity) lassen ihn bewusst aus.
     if (elements && def.damageType && !elements.includes(def.damageType)) continue;
+    // UMBAUPLAN-LP Phase 18 (Signaturtoepfe): eine Karte mit signatureClass
+    // gehoert genau EINER Klasse und erscheint nur, wenn diese Klasse gespielt
+    // wird. Karten OHNE signatureClass sind universell (unveraendert). Ohne
+    // gesetztes starterTank (Elite-/Treasure-Belohnung laeuft ohnehin ueber
+    // includeTag/onlyRarity) faellt jede Signaturkarte durch -- so kann eine
+    // fremde Klassensignatur nie in einer Belohnung auftauchen.
+    if (def.signatureClass && def.signatureClass !== starterTank) continue;
     if (onlyRarity && def.rarity !== onlyRarity) continue;
     if (bannedSet.has(id)) continue;
     // P4: Die frueher noetige Minen-Sperre (MINE_ONLY_IDS) ist entfallen.
