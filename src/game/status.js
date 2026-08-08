@@ -66,8 +66,11 @@ export function applyStatus(state, tank, id, stacks = 1, opts = {}) {
   // Deckel. Wuerde sie bei jedem Auftragen auf voller Stufe erneut
   // ausloesen, waere ein Gegner mit einer Frostquelle dauerhaft
   // handlungsunfaehig (Dauer-Stunlock).
-  if (def.freezeAtStacks && vorher < def.freezeAtStacks && neu >= def.freezeAtStacks) {
-    tank.stunTimer = Math.max(tank.stunTimer || 0, def.freezeS || 0);
+  // Phase 14 (Frost-Topf): eine Quelle kann die Schwelle senken
+  // (opts.freezeThreshold) und die Dauer verlaengern (opts.freezeDurationBonus).
+  const freezeAt = opts.freezeThreshold ?? def.freezeAtStacks;
+  if (freezeAt && vorher < freezeAt && neu >= freezeAt) {
+    tank.stunTimer = Math.max(tank.stunTimer || 0, (def.freezeS || 0) + (opts.freezeDurationBonus || 0));
   }
   return neu;
 }

@@ -1048,7 +1048,10 @@ export function stepState(state, cmd, dt) {
           oc?.executeThreshold && t !== state.player && t.hp / (t.cfg.maxHp || 1) < oc.executeThreshold
             ? oc.executeMult || 1
             : 1;
-        let schaden = Math.round(basisSchaden * abprallMult * critMult * shooterBounceBonus * execMult);
+        // Frost-Topf (Phase 14): "Splittern" -- Extra-Schaden gegen ERSTARRTE
+        // (betaeubte) Ziele, damit die Frost-CC in Schaden umschlaegt.
+        const shatterMult = oc?.shatterMult && t.stunTimer > 0 ? 1 + oc.shatterMult : 1;
+        let schaden = Math.round(basisSchaden * abprallMult * critMult * shooterBounceBonus * execMult * shatterMult);
         // Kopfschuss (Phase 11): ein Krit toetet einen Nicht-Boss-Gegner sofort.
         if (isCrit && oc?.critExecute && t !== state.player && !isBossCfg(t.cfg)) {
           schaden = Math.max(schaden, t.hp);

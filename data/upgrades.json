@@ -1731,6 +1731,192 @@
         "statusMaxStacksBonus": 2,
         "damageAdd": 3
       }
+    },
+    "frost_slow": {
+      "id": "frost_slow",
+      "name": "Kältegrad",
+      "description": "Frost-Verlangsamung stärker (+10 %)",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "frostSlowBonus": 0.1
+      }
+    },
+    "frost_dur": {
+      "id": "frost_dur",
+      "name": "Dauerfrost",
+      "description": "Frostdauer +20 %",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "statusDurationMult": 1.2
+      }
+    },
+    "frost_ammo": {
+      "id": "frost_ammo",
+      "name": "Frostmunition",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "frost_shard": {
+      "id": "frost_shard",
+      "name": "Eissplitter",
+      "description": "Kritchance +4 %",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.04
+      }
+    },
+    "frost_deep": {
+      "id": "frost_deep",
+      "name": "Tiefkühlung",
+      "description": "Einfrieren schon bei 2 statt 3 Stufen",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧊",
+      "core": {
+        "frostFreezeReduction": 1
+      }
+    },
+    "frost_stack": {
+      "id": "frost_stack",
+      "name": "Frostschock",
+      "description": "Jeder Treffer legt +1 Froststufe",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "statusStackBonus": 1
+      }
+    },
+    "frost_hold": {
+      "id": "frost_hold",
+      "name": "Vereisung",
+      "description": "Einfrieren hält +1 s länger",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧊",
+      "core": {
+        "frostFreezeDurationBonus": 1.0
+      }
+    },
+    "frost_shatter": {
+      "id": "frost_shatter",
+      "name": "Splittern",
+      "description": "+50 % Schaden gegen erstarrte Gegner",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💠",
+      "core": {
+        "shatterMult": 0.5
+      }
+    },
+    "frost_blizzard": {
+      "id": "frost_blizzard",
+      "name": "Blizzard",
+      "description": "Einfrieren schon ab der ersten Stufe, +1 s Dauer",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌨️",
+      "core": {
+        "frostFreezeReduction": 2,
+        "frostFreezeDurationBonus": 1.0
+      }
+    },
+    "frost_zero": {
+      "id": "frost_zero",
+      "name": "Absoluter Nullpunkt",
+      "description": "Verlangsamung fast bis zum Stillstand, Einfrieren +2 s",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "frostSlowBonus": 0.4,
+        "frostFreezeDurationBonus": 2.0
+      }
+    },
+    "frost_breaker": {
+      "id": "frost_breaker",
+      "name": "Frostbrecher",
+      "description": "Doppelter Schaden gegen erstarrte Gegner, +1 Froststufe",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💠",
+      "core": {
+        "shatterMult": 1.0,
+        "statusStackBonus": 1
+      }
+    },
+    "frost_arsenal": {
+      "id": "frost_arsenal",
+      "name": "Frostarsenal",
+      "description": "+20 % Verlangsamung, +1 Stufe, Höchststufe +2, +3 Schaden",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💼",
+      "core": {
+        "frostSlowBonus": 0.2,
+        "statusStackBonus": 1,
+        "statusMaxStacksBonus": 2,
+        "damageAdd": 3
+      }
     }
   },
   "fallback": {

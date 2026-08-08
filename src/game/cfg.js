@@ -406,6 +406,13 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.statusMaxStacksBonus) cfg.statusMaxStacksBonus = (cfg.statusMaxStacksBonus || 0) + c.statusMaxStacksBonus * lvl;
     if (c.fireDurationMult) fireDurMult *= Math.pow(c.fireDurationMult, lvl);
     if (c.fireSpreadRadius) cfg.fireSpreadRadius = Math.max(cfg.fireSpreadRadius || 0, c.fireSpreadRadius);
+    // Phase 14 (Frost-Topf): frostSlowBonus ADDITIV zum Klassen-Passiv;
+    // Freeze-Schwelle senken / Freeze-Dauer verlaengern; Schaden gegen
+    // erstarrte Ziele.
+    if (c.frostSlowBonus) cfg.frostSlowBonus = (cfg.frostSlowBonus || 0) + c.frostSlowBonus * lvl;
+    if (c.frostFreezeReduction) cfg.frostFreezeReduction = (cfg.frostFreezeReduction || 0) + c.frostFreezeReduction * lvl;
+    if (c.frostFreezeDurationBonus) cfg.frostFreezeDurationBonus = (cfg.frostFreezeDurationBonus || 0) + c.frostFreezeDurationBonus * lvl;
+    if (c.shatterMult) cfg.shatterMult = (cfg.shatterMult || 0) + c.shatterMult * lvl;
   }
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;

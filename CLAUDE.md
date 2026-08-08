@@ -176,7 +176,12 @@ Explosionsradius/-schaden/Splitter skalieren; neuer
 und den Brand über die generischen Status-Boosts (`statusStackBonus`/
 `statusTickMult`/`statusMaxStacksBonus`/`statusDurationMult`) + eine
 Ausbreitung (`fireSpreadRadius`) steuern.
-**Nächste Sitzung: Phase 14 (Frost-Topf, 12 Karten).** `PLAN.md`/die
+**Phase 14 (Frost-Topf, 12 Karten) ist gebaut** (s. eigener Abschnitt unten):
+12 Frostkarten (4/4/4) mit stärkerer Verlangsamung (`frostSlowBonus` additiv
+zum Klassen-Passiv), früherem/längerem Einfrieren (`frostFreezeReduction`/
+`frostFreezeDurationBonus`) und Extra-Schaden gegen erstarrte Ziele
+(`shatterMult`).
+**Nächste Sitzung: Phase 15 (Gift-Topf, 12 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2284,6 +2289,30 @@ Status-Boosts**, damit die Frost-/Gift-Töpfe (14/15) dieselben Hebel nutzen.
   Deckel + angehobener Deckel, Dauer/Tickschaden skaliert, Ausbreitung inner-/
   außerhalb der Reichweite.
 
+### UMBAUPLAN-LP Phase 14 (Frost-Topf) — gemergt
+Vierter Element-Topf (12 Karten, 4/4/4, Tag+`damageType` `frost`). Frost
+verlangsamt statt zu ticken; die Karten nutzen die generischen Status-Boosts
+(Stufen/Dauer/Deckel) aus Phase 13 plus frost-spezifische Hebel.
+- **Stärkere Verlangsamung**: `frostSlowBonus` wird **additiv** zum
+  Klassen-Passiv aufaddiert (`cfg.js`) und in `damagetypes.js` in den
+  `speedMultOverride` gefaltet (den das Frostpanzer-Passiv seit Phase 9 nutzt).
+- **Früheres/längeres Einfrieren**: `frostFreezeReduction` senkt die
+  Freeze-Schwelle (`opts.freezeThreshold` in `status.js`),
+  `frostFreezeDurationBonus` verlängert `freezeS`. Die „nur beim Übergang"-Regel
+  bleibt (kein Stunlock).
+- **Splittern** (`shatterMult`): Extra-Schaden gegen bereits **erstarrte**
+  (`stunTimer > 0`) Ziele — die Frost-CC schlägt in Schaden um. Hook im
+  Schadensschritt (`state.js`), multipliziert sich mit Abprall/Krit.
+- **12 Karten**: 4 common (Verlangsamung/Dauer/Direktschaden/Krit), 4 rare
+  (Tiefkühlung = Schwelle 3→2, Frostschock = +Stufe, Vereisung = +Freeze-Dauer,
+  Splittern), 4 legendär (Blizzard/Absoluter Nullpunkt = CC-Richtung,
+  Frostbrecher/Frostarsenal = Splitter-/Allrounder-Richtung).
+- **Neue Dauertests** (Abschnitt 22, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (12, 4/4/4), Filter (Frostpanzer sieht sie, physische Klasse nicht),
+  Applier (frostSlowBonus additiv zum Passiv), stärkere Verlangsamung,
+  früheres Einfrieren (2 statt 3 Stufen), längeres Einfrieren, Splittern gegen
+  erstarrte vs. freie Ziele.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2379,7 +2408,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v85`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v86`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2428,7 +2457,7 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–21 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–22 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.
