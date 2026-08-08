@@ -56,11 +56,18 @@ export function applyTypeEffects(state, ziel, damageType, basisSchaden, meta) {
       tickDamageMult: oc?.statusTickMult ?? 1,
       maxStacksBonus: oc?.statusMaxStacksBonus ?? 0,
     };
-    if (def.status === 'frost' && oc?.frostSlowBonus) {
+    if (def.status === 'frost') {
       // "Verlangsamung +20 %": die Verlangsamung (1 - speedMult) waechst um den
       // Bonus, nicht der Multiplikator selbst. 0.6 -> 1 - (0.4 * 1.2) = 0.52.
-      const base = eff?.speedMult ?? 1;
-      opts.speedMultOverride = 1 - (1 - base) * (1 + oc.frostSlowBonus);
+      if (oc?.frostSlowBonus) {
+        const base = eff?.speedMult ?? 1;
+        opts.speedMultOverride = 1 - (1 - base) * (1 + oc.frostSlowBonus);
+      }
+      // Phase 14 (Frost-Topf): frueheres/laengeres Einfrieren.
+      if (oc?.frostFreezeReduction) {
+        opts.freezeThreshold = Math.max(1, (eff?.freezeAtStacks ?? Infinity) - oc.frostFreezeReduction);
+      }
+      if (oc?.frostFreezeDurationBonus) opts.freezeDurationBonus = oc.frostFreezeDurationBonus;
     }
     const stacks = (eff?.stacksPerHit ?? 1) + (oc?.statusStackBonus ?? 0);
     state.applyStatus?.(ziel, def.status, stacks, opts);

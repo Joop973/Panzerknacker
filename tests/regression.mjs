@@ -3304,6 +3304,137 @@ function check(ok, msg) {
   }
 }
 
+// ---- 22. UMBAUPLAN-LP Phase 14: Frost-Topf -------------------------------
+// 12 Frostkarten (4/4/4): stärkere Verlangsamung, früheres/längeres Einfrieren,
+// Schaden gegen erstarrte Ziele. Gegenprobe bestanden.
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { stepState } = await import('../src/game/state.js');
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { applyTypeEffects } = await import('../src/game/damagetypes.js');
+  const { statusSpeedMult } = await import('../src/game/status.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+  const U = upgradesData.upgrades;
+  const frost = Object.entries(U).filter(([, d]) => d.damageType === 'frost');
+  const FR = tanksData.status.effects.frost; // speedMult 0.6, freezeAtStacks 3, freezeS 1, maxStacks 3
+
+  // (a) Struktur: 12 Frostkarten, 4/4/4, Tag+damageType frost.
+  {
+    check(frost.length === 12, `Phase 14: ${frost.length} Frostkarten statt 12`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of frost) rar[d.rarity]++;
+    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 14: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(frost.every(([, d]) => d.tag === 'frost'), 'Phase 14: nicht alle Frostkarten tragen Tag frost');
+  }
+
+  // (b) Filter: Frostpanzer sieht sie, physische Klasse NICHT.
+  {
+    const sieht = (element) => {
+      const rng = mulberry32(9);
+      for (let i = 0; i < 300; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(), elements: [element],
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('frost_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('frost'), 'Phase 14: Frostpanzer sieht keine Frostkarten');
+    check(!sieht('physical'), 'Phase 14: physische Klasse sieht Frostkarten (Filter greift nicht)');
+  }
+
+  // (c) Applier: frostSlowBonus ADDITIV zum Klassen-Passiv; Freeze-Hebel +
+  //     Splittern landen im cfg.
+  {
+    const slow = applyUpgrades(resolveCfg(tanksData, 'c_frost'), { frost_slow: 3 }, upgradesData, 'mine', null);
+    // c_frost-Passiv 0.2 + 0.1*3 = 0.5
+    check(Math.abs(slow.frostSlowBonus - 0.5) < 1e-6, `Phase 14: frostSlowBonus ${slow.frostSlowBonus} statt 0.5 (Passiv additiv)`);
+    const deep = applyUpgrades(resolveCfg(tanksData, 'c_frost'), { frost_deep: 1 }, upgradesData, 'mine', null);
+    check(deep.frostFreezeReduction === 1, `Phase 14: frostFreezeReduction ${deep.frostFreezeReduction} statt 1`);
+    const shatter = applyUpgrades(resolveCfg(tanksData, 'c_frost'), { frost_shatter: 2 }, upgradesData, 'mine', null);
+    check(Math.abs(shatter.shatterMult - 1.0) < 1e-6, `Phase 14: shatterMult ${shatter.shatterMult} statt 1.0`);
+  }
+
+  const reihe = (n, abstand = 60) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.player.x = 2000;
+    st.player.y = 2000;
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const ziele = [];
+    for (let i = 0; i < n; i++) {
+      const z = {
+        ...proto, x: 200 + i * abstand, y: 250, prevX: 200 + i * abstand, prevY: 250,
+        alive: true, hp: 9999, protect: 0, shieldReady: false, status: {}, stunTimer: 0,
+        cfg: { ...proto.cfg, maxHp: 9999 },
+      };
+      st.tanks.push(z);
+      ziele.push(z);
+    }
+    return { st, ziele };
+  };
+
+  // (d) Stärkere Verlangsamung: der Eintrag traegt den berechneten speedMult.
+  {
+    const { st, ziele } = reihe(1);
+    applyTypeEffects(st, ziele[0], 'frost', 10, { ownerCfg: { frostSlowBonus: 0.2 } });
+    const erwartet = 1 - (1 - FR.speedMult) * 1.2; // 0.52
+    check(Math.abs(ziele[0].status.frost.speedMult - erwartet) < 1e-6, `Phase 14: Frost-speedMult ${ziele[0].status.frost.speedMult} statt ${erwartet}`);
+    check(Math.abs(statusSpeedMult(st, ziele[0]) - erwartet) < 1e-6, 'Phase 14: statusSpeedMult nutzt den Eintrags-Override nicht');
+  }
+
+  // (e) Frueheres Einfrieren: bei 2 Stufen mit Reduktion 1 friert es ein,
+  //     ohne Reduktion (Schwelle 3) nicht.
+  {
+    const a = reihe(1);
+    applyTypeEffects(a.st, a.ziele[0], 'frost', 10, { ownerCfg: { statusStackBonus: 1, frostFreezeReduction: 1 } });
+    check(a.ziele[0].status.frost.stacks === 2, `Phase 14: Vorbedingung ${a.ziele[0].status.frost.stacks} Stufen statt 2`);
+    check(a.ziele[0].stunTimer > 0, 'Phase 14: Tiefkühlung friert bei 2 Stufen nicht ein');
+
+    const b = reihe(1);
+    applyTypeEffects(b.st, b.ziele[0], 'frost', 10, { ownerCfg: { statusStackBonus: 1 } });
+    check(b.ziele[0].stunTimer === 0, 'Phase 14: friert schon bei 2 Stufen OHNE Reduktion ein');
+  }
+
+  // (f) Längeres Einfrieren: 3 Stufen -> stunTimer = freezeS + Bonus.
+  {
+    const { st, ziele } = reihe(1);
+    applyTypeEffects(st, ziele[0], 'frost', 10, { ownerCfg: { statusStackBonus: 2, frostFreezeDurationBonus: 1.0 } });
+    check(ziele[0].status.frost.stacks === FR.freezeAtStacks, `Phase 14: Vorbedingung ${ziele[0].status.frost.stacks} Stufen statt ${FR.freezeAtStacks}`);
+    check(Math.abs(ziele[0].stunTimer - (FR.freezeS + 1.0)) < 1e-6, `Phase 14: Einfrierdauer ${ziele[0].stunTimer} statt ${FR.freezeS + 1.0}`);
+  }
+
+  // (g) Splittern: +Schaden gegen ein bereits erstarrtes (betaeubtes) Ziel.
+  {
+    const schaden = (shatter, stun) => {
+      const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+      const proto = st.tanks.find((t) => t !== st.player && t.alive);
+      st.tanks.length = 0;
+      st.tanks.push(st.player);
+      if (shatter) st.player.cfg.shatterMult = shatter;
+      const z = {
+        ...proto, x: 200, y: 250, prevX: 200, prevY: 250,
+        alive: true, hp: 9999, protect: 0, shieldReady: false, status: {}, stunTimer: stun,
+        cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+      };
+      st.tanks.push(z);
+      const b = createBullet(z.x, z.y, 0, { speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10, damageType: 'frost' });
+      b.age = 5;
+      st.bullets.length = 0;
+      st.mines.length = 0;
+      st.bullets.push(b);
+      const vor = z.hp;
+      stepState(st, CMD0, 1 / 60);
+      return vor - z.hp;
+    };
+    check(schaden(0.5, 1) === 15, `Phase 14: Splittern gegen erstarrtes Ziel ${schaden(0.5, 1)} statt 15`);
+    check(schaden(0.5, 0) === 10, `Phase 14: Splittern trifft ein NICHT erstarrtes Ziel faelschlich haerter (${schaden(0.5, 0)})`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
