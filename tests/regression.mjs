@@ -3858,6 +3858,82 @@ function check(ok, msg) {
   }
 }
 
+// ---- 27. UMBAUPLAN-LP Phase 19: Signaturtopf Sprengpanzer ----------------
+// 6 klassenexklusive Karten (2/2/2) fuer den Sprengpanzer (c_blast) ueber den
+// signatureClass-Filter (Phase 18) und die Explosiv-core-Schluessel (Phase 12).
+// Mechanismus mit eigenen Zahlen; Gegenprobe fuer jeden Kernpunkt bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const blast = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_blast');
+
+  // (a) Struktur: 6 Sprengpanzer-Signaturen, 2/2/2, Tag signature.
+  {
+    check(blast.length === 6, `Phase 19: ${blast.length} Sprengpanzer-Signaturen statt 6`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of blast) rar[d.rarity]++;
+    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 19: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(blast.every(([, d]) => d.tag === 'signature' && d.core), 'Phase 19: Signatur ohne Tag signature oder ohne core');
+    // Signaturen sind klassen-, nicht elementgebunden: kein damageType, sonst
+    // wuerde der Element-Filter sie zusaetzlich (unnoetig) einschraenken.
+    check(blast.every(([, d]) => !d.damageType), 'Phase 19: eine Sprengsignatur traegt faelschlich einen damageType');
+  }
+
+  // (b) Filter: der Sprengpanzer sieht sie, eine andere Klasse (player) NIE.
+  {
+    const sieht = (klass) => {
+      const rng = mulberry32(31);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass,
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_blast_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('c_blast'), 'Phase 19: Sprengpanzer sieht die eigene Signatur nicht');
+    check(!sieht('player'), 'Phase 19: fremde Klasse sieht die Sprengsignatur (Filter greift nicht)');
+  }
+
+  // (c) Applier: Explosiv-core-Schluessel wirken auf das aufgeloeste c_blast-cfg.
+  //     Delta/Faktor gegen die upgradelose Basis (die schon das +20%-Passiv
+  //     traegt) mit den Zahlen der Karte selbst.
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'c_blast'), {}, upgradesData, 'mine', null);
+    // Sprengmeister: schaltet allExplosive frei -> Schuesse zuenden.
+    const sm = applyUpgrades(resolveCfg(tanksData, 'c_blast'), { sig_blast_sprengmeister: 1 }, upgradesData, 'mine', null);
+    check(!base.allExplosive && sm.allExplosive === true, 'Phase 19: Sprengmeister schaltet allExplosive nicht frei');
+    check(sm.damage === base.damage + U.sig_blast_sprengmeister.core.damageAdd, `Phase 19: Sprengmeister Schaden ${sm.damage} falsch`);
+    // Zünder: +1 Mine je Stufe, Radius-Faktor auf Schuss UND Mine (mineRadiusMult).
+    const z2 = applyUpgrades(resolveCfg(tanksData, 'c_blast'), { sig_blast_zuender: 2 }, upgradesData, 'mine', null);
+    check(z2.mines === base.mines + 2, `Phase 19: Zünder Bomben ${z2.mines} statt ${base.mines + 2}`);
+    const radFactor = Math.pow(U.sig_blast_zuender.core.explosionRadiusMult, 2);
+    check(Math.abs(z2.mineRadiusMult - base.mineRadiusMult * radFactor) < 1e-6, `Phase 19: Zünder Minenradius-Faktor falsch (${z2.mineRadiusMult})`);
+    // Arsenal: Schrapnell (Max) + Explosionsschaden-Faktor.
+    const ar = applyUpgrades(resolveCfg(tanksData, 'c_blast'), { sig_blast_arsenal: 1 }, upgradesData, 'mine', null);
+    check(ar.schrapnell === U.sig_blast_arsenal.core.schrapnellCount, `Phase 19: Arsenal Schrapnell ${ar.schrapnell} statt ${U.sig_blast_arsenal.core.schrapnellCount}`);
+    check(Math.abs((ar.explosionDamageMult || 1) - U.sig_blast_arsenal.core.explosionDamageMult) < 1e-6, `Phase 19: Arsenal Explosionsschaden-Faktor falsch (${ar.explosionDamageMult})`);
+  }
+
+  // (d) Gemeinsamer Tag signature -> hoechstens eine Sprengsignatur pro Angebot.
+  {
+    const rng = mulberry32(83);
+    let maxProAngebot = 0;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_blast',
+      });
+      const n = offers.filter((o) => String(o.id || '').startsWith('sig_blast_')).length;
+      if (n > maxProAngebot) maxProAngebot = n;
+    }
+    check(maxProAngebot === 1, `Phase 19: bis zu ${maxProAngebot} Sprengsignaturen pro Angebot (Tag-Regel greift nicht)`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;

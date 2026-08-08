@@ -199,7 +199,10 @@ Shop gegen Schrott neu würfelbar, in der Raumvorschau angezeigt.
 sechs klassenexklusive Karten für die Standard-Klasse + der `signatureClass`-
 Filter, den alle Signaturtöpfe (18–27) teilen — eine Karte mit `signatureClass`
 erscheint nur, wenn genau diese Klasse gespielt wird.
-**Nächste Sitzung: Phase 19 (Signaturtopf Sprengpanzer, 6 Karten).** `PLAN.md`/die
+**Phase 19 (Signaturtopf Sprengpanzer) ist gebaut** (s. eigener Abschnitt unten):
+sechs klassenexklusive Explosiv-Karten für den Sprengpanzer (`c_blast`) über den
+`signatureClass`-Filter (Phase 18) und die Explosiv-`core`-Schlüssel (Phase 12).
+**Nächste Sitzung: Phase 20 (Signaturtopf Frostpanzer, 6 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2451,6 +2454,35 @@ keine Codezeile.
   Karten; `damageAdd`-Pfad genullt → Applier-Delta falsch; Rarität verdreht →
   Verteilung ≠ 2/2/2.
 
+### UMBAUPLAN-LP Phase 19 (Signaturtopf Sprengpanzer) — gemergt
+Zweiter Signaturtopf (6 Karten, 2/2/2, Tag `signature` + `signatureClass:
+"c_blast"`). Nutzt den `signatureClass`-Filter aus Phase 18 und die
+Explosiv-`core`-Schlüssel aus Phase 12 — **keine neue Engine-Zeile**.
+- **Klassen-, nicht elementgebunden**: die Karten tragen bewusst **keinen**
+  `damageType` (nur `signatureClass`). Sonst würde der Element-Filter aus
+  Phase 11 sie zusätzlich einschränken — der `signatureClass`-Filter allein
+  ist die richtige Achse. Ein Test wacht darüber.
+- **Explosiv-Identität** über bestehende `core`-Schlüssel: `mineAdd`,
+  `explosionRadiusMult` (wirkt auf Schuss **und** Mine über `mineRadiusMult`),
+  `explosionDamageMult`, `schrapnellCount`, `allExplosive` (jeder Schuss
+  zündet). Die Sprengpanzer-Schüsse zünden **nur** mit einer Karte, die
+  `allExplosive`/`explosionEveryShots` setzt (der Klassen-`damageType
+  explosive` färbt nur ein) — deshalb schaltet die Legendäre *Sprengmeister*
+  genau das frei; die commons/rares skalieren Radius/Schaden/Splitter/Minen
+  (wirken über die Minen auch ohne `allExplosive`).
+- **Sechs Karten**: 2 common (Zünder = Bombe+Radius, Kompression =
+  Explosionsschaden+Nachladen), 2 rare (Splittermantel = Schrapnell+Schaden,
+  Druckwelle = Radius+Explosionsschaden), 2 legendär (Sprengmeister =
+  `allExplosive`+Radius+Schaden, Sprengarsenal = Bomben+Schrapnell+
+  Explosionsschaden).
+- **Neue Dauertests** (Abschnitt 27, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (6, 2/2/2, kein `damageType`), Filter (`c_blast` sieht sie, `player`
+  nie), Applier (`allExplosive` freigeschaltet, `mineAdd`, Radius-Faktor auf
+  `mineRadiusMult`, `schrapnellCount`, `explosionDamageMult`), höchstens eine
+  Signatur pro Angebot. Gegenproben rot bestätigt: `allExplosive`-Zweig aus →
+  Sprengmeister schaltet nicht frei; Rarität verdreht → Verteilung ≠ 2/2/2;
+  Filter aus → fremde Klasse sieht die Karten.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2546,7 +2578,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v90`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v91`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2595,8 +2627,8 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–26 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–27 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
-Phase-18-Signaturtopf Standard + `signatureClass`-Filter). Die frühere
+Phase-18/19-Signaturtöpfe Standard+Sprengpanzer + `signatureClass`-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.
