@@ -191,7 +191,11 @@ Feuer-Ausbreitungsblock ist zu einem status-agnostischen Zweig verallgemeinert.
 (`lightningRangeBonus`), schwächerer Abfall (`lightningFalloffBonus`) und
 Betäubung je Sprung (`lightningStun`). **Damit sind alle sechs Element-Töpfe
 (Phasen 11–16) fertig.**
-**Nächste Sitzung: Phase 17 (Zweitelement).** `PLAN.md`/die
+**Phase 17 (Zweitelement) ist gebaut** (s. eigener Abschnitt unten): beim
+Runstart wird deterministisch ein zufälliges zweites Element gezogen und mit
+halber Gewichtung in die Angebote gemischt (`weightedPick` tier-normiert), im
+Shop gegen Schrott neu würfelbar, in der Raumvorschau angezeigt.
+**Nächste Sitzung: Phase 18 (Signaturtopf Standard, 6 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2372,6 +2376,40 @@ Sechster und letzter Element-Topf (12 Karten, 4/4/4, Tag+`damageType`
   Trefferschleife) — der Test wendet den Aufschlag deshalb erst per
   `applyDamage` an, dann die Kette.
 
+### UMBAUPLAN-LP Phase 17 (Zweitelement) — gemergt
+Jede Klasse zieht ihr Primärelement voll; beim Runstart wird zusätzlich ein
+zufälliges **Zweitelement** gezogen und mit halber Gewichtung beigemischt —
+„fünfzig Spielgefühle aus sechs Töpfen, ohne eine einzige zusätzliche Karte".
+- **Deterministische Ziehung** (`run.js`): `drawSecondElement(seed, primary,
+  idx)` aus dem run-weiten Strom `rngForRun(seed, "element_<idx>")`, Pool = die
+  sechs Elemente ohne das Primärelement. `idx` = `run.elementRerolls` (0 beim
+  Start). `elementsOf(run)` liefert jetzt `[primär, zweit]`; der Element-Filter
+  aus Phase 11 war schon auf ein **Array** ausgelegt.
+- **Halbe Gewichtung** (`upgradepool.js`): `weightedPick` bekommt einen
+  optionalen `elementWeight(def)` und normiert die Seltenheit jetzt über die
+  **Summe der Element-Gewichte pro Stufe** statt der Kartenzahl — so bleibt die
+  Rarity-Verteilung (60/30/10) exakt erhalten und nur INNERHALB einer Stufe
+  erscheint das Zweitelement halb so oft (gemessen: `frost/fire ≈ 0,55` bei
+  einem Flammenpanzer mit Frost). Ohne `elementWeight` (alle 1) ist die Summe
+  gleich der Kartenzahl → identisch zum Phase-10-Verhalten (der
+  Verteilungstest bleibt unverändert). `poolOpts` reicht `secondElement` +
+  `balance.upgrades.secondElementWeight` (0,5) durch.
+- **Shop-Reroll** (`run.js: rerollSecondElement()`, Preis
+  `scrap.cost.rerollElement` 4): erhöht `elementRerolls` → neues Element aus dem
+  nächsten Strom, ändert den Pool **sofort** fürs nächste Angebot. Knopf im
+  Shop-Screen (`roomscreens.js`), zeigt das aktuelle Zweitelement.
+- **Seed-Wiedergabe**: `secondElement` + `elementRerolls` stehen im
+  `runSnapshot()` (nach Rerolls nicht mehr rein seed-ableitbar) und werden beim
+  `resume` restauriert; ein Altstand ohne die Felder zieht sie deterministisch
+  nach.
+- **Anzeige**: die Raumvorschau (`preview.js`) zeigt „Elemente: Feuer + Frost"
+  (Namen aus `status.json`), sichtbar vor dem Betreten wie der Modifikator.
+- **Neue Dauertests** (Abschnitt 25, Gegenprobe für die Kernpunkte bestanden):
+  Determinismus (gleicher Seed → gleiches Zweitelement) + Variation über Seeds,
+  halbe Gewichtung + kein drittes Element, Shop-Reroll (Kosten/Index/Änderung),
+  Snapshot-Fortsetzen. Playwright-Smoke: Element-Zeile in der Vorschau,
+  `uilayout.mjs` über alle Viewports grün.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2467,7 +2505,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v88`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v89`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2516,7 +2554,7 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–24 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–25 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.

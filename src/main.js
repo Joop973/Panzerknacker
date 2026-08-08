@@ -27,6 +27,7 @@ import {
   buyShopCard,
   buyShopSecondary,
   buyShopLife,
+  rerollSecondElement,
   ROOM_TYPE_INFO,
 } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
@@ -383,6 +384,18 @@ async function init() {
     touch.setGadgetLabel(run.equippedGadget ? tanksData.secondaries?.[run.equippedGadget]?.label || 'GADGET' : '');
   }
 
+  // Phase 17: "Elemente: Feuer + Frost" -- Primaer- + Zweitelement der Klasse,
+  // Anzeigenamen aus status.json. Zeigt das Zweitelement nur, wenn es sich vom
+  // Primaerelement unterscheidet.
+  function elementLineFor(run) {
+    const dt = tanksData.status?.damageTypes || {};
+    const nameOf = (id) => dt[id]?.name || id;
+    const primary = tanksData.types[run.starterTank]?.damageType || 'physical';
+    const second = run.secondElement;
+    if (!second || second === primary) return `Element: ${nameOf(primary)}`;
+    return `Elemente: ${nameOf(primary)} + ${nameOf(second)}`;
+  }
+
   function launchRun(seed, modeKey, resume) {
     run = createRun(tanksData, tilesData, diffData, upgradesData, seed, modeKey, {
       roomSpec: arenaSpec,
@@ -723,6 +736,13 @@ async function init() {
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shopLife', amount: costs.shopLife });
           return ok;
         },
+        // Phase 17: Zweitelement gegen Schrott neu wuerfeln.
+        getSecondElement: () => tanksData.status?.damageTypes?.[run.secondElement]?.name || run.secondElement || '—',
+        onRerollElement: () => {
+          const ok = rerollSecondElement(run);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'rerollElement', amount: costs.rerollElement });
+          return ok;
+        },
         onDrop: (id) => {
           const ok = dropUpgrade(run, id);
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'drop', amount: -refund });
@@ -793,6 +813,7 @@ async function init() {
           hazardLine: run.roomHazard
             ? `Gefahr: ${run.roomHazard.name} — ${run.roomHazard.desc}`
             : null,
+          elementLine: elementLineFor(run),
         },
         run.state.tanks.slice(1).map((t) => t.type),
         tanksData,

@@ -57,7 +57,7 @@ export function createPreview() {
     // opts: { title, character (Raumtyp-Text),
     //         upgrades: [{ name, level, description }] (eigene Ausruestung) }
     show(opts, enemyTypes, tanksData, onGo) {
-      const { title, character, upgrades, dangerByType, modifierLine, hazardLine } = opts;
+      const { title, character, upgrades, dangerByType, modifierLine, hazardLine, elementLine } = opts;
       // Typen gruppieren: ["t_brown","t_brown","t_grey"] -> Brauner x2 ...
       const counts = new Map();
       for (const t of enemyTypes) counts.set(t, (counts.get(t) || 0) + 1);
@@ -76,6 +76,16 @@ export function createPreview() {
         ? `Raumtyp: ${character}${threatTxt} — diese Gegner erwarten dich:`
         : `Diese Gegner erwarten dich${threatTxt}:`;
       el.appendChild(sub);
+
+      // Elemente (Phase 17): Primaer- + Zweitelement der Klasse -- bestimmt,
+      // welche Element-Karten in den Angeboten erscheinen. Vor dem Betreten
+      // sichtbar wie der Modifikator.
+      if (elementLine) {
+        const els = document.createElement('p');
+        els.className = 'pv-mod';
+        els.textContent = elementLine;
+        el.appendChild(els);
+      }
 
       const row = document.createElement('div');
       row.className = 'pv-chips';

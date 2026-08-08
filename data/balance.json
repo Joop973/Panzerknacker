@@ -70,8 +70,13 @@
       "shieldCharge": 4,
       "shopCard": 5,
       "shopSecondary": 6,
-      "shopLife": 12
+      "shopLife": 12,
+      "rerollElement": 4
     }
+  },
+  "_comment_upgrades": "UMBAUPLAN-LP Phase 17: secondElementWeight ist die Gewichtung, mit der die Karten des zufaelligen Zweitelements gegenueber dem Primaerelement in den Angeboten erscheinen (0.5 = halb so oft). Universelle Karten (Kernpool, Altkarten ohne damageType) bleiben voll gewichtet.",
+  "upgrades": {
+    "secondElementWeight": 0.5
   },
   "shop": {
     "cardChoices": 5
