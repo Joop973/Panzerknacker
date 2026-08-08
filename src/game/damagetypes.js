@@ -43,16 +43,36 @@ export function applyTypeEffects(state, ziel, damageType, basisSchaden, meta) {
   if (def.status) {
     const eff = state.data.status.effects?.[def.status];
     const oc = meta?.ownerCfg;
-    const opts = {};
-    if (def.status === 'fire') opts.durationMult = oc?.fireDurationMult ?? 1;
-    else if (def.status === 'poison') opts.durationMult = oc?.poisonDurationMult ?? 1;
-    else if (def.status === 'frost' && oc?.frostSlowBonus) {
+    // Dauer: elementspezifisches Klassen-Passiv (Phase 9) MAL generischer
+    // Karten-Multiplikator (Phase 13, gilt fuer den Status des eigenen
+    // Elements). tickDamageMult/maxStacksBonus/stackBonus kommen ebenfalls aus
+    // den Topf-Karten (generisch benannt, weil die Klasse nur EIN Element
+    // schiesst -- der Boost trifft also immer den passenden Status).
+    let durationMult = oc?.statusDurationMult ?? 1;
+    if (def.status === 'fire') durationMult *= oc?.fireDurationMult ?? 1;
+    else if (def.status === 'poison') durationMult *= oc?.poisonDurationMult ?? 1;
+    const opts = {
+      durationMult,
+      tickDamageMult: oc?.statusTickMult ?? 1,
+      maxStacksBonus: oc?.statusMaxStacksBonus ?? 0,
+    };
+    if (def.status === 'frost' && oc?.frostSlowBonus) {
       // "Verlangsamung +20 %": die Verlangsamung (1 - speedMult) waechst um den
       // Bonus, nicht der Multiplikator selbst. 0.6 -> 1 - (0.4 * 1.2) = 0.52.
       const base = eff?.speedMult ?? 1;
       opts.speedMultOverride = 1 - (1 - base) * (1 + oc.frostSlowBonus);
     }
-    state.applyStatus?.(ziel, def.status, eff?.stacksPerHit ?? 1, opts);
+    const stacks = (eff?.stacksPerHit ?? 1) + (oc?.statusStackBonus ?? 0);
+    state.applyStatus?.(ziel, def.status, stacks, opts);
+    // Feuer-Ausbreitung (Phase 13): der Treffer entzuendet nahe Gegner mit
+    // einer Grundstufe. Kein applyTypeEffects-Aufruf -> keine Rekursion.
+    if (def.status === 'fire' && oc?.fireSpreadRadius) {
+      const r2 = oc.fireSpreadRadius * oc.fireSpreadRadius;
+      for (const t of state.tanks) {
+        if (t === ziel || !t.alive || t === state.player || t.protect > 0) continue;
+        if ((t.x - ziel.x) ** 2 + (t.y - ziel.y) ** 2 <= r2) state.applyStatus?.(t, 'fire', 1, opts);
+      }
+    }
   }
 
   // 2. Blitz-Kette. Sie springt vom ZULETZT getroffenen Panzer weiter (nicht

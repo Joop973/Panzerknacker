@@ -171,7 +171,12 @@ Fangschuss/Abprallkönig/Kopfschuss/Railgun).
 unten): 12 explosive Karten (4/4/4), die Schüsse zünden lassen und
 Explosionsradius/-schaden/Splitter skalieren; neuer
 `explosionDamageMult`-Multiplikator im Zündpfad (Schuss + Mine).
-**Nächste Sitzung: Phase 13 (Feuer-Topf, 12 Karten).** `PLAN.md`/die
+**Phase 13 (Feuer-Topf, 12 Karten) ist gebaut** (s. eigener Abschnitt unten):
+12 Feuerkarten (4/4/4), die Brandstufen/-dauer/-tickschaden/-deckel skalieren
+und den Brand über die generischen Status-Boosts (`statusStackBonus`/
+`statusTickMult`/`statusMaxStacksBonus`/`statusDurationMult`) + eine
+Ausbreitung (`fireSpreadRadius`) steuern.
+**Nächste Sitzung: Phase 14 (Frost-Topf, 12 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2251,6 +2256,34 @@ Explosionsschaden-Multiplikator im Zündpfad.
   **Zündpfad** (skalierter Explosionsschaden am Ziel gemessen, Abprall
   verdoppelt die Explosion nicht).
 
+### UMBAUPLAN-LP Phase 13 (Feuer-Topf) — gemergt
+Dritter Element-Topf (12 Karten, 4/4/4, Tag+`damageType` `fire`). Feuer trägt
+den Brand-Statuseffekt (Phase 5/6) — die Karten skalieren ihn über **generische
+Status-Boosts**, damit die Frost-/Gift-Töpfe (14/15) dieselben Hebel nutzen.
+- **Generische Status-Boosts** (`damagetypes.js: applyTypeEffects()` reicht sie
+  in die `applyStatus`-Optionen): `statusStackBonus` (+Stufen je Treffer),
+  `statusMaxStacksBonus` (Stufen-Deckel anheben, `status.js`),
+  `statusTickMult` (Tickschaden, am Eintrag gemerkt + in `updateStatus`
+  verrechnet), `statusDurationMult` (Dauer, **mal** dem elementspezifischen
+  Klassen-Passiv `fireDurationMult`). Generisch benannt, weil eine Klasse nur
+  EIN Element schießt — der Boost trifft also immer den passenden Status.
+- **Feuer-Ausbreitung** (`fireSpreadRadius`): ein Treffer entzündet nahe Gegner
+  mit einer Grundstufe. Bewusst **kein** `applyTypeEffects`-Aufruf (nur
+  `applyStatus`) → keine Rekursion/Kettenzündung ins Unendliche.
+- **`core`-Applier-Schlüssel** (`cfg.js`): `statusDurationMult`/`statusTickMult`
+  (multiplikativ, nach der Schleife), `statusStackBonus`/`statusMaxStacksBonus`
+  (additiv), `fireDurationMult` (multipliziert das Klassen-Passiv),
+  `fireSpreadRadius` (Max).
+- **12 Karten**: 4 common (Dauer/Tick/Direktschaden/Krit), 4 rare (Napalm =
+  +Stufe, Brandherd = Ausbreitung, Höllenglut = Deckel 3→5, Brandbombe = Tick),
+  4 legendär (Inferno/Pyromane = Dauerbrand-Richtung, Feuersturm/Brandarsenal =
+  Ausbreitungs-/Allrounder-Richtung).
+- **Neue Dauertests** (Abschnitt 21, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (12, 4/4/4), Filter (Flammenpanzer sieht sie, physische Klasse
+  nicht), Applier (Status-Boosts getrennt vom Klassen-Passiv), Brandstufen +
+  Deckel + angehobener Deckel, Dauer/Tickschaden skaliert, Ausbreitung inner-/
+  außerhalb der Reichweite.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2346,7 +2379,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v84`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v85`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2395,7 +2428,7 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–20 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–21 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.
