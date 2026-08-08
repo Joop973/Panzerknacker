@@ -3435,6 +3435,115 @@ function check(ok, msg) {
   }
 }
 
+// ---- 23. UMBAUPLAN-LP Phase 15: Gift-Topf --------------------------------
+// 12 Giftkarten (4/4/4): Gift tickt (wie Feuer) mit hohem Deckel; Karten nutzen
+// die generischen Status-Boosts + eine Gift-Ausbreitung. Gegenprobe bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { applyTypeEffects } = await import('../src/game/damagetypes.js');
+  const { updateStatus } = await import('../src/game/status.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const poison = Object.entries(U).filter(([, d]) => d.damageType === 'poison');
+  const PO = tanksData.status.effects.poison; // damagePerTick 2, durationS 6, maxStacks 5
+
+  // (a) Struktur: 12 Giftkarten, 4/4/4, Tag+damageType poison.
+  {
+    check(poison.length === 12, `Phase 15: ${poison.length} Giftkarten statt 12`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of poison) rar[d.rarity]++;
+    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 15: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(poison.every(([, d]) => d.tag === 'poison'), 'Phase 15: nicht alle Giftkarten tragen Tag poison');
+  }
+
+  // (b) Filter: Radioaktiv-Panzer (Element poison) sieht sie, physische Klasse NICHT.
+  {
+    const sieht = (element) => {
+      const rng = mulberry32(11);
+      for (let i = 0; i < 300; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(), elements: [element],
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('poison_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('poison'), 'Phase 15: Radioaktiv-Panzer sieht keine Giftkarten');
+    check(!sieht('physical'), 'Phase 15: physische Klasse sieht Giftkarten (Filter greift nicht)');
+  }
+
+  // (c) Applier: Status-Boosts + Ausbreitung; Klassen-Passiv (poisonDurationMult)
+  //     bleibt getrennt von statusDurationMult.
+  {
+    const st = applyUpgrades(resolveCfg(tanksData, 'c_toxic'), { poison_stack: 2 }, upgradesData, 'mine', null);
+    check(st.statusStackBonus === 2, `Phase 15: Nervengift statusStackBonus ${st.statusStackBonus} statt 2`);
+    const cap = applyUpgrades(resolveCfg(tanksData, 'c_toxic'), { poison_cap: 1 }, upgradesData, 'mine', null);
+    check(cap.statusMaxStacksBonus === 2, `Phase 15: Überdosis statusMaxStacksBonus ${cap.statusMaxStacksBonus} statt 2`);
+    const spr = applyUpgrades(resolveCfg(tanksData, 'c_toxic'), { poison_plaguecard: 1 }, upgradesData, 'mine', null);
+    check(spr.poisonSpreadRadius === 70, `Phase 15: Seuche poisonSpreadRadius ${spr.poisonSpreadRadius} statt 70`);
+    const dur = applyUpgrades(resolveCfg(tanksData, 'c_toxic'), { poison_dur: 3 }, upgradesData, 'mine', null);
+    check(dur.poisonDurationMult === 1.25, `Phase 15: Klassen-Passiv poisonDurationMult ${dur.poisonDurationMult} (soll 1.25)`);
+    check(Math.abs(dur.statusDurationMult - Math.pow(1.2, 3)) < 1e-6, `Phase 15: statusDurationMult ${dur.statusDurationMult}`);
+  }
+
+  const reihe = (n, abstand = 60) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.player.x = 2000;
+    st.player.y = 2000;
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const ziele = [];
+    for (let i = 0; i < n; i++) {
+      const z = {
+        ...proto, x: 200 + i * abstand, y: 250, prevX: 200 + i * abstand, prevY: 250,
+        alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+        cfg: { ...proto.cfg, maxHp: 9999 },
+      };
+      st.tanks.push(z);
+      ziele.push(z);
+    }
+    return { st, ziele };
+  };
+
+  // (d) Deckel + Dauer + Tickschaden (mit eigenen Zahlen).
+  {
+    // Deckel: viele Stufen auf einmal, Standard-Deckel 5.
+    const a = reihe(1);
+    applyTypeEffects(a.st, a.ziele[0], 'poison', 10, { ownerCfg: { statusStackBonus: 6 } });
+    check(a.ziele[0].status.poison.stacks === PO.maxStacks, `Phase 15: Deckel greift nicht (${a.ziele[0].status.poison.stacks} statt ${PO.maxStacks})`);
+    // Überdosis hebt ihn auf 7.
+    const b = reihe(1);
+    applyTypeEffects(b.st, b.ziele[0], 'poison', 10, { ownerCfg: { statusStackBonus: 6, statusMaxStacksBonus: 2 } });
+    check(b.ziele[0].status.poison.stacks === PO.maxStacks + 2, `Phase 15: angehobener Deckel (${b.ziele[0].status.poison.stacks} statt ${PO.maxStacks + 2})`);
+
+    // Dauer: Klassen-Passiv 1,25 (poisonDurationMult) -> timeLeft 6 * 1,25.
+    const c = reihe(1);
+    applyTypeEffects(c.st, c.ziele[0], 'poison', 10, { ownerCfg: { poisonDurationMult: 1.25 } });
+    check(Math.abs(c.ziele[0].status.poison.timeLeft - PO.durationS * 1.25) < 1e-6, `Phase 15: Giftdauer ${c.ziele[0].status.poison.timeLeft} statt ${PO.durationS * 1.25}`);
+
+    // Tickschaden: 1 Stufe, ×1,5 -> ein 0,5-s-Tick = 2*1*1,5 = 3.
+    const e = reihe(1);
+    applyTypeEffects(e.st, e.ziele[0], 'poison', 10, { ownerCfg: { statusTickMult: 1.5 } });
+    const vor = e.ziele[0].hp;
+    updateStatus(e.st, 0.5);
+    check(e.ziele[0].hp === vor - PO.damagePerTick * 1.5, `Phase 15: Gifttick ${vor - e.ziele[0].hp} statt ${PO.damagePerTick * 1.5}`);
+  }
+
+  // (e) Ausbreitung (Seuche): ein Treffer vergiftet einen nahen Gegner mit,
+  //     aber nicht über die Reichweite hinaus.
+  {
+    const { st, ziele } = reihe(2, 50);
+    applyTypeEffects(st, ziele[0], 'poison', 10, { ownerCfg: { poisonSpreadRadius: 70 } });
+    check(ziele[1].status.poison?.stacks > 0, 'Phase 15: Seuche vergiftet den nahen Gegner nicht');
+
+    const b = reihe(2, 200);
+    applyTypeEffects(b.st, b.ziele[0], 'poison', 10, { ownerCfg: { poisonSpreadRadius: 70 } });
+    check(!(b.ziele[1].status.poison?.stacks > 0), 'Phase 15: Gift breitet sich über die Reichweite hinaus aus');
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;

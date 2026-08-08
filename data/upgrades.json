@@ -1917,6 +1917,193 @@
         "statusMaxStacksBonus": 2,
         "damageAdd": 3
       }
+    },
+    "poison_dur": {
+      "id": "poison_dur",
+      "name": "Toxin",
+      "description": "Giftdauer +20 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusDurationMult": 1.2
+      }
+    },
+    "poison_tick": {
+      "id": "poison_tick",
+      "name": "Ätzmittel",
+      "description": "Giftschaden +15 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusTickMult": 1.15
+      }
+    },
+    "poison_ammo": {
+      "id": "poison_ammo",
+      "name": "Giftmunition",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "poison_fang": {
+      "id": "poison_fang",
+      "name": "Giftzahn",
+      "description": "Kritchance +4 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.04
+      }
+    },
+    "poison_stack": {
+      "id": "poison_stack",
+      "name": "Nervengift",
+      "description": "Jeder Treffer legt +1 Giftstufe",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusStackBonus": 1
+      }
+    },
+    "poison_cap": {
+      "id": "poison_cap",
+      "name": "Überdosis",
+      "description": "Gift-Höchststufe 5 → 7",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusMaxStacksBonus": 2
+      }
+    },
+    "poison_plaguecard": {
+      "id": "poison_plaguecard",
+      "name": "Seuche",
+      "description": "Ein Treffer vergiftet nahe Gegner",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☣️",
+      "core": {
+        "poisonSpreadRadius": 70
+      }
+    },
+    "poison_conc": {
+      "id": "poison_conc",
+      "name": "Konzentrat",
+      "description": "Giftschaden +50 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusTickMult": 1.5
+      }
+    },
+    "poison_pandemic": {
+      "id": "poison_pandemic",
+      "name": "Pandemie",
+      "description": "+2 Giftstufen, Höchststufe +5, Giftdauer +50 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧫",
+      "core": {
+        "statusStackBonus": 2,
+        "statusMaxStacksBonus": 5,
+        "statusDurationMult": 1.5
+      }
+    },
+    "poison_bomb": {
+      "id": "poison_bomb",
+      "name": "Toxinbombe",
+      "description": "Giftschaden ×2, Giftdauer +50 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusTickMult": 2.0,
+        "statusDurationMult": 1.5
+      }
+    },
+    "poison_contagion": {
+      "id": "poison_contagion",
+      "name": "Kontamination",
+      "description": "Treffer vergiften weite Umgebung, +1 Giftstufe",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☣️",
+      "core": {
+        "poisonSpreadRadius": 130,
+        "statusStackBonus": 1
+      }
+    },
+    "poison_arsenal": {
+      "id": "poison_arsenal",
+      "name": "Giftarsenal",
+      "description": "+1 Giftstufe, Giftschaden +30 %, Höchststufe +2, +3 Schaden",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💼",
+      "core": {
+        "statusStackBonus": 1,
+        "statusTickMult": 1.3,
+        "statusMaxStacksBonus": 2,
+        "damageAdd": 3
+      }
     }
   },
   "fallback": {
