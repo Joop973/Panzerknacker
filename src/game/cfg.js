@@ -416,6 +416,12 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     // Phase 15 (Gift-Topf): Gift-Ausbreitung (Seuche). Dauer/Tick/Stufen laufen
     // ueber die generischen Status-Boosts (Phase 13).
     if (c.poisonSpreadRadius) cfg.poisonSpreadRadius = Math.max(cfg.poisonSpreadRadius || 0, c.poisonSpreadRadius);
+    // Phase 16 (Blitz-Topf): mehr Kettenziele (ADDITIV zum Klassen-Passiv),
+    // groessere Sprungreichweite, schwaecherer Abfall, Betaeubung je Sprung.
+    if (c.lightningBonusTargets) cfg.lightningBonusTargets = (cfg.lightningBonusTargets || 0) + c.lightningBonusTargets * lvl;
+    if (c.lightningRangeBonus) cfg.lightningRangeBonus = (cfg.lightningRangeBonus || 0) + c.lightningRangeBonus * lvl;
+    if (c.lightningFalloffBonus) cfg.lightningFalloffBonus = (cfg.lightningFalloffBonus || 0) + c.lightningFalloffBonus * lvl;
+    if (c.lightningStun) cfg.lightningStun = Math.max(cfg.lightningStun || 0, c.lightningStun);
   }
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;
