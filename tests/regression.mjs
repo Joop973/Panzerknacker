@@ -4007,6 +4007,76 @@ function check(ok, msg) {
   }
 }
 
+// ---- 29. UMBAUPLAN-LP Phase 21: Signaturtopf Teslapanzer -----------------
+// 6 klassenexklusive Karten (2/2/2) fuer den Teslapanzer (c_tesla) ueber den
+// signatureClass-Filter (Phase 18) und die Blitz-core-Schluessel (Phase 16).
+// Mechanismus mit eigenen Zahlen; Gegenprobe fuer jeden Kernpunkt bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const tesla = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_tesla');
+
+  // (a) Struktur: 6 Tesla-Signaturen, 2/2/2, Tag signature, kein damageType.
+  {
+    check(tesla.length === 6, `Phase 21: ${tesla.length} Tesla-Signaturen statt 6`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of tesla) rar[d.rarity]++;
+    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 21: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(tesla.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 21: Signatur ohne Tag/core oder mit damageType');
+  }
+
+  // (b) Filter: der Teslapanzer sieht sie, eine andere Klasse (player) NIE.
+  {
+    const sieht = (klass) => {
+      const rng = mulberry32(43);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass,
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_tesla_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('c_tesla'), 'Phase 21: Teslapanzer sieht die eigene Signatur nicht');
+    check(!sieht('player'), 'Phase 21: fremde Klasse sieht die Tesla-Signatur (Filter greift nicht)');
+  }
+
+  // (c) Applier: Blitz-core-Schluessel wirken auf das aufgeloeste c_tesla-cfg.
+  //     lightningBonusTargets ist ADDITIV zum Klassen-Passiv (1) -- Delta gegen
+  //     die upgradelose Basis mit den Zahlen der Karte selbst.
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'c_tesla'), {}, upgradesData, 'mine', null);
+    check(base.lightningBonusTargets === 1, `Phase 21: Vorbedingung -- Tesla-Passiv ${base.lightningBonusTargets} statt 1`);
+    const kr = applyUpgrades(resolveCfg(tanksData, 'c_tesla'), { sig_tesla_kettenreaktion: 2 }, upgradesData, 'mine', null);
+    check(kr.lightningBonusTargets === base.lightningBonusTargets + U.sig_tesla_kettenreaktion.core.lightningBonusTargets * 2, `Phase 21: Kettenreaktion Blitzziele ${kr.lightningBonusTargets} (nicht additiv zum Passiv)`);
+    check(kr.lightningRangeBonus === U.sig_tesla_kettenreaktion.core.lightningRangeBonus * 2, `Phase 21: Kettenreaktion Reichweite ${kr.lightningRangeBonus} falsch`);
+    const gw = applyUpgrades(resolveCfg(tanksData, 'c_tesla'), { sig_tesla_gewitter: 1 }, upgradesData, 'mine', null);
+    check(gw.lightningBonusTargets === base.lightningBonusTargets + U.sig_tesla_gewitter.core.lightningBonusTargets, `Phase 21: Gewittersturm Blitzziele ${gw.lightningBonusTargets} falsch`);
+    check(Math.abs(gw.lightningFalloffBonus - U.sig_tesla_gewitter.core.lightningFalloffBonus) < 1e-6, `Phase 21: Gewittersturm Abfall ${gw.lightningFalloffBonus} falsch`);
+    const us = applyUpgrades(resolveCfg(tanksData, 'c_tesla'), { sig_tesla_supraleiter: 1 }, upgradesData, 'mine', null);
+    check(Math.abs((us.lightningStun || 0) - U.sig_tesla_supraleiter.core.lightningStun) < 1e-6, `Phase 21: Supraleiter Betäubung ${us.lightningStun} falsch`);
+    check(us.damage === base.damage + U.sig_tesla_supraleiter.core.damageAdd, `Phase 21: Supraleiter Schaden ${us.damage} falsch`);
+  }
+
+  // (d) Gemeinsamer Tag signature -> hoechstens eine Tesla-Signatur pro Angebot.
+  {
+    const rng = mulberry32(97);
+    let maxProAngebot = 0;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_tesla',
+      });
+      const n = offers.filter((o) => String(o.id || '').startsWith('sig_tesla_')).length;
+      if (n > maxProAngebot) maxProAngebot = n;
+    }
+    check(maxProAngebot === 1, `Phase 21: bis zu ${maxProAngebot} Tesla-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;

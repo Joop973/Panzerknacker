@@ -2585,6 +2585,104 @@
         "frostFreezeReduction": 1,
         "damageAdd": 8
       }
+    },
+    "sig_tesla_leitwerk": {
+      "id": "sig_tesla_leitwerk",
+      "name": "Leitwerk",
+      "description": "+40 Blitz-Sprungreichweite und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningRangeBonus": 40,
+        "damageAdd": 4
+      }
+    },
+    "sig_tesla_kondensator": {
+      "id": "sig_tesla_kondensator",
+      "name": "Kondensator",
+      "description": "Schwächerer Blitzabfall und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningFalloffBonus": 0.08,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_tesla_kettenreaktion": {
+      "id": "sig_tesla_kettenreaktion",
+      "name": "Kettenreaktion",
+      "description": "+1 Blitzziel und +20 Sprungreichweite pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningBonusTargets": 1,
+        "lightningRangeBonus": 20
+      }
+    },
+    "sig_tesla_ueberschlag": {
+      "id": "sig_tesla_ueberschlag",
+      "name": "Überschlag",
+      "description": "Blitzsprünge betäuben und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningStun": 0.4,
+        "damageAdd": 4
+      }
+    },
+    "sig_tesla_gewitter": {
+      "id": "sig_tesla_gewitter",
+      "name": "Gewittersturm",
+      "description": "+2 Blitzziele, +40 Sprungreichweite, schwächerer Abfall",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌩",
+      "core": {
+        "lightningBonusTargets": 2,
+        "lightningRangeBonus": 40,
+        "lightningFalloffBonus": 0.1
+      }
+    },
+    "sig_tesla_supraleiter": {
+      "id": "sig_tesla_supraleiter",
+      "name": "Supraleiter",
+      "description": "+1 Blitzziel, Blitzsprünge betäuben, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌩",
+      "core": {
+        "lightningBonusTargets": 1,
+        "lightningStun": 0.6,
+        "damageAdd": 8
+      }
     }
   },
   "fallback": {

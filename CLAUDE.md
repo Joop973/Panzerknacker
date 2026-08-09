@@ -205,7 +205,10 @@ sechs klassenexklusive Explosiv-Karten für den Sprengpanzer (`c_blast`) über d
 **Phase 20 (Signaturtopf Frostpanzer) ist gebaut** (s. eigener Abschnitt unten):
 sechs klassenexklusive Frost-Karten für den Frostpanzer (`c_frost`) über den
 `signatureClass`-Filter (Phase 18) und die Frost-`core`-Schlüssel (Phase 14).
-**Nächste Sitzung: Phase 21 (Signaturtopf Teslapanzer, 6 Karten).** `PLAN.md`/die
+**Phase 21 (Signaturtopf Teslapanzer) ist gebaut** (s. eigener Abschnitt unten):
+sechs klassenexklusive Blitz-Karten für den Teslapanzer (`c_tesla`) über den
+`signatureClass`-Filter (Phase 18) und die Blitz-`core`-Schlüssel (Phase 16).
+**Nächste Sitzung: Phase 22 (Signaturtopf Radioaktiv, 6 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2510,6 +2513,28 @@ Frost-`core`-Schlüssel aus Phase 14 — **keine neue Engine-Zeile**.
   genullt → nicht mehr additiv; Rarität verdreht → Verteilung ≠ 2/2/2;
   Filter aus → fremde Klasse sieht die Karten.
 
+### UMBAUPLAN-LP Phase 21 (Signaturtopf Teslapanzer) — gemergt
+Vierter Signaturtopf (6 Karten, 2/2/2, Tag `signature` + `signatureClass:
+"c_tesla"`). Nutzt den `signatureClass`-Filter aus Phase 18 und die
+Blitz-`core`-Schlüssel aus Phase 16 — **keine neue Engine-Zeile**.
+- **Klassen-, nicht elementgebunden** (kein `damageType`) wie schon Phase 19/20.
+- **Blitz-Identität** über bestehende `core`-Schlüssel: `lightningBonusTargets`
+  (**additiv** zum Klassen-Passiv 1 → mehr Kettenziele), `lightningRangeBonus`
+  (weitere Sprünge), `lightningFalloffBonus` (schwächerer Abfall, in
+  `damagetypes.js` bei 0,95 gedeckelt), `lightningStun` (Betäubung je Sprung,
+  `Math.max`).
+- **Sechs Karten**: 2 common (Leitwerk = Reichweite+Schaden, Kondensator =
+  schwächerer Abfall+Geschosstempo), 2 rare (Kettenreaktion = +Ziel+Reichweite,
+  Überschlag = Betäubung+Schaden), 2 legendär (Gewittersturm =
+  +2 Ziele+Reichweite+Abfall, Supraleiter = +Ziel+Betäubung+Schaden).
+- **Neue Dauertests** (Abschnitt 29, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (6, 2/2/2, kein `damageType`), Filter (`c_tesla` sieht sie, `player`
+  nie), Applier (`lightningBonusTargets` additiv zum Passiv, `lightningRangeBonus`,
+  `lightningFalloffBonus`, `lightningStun`), höchstens eine Signatur pro Angebot.
+  Gegenproben rot bestätigt: `lightningBonusTargets`-Pfad genullt → nicht mehr
+  additiv; Rarität verdreht → Verteilung ≠ 2/2/2; Filter aus → fremde Klasse
+  sieht die Karten.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2605,7 +2630,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v92`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v93`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2654,8 +2679,8 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–28 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–29 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
-Phase-18/19/20-Signaturtöpfe Standard+Sprengpanzer+Frostpanzer + `signatureClass`-Filter). Die frühere
+Phase-18/19/20/21-Signaturtöpfe Standard+Sprengpanzer+Frostpanzer+Teslapanzer + `signatureClass`-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.
