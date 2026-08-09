@@ -2879,6 +2879,197 @@
         "statusTickMult": 1.2,
         "damageAdd": 8
       }
+    },
+    "sig_ric_kalibrierung": {
+      "id": "sig_ric_kalibrierung",
+      "name": "Kalibrierung",
+      "description": "+3 Schaden und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "damageAdd": 3,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_ric_bandenschlag": {
+      "id": "sig_ric_bandenschlag",
+      "name": "Bandenschlag",
+      "description": "+10% Schaden auf abgeprallte Schüsse pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "bounceDamageBonus": 0.1
+      }
+    },
+    "sig_ric_schnellfeuer": {
+      "id": "sig_ric_schnellfeuer",
+      "name": "Schnellfeuer",
+      "description": "-6% Nachladen und +1 Magazin pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "reloadMult": 0.94,
+        "magAdd": 1
+      }
+    },
+    "sig_ric_praezision": {
+      "id": "sig_ric_praezision",
+      "name": "Präzision",
+      "description": "+5% Kritchance und +3 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.05,
+        "damageAdd": 3
+      }
+    },
+    "sig_ric_konterschlag": {
+      "id": "sig_ric_konterschlag",
+      "name": "Konterschlag",
+      "description": "Abgeprallte Schüsse sind kritisch, +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critOnBounce": true,
+        "damageAdd": 4
+      }
+    },
+    "sig_ric_wuchtgeschoss": {
+      "id": "sig_ric_wuchtgeschoss",
+      "name": "Wuchtgeschoss",
+      "description": "+20% Schaden auf abgeprallte Schüsse pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "bounceDamageBonus": 0.2
+      }
+    },
+    "sig_ric_zusatzabpraller": {
+      "id": "sig_ric_zusatzabpraller",
+      "name": "Zusatzabpraller",
+      "description": "+1 Abpraller und +20 LP",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "ricochetAdd": 1,
+        "hpAdd": 20
+      }
+    },
+    "sig_ric_verstaerker": {
+      "id": "sig_ric_verstaerker",
+      "name": "Verstärker",
+      "description": "+0,5× Kritfaktor und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critMultBonus": 0.5,
+        "damageAdd": 4
+      }
+    },
+    "sig_ric_trickmeister": {
+      "id": "sig_ric_trickmeister",
+      "name": "Trickmeister",
+      "description": "Abgeprallte Schüsse kritisch, +0,5× Kritfaktor, +6 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💫",
+      "core": {
+        "critOnBounce": true,
+        "critMultBonus": 0.5,
+        "damageAdd": 6
+      }
+    },
+    "sig_ric_kettenbank": {
+      "id": "sig_ric_kettenbank",
+      "name": "Kettenbank",
+      "description": "+50% Schaden je Wandabpraller des Schusses",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💫",
+      "core": {
+        "bounceRampPerBounce": 0.5
+      }
+    },
+    "sig_ric_querschlaeger": {
+      "id": "sig_ric_querschlaeger",
+      "name": "Querschläger",
+      "description": "+1 Abpraller und +25% Schaden auf abgeprallte Schüsse",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💫",
+      "core": {
+        "ricochetAdd": 1,
+        "bounceDamageBonus": 0.25
+      }
+    },
+    "sig_ric_kanonade": {
+      "id": "sig_ric_kanonade",
+      "name": "Kanonade",
+      "description": "+8 Schaden, +2 Magazin und -12% Nachladen",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💫",
+      "core": {
+        "damageAdd": 8,
+        "magAdd": 2,
+        "reloadMult": 0.88
+      }
     }
   },
   "fallback": {
