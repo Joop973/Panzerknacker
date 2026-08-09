@@ -3934,6 +3934,79 @@ function check(ok, msg) {
   }
 }
 
+// ---- 28. UMBAUPLAN-LP Phase 20: Signaturtopf Frostpanzer -----------------
+// 6 klassenexklusive Karten (2/2/2) fuer den Frostpanzer (c_frost) ueber den
+// signatureClass-Filter (Phase 18) und die Frost-core-Schluessel (Phase 14).
+// Mechanismus mit eigenen Zahlen; Gegenprobe fuer jeden Kernpunkt bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const frost = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_frost');
+
+  // (a) Struktur: 6 Frost-Signaturen, 2/2/2, Tag signature, kein damageType
+  //     (klassen-, nicht elementgebunden).
+  {
+    check(frost.length === 6, `Phase 20: ${frost.length} Frost-Signaturen statt 6`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of frost) rar[d.rarity]++;
+    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 20: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(frost.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 20: Signatur ohne Tag/core oder mit damageType');
+  }
+
+  // (b) Filter: der Frostpanzer sieht sie, eine andere Klasse (player) NIE.
+  {
+    const sieht = (klass) => {
+      const rng = mulberry32(37);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass,
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_frost_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('c_frost'), 'Phase 20: Frostpanzer sieht die eigene Signatur nicht');
+    check(!sieht('player'), 'Phase 20: fremde Klasse sieht die Frost-Signatur (Filter greift nicht)');
+  }
+
+  // (c) Applier: Frost-core-Schluessel wirken auf das aufgeloeste c_frost-cfg.
+  //     frostSlowBonus ist ADDITIV zum Klassen-Passiv (0.2) -- Delta gegen die
+  //     upgradelose Basis mit den Zahlen der Karte selbst.
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'c_frost'), {}, upgradesData, 'mine', null);
+    check(base.frostSlowBonus === 0.2, `Phase 20: Vorbedingung -- Frost-Passiv ${base.frostSlowBonus} statt 0.2`);
+    const kk = applyUpgrades(resolveCfg(tanksData, 'c_frost'), { sig_frost_kaeltekammer: 3 }, upgradesData, 'mine', null);
+    check(Math.abs(kk.frostSlowBonus - (base.frostSlowBonus + U.sig_frost_kaeltekammer.core.frostSlowBonus * 3)) < 1e-6, `Phase 20: Kältekammer frostSlowBonus ${kk.frostSlowBonus} (nicht additiv zum Passiv)`);
+    check(kk.damage === base.damage + U.sig_frost_kaeltekammer.core.damageAdd * 3, `Phase 20: Kältekammer Schaden ${kk.damage} falsch`);
+    // Blizzard: +Verlangsamung, +Froststufe je Treffer, laengeres Einfrieren.
+    const bz = applyUpgrades(resolveCfg(tanksData, 'c_frost'), { sig_frost_blizzard: 1 }, upgradesData, 'mine', null);
+    check(bz.statusStackBonus === U.sig_frost_blizzard.core.statusStackBonus, `Phase 20: Blizzard statusStackBonus ${bz.statusStackBonus} falsch`);
+    check(Math.abs(bz.frostFreezeDurationBonus - U.sig_frost_blizzard.core.frostFreezeDurationBonus) < 1e-6, `Phase 20: Blizzard Freeze-Dauer ${bz.frostFreezeDurationBonus} falsch`);
+    // Absoluter Nullpunkt: Splittern + frühere Freeze-Schwelle.
+    const np = applyUpgrades(resolveCfg(tanksData, 'c_frost'), { sig_frost_nullpunkt: 1 }, upgradesData, 'mine', null);
+    check(Math.abs((np.shatterMult || 0) - U.sig_frost_nullpunkt.core.shatterMult) < 1e-6, `Phase 20: Nullpunkt shatterMult ${np.shatterMult} falsch`);
+    check(np.frostFreezeReduction === U.sig_frost_nullpunkt.core.frostFreezeReduction, `Phase 20: Nullpunkt frostFreezeReduction ${np.frostFreezeReduction} falsch`);
+  }
+
+  // (d) Gemeinsamer Tag signature -> hoechstens eine Frost-Signatur pro Angebot.
+  {
+    const rng = mulberry32(91);
+    let maxProAngebot = 0;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_frost',
+      });
+      const n = offers.filter((o) => String(o.id || '').startsWith('sig_frost_')).length;
+      if (n > maxProAngebot) maxProAngebot = n;
+    }
+    check(maxProAngebot === 1, `Phase 20: bis zu ${maxProAngebot} Frost-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
