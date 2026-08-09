@@ -214,9 +214,12 @@ sechs klassenexklusive Gift-Karten für den Radioaktiv-Panzer (`c_toxic`) über 
 **Phase 23 (Signaturtopf Flammenpanzer) ist gebaut** (s. eigener Abschnitt unten):
 sechs klassenexklusive Feuer-Karten für den Flammenpanzer (`c_flame`) über den
 `signatureClass`-Filter (Phase 18) und die Feuer-`core`-Schlüssel (Phase 13).
-**Damit sind alle fünf Element-Signaturtöpfe (Phasen 19–23) fertig; die vier
-Mechanikklassen (Phasen 24–27, je 12 Karten) stehen noch aus.**
-**Nächste Sitzung: Phase 24 (Signaturtopf Abprallpanzer, 12 Karten).** `PLAN.md`/die
+**Damit sind alle fünf Element-Signaturtöpfe (Phasen 19–23) fertig.**
+**Phase 24 (Signaturtopf Abprallpanzer) ist gebaut** (s. eigener Abschnitt unten):
+erster Mechanikklassen-Topf mit 12 Karten (4/4/4) für den Abprallpanzer
+(`c_ricochet`) — bestehende Abprall-Schlüssel plus eine **neue klassenexklusive
+Regel** `bounceRampPerBounce` (Schaden je Wandabpraller).
+**Nächste Sitzung: Phase 25 (Signaturtopf Schrottpanzer, 12 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2588,6 +2591,37 @@ Phase 18 und die Feuer-`core`-Schlüssel aus Phase 13 — **keine neue Engine-Ze
   genullt → Passiv nicht mehr multipliziert; Rarität verdreht → Verteilung ≠
   2/2/2; Filter aus → fremde Klasse sieht die Karten.
 
+### UMBAUPLAN-LP Phase 24 (Signaturtopf Abprallpanzer) — gemergt
+Erster **Mechanikklassen**-Topf: **12 Karten (4/4/4)** für den Abprallpanzer
+(`c_ricochet`) statt der sechs eines Element-Topfs — Mechanikklassen haben
+keinen eigenen Schadenstyp, ihr Charakter kommt aus einer eigenen Regel, daher
+der doppelte Topf (Plan). Nutzt den `signatureClass`-Filter (Phase 18).
+- **Klassen-, nicht elementgebunden** (kein `damageType`) wie schon Phase 19–23.
+- **Bestehende Abprall-Schlüssel**: `ricochetAdd` (+Abpraller), `bounceDamageBonus`
+  (mehr Schaden auf gebandete Schüsse, via `shooterBounceBonus` in `state.js`),
+  `critOnBounce` (gebandete Schüsse kritisch), `critMultBonus` (größerer
+  Kritfaktor) plus Basisstats.
+- **Eine neue klassenexklusive Regel** `bounceRampPerBounce` (`cfg.js` +
+  `state.js`): Schaden **je gezähltem Wandabpraller** (`b.wallBounces`), nicht
+  nur der pauschale 2×-Bonus für ≥1 Abpraller. Das ist die in **Phase 4 bewusst
+  zurückgestellte** `perBounce`-Alternative — hier als Signaturregel des
+  Abprallpanzers, sodass ein Doppelbank-Schuss härter trifft als ein einfacher.
+  Verrechnet im `shooterBounceBonus` (`1 + bounceDamageBonus +
+  bounceRampPerBounce × wallBounces`).
+- **Zwölf Karten**: 4 common (Kalibrierung, Bandenschlag, Schnellfeuer,
+  Präzision), 4 rare (Konterschlag=critOnBounce, Wuchtgeschoss, Zusatzabpraller,
+  Verstärker=critMultBonus), 4 legendär (Trickmeister, Kettenbank=`bounceRampPerBounce`,
+  Querschläger, Kanonade).
+- **Neue Dauertests** (Abschnitt 32, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (12, 4/4/4, kein `damageType`), Filter (`c_ricochet` sieht sie,
+  `player` nie), Applier (`ricochetAdd` auf die Basis 2, `bounceDamageBonus`,
+  `critOnBounce`, `critMultBonus`, `bounceRampPerBounce`) UND — der Kern —
+  **auf Schadensebene**: die Rampe skaliert den gebandeten Schaden je
+  Wandabpraller (Kontrolle ohne Rampe, dann 1 und 2 Abpraller). Gegenproben rot
+  bestätigt: Rampe im Trefferpfad genullt → Schaden falsch; Rampe-Applier
+  genullt → cfg-Wert fehlt; Rarität verdreht → Verteilung ≠ 4/4/4; Filter aus →
+  fremde Klasse sieht die Karten.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2683,7 +2717,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v95`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v96`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2732,8 +2766,8 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–31 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–32 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
-Phase-18–23-Signaturtöpfe Standard+Sprengpanzer+Frostpanzer+Teslapanzer+Radioaktiv+Flammenpanzer + `signatureClass`-Filter). Die frühere
+Phase-18–24-Signaturtöpfe (Element + erste Mechanikklasse Abprallpanzer) + `signatureClass`-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.

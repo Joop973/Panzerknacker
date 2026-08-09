@@ -4222,6 +4222,114 @@ function check(ok, msg) {
   }
 }
 
+// ---- 32. UMBAUPLAN-LP Phase 24: Signaturtopf Abprallpanzer ---------------
+// Erster MECHANIKKLASSEN-Topf: 12 Karten (4/4/4) fuer den Abprallpanzer
+// (c_ricochet). Nutzt die bestehenden Abprall-Schluessel (ricochetAdd/
+// bounceDamageBonus/critOnBounce/critMultBonus) UND eine neue klassenexklusive
+// Regel: bounceRampPerBounce -- Schaden JE Wandabpraller (die in Phase 4 bewusst
+// zurueckgestellte perBounce-Alternative). Mechanismus mit eigenen Zahlen auf
+// Schadensebene geprueft; Gegenprobe fuer jeden Kernpunkt bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { stepState } = await import('../src/game/state.js');
+  const U = upgradesData.upgrades;
+  const ric = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_ricochet');
+
+  // (a) Struktur: 12 Abprall-Signaturen, 4/4/4, Tag signature, kein damageType.
+  {
+    check(ric.length === 12, `Phase 24: ${ric.length} Abprall-Signaturen statt 12`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of ric) rar[d.rarity]++;
+    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 24: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(ric.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 24: Signatur ohne Tag/core oder mit damageType');
+  }
+
+  // (b) Filter: der Abprallpanzer sieht sie, eine andere Klasse (player) NIE.
+  {
+    const sieht = (klass) => {
+      const rng = mulberry32(61);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass,
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_ric_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('c_ricochet'), 'Phase 24: Abprallpanzer sieht die eigene Signatur nicht');
+    check(!sieht('player'), 'Phase 24: fremde Klasse sieht die Abprall-Signatur (Filter greift nicht)');
+  }
+
+  // (c) Applier: Abprall-core-Schluessel landen im aufgeloesten c_ricochet-cfg.
+  //     Die Basis-Abprallzahl ist 2 (ricochets 1 + Passiv bonusRicochets 1).
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), {}, upgradesData, 'mine', null);
+    check(base.ricochets === 2, `Phase 24: Vorbedingung -- Basis-Abpraller ${base.ricochets} statt 2`);
+    const za = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), { sig_ric_zusatzabpraller: 1 }, upgradesData, 'mine', null);
+    check(za.ricochets === base.ricochets + U.sig_ric_zusatzabpraller.core.ricochetAdd, `Phase 24: Zusatzabpraller Abprallzahl ${za.ricochets} falsch`);
+    const ws = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), { sig_ric_wuchtgeschoss: 2 }, upgradesData, 'mine', null);
+    check(Math.abs((ws.bounceDamageBonus || 0) - U.sig_ric_wuchtgeschoss.core.bounceDamageBonus * 2) < 1e-6, `Phase 24: Wuchtgeschoss bounceDamageBonus ${ws.bounceDamageBonus} falsch`);
+    const ks = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), { sig_ric_konterschlag: 1 }, upgradesData, 'mine', null);
+    check(ks.critOnBounce === true, 'Phase 24: Konterschlag setzt critOnBounce nicht');
+    const vs = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), { sig_ric_verstaerker: 2 }, upgradesData, 'mine', null);
+    check(Math.abs((vs.critMultBonus || 0) - U.sig_ric_verstaerker.core.critMultBonus * 2) < 1e-6, `Phase 24: Verstärker critMultBonus ${vs.critMultBonus} falsch`);
+    const kb = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), { sig_ric_kettenbank: 1 }, upgradesData, 'mine', null);
+    check(Math.abs((kb.bounceRampPerBounce || 0) - U.sig_ric_kettenbank.core.bounceRampPerBounce) < 1e-6, `Phase 24: Kettenbank bounceRampPerBounce ${kb.bounceRampPerBounce} falsch`);
+  }
+
+  // (d) SCHADENSEBENE: die neue Regel bounceRampPerBounce skaliert den Schaden
+  //     JE Wandabpraller. Kontrolle ohne Rampe, dann mit Rampe bei 1 und 2
+  //     Abprallern. Erwartung: base * wallBounceDamageMult * (1 + ramp*bounces).
+  {
+    const MULT = tanksData.balance.bullet.wallBounceDamageMult;
+    const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+    const blank = () => {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+      return run.state;
+    };
+    const gegner = (st) => st.tanks.find((t) => t !== st.player && t.alive);
+    const treffer = (ramp, bounces) => {
+      const st = blank();
+      const e = gegner(st);
+      e.cfg.armor = null; e.cfg.requiresRicochet = false; e.cfg.bounceDamageTakenMult = null;
+      e.cfg.maxHp = 100000; e.hp = 100000; e.protect = 0; e.shieldReady = false;
+      st.player.cfg.bounceRampPerBounce = ramp;
+      const vor = e.hp;
+      const b = createBullet(e.x, e.y, 0, { speed: 1, radius: 3, ricochets: 3, owner: st.player, kind: 'bullet', damage: 100 });
+      b.age = 5; b.wallBounces = bounces; b.crit = false;
+      st.bullets.length = 0; st.bullets.push(b);
+      stepState(st, CMD0, 1 / 60);
+      return vor - e.hp;
+    };
+    const ohne = treffer(0, 2); // nur der pauschale 2x-Bonus
+    const mit1 = treffer(0.5, 1);
+    const mit2 = treffer(0.5, 2);
+    check(ohne === Math.round(100 * MULT), `Phase 24: Kontrolle ohne Rampe ${ohne} statt ${Math.round(100 * MULT)}`);
+    check(mit1 === Math.round(100 * MULT * (1 + 0.5 * 1)), `Phase 24: Rampe bei 1 Abpraller ${mit1} statt ${Math.round(100 * MULT * 1.5)}`);
+    check(mit2 === Math.round(100 * MULT * (1 + 0.5 * 2)), `Phase 24: Rampe bei 2 Abprallern ${mit2} statt ${Math.round(100 * MULT * 2.0)}`);
+    check(mit2 > mit1 && mit1 > ohne, 'Phase 24: die Rampe waechst nicht mit der Abprallzahl');
+  }
+
+  // (e) Gemeinsamer Tag signature -> hoechstens eine Abprall-Signatur pro Angebot.
+  {
+    const rng = mulberry32(107);
+    let maxProAngebot = 0;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_ricochet',
+      });
+      const n = offers.filter((o) => String(o.id || '').startsWith('sig_ric_')).length;
+      if (n > maxProAngebot) maxProAngebot = n;
+    }
+    check(maxProAngebot === 1, `Phase 24: bis zu ${maxProAngebot} Abprall-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;

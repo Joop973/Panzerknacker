@@ -393,6 +393,11 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.critMultBonus) cfg.critMultBonus = (cfg.critMultBonus || 0) + c.critMultBonus * lvl;
     if (c.critExecute) cfg.critExecute = true;
     if (c.bounceDamageBonus) cfg.bounceDamageBonus = (cfg.bounceDamageBonus || 0) + c.bounceDamageBonus * lvl;
+    // UMBAUPLAN-LP Phase 24 (Signaturtopf Abprallpanzer): Schaden JE Wandabpraller
+    // (b.wallBounces), nicht nur der pauschale 2x-Bonus fuer >=1 Abpraller. Das
+    // ist die in Phase 4 bewusst zurueckgestellte Alternative (perBounce) --
+    // hier als klassenexklusive Regel des Abprallpanzers. Ausgewertet in state.js.
+    if (c.bounceRampPerBounce) cfg.bounceRampPerBounce = (cfg.bounceRampPerBounce || 0) + c.bounceRampPerBounce * lvl;
     // Phase 12 (Sprengstoff-Topf):
     if (c.allExplosive) grantExplosive = true;
     if (c.shotExplosionRadius) explBaseRadius = Math.max(explBaseRadius, c.shotExplosionRadius);

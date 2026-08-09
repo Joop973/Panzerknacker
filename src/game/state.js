@@ -1043,7 +1043,13 @@ export function stepState(state, cmd, dt) {
         // balance.crit.mult (+ Splittergeschoss-Bonus). Faktoren MULTIPLIZIEREN
         // sich: ein gebandeter Krit macht abprallMult * critMult = 2 * 2 = 4.
         const critMult = isCrit ? (state.data.balance?.crit?.mult ?? 1) + (oc?.critMultBonus || 0) : 1;
-        const shooterBounceBonus = bounced ? 1 + (oc?.bounceDamageBonus || 0) : 1;
+        // shooterBounceBonus: pauschaler Abprall-Bonus (bounceDamageBonus) +
+        // Abprallpanzer-Rampe (bounceRampPerBounce, Phase 24): je gezaehltem
+        // Wandabpraller (b.wallBounces) zusaetzlicher Schaden -- ein Doppelbank-
+        // Schuss trifft dadurch haerter als ein einfacher.
+        const shooterBounceBonus = bounced
+          ? 1 + (oc?.bounceDamageBonus || 0) + (oc?.bounceRampPerBounce || 0) * (b.wallBounces || 0)
+          : 1;
         const execMult =
           oc?.executeThreshold && t !== state.player && t.hp / (t.cfg.maxHp || 1) < oc.executeThreshold
             ? oc.executeMult || 1
