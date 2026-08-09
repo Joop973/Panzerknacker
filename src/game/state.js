@@ -626,7 +626,7 @@ export function createState(data, tiles, opts) {
         // das Ziel"). Deckel per FIFO-Verdraengung, kein Verweigern
         // (Muster wie die Krallenfalle-Obergrenze in trap.js).
         if (pc.ghostCrew) {
-          state.ghosts.push(createGhost(tank, state.data.balance));
+          state.ghosts.push(createGhost(tank, state.data.balance, pc.ghostDurationBonus || 0));
           if (state.ghosts.length > state.data.balance.ghost.maxActive) {
             state.ghosts.shift();
           }

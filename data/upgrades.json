@@ -3261,6 +3261,199 @@
         "scrapAdd": 4,
         "scrapDamageBonus": 0.08
       }
+    },
+    "sig_necro_totenbeschwoerung": {
+      "id": "sig_necro_totenbeschwoerung",
+      "name": "Totenbeschwörung",
+      "description": "+2 Schaden und +8% Fahrtempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "damageAdd": 2,
+        "speedMult": 1.08
+      }
+    },
+    "sig_necro_lebenskraft": {
+      "id": "sig_necro_lebenskraft",
+      "name": "Lebenskraft",
+      "description": "+20 LP und +2 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "hpAdd": 20,
+        "damageAdd": 2
+      }
+    },
+    "sig_necro_seelenernte": {
+      "id": "sig_necro_seelenernte",
+      "name": "Seelenernte",
+      "description": "+5% Kritchance und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "critAdd": 0.05,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_necro_verwesung": {
+      "id": "sig_necro_verwesung",
+      "name": "Verwesung",
+      "description": "+1 Magazin und -6% Nachladen pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "magAdd": 1,
+        "reloadMult": 0.94
+      }
+    },
+    "sig_necro_wiedergaenger": {
+      "id": "sig_necro_wiedergaenger",
+      "name": "Wiedergänger",
+      "description": "+10% Wiederbelebungschance und +20 LP pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "reviveChanceBonus": 0.1,
+        "hpAdd": 20
+      }
+    },
+    "sig_necro_geisterbeschwoerung": {
+      "id": "sig_necro_geisterbeschwoerung",
+      "name": "Geisterbeschwörung",
+      "description": "Getötete Gegner kämpfen als Geist weiter, +2 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "grantGhostCrew": true,
+        "damageAdd": 2
+      }
+    },
+    "sig_necro_knochenpanzer": {
+      "id": "sig_necro_knochenpanzer",
+      "name": "Knochenpanzer",
+      "description": "+30 LP und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "hpAdd": 30,
+        "damageAdd": 4
+      }
+    },
+    "sig_necro_todesmal": {
+      "id": "sig_necro_todesmal",
+      "name": "Todesmal",
+      "description": "+0,5× Kritfaktor und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "critMultBonus": 0.5,
+        "damageAdd": 4
+      }
+    },
+    "sig_necro_lich": {
+      "id": "sig_necro_lich",
+      "name": "Lich",
+      "description": "+15% Wiederbelebungschance und +40 LP",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "reviveChanceBonus": 0.15,
+        "hpAdd": 40
+      }
+    },
+    "sig_necro_geisterlegion": {
+      "id": "sig_necro_geisterlegion",
+      "name": "Geisterlegion",
+      "description": "Getötete Gegner kämpfen als Geist weiter und halten länger",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "grantGhostCrew": true,
+        "ghostDurationBonus": 2.0
+      }
+    },
+    "sig_necro_seelenfresser": {
+      "id": "sig_necro_seelenfresser",
+      "name": "Seelenfresser",
+      "description": "+8 Schaden, +2 Magazin und +5% Kritchance",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "damageAdd": 8,
+        "magAdd": 2,
+        "critAdd": 0.05
+      }
+    },
+    "sig_necro_unsterblich": {
+      "id": "sig_necro_unsterblich",
+      "name": "Unsterblich",
+      "description": "+20% Wiederbelebungschance und +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_necro",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "reviveChanceBonus": 0.2,
+        "damageAdd": 8
+      }
     }
   },
   "fallback": {

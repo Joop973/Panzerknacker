@@ -18,7 +18,9 @@ const FIRE_CONE = 0.15; // rad -- muss so genau ausgerichtet sein, um zu feuern
 let nextGhostId = 1;
 
 // tank = der soeben gestorbene Panzer (liefert Position/Ausrichtung/cfg).
-export function createGhost(tank, balance) {
+// durationBonus (Phase 26, Nekromant-Signatur): verlaengert die Lebensdauer
+// des Geistes ueber balance.ghost.duration hinaus ("Qualitaet statt Zahl").
+export function createGhost(tank, balance, durationBonus = 0) {
   return {
     id: nextGhostId++,
     x: tank.x,
@@ -30,7 +32,7 @@ export function createGhost(tank, balance) {
     type: tank.type,
     cfg: tank.cfg, // dieselbe aufgeloeste cfg -- kein neuer Balance-Wert noetig
     cooldown: 0,
-    timeLeft: balance.ghost.duration,
+    timeLeft: balance.ghost.duration + durationBonus,
     isGhost: true,
     dead: false,
   };

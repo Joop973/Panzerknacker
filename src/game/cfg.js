@@ -380,6 +380,14 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     // scrapDamagePer100 -- applyScrapDamage() (nach applyUpgrades in state.js)
     // liest den erhoehten Wert und skaliert den Schaden je 100 Schrott.
     if (c.scrapDamageBonus) cfg.scrapDamagePer100 = (cfg.scrapDamagePer100 || 0) + c.scrapDamageBonus * lvl;
+    // UMBAUPLAN-LP Phase 26 (Signaturtopf Nekromant): staerkere Wiederbelebung
+    // (additiv zum Klassen-Passiv reviveChance, in state.js tryRevive gelesen);
+    // Geister beschwoeren (grantGhostCrew wie das ghost_crew-Upgrade) und laenger
+    // halten (ghostDurationBonus, in killTank an createGhost gereicht -- Qualitaet
+    // statt Zahl, der Deckel balance.ghost.maxActive bleibt).
+    if (c.reviveChanceBonus) cfg.reviveChance = (cfg.reviveChance || 0) + c.reviveChanceBonus * lvl;
+    if (c.grantGhostCrew) cfg.ghostCrew = true;
+    if (c.ghostDurationBonus) cfg.ghostDurationBonus = (cfg.ghostDurationBonus || 0) + c.ghostDurationBonus * lvl;
     if (c.mineAdd) cfg.mines += c.mineAdd * lvl;
     if (c.dashGrant) {
       coreDashGrant = true;
