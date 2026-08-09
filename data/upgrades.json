@@ -3070,6 +3070,197 @@
         "magAdd": 2,
         "reloadMult": 0.88
       }
+    },
+    "sig_scrap_sammler": {
+      "id": "sig_scrap_sammler",
+      "name": "Sammler",
+      "description": "+1 Schrott je Raum und +2 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 1,
+        "damageAdd": 2
+      }
+    },
+    "sig_scrap_verwerter": {
+      "id": "sig_scrap_verwerter",
+      "name": "Verwerter",
+      "description": "+3% Schaden je 100 Schrott und +2 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapDamageBonus": 0.03,
+        "damageAdd": 2
+      }
+    },
+    "sig_scrap_recycling": {
+      "id": "sig_scrap_recycling",
+      "name": "Recycling",
+      "description": "+1 Schrott je Raum und +10 LP pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 1,
+        "hpAdd": 10
+      }
+    },
+    "sig_scrap_werkbank": {
+      "id": "sig_scrap_werkbank",
+      "name": "Werkbank",
+      "description": "-6% Nachladen und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "reloadMult": 0.94,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_scrap_kopfgeld": {
+      "id": "sig_scrap_kopfgeld",
+      "name": "Kopfgeld",
+      "description": "+3 Schrott je Raum und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 3,
+        "damageAdd": 4
+      }
+    },
+    "sig_scrap_investition": {
+      "id": "sig_scrap_investition",
+      "name": "Investition",
+      "description": "+6% Schaden je 100 Schrott pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapDamageBonus": 0.06
+      }
+    },
+    "sig_scrap_panzerung": {
+      "id": "sig_scrap_panzerung",
+      "name": "Schrottpanzerung",
+      "description": "+30 LP und +2 Schrott je Raum pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "hpAdd": 30,
+        "scrapAdd": 2
+      }
+    },
+    "sig_scrap_nachschub": {
+      "id": "sig_scrap_nachschub",
+      "name": "Nachschub",
+      "description": "+2 Magazin und +5% Kritchance pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "magAdd": 2,
+        "critAdd": 0.05
+      }
+    },
+    "sig_scrap_mogul": {
+      "id": "sig_scrap_mogul",
+      "name": "Schrottmogul",
+      "description": "+5 Schrott je Raum und +6 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏆",
+      "core": {
+        "scrapAdd": 5,
+        "damageAdd": 6
+      }
+    },
+    "sig_scrap_hochfinanz": {
+      "id": "sig_scrap_hochfinanz",
+      "name": "Hochfinanz",
+      "description": "+12% Schaden je 100 Schrott",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏆",
+      "core": {
+        "scrapDamageBonus": 0.12
+      }
+    },
+    "sig_scrap_juggernaut": {
+      "id": "sig_scrap_juggernaut",
+      "name": "Schrottjuggernaut",
+      "description": "+40 LP, +8 Schaden und +2 Magazin",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏆",
+      "core": {
+        "hpAdd": 40,
+        "damageAdd": 8,
+        "magAdd": 2
+      }
+    },
+    "sig_scrap_goldrausch": {
+      "id": "sig_scrap_goldrausch",
+      "name": "Goldrausch",
+      "description": "+4 Schrott je Raum und +8% Schaden je 100 Schrott",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏆",
+      "core": {
+        "scrapAdd": 4,
+        "scrapDamageBonus": 0.08
+      }
     }
   },
   "fallback": {
