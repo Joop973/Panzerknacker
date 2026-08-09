@@ -375,6 +375,11 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.ricochetAdd) cfg.ricochets += c.ricochetAdd * lvl;
     if (c.critAdd) cfg.critChance += c.critAdd * lvl;
     if (c.scrapAdd) cfg.scrapBonusPerRoom = (cfg.scrapBonusPerRoom || 0) + c.scrapAdd * lvl;
+    // UMBAUPLAN-LP Phase 25 (Signaturtopf Schrottpanzer): staerkt die
+    // "reicher = staerker"-Skalierung. Addiert zum Klassen-Passiv
+    // scrapDamagePer100 -- applyScrapDamage() (nach applyUpgrades in state.js)
+    // liest den erhoehten Wert und skaliert den Schaden je 100 Schrott.
+    if (c.scrapDamageBonus) cfg.scrapDamagePer100 = (cfg.scrapDamagePer100 || 0) + c.scrapDamageBonus * lvl;
     if (c.mineAdd) cfg.mines += c.mineAdd * lvl;
     if (c.dashGrant) {
       coreDashGrant = true;

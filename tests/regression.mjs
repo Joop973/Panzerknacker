@@ -4330,6 +4330,96 @@ function check(ok, msg) {
   }
 }
 
+// ---- 33. UMBAUPLAN-LP Phase 25: Signaturtopf Schrottpanzer ---------------
+// Zweiter Mechanikklassen-Topf: 12 Karten (4/4/4) fuer den Schrottpanzer
+// (c_scrap). Bestehender scrapAdd (Schrott je Raum) plus eine neue
+// klassenexklusive Regel scrapDamageBonus -- addiert zum Klassen-Passiv
+// scrapDamagePer100 ("reicher = staerker"). Mechanismus mit eigenen Zahlen auf
+// Schadensebene geprueft; Gegenprobe fuer jeden Kernpunkt bestanden.
+{
+  const { resolveCfg, applyUpgrades, applyScrapDamage } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const scrap = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_scrap');
+
+  // (a) Struktur: 12 Schrott-Signaturen, 4/4/4, Tag signature, kein damageType.
+  {
+    check(scrap.length === 12, `Phase 25: ${scrap.length} Schrott-Signaturen statt 12`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of scrap) rar[d.rarity]++;
+    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 25: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(scrap.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 25: Signatur ohne Tag/core oder mit damageType');
+  }
+
+  // (b) Filter: der Schrottpanzer sieht sie, eine andere Klasse (player) NIE.
+  {
+    const sieht = (klass) => {
+      const rng = mulberry32(67);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass,
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_scrap_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('c_scrap'), 'Phase 25: Schrottpanzer sieht die eigene Signatur nicht');
+    check(!sieht('player'), 'Phase 25: fremde Klasse sieht die Schrott-Signatur (Filter greift nicht)');
+  }
+
+  // (c) Applier: scrapAdd -> Schrott je Raum; scrapDamageBonus ADDITIV zum
+  //     Klassen-Passiv scrapDamagePer100 (0.05).
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'c_scrap'), {}, upgradesData, 'mine', null);
+    check(Math.abs((base.scrapDamagePer100 || 0) - 0.05) < 1e-6, `Phase 25: Vorbedingung -- Passiv ${base.scrapDamagePer100} statt 0.05`);
+    const sa = applyUpgrades(resolveCfg(tanksData, 'c_scrap'), { sig_scrap_kopfgeld: 2 }, upgradesData, 'mine', null);
+    check((sa.scrapBonusPerRoom || 0) === U.sig_scrap_kopfgeld.core.scrapAdd * 2, `Phase 25: Kopfgeld scrapBonusPerRoom ${sa.scrapBonusPerRoom} falsch`);
+    const hf = applyUpgrades(resolveCfg(tanksData, 'c_scrap'), { sig_scrap_hochfinanz: 1 }, upgradesData, 'mine', null);
+    check(Math.abs(hf.scrapDamagePer100 - (0.05 + U.sig_scrap_hochfinanz.core.scrapDamageBonus)) < 1e-6, `Phase 25: Hochfinanz scrapDamagePer100 ${hf.scrapDamagePer100} (nicht additiv zum Passiv)`);
+  }
+
+  // (d) SCHADENSEBENE: das erhoehte scrapDamagePer100 skaliert den Schaden je
+  //     100 Schrott (applyScrapDamage). Bei 200 Schrott traegt eine Karte mit
+  //     hoeherem Faktor sichtbar mehr Schaden als die reine Passiv-Basis.
+  {
+    const SCRAP = 200; // floor(200/100) = 2 Schritte
+    const mit = (ups) => {
+      const cfg = applyUpgrades(resolveCfg(tanksData, 'c_scrap'), ups, upgradesData, 'mine', null);
+      const per100 = cfg.scrapDamagePer100;
+      const vor = cfg.damage;
+      applyScrapDamage(cfg, SCRAP);
+      return { dmg: cfg.damage, erwartet: Math.round(vor * (1 + per100 * Math.floor(SCRAP / 100))) };
+    };
+    const basis = mit({});
+    const hoch = mit({ sig_scrap_hochfinanz: 1 });
+    check(basis.dmg === basis.erwartet, `Phase 25: Basis-Schrottschaden ${basis.dmg} statt ${basis.erwartet}`);
+    check(hoch.dmg === hoch.erwartet, `Phase 25: Hochfinanz-Schrottschaden ${hoch.dmg} statt ${hoch.erwartet}`);
+    check(hoch.dmg > basis.dmg, `Phase 25: die staerkere Schrott-Skalierung bringt bei 200 Schrott nicht mehr Schaden (${hoch.dmg} vs ${basis.dmg})`);
+    // Ohne Schrott KEINE Skalierung (applyScrapDamage ist ein No-op bei 0).
+    const cfg0 = applyUpgrades(resolveCfg(tanksData, 'c_scrap'), { sig_scrap_hochfinanz: 1 }, upgradesData, 'mine', null);
+    const roh = cfg0.damage;
+    applyScrapDamage(cfg0, 0);
+    check(cfg0.damage === roh, `Phase 25: Schrottschaden skaliert schon bei 0 Schrott (${cfg0.damage} statt ${roh})`);
+  }
+
+  // (e) Gemeinsamer Tag signature -> hoechstens eine Schrott-Signatur pro Angebot.
+  {
+    const rng = mulberry32(109);
+    let maxProAngebot = 0;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_scrap',
+      });
+      const n = offers.filter((o) => String(o.id || '').startsWith('sig_scrap_')).length;
+      if (n > maxProAngebot) maxProAngebot = n;
+    }
+    check(maxProAngebot === 1, `Phase 25: bis zu ${maxProAngebot} Schrott-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;

@@ -219,7 +219,11 @@ sechs klassenexklusive Feuer-Karten für den Flammenpanzer (`c_flame`) über den
 erster Mechanikklassen-Topf mit 12 Karten (4/4/4) für den Abprallpanzer
 (`c_ricochet`) — bestehende Abprall-Schlüssel plus eine **neue klassenexklusive
 Regel** `bounceRampPerBounce` (Schaden je Wandabpraller).
-**Nächste Sitzung: Phase 25 (Signaturtopf Schrottpanzer, 12 Karten).** `PLAN.md`/die
+**Phase 25 (Signaturtopf Schrottpanzer) ist gebaut** (s. eigener Abschnitt unten):
+zweiter Mechanikklassen-Topf mit 12 Karten (4/4/4) für den Schrottpanzer
+(`c_scrap`) — bestehender `scrapAdd` plus eine **neue klassenexklusive Regel**
+`scrapDamageBonus` (stärkere „reicher = stärker"-Skalierung).
+**Nächste Sitzung: Phase 26 (Signaturtopf Nekromant, 12 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2622,6 +2626,31 @@ der doppelte Topf (Plan). Nutzt den `signatureClass`-Filter (Phase 18).
   genullt → cfg-Wert fehlt; Rarität verdreht → Verteilung ≠ 4/4/4; Filter aus →
   fremde Klasse sieht die Karten.
 
+### UMBAUPLAN-LP Phase 25 (Signaturtopf Schrottpanzer) — gemergt
+Zweiter **Mechanikklassen**-Topf: **12 Karten (4/4/4)** für den Schrottpanzer
+(`c_scrap`) über den `signatureClass`-Filter (Phase 18). Kein `damageType`
+(nur klassengebunden) wie schon Phase 19–24.
+- **Bestehender Schlüssel** `scrapAdd` (mehr Schrott je Raum, über
+  `scrapBonusPerRoom` in `run.js`) plus Basisstats (Schaden/LP/Magazin/
+  Nachladen/Krit/Geschosstempo).
+- **Eine neue klassenexklusive Regel** `scrapDamageBonus` (`cfg.js`): addiert
+  zum Klassen-Passiv `scrapDamagePer100` (0,05) und stärkt so die
+  „reicher = stärker"-Skalierung. `applyScrapDamage()` läuft in `state.js`
+  **nach** `applyUpgrades()`, liest also den erhöhten Faktor und skaliert den
+  Schaden je 100 Schrott.
+- **Zwölf Karten**: 4 common (Sammler, Verwerter, Recycling, Werkbank),
+  4 rare (Kopfgeld, Investition, Schrottpanzerung, Nachschub), 4 legendär
+  (Schrottmogul, Hochfinanz=`scrapDamageBonus`, Schrottjuggernaut, Goldrausch).
+- **Neue Dauertests** (Abschnitt 33, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (12, 4/4/4, kein `damageType`), Filter (`c_scrap` sieht sie, `player`
+  nie), Applier (`scrapAdd` → `scrapBonusPerRoom`, `scrapDamageBonus` additiv
+  zum Passiv) UND — der Kern — **auf Schadensebene**: das erhöhte
+  `scrapDamagePer100` skaliert den Schaden je 100 Schrott (Basis vs. Hochfinanz
+  bei 200 Schrott; No-op bei 0 Schrott). Gegenproben rot bestätigt:
+  `scrapDamageBonus`-Applier genullt → nicht mehr additiv; `applyScrapDamage`-
+  Skalierung genullt → kein Mehrschaden; Rarität verdreht → Verteilung ≠ 4/4/4;
+  Filter aus → fremde Klasse sieht die Karten.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2717,7 +2746,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v96`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v97`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2766,8 +2795,8 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–32 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–33 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
-Phase-18–24-Signaturtöpfe (Element + erste Mechanikklasse Abprallpanzer) + `signatureClass`-Filter). Die frühere
+Phase-18–25-Signaturtöpfe (Element + Mechanikklassen Abprall/Schrott) + `signatureClass`-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.
