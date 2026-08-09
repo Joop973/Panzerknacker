@@ -4077,6 +4077,77 @@ function check(ok, msg) {
   }
 }
 
+// ---- 30. UMBAUPLAN-LP Phase 22: Signaturtopf Radioaktiv ------------------
+// 6 klassenexklusive Karten (2/2/2) fuer den Radioaktiv-Panzer (c_toxic) ueber
+// den signatureClass-Filter (Phase 18) und die Gift-core-Schluessel (Phase 15).
+// Mechanismus mit eigenen Zahlen; Gegenprobe fuer jeden Kernpunkt bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const toxic = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_toxic');
+
+  // (a) Struktur: 6 Gift-Signaturen, 2/2/2, Tag signature, kein damageType.
+  {
+    check(toxic.length === 6, `Phase 22: ${toxic.length} Gift-Signaturen statt 6`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of toxic) rar[d.rarity]++;
+    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 22: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(toxic.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 22: Signatur ohne Tag/core oder mit damageType');
+  }
+
+  // (b) Filter: der Radioaktiv-Panzer sieht sie, eine andere Klasse (player) NIE.
+  {
+    const sieht = (klass) => {
+      const rng = mulberry32(53);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass,
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_toxic_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('c_toxic'), 'Phase 22: Radioaktiv sieht die eigene Signatur nicht');
+    check(!sieht('player'), 'Phase 22: fremde Klasse sieht die Gift-Signatur (Filter greift nicht)');
+  }
+
+  // (c) Applier: Gift-core-Schluessel wirken auf das aufgeloeste c_toxic-cfg.
+  //     Die generischen Status-Boosts sind GETRENNT vom Klassen-Passiv
+  //     (poisonDurationMult 1.25) -- Delta gegen die upgradelose Basis.
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'c_toxic'), {}, upgradesData, 'mine', null);
+    check(base.poisonDurationMult === 1.25, `Phase 22: Vorbedingung -- Gift-Passiv ${base.poisonDurationMult} statt 1.25`);
+    const vs = applyUpgrades(resolveCfg(tanksData, 'c_toxic'), { sig_toxic_verseuchung: 3 }, upgradesData, 'mine', null);
+    check(Math.abs((vs.statusDurationMult || 1) - Math.pow(U.sig_toxic_verseuchung.core.statusDurationMult, 3)) < 1e-6, `Phase 22: Verseuchung statusDurationMult ${vs.statusDurationMult} falsch`);
+    check(vs.poisonDurationMult === 1.25, `Phase 22: Verseuchung fasst faelschlich das Klassen-Passiv an (${vs.poisonDurationMult})`);
+    const ng = applyUpgrades(resolveCfg(tanksData, 'c_toxic'), { sig_toxic_nervengift: 2 }, upgradesData, 'mine', null);
+    check(ng.statusStackBonus === U.sig_toxic_nervengift.core.statusStackBonus * 2, `Phase 22: Nervengift statusStackBonus ${ng.statusStackBonus} falsch`);
+    const pd = applyUpgrades(resolveCfg(tanksData, 'c_toxic'), { sig_toxic_pandemie: 1 }, upgradesData, 'mine', null);
+    check(pd.statusMaxStacksBonus === U.sig_toxic_pandemie.core.statusMaxStacksBonus, `Phase 22: Pandemie statusMaxStacksBonus ${pd.statusMaxStacksBonus} falsch`);
+    check(Math.abs((pd.statusTickMult || 1) - U.sig_toxic_pandemie.core.statusTickMult) < 1e-6, `Phase 22: Pandemie statusTickMult ${pd.statusTickMult} falsch`);
+    const se = applyUpgrades(resolveCfg(tanksData, 'c_toxic'), { sig_toxic_seuche: 1 }, upgradesData, 'mine', null);
+    check(se.poisonSpreadRadius === U.sig_toxic_seuche.core.poisonSpreadRadius, `Phase 22: Seuche poisonSpreadRadius ${se.poisonSpreadRadius} falsch`);
+  }
+
+  // (d) Gemeinsamer Tag signature -> hoechstens eine Gift-Signatur pro Angebot.
+  {
+    const rng = mulberry32(101);
+    let maxProAngebot = 0;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_toxic',
+      });
+      const n = offers.filter((o) => String(o.id || '').startsWith('sig_toxic_')).length;
+      if (n > maxProAngebot) maxProAngebot = n;
+    }
+    check(maxProAngebot === 1, `Phase 22: bis zu ${maxProAngebot} Gift-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
