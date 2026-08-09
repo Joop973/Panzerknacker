@@ -3454,6 +3454,200 @@
         "reviveChanceBonus": 0.2,
         "damageAdd": 8
       }
+    },
+    "sig_eng_werkzeugkasten": {
+      "id": "sig_eng_werkzeugkasten",
+      "name": "Werkzeugkasten",
+      "description": "+2 Schaden und +1 Bombe pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "damageAdd": 2,
+        "mineAdd": 1
+      }
+    },
+    "sig_eng_verstaerkung": {
+      "id": "sig_eng_verstaerkung",
+      "name": "Verstärkung",
+      "description": "+20 LP und -5% Nachladen pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "hpAdd": 20,
+        "reloadMult": 0.95
+      }
+    },
+    "sig_eng_sprengfalle": {
+      "id": "sig_eng_sprengfalle",
+      "name": "Sprengfalle",
+      "description": "+8% Explosionsradius und +2 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "explosionRadiusMult": 1.08,
+        "damageAdd": 2
+      }
+    },
+    "sig_eng_praezisionsbau": {
+      "id": "sig_eng_praezisionsbau",
+      "name": "Präzisionsbau",
+      "description": "+5% Kritchance und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "critAdd": 0.05,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_eng_bunker": {
+      "id": "sig_eng_bunker",
+      "name": "Bunker",
+      "description": "+25% Sperrmauer-Haltbarkeit und +30 LP pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "builtHpBonus": 0.25,
+        "hpAdd": 30
+      }
+    },
+    "sig_eng_minenfeld": {
+      "id": "sig_eng_minenfeld",
+      "name": "Minenfeld",
+      "description": "+2 Bomben und +10% Explosionsschaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "mineAdd": 2,
+        "explosionDamageMult": 1.1
+      }
+    },
+    "sig_eng_splitterladung": {
+      "id": "sig_eng_splitterladung",
+      "name": "Splitterladung",
+      "description": "+2 Splitter und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "schrapnellCount": 2,
+        "damageAdd": 4
+      }
+    },
+    "sig_eng_feldwerkstatt": {
+      "id": "sig_eng_feldwerkstatt",
+      "name": "Feldwerkstatt",
+      "description": "+1 Magazin und -8% Nachladen pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "magAdd": 1,
+        "reloadMult": 0.92
+      }
+    },
+    "sig_eng_festung": {
+      "id": "sig_eng_festung",
+      "name": "Festung",
+      "description": "+50% Sperrmauer-Haltbarkeit und +40 LP",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏗",
+      "core": {
+        "builtHpBonus": 0.5,
+        "hpAdd": 40
+      }
+    },
+    "sig_eng_grosskaliber": {
+      "id": "sig_eng_grosskaliber",
+      "name": "Großkaliber",
+      "description": "+12% Explosionsradius, +15% Explosionsschaden, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏗",
+      "core": {
+        "explosionRadiusMult": 1.12,
+        "explosionDamageMult": 1.15,
+        "damageAdd": 8
+      }
+    },
+    "sig_eng_pionierarsenal": {
+      "id": "sig_eng_pionierarsenal",
+      "name": "Pionierarsenal",
+      "description": "+3 Bomben und +3 Splitter",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏗",
+      "core": {
+        "mineAdd": 3,
+        "schrapnellCount": 3
+      }
+    },
+    "sig_eng_chefingenieur": {
+      "id": "sig_eng_chefingenieur",
+      "name": "Chefingenieur",
+      "description": "+8 Schaden, +2 Magazin und +40 LP",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏗",
+      "core": {
+        "damageAdd": 8,
+        "magAdd": 2,
+        "hpAdd": 40
+      }
     }
   },
   "fallback": {

@@ -4521,6 +4521,105 @@ function check(ok, msg) {
   }
 }
 
+// ---- 35. UMBAUPLAN-LP Phase 27: Signaturtopf Ingenieur -------------------
+// Vierter und letzter Signaturtopf: 12 Karten (4/4/4) fuer den Ingenieur
+// (c_engineer). Bestehende Minen-/Explosiv-Schluessel plus eine neue
+// klassenexklusive Regel builtHpBonus -- additiv zum Klassen-Passiv builtHpMult,
+// die Sperrmauer (tank.js: placeTrapWall) haelt dadurch mehr Treffer aus.
+// Mechanismus mit eigenen Zahlen END-TO-END ueber useGadget geprueft; Gegenprobe
+// fuer jeden Kernpunkt bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const { useGadget } = await import('../src/game/tank.js');
+  const U = upgradesData.upgrades;
+  const eng = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_engineer');
+
+  // (a) Struktur: 12 Ingenieur-Signaturen, 4/4/4, Tag signature, kein damageType.
+  {
+    check(eng.length === 12, `Phase 27: ${eng.length} Ingenieur-Signaturen statt 12`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of eng) rar[d.rarity]++;
+    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 27: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(eng.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 27: Signatur ohne Tag/core oder mit damageType');
+  }
+
+  // (b) Filter: der Ingenieur sieht sie, eine andere Klasse (player) NIE.
+  {
+    const sieht = (klass) => {
+      const rng = mulberry32(73);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass,
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_eng_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('c_engineer'), 'Phase 27: Ingenieur sieht die eigene Signatur nicht');
+    check(!sieht('player'), 'Phase 27: fremde Klasse sieht die Ingenieur-Signatur (Filter greift nicht)');
+  }
+
+  // (c) Applier: builtHpBonus ADDITIV zum Passiv (1.2); Minen-Schluessel landen.
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'c_engineer'), {}, upgradesData, 'mine', null);
+    check(Math.abs((base.builtHpMult || 1) - 1.2) < 1e-6, `Phase 27: Vorbedingung -- builtHpMult ${base.builtHpMult} statt 1.2`);
+    const fe = applyUpgrades(resolveCfg(tanksData, 'c_engineer'), { sig_eng_festung: 1 }, upgradesData, 'mine', null);
+    check(Math.abs(fe.builtHpMult - (1.2 + U.sig_eng_festung.core.builtHpBonus)) < 1e-6, `Phase 27: Festung builtHpMult ${fe.builtHpMult} (nicht additiv zum Passiv)`);
+    const mf = applyUpgrades(resolveCfg(tanksData, 'c_engineer'), { sig_eng_minenfeld: 2 }, upgradesData, 'mine', null);
+    check(mf.mines === base.mines + U.sig_eng_minenfeld.core.mineAdd * 2, `Phase 27: Minenfeld Bomben ${mf.mines} falsch`);
+  }
+
+  // (d) END-TO-END: eine Sperrmauer, gebaut ueber useGadget, haelt mit hoeherem
+  //     builtHpMult mehr Treffer aus. Nicht die Formel nachrechnen, sondern die
+  //     echte Mauer bauen und ihre customDurability lesen.
+  {
+    const baueMauer = (builtHpMult) => {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, 42, 'normal', { starterTank: 'c_engineer' });
+      const st = run.state;
+      const p = st.player;
+      p.cfg.gadget = 'trap_wall';
+      p.cfg.secondaryDisabled = false;
+      p.cfg.builtHpMult = builtHpMult;
+      // In eine der vier Richtungen bauen, in der die Zielkachel frei ist.
+      for (const dir of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+        // vorhandene Sperrmauern entfernen, damit wir die neue eindeutig finden
+        st.walls = st.walls.filter((w) => w.type !== 'trap');
+        p.turret = dir;
+        p.gadgetCooldown = 0;
+        if (useGadget(p, st, null)) {
+          const w = st.walls.find((w) => w.type === 'trap');
+          if (w) return w.customDurability;
+        }
+      }
+      return null;
+    };
+    const grund = baueMauer(1.2); // c_engineer-Passiv: round(3*1.2)=4
+    const stark = baueMauer(1.7); // + Festung (0.5): round(3*1.7)=5
+    check(grund != null && stark != null, 'Phase 27: Sperrmauer liess sich in keiner Richtung bauen (Test-Setup)');
+    check(grund === 4, `Phase 27: Grund-Sperrmauer haelt ${grund} statt 4 Treffer`);
+    check(stark === 5, `Phase 27: verstaerkte Sperrmauer haelt ${stark} statt 5 Treffer`);
+    check(stark > grund, 'Phase 27: der builtHpBonus macht die Sperrmauer nicht haltbarer');
+  }
+
+  // (e) Gemeinsamer Tag signature -> hoechstens eine Ingenieur-Signatur pro Angebot.
+  {
+    const rng = mulberry32(127);
+    let maxProAngebot = 0;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_engineer',
+      });
+      const n = offers.filter((o) => String(o.id || '').startsWith('sig_eng_')).length;
+      if (n > maxProAngebot) maxProAngebot = n;
+    }
+    check(maxProAngebot === 1, `Phase 27: bis zu ${maxProAngebot} Ingenieur-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
