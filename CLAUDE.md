@@ -223,7 +223,12 @@ Regel** `bounceRampPerBounce` (Schaden je Wandabpraller).
 zweiter Mechanikklassen-Topf mit 12 Karten (4/4/4) für den Schrottpanzer
 (`c_scrap`) — bestehender `scrapAdd` plus eine **neue klassenexklusive Regel**
 `scrapDamageBonus` (stärkere „reicher = stärker"-Skalierung).
-**Nächste Sitzung: Phase 26 (Signaturtopf Nekromant, 12 Karten).** `PLAN.md`/die
+**Phase 26 (Signaturtopf Nekromant) ist gebaut** (s. eigener Abschnitt unten):
+dritter Mechanikklassen-Topf mit 12 Karten (4/4/4) für den Nekromanten
+(`c_necro`) — verstärkt Wiederbelebung und Geisterpanzer über drei **neue
+klassenexklusive Regeln** (`reviveChanceBonus`, `grantGhostCrew`,
+`ghostDurationBonus`).
+**Nächste Sitzung: Phase 27 (Signaturtopf Ingenieur, 12 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2651,6 +2656,39 @@ Zweiter **Mechanikklassen**-Topf: **12 Karten (4/4/4)** für den Schrottpanzer
   Skalierung genullt → kein Mehrschaden; Rarität verdreht → Verteilung ≠ 4/4/4;
   Filter aus → fremde Klasse sieht die Karten.
 
+### UMBAUPLAN-LP Phase 26 (Signaturtopf Nekromant) — gemergt
+Dritter **Mechanikklassen**-Topf: **12 Karten (4/4/4)** für den Nekromanten
+(`c_necro`) über den `signatureClass`-Filter (Phase 18). Kein `damageType`
+(nur klassengebunden) wie schon Phase 19–25. Verstärkt die zwei gebauten
+Nekromanten-Mechaniken: **Wiederbelebung** (`reviveChance`, Phase 9) und
+**Geisterpanzer** (`ghost_crew`, Phase 7).
+- **Drei neue klassenexklusive Regeln**: `reviveChanceBonus` (`cfg.js`, additiv
+  zum Klassen-Passiv `reviveChance` 0,25 — `state.js: tryRevive` liest den Wert),
+  `grantGhostCrew` (`cfg.js`, schaltet `ghostCrew` frei wie das
+  `ghost_crew`-Upgrade → getötete Gegner kämpfen als Geist weiter) und
+  `ghostDurationBonus` (`cfg.js` + `ghost.js` + `state.js`: die Geister halten
+  länger — **Qualität statt Zahl**, der Deckel `balance.ghost.maxActive` bleibt,
+  wie im Plan für Nekromant/Ingenieur gefordert). `createGhost()` nimmt einen
+  optionalen `durationBonus`, den `killTank()` aus der Spieler-cfg durchreicht.
+- **Zwölf Karten**: 4 common (Totenbeschwörung, Lebenskraft, Seelenernte,
+  Verwesung), 4 rare (Wiedergänger=`reviveChanceBonus`,
+  Geisterbeschwörung=`grantGhostCrew`, Knochenpanzer, Todesmal), 4 legendär
+  (Lich, Geisterlegion=`grantGhostCrew`+`ghostDurationBonus`, Seelenfresser,
+  Unsterblich). Die Wiederbelebungschance klettert gebaut höchstens auf ~0,80
+  (Basis 0,25 + alle Revive-Karten) — bleibt also ein Glücksspiel, kein
+  garantiertes Überleben (kein Deckel nötig).
+- **Neue Dauertests** (Abschnitt 34, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (12, 4/4/4, kein `damageType`), Filter (`c_necro` sieht sie, `player`
+  nie), Applier (`reviveChanceBonus` additiv, `grantGhostCrew` setzt `ghostCrew`,
+  `ghostDurationBonus`) UND — der Kern — **zwei Mechanismus-Tests**: (1)
+  Wiederbelebung — mit einem gestellten RNG-Wurf (0,30) belebt die Basis (0,25)
+  nicht, die geboostete (0,45) schon, und stellt die vollen LP her; (2)
+  Geisterdauer — `createGhost()` mit Bonus lebt länger als ohne. Gegenproben rot
+  bestätigt: `reviveChanceBonus`-Applier genullt → keine Wiederbelebung;
+  `ghostDurationBonus` im Geist genullt → keine längere Dauer; `grantGhostCrew`
+  auf `false` → kein Geist; Rarität verdreht → Verteilung ≠ 4/4/4; Filter aus →
+  fremde Klasse sieht die Karten.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2746,7 +2784,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v97`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v98`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2795,8 +2833,8 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–33 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–34 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
-Phase-18–25-Signaturtöpfe (Element + Mechanikklassen Abprall/Schrott) + `signatureClass`-Filter). Die frühere
+Phase-18–26-Signaturtöpfe (Element + Mechanikklassen Abprall/Schrott/Nekromant) + `signatureClass`-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.

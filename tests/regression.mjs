@@ -4420,6 +4420,107 @@ function check(ok, msg) {
   }
 }
 
+// ---- 34. UMBAUPLAN-LP Phase 26: Signaturtopf Nekromant -------------------
+// Dritter Mechanikklassen-Topf: 12 Karten (4/4/4) fuer den Nekromanten
+// (c_necro). Verstaerkt die zwei gebauten Nekromanten-Mechaniken: Wiederbelebung
+// (reviveChance) und Geisterpanzer (ghost_crew, Phase 7). Neue klassenexklusive
+// Regeln: reviveChanceBonus (additiv zum Passiv), grantGhostCrew (Geister
+// beschwoeren) und ghostDurationBonus (Geister halten laenger -- Qualitaet statt
+// Zahl, der Deckel bleibt). Mechanismus mit eigenen Zahlen geprueft; Gegenprobe
+// fuer jeden Kernpunkt bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const { createGhost } = await import('../src/game/ghost.js');
+  const U = upgradesData.upgrades;
+  const necro = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_necro');
+
+  // (a) Struktur: 12 Nekromant-Signaturen, 4/4/4, Tag signature, kein damageType.
+  {
+    check(necro.length === 12, `Phase 26: ${necro.length} Nekromant-Signaturen statt 12`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of necro) rar[d.rarity]++;
+    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 26: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(necro.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 26: Signatur ohne Tag/core oder mit damageType');
+  }
+
+  // (b) Filter: der Nekromant sieht sie, eine andere Klasse (player) NIE.
+  {
+    const sieht = (klass) => {
+      const rng = mulberry32(71);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass,
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_necro_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('c_necro'), 'Phase 26: Nekromant sieht die eigene Signatur nicht');
+    check(!sieht('player'), 'Phase 26: fremde Klasse sieht die Nekromant-Signatur (Filter greift nicht)');
+  }
+
+  // (c) Applier: reviveChanceBonus ADDITIV zum Passiv (0.25); grantGhostCrew
+  //     schaltet ghostCrew frei; ghostDurationBonus landet im cfg.
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'c_necro'), {}, upgradesData, 'mine', null);
+    check(Math.abs((base.reviveChance || 0) - 0.25) < 1e-6, `Phase 26: Vorbedingung -- reviveChance ${base.reviveChance} statt 0.25`);
+    check(!base.ghostCrew, 'Phase 26: Vorbedingung -- ghostCrew ist ohne Karte schon aktiv');
+    const wg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_wiedergaenger: 2 }, upgradesData, 'mine', null);
+    check(Math.abs(wg.reviveChance - (0.25 + U.sig_necro_wiedergaenger.core.reviveChanceBonus * 2)) < 1e-6, `Phase 26: Wiedergänger reviveChance ${wg.reviveChance} (nicht additiv zum Passiv)`);
+    const gb = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_geisterbeschwoerung: 1 }, upgradesData, 'mine', null);
+    check(gb.ghostCrew === true, 'Phase 26: Geisterbeschwörung schaltet ghostCrew nicht frei');
+    const gl = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_geisterlegion: 1 }, upgradesData, 'mine', null);
+    check(gl.ghostCrew === true && Math.abs((gl.ghostDurationBonus || 0) - U.sig_necro_geisterlegion.core.ghostDurationBonus) < 1e-6, `Phase 26: Geisterlegion ghostDurationBonus ${gl.ghostDurationBonus} falsch`);
+  }
+
+  // (d1) MECHANISMUS Wiederbelebung: das erhoehte reviveChance macht bei einem
+  //      RNG-Wurf, der die Basis NICHT bestehen wuerde, den Unterschied.
+  //      tryRevive rollt state.rng() < cfg.reviveChance.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42, 'normal', { starterTank: 'c_necro' });
+    const st = run.state;
+    st.rng = () => 0.30; // zwischen Basis (0.25) und geboostet (0.45)
+    st.player.cfg.reviveChance = 0.25;
+    st.player.hp = 1;
+    check(st.tryRevive(st.player) === false, 'Phase 26: Basis-reviveChance sollte bei 0.30 nicht wiederbeleben');
+    const boosted = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_wiedergaenger: 2 }, upgradesData, 'mine', null);
+    st.player.cfg.reviveChance = boosted.reviveChance; // 0.45
+    st.player.hp = 1;
+    check(st.tryRevive(st.player) === true, 'Phase 26: geboostetes reviveChance (0.45) belebt bei 0.30 nicht wieder');
+    check(st.player.hp === st.player.cfg.maxHp, 'Phase 26: Wiederbelebung stellt nicht die vollen LP her');
+  }
+
+  // (d2) MECHANISMUS Geisterdauer: ghostDurationBonus verlaengert die Lebensdauer
+  //      des erzeugten Geistes ueber balance.ghost.duration hinaus.
+  {
+    const base = tanksData.balance.ghost.duration;
+    const fake = { x: 0, y: 0, heading: 0, turret: 0, type: 'player', cfg: {} };
+    const ohne = createGhost(fake, tanksData.balance);
+    const mit = createGhost(fake, tanksData.balance, U.sig_necro_geisterlegion.core.ghostDurationBonus);
+    check(Math.abs(ohne.timeLeft - base) < 1e-6, `Phase 26: Geist ohne Bonus lebt ${ohne.timeLeft} statt ${base}`);
+    check(Math.abs(mit.timeLeft - (base + U.sig_necro_geisterlegion.core.ghostDurationBonus)) < 1e-6, `Phase 26: Geisterdauer-Bonus greift nicht (${mit.timeLeft})`);
+    check(mit.timeLeft > ohne.timeLeft, 'Phase 26: der Geisterdauer-Bonus verlaengert die Lebensdauer nicht');
+  }
+
+  // (e) Gemeinsamer Tag signature -> hoechstens eine Nekromant-Signatur pro Angebot.
+  {
+    const rng = mulberry32(113);
+    let maxProAngebot = 0;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_necro',
+      });
+      const n = offers.filter((o) => String(o.id || '').startsWith('sig_necro_')).length;
+      if (n > maxProAngebot) maxProAngebot = n;
+    }
+    check(maxProAngebot === 1, `Phase 26: bis zu ${maxProAngebot} Nekromant-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
