@@ -228,8 +228,14 @@ dritter Mechanikklassen-Topf mit 12 Karten (4/4/4) für den Nekromanten
 (`c_necro`) — verstärkt Wiederbelebung und Geisterpanzer über drei **neue
 klassenexklusive Regeln** (`reviveChanceBonus`, `grantGhostCrew`,
 `ghostDurationBonus`).
-**Nächste Sitzung: Phase 27 (Signaturtopf Ingenieur, 12 Karten).** `PLAN.md`/die
-Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
+**Phase 27 (Signaturtopf Ingenieur) ist gebaut** (s. eigener Abschnitt unten):
+vierter und letzter Signaturtopf mit 12 Karten (4/4/4) für den Ingenieur
+(`c_engineer`) — Minen-/Explosiv-Schlüssel plus eine **neue klassenexklusive
+Regel** `builtHpBonus` (haltbarere Sperrmauer). **Damit sind alle zehn
+Signaturtöpfe (Phasen 18–27) fertig.**
+**Nächste Sitzung: Phase 28 (Balance + neue Tests — die Schlussabnahme des
+LP-Umbaus).** `PLAN.md`/die Telemetrie-Auswertung bleibt parallel offen
+(s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -2689,6 +2695,34 @@ Nekromanten-Mechaniken: **Wiederbelebung** (`reviveChance`, Phase 9) und
   auf `false` → kein Geist; Rarität verdreht → Verteilung ≠ 4/4/4; Filter aus →
   fremde Klasse sieht die Karten.
 
+### UMBAUPLAN-LP Phase 27 (Signaturtopf Ingenieur) — gemergt
+Vierter und **letzter** Signaturtopf: **12 Karten (4/4/4)** für den Ingenieur
+(`c_engineer`) über den `signatureClass`-Filter (Phase 18). Kein `damageType`
+(nur klassengebunden) wie schon Phase 19–26. **Damit haben alle zehn Klassen
+ihren Signaturtopf (Phasen 18–27).**
+- **Bestehende Minen-/Explosiv-Schlüssel** (`mineAdd`, `explosionRadiusMult`,
+  `explosionDamageMult`, `schrapnellCount`) plus Basisstats — die Mine liegt im
+  festen Sekundärslot, wirkt also immer.
+- **Eine neue klassenexklusive Regel** `builtHpBonus` (`cfg.js`): additiv zum
+  Klassen-Passiv `builtHpMult` (1,2) — `tank.js: placeTrapWall()` liest den
+  erhöhten Faktor und baut eine haltbarere Sperrmauer. Bei Grundhaltbarkeit 3
+  hält die Mauer mit dem Passiv 4 Treffer, mit der legendären *Festung* (+0,5)
+  5 Treffer.
+- **Zwölf Karten**: 4 common (Werkzeugkasten, Verstärkung, Sprengfalle,
+  Präzisionsbau), 4 rare (Bunker=`builtHpBonus`, Minenfeld, Splitterladung,
+  Feldwerkstatt), 4 legendär (Festung=`builtHpBonus`, Großkaliber,
+  Pionierarsenal, Chefingenieur).
+- **Neue Dauertests** (Abschnitt 35, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (12, 4/4/4, kein `damageType`), Filter (`c_engineer` sieht sie,
+  `player` nie), Applier (`builtHpBonus` additiv zum Passiv, `mineAdd`) UND —
+  der Kern — **END-TO-END über `useGadget`**: eine echt gebaute Sperrmauer hält
+  mit höherem `builtHpMult` mehr Treffer aus (Grund 4 vs. Festung 5, aus der
+  gelesenen `customDurability` statt aus einer nachgerechneten Formel).
+  Gegenproben rot bestätigt: `builtHpBonus`-Applier genullt → nicht mehr
+  additiv; `placeTrapWall`-Multiplikation genullt → Mauer bleibt bei 3;
+  Rarität verdreht → Verteilung ≠ 4/4/4; Filter aus → fremde Klasse sieht die
+  Karten.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2784,7 +2818,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v98`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v99`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2833,8 +2867,8 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–34 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–35 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
-Phase-18–26-Signaturtöpfe (Element + Mechanikklassen Abprall/Schrott/Nekromant) + `signatureClass`-Filter). Die frühere
+Phase-18–27-Signaturtöpfe (alle zehn Klassen) + `signatureClass`-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.

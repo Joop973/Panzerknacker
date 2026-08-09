@@ -388,6 +388,10 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.reviveChanceBonus) cfg.reviveChance = (cfg.reviveChance || 0) + c.reviveChanceBonus * lvl;
     if (c.grantGhostCrew) cfg.ghostCrew = true;
     if (c.ghostDurationBonus) cfg.ghostDurationBonus = (cfg.ghostDurationBonus || 0) + c.ghostDurationBonus * lvl;
+    // UMBAUPLAN-LP Phase 27 (Signaturtopf Ingenieur): staerkere Sperrmauer.
+    // Additiv zum Klassen-Passiv builtHpMult -- tank.js: placeTrapWall() liest
+    // den erhoehten Faktor und baut eine haltbarere Mauer.
+    if (c.builtHpBonus) cfg.builtHpMult = (cfg.builtHpMult || 1) + c.builtHpBonus * lvl;
     if (c.mineAdd) cfg.mines += c.mineAdd * lvl;
     if (c.dashGrant) {
       coreDashGrant = true;
