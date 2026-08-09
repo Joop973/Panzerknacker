@@ -2487,6 +2487,104 @@
         "schrapnellCount": 3,
         "explosionDamageMult": 1.12
       }
+    },
+    "sig_frost_kaeltekammer": {
+      "id": "sig_frost_kaeltekammer",
+      "name": "Kältekammer",
+      "description": "+8% Verlangsamung und +3 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "frostSlowBonus": 0.08,
+        "damageAdd": 3
+      }
+    },
+    "sig_frost_raureif": {
+      "id": "sig_frost_raureif",
+      "name": "Raureif",
+      "description": "+8% Froststdauer und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "statusDurationMult": 1.08,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_frost_tiefkuehlung": {
+      "id": "sig_frost_tiefkuehlung",
+      "name": "Tiefkühlung",
+      "description": "Einfrieren eine Stufe früher, längeres Einfrieren",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "frostFreezeReduction": 1,
+        "frostFreezeDurationBonus": 0.5
+      }
+    },
+    "sig_frost_splitterfrost": {
+      "id": "sig_frost_splitterfrost",
+      "name": "Splitterfrost",
+      "description": "+50% Schaden gegen erstarrte Ziele und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "shatterMult": 0.5,
+        "damageAdd": 4
+      }
+    },
+    "sig_frost_blizzard": {
+      "id": "sig_frost_blizzard",
+      "name": "Blizzard",
+      "description": "+15% Verlangsamung, +1 Froststufe je Treffer, längeres Einfrieren",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧊",
+      "core": {
+        "frostSlowBonus": 0.15,
+        "statusStackBonus": 1,
+        "frostFreezeDurationBonus": 1.0
+      }
+    },
+    "sig_frost_nullpunkt": {
+      "id": "sig_frost_nullpunkt",
+      "name": "Absoluter Nullpunkt",
+      "description": "Einfrieren eine Stufe früher, +100% Schaden gegen Erstarrte, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧊",
+      "core": {
+        "shatterMult": 1.0,
+        "frostFreezeReduction": 1,
+        "damageAdd": 8
+      }
     }
   },
   "fallback": {
