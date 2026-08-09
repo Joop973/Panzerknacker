@@ -208,7 +208,10 @@ sechs klassenexklusive Frost-Karten für den Frostpanzer (`c_frost`) über den
 **Phase 21 (Signaturtopf Teslapanzer) ist gebaut** (s. eigener Abschnitt unten):
 sechs klassenexklusive Blitz-Karten für den Teslapanzer (`c_tesla`) über den
 `signatureClass`-Filter (Phase 18) und die Blitz-`core`-Schlüssel (Phase 16).
-**Nächste Sitzung: Phase 22 (Signaturtopf Radioaktiv, 6 Karten).** `PLAN.md`/die
+**Phase 22 (Signaturtopf Radioaktiv) ist gebaut** (s. eigener Abschnitt unten):
+sechs klassenexklusive Gift-Karten für den Radioaktiv-Panzer (`c_toxic`) über den
+`signatureClass`-Filter (Phase 18) und die Gift-`core`-Schlüssel (Phase 15).
+**Nächste Sitzung: Phase 23 (Signaturtopf Flammenpanzer, 6 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2535,6 +2538,29 @@ Blitz-`core`-Schlüssel aus Phase 16 — **keine neue Engine-Zeile**.
   additiv; Rarität verdreht → Verteilung ≠ 2/2/2; Filter aus → fremde Klasse
   sieht die Karten.
 
+### UMBAUPLAN-LP Phase 22 (Signaturtopf Radioaktiv) — gemergt
+Fünfter Signaturtopf (6 Karten, 2/2/2, Tag `signature` + `signatureClass:
+"c_toxic"`). Nutzt den `signatureClass`-Filter aus Phase 18 und die
+Gift-`core`-Schlüssel aus Phase 15 — **keine neue Engine-Zeile**.
+- **Klassen-, nicht elementgebunden** (kein `damageType`) wie schon Phase 19–21.
+- **Gift-Identität** über bestehende `core`-Schlüssel: die generischen
+  Status-Boosts `statusStackBonus` (+Giftstufe/Treffer), `statusMaxStacksBonus`
+  (Deckel 5→7), `statusTickMult` (Tickschaden), `statusDurationMult` (Dauer) plus
+  `poisonSpreadRadius` (Seuche/Ausbreitung). Die Boosts sind **getrennt** vom
+  Klassen-Passiv `poisonDurationMult` (1,25) — ein Test wacht darüber, dass eine
+  Karte das Passiv nicht anfasst.
+- **Sechs Karten**: 2 common (Verseuchung = Dauer+Schaden, Konzentrat =
+  Tickschaden+Krit), 2 rare (Nervengift = +Stufe+Schaden, Seuche =
+  Ausbreitung+LP), 2 legendär (Pandemie = Deckel+Stufe+Tickschaden,
+  Kontamination = Ausbreitung+Dauer+Schaden).
+- **Neue Dauertests** (Abschnitt 30, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (6, 2/2/2, kein `damageType`), Filter (`c_toxic` sieht sie, `player`
+  nie), Applier (Status-Boosts landen, Klassen-Passiv unberührt,
+  `poisonSpreadRadius` per `Math.max`), höchstens eine Signatur pro Angebot.
+  Gegenproben rot bestätigt: `statusStackBonus`-Pfad genullt → Delta falsch;
+  Rarität verdreht → Verteilung ≠ 2/2/2; Filter aus → fremde Klasse sieht die
+  Karten.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2630,7 +2656,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v93`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v94`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2679,8 +2705,8 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–29 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–30 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
-Phase-18/19/20/21-Signaturtöpfe Standard+Sprengpanzer+Frostpanzer+Teslapanzer + `signatureClass`-Filter). Die frühere
+Phase-18–22-Signaturtöpfe Standard+Sprengpanzer+Frostpanzer+Teslapanzer+Radioaktiv + `signatureClass`-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.

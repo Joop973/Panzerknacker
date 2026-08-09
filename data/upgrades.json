@@ -2683,6 +2683,104 @@
         "lightningStun": 0.6,
         "damageAdd": 8
       }
+    },
+    "sig_toxic_verseuchung": {
+      "id": "sig_toxic_verseuchung",
+      "name": "Verseuchung",
+      "description": "+8% Giftdauer und +3 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☢",
+      "core": {
+        "statusDurationMult": 1.08,
+        "damageAdd": 3
+      }
+    },
+    "sig_toxic_konzentrat": {
+      "id": "sig_toxic_konzentrat",
+      "name": "Konzentrat",
+      "description": "+10% Gift-Tickschaden und +5% Kritchance pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☢",
+      "core": {
+        "statusTickMult": 1.1,
+        "critAdd": 0.05
+      }
+    },
+    "sig_toxic_nervengift": {
+      "id": "sig_toxic_nervengift",
+      "name": "Nervengift",
+      "description": "+1 Giftstufe je Treffer und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☢",
+      "core": {
+        "statusStackBonus": 1,
+        "damageAdd": 4
+      }
+    },
+    "sig_toxic_seuche": {
+      "id": "sig_toxic_seuche",
+      "name": "Seuche",
+      "description": "Gift breitet sich auf nahe Gegner aus, +20 LP",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☢",
+      "core": {
+        "poisonSpreadRadius": 80,
+        "hpAdd": 20
+      }
+    },
+    "sig_toxic_pandemie": {
+      "id": "sig_toxic_pandemie",
+      "name": "Pandemie",
+      "description": "Giftdeckel +2 (5→7), +1 Giftstufe je Treffer, +10% Tickschaden",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☣",
+      "core": {
+        "statusMaxStacksBonus": 2,
+        "statusStackBonus": 1,
+        "statusTickMult": 1.1
+      }
+    },
+    "sig_toxic_kontamination": {
+      "id": "sig_toxic_kontamination",
+      "name": "Kontamination",
+      "description": "Weite Gift-Ausbreitung, +20% Giftdauer, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☣",
+      "core": {
+        "poisonSpreadRadius": 110,
+        "statusDurationMult": 1.2,
+        "damageAdd": 8
+      }
     }
   },
   "fallback": {
