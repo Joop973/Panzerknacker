@@ -2781,6 +2781,104 @@
         "statusDurationMult": 1.2,
         "damageAdd": 8
       }
+    },
+    "sig_flame_brandbeschleuniger": {
+      "id": "sig_flame_brandbeschleuniger",
+      "name": "Brandbeschleuniger",
+      "description": "+10% Branddauer und +3 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "fireDurationMult": 1.1,
+        "damageAdd": 3
+      }
+    },
+    "sig_flame_glutkern": {
+      "id": "sig_flame_glutkern",
+      "name": "Glutkern",
+      "description": "+10% Brand-Tickschaden und +5% Kritchance pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "statusTickMult": 1.1,
+        "critAdd": 0.05
+      }
+    },
+    "sig_flame_napalm": {
+      "id": "sig_flame_napalm",
+      "name": "Napalm",
+      "description": "+1 Brandstufe je Treffer und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "statusStackBonus": 1,
+        "damageAdd": 4
+      }
+    },
+    "sig_flame_brandherd": {
+      "id": "sig_flame_brandherd",
+      "name": "Brandherd",
+      "description": "Feuer breitet sich auf nahe Gegner aus, +20 LP",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "fireSpreadRadius": 80,
+        "hpAdd": 20
+      }
+    },
+    "sig_flame_inferno": {
+      "id": "sig_flame_inferno",
+      "name": "Inferno",
+      "description": "Branddeckel +2 (3→5), +1 Brandstufe je Treffer, +15% Branddauer",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌋",
+      "core": {
+        "statusMaxStacksBonus": 2,
+        "statusStackBonus": 1,
+        "fireDurationMult": 1.15
+      }
+    },
+    "sig_flame_feuersturm": {
+      "id": "sig_flame_feuersturm",
+      "name": "Feuersturm",
+      "description": "Weite Feuer-Ausbreitung, +20% Tickschaden, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌋",
+      "core": {
+        "fireSpreadRadius": 110,
+        "statusTickMult": 1.2,
+        "damageAdd": 8
+      }
     }
   },
   "fallback": {

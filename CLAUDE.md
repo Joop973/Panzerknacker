@@ -211,7 +211,12 @@ sechs klassenexklusive Blitz-Karten für den Teslapanzer (`c_tesla`) über den
 **Phase 22 (Signaturtopf Radioaktiv) ist gebaut** (s. eigener Abschnitt unten):
 sechs klassenexklusive Gift-Karten für den Radioaktiv-Panzer (`c_toxic`) über den
 `signatureClass`-Filter (Phase 18) und die Gift-`core`-Schlüssel (Phase 15).
-**Nächste Sitzung: Phase 23 (Signaturtopf Flammenpanzer, 6 Karten).** `PLAN.md`/die
+**Phase 23 (Signaturtopf Flammenpanzer) ist gebaut** (s. eigener Abschnitt unten):
+sechs klassenexklusive Feuer-Karten für den Flammenpanzer (`c_flame`) über den
+`signatureClass`-Filter (Phase 18) und die Feuer-`core`-Schlüssel (Phase 13).
+**Damit sind alle fünf Element-Signaturtöpfe (Phasen 19–23) fertig; die vier
+Mechanikklassen (Phasen 24–27, je 12 Karten) stehen noch aus.**
+**Nächste Sitzung: Phase 24 (Signaturtopf Abprallpanzer, 12 Karten).** `PLAN.md`/die
 Telemetrie-Auswertung bleibt parallel offen (s. To-do-Liste unten).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
@@ -2561,6 +2566,28 @@ Gift-`core`-Schlüssel aus Phase 15 — **keine neue Engine-Zeile**.
   Rarität verdreht → Verteilung ≠ 2/2/2; Filter aus → fremde Klasse sieht die
   Karten.
 
+### UMBAUPLAN-LP Phase 23 (Signaturtopf Flammenpanzer) — gemergt
+Sechster Signaturtopf (6 Karten, 2/2/2, Tag `signature` + `signatureClass:
+"c_flame"`) und der letzte Element-Topf. Nutzt den `signatureClass`-Filter aus
+Phase 18 und die Feuer-`core`-Schlüssel aus Phase 13 — **keine neue Engine-Zeile**.
+- **Klassen-, nicht elementgebunden** (kein `damageType`) wie schon Phase 19–22.
+- **Feuer-Identität** über bestehende `core`-Schlüssel: `fireDurationMult`
+  **multipliziert** das Klassen-Passiv (1,25) — anders als der generische
+  `statusDurationMult` (ein Test prüft genau diese Multiplikation) — plus
+  `statusStackBonus` (+Brandstufe/Treffer), `statusMaxStacksBonus` (Deckel 3→5),
+  `statusTickMult` (Tickschaden) und `fireSpreadRadius` (Ausbreitung).
+- **Sechs Karten**: 2 common (Brandbeschleuniger = Dauer+Schaden, Glutkern =
+  Tickschaden+Krit), 2 rare (Napalm = +Stufe+Schaden, Brandherd =
+  Ausbreitung+LP), 2 legendär (Inferno = Deckel+Stufe+Dauer, Feuersturm =
+  Ausbreitung+Tickschaden+Schaden).
+- **Neue Dauertests** (Abschnitt 31, Gegenprobe für jeden Kernpunkt bestanden):
+  Struktur (6, 2/2/2, kein `damageType`), Filter (`c_flame` sieht sie, `player`
+  nie), Applier (`fireDurationMult` multipliziert das Passiv, `statusStackBonus`,
+  `statusMaxStacksBonus`, `fireSpreadRadius` per `Math.max`), höchstens eine
+  Signatur pro Angebot. Gegenproben rot bestätigt: `fireDurationMult`-Pfad
+  genullt → Passiv nicht mehr multipliziert; Rarität verdreht → Verteilung ≠
+  2/2/2; Filter aus → fremde Klasse sieht die Karten.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
@@ -2656,7 +2683,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v94`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v95`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2705,8 +2732,8 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–30 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–31 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
-Phase-18–22-Signaturtöpfe Standard+Sprengpanzer+Frostpanzer+Teslapanzer+Radioaktiv + `signatureClass`-Filter). Die frühere
+Phase-18–23-Signaturtöpfe Standard+Sprengpanzer+Frostpanzer+Teslapanzer+Radioaktiv+Flammenpanzer + `signatureClass`-Filter). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.

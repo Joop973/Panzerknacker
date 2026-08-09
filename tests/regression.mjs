@@ -4148,6 +4148,80 @@ function check(ok, msg) {
   }
 }
 
+// ---- 31. UMBAUPLAN-LP Phase 23: Signaturtopf Flammenpanzer ---------------
+// 6 klassenexklusive Karten (2/2/2) fuer den Flammenpanzer (c_flame) ueber den
+// signatureClass-Filter (Phase 18) und die Feuer-core-Schluessel (Phase 13).
+// fireDurationMult MULTIPLIZIERT das Klassen-Passiv (1.25) -- anders als der
+// generische statusDurationMult. Mechanismus mit eigenen Zahlen; Gegenprobe
+// fuer jeden Kernpunkt bestanden.
+{
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const flame = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_flame');
+
+  // (a) Struktur: 6 Feuer-Signaturen, 2/2/2, Tag signature, kein damageType.
+  {
+    check(flame.length === 6, `Phase 23: ${flame.length} Feuer-Signaturen statt 6`);
+    const rar = { common: 0, rare: 0, legendary: 0 };
+    for (const [, d] of flame) rar[d.rarity]++;
+    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 23: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(flame.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 23: Signatur ohne Tag/core oder mit damageType');
+  }
+
+  // (b) Filter: der Flammenpanzer sieht sie, eine andere Klasse (player) NIE.
+  {
+    const sieht = (klass) => {
+      const rng = mulberry32(59);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass,
+        });
+        if (offers.some((o) => String(o.id || '').startsWith('sig_flame_'))) return true;
+      }
+      return false;
+    };
+    check(sieht('c_flame'), 'Phase 23: Flammenpanzer sieht die eigene Signatur nicht');
+    check(!sieht('player'), 'Phase 23: fremde Klasse sieht die Feuer-Signatur (Filter greift nicht)');
+  }
+
+  // (c) Applier: fireDurationMult MULTIPLIZIERT das Klassen-Passiv (1.25);
+  //     generische Boosts landen additiv/multiplikativ. Delta/Faktor gegen die
+  //     upgradelose Basis mit den Zahlen der Karte selbst.
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'c_flame'), {}, upgradesData, 'mine', null);
+    check(base.fireDurationMult === 1.25, `Phase 23: Vorbedingung -- Feuer-Passiv ${base.fireDurationMult} statt 1.25`);
+    const bb = applyUpgrades(resolveCfg(tanksData, 'c_flame'), { sig_flame_brandbeschleuniger: 3 }, upgradesData, 'mine', null);
+    const erwartet = 1.25 * Math.pow(U.sig_flame_brandbeschleuniger.core.fireDurationMult, 3);
+    check(Math.abs(bb.fireDurationMult - erwartet) < 1e-6, `Phase 23: Brandbeschleuniger fireDurationMult ${bb.fireDurationMult} statt ${erwartet} (multipliziert Passiv nicht)`);
+    check(bb.damage === base.damage + U.sig_flame_brandbeschleuniger.core.damageAdd * 3, `Phase 23: Brandbeschleuniger Schaden ${bb.damage} falsch`);
+    const np = applyUpgrades(resolveCfg(tanksData, 'c_flame'), { sig_flame_napalm: 2 }, upgradesData, 'mine', null);
+    check(np.statusStackBonus === U.sig_flame_napalm.core.statusStackBonus * 2, `Phase 23: Napalm statusStackBonus ${np.statusStackBonus} falsch`);
+    const inf = applyUpgrades(resolveCfg(tanksData, 'c_flame'), { sig_flame_inferno: 1 }, upgradesData, 'mine', null);
+    check(inf.statusMaxStacksBonus === U.sig_flame_inferno.core.statusMaxStacksBonus, `Phase 23: Inferno statusMaxStacksBonus ${inf.statusMaxStacksBonus} falsch`);
+    check(Math.abs(inf.fireDurationMult - 1.25 * U.sig_flame_inferno.core.fireDurationMult) < 1e-6, `Phase 23: Inferno Branddauer ${inf.fireDurationMult} falsch`);
+    const bh = applyUpgrades(resolveCfg(tanksData, 'c_flame'), { sig_flame_brandherd: 1 }, upgradesData, 'mine', null);
+    check(bh.fireSpreadRadius === U.sig_flame_brandherd.core.fireSpreadRadius, `Phase 23: Brandherd fireSpreadRadius ${bh.fireSpreadRadius} falsch`);
+  }
+
+  // (d) Gemeinsamer Tag signature -> hoechstens eine Feuer-Signatur pro Angebot.
+  {
+    const rng = mulberry32(103);
+    let maxProAngebot = 0;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_flame',
+      });
+      const n = offers.filter((o) => String(o.id || '').startsWith('sig_flame_')).length;
+      if (n > maxProAngebot) maxProAngebot = n;
+    }
+    check(maxProAngebot === 1, `Phase 23: bis zu ${maxProAngebot} Feuer-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+  }
+}
+
 // ---- Hilfen fuer den Auto-Durchlauf --------------------------------------
 const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 const STEP = 1 / 60;
