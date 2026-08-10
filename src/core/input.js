@@ -249,6 +249,19 @@ export function createInput(target, canvas, opts = {}) {
         y: (down(dpad.down) ? 1 : 0) - (down(dpad.up) ? 1 : 0),
       },
     };
+    // Menue-Navigation: GEHALTENE Richtung aus D-Pad ODER linkem Stick (nicht
+    // nur die Flanke). menunav.js macht daraus die Wiederholung (erst ein
+    // Schritt, dann Auto-Repeat, solange gehalten) -- so wie die Tastatur.
+    // Die Doktrin (SPEC.md 9) nennt fuer Menues das D-Pad; der Stick kommt
+    // bewusst als Zusatz dazu, weil praktisch jeder Controller-Nutzer Menues
+    // mit dem linken Stick bedient. Eigene, hoehere Schwelle als die
+    // Fahr-Deadzone, damit ein leicht ausgelenkter Stick nicht scrollt.
+    const mt = stickCfg.menuThreshold ?? 0.5;
+    const q = (v) => (v > mt ? 1 : v < -mt ? -1 : 0);
+    out.menuAxis = {
+      x: (down(dpad.right) ? 1 : 0) - (down(dpad.left) ? 1 : 0) || q(move.x),
+      y: (down(dpad.down) ? 1 : 0) - (down(dpad.up) ? 1 : 0) || q(move.y),
+    };
     // Release = die fallende Flanke der Halte-Tasten (Doktrin: zielen und
     // ausloesen sind auf dem Controller getrennt, ausgeloest wird beim
     // Loslassen wie auf dem Handy).
@@ -419,7 +432,10 @@ export function createInput(target, canvas, opts = {}) {
     getMenuState() {
       const gp = pollGamepad();
       const kb = keyboardMove();
-      const menuDir = gp && (gp.menuDir.x || gp.menuDir.y) ? gp.menuDir : kb;
+      // GEHALTENE Gamepad-Richtung (Stick + D-Pad, menuAxis) hat Vorrang, sonst
+      // die Tastatur. Beide sind gehalten -> menunav.js macht die Wiederholung.
+      const gpDir = gp?.menuAxis;
+      const menuDir = gpDir && (gpDir.x || gpDir.y) ? gpDir : kb;
       const menuConfirm = !!(queued.menuConfirm || gp?.menuConfirm);
       queued.menuConfirm = false;
       return { menuDir, menuConfirm };

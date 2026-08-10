@@ -2764,7 +2764,42 @@ und die „gezogene Verteilung" an einer synthetischen Liste (Abschnitt 18b).
   Der im Plan genannte Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0) ist ein
   manuelles Spielgefühl-Urteil, kein automatisierbarer Test, und bleibt offen.
 
+### Controller-Steuerung „richtig gemacht" (Nutzer-Meldung) — gemergt
+Meldung: Controller (Xbox) „reagiert gar nicht" + „Menü nicht bedienbar" (PC
+und Handy). Diagnose mit einem **injizierten Standard-Gamepad** (Playwright +
+Node-Isolationstest von `input.js`): In-Game (linker Stick fahren, RT feuern)
+war korrekt — der Bug lag im Menü. Zwei echte Lücken:
+- **`src/core/input.js`**: die Menü-Richtung kam NUR aus der D-Pad-**Flanke**.
+  Der **linke Stick navigierte gar nicht** (das machen praktisch alle
+  Controller-Nutzer), und ein gehaltenes D-Pad **wiederholte nicht**. Fix:
+  `getMenuState()` liefert jetzt eine **gehaltene** Richtung `menuAxis` aus
+  **Stick ODER D-Pad** (Schwelle `data/input.json: stick.menuThreshold` 0,5);
+  die Wiederholung (erst ein Schritt, dann Auto-Repeat) macht `menunav.js` —
+  genau wie bei der Tastatur. Die SPEC-Doktrin (Abschnitt 9) nennt fürs Menü
+  das D-Pad; der Stick kommt bewusst als Zusatz dazu.
+- **`src/main.js`**: die **In-Run-Overlays** (Upgrade, Karte, Shop, Event,
+  Raumvorschau + Ausrüstungsseite) hatten **gar keine** Controller-Navigation —
+  nur Maus/Touch. Neu: ein generischer `runOverlayNav` (dieselbe `menunav`)
+  navigiert das jeweils sichtbare Overlay (`visibleRunOverlay()`), die
+  Spiellogik pausiert dahinter — genau wie der Startbildschirm. Maus/Touch
+  laufen parallel weiter. **Umsetzungsfund:** ein `offsetParent !== null`-Filter
+  auf der Fokusliste verwarf in den fixed-positionierten Overlays fast alle
+  Knöpfe (nur einer blieb → Fokus klebte); der bewährte `focusablesIn` filtert
+  nur `hidden`/`disabled`, also tut das der Overlay-Nav jetzt auch.
+- **`tests/gamepad.mjs` (NEU, dependency-frei)**: stubbt `navigator.getGamepads`
+  und prüft `input.js` — Stick fährt, RT feuert (kein Autofire), Stick UND
+  D-Pad liefern eine **gehaltene** Menü-Richtung, A bestätigt genau einmal
+  (Flanke). Gegenprobe bestanden: alte edge-basierte `menuDir` → 4 Checks rot.
+  End-to-end im Browser gegengeprüft (Fake-Xbox-Pad: Startmenü-Stick +
+  Auto-Repeat, Vorschau per Stick + A → Raum startet).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
+      auf dem Gamepad nur die Turmrichtung (`secondaryAim`/`gadgetAim` werden in
+      `profileGamepad` nicht gesetzt) — Richtung stimmt, aber die Wurfweite lässt
+      sich nicht wie am Handy dosieren. (2) Der A-Knopf legt im Spiel zusätzlich
+      eine Bombe (`secondaryAlt`), obwohl die Doktrin dafür LT vorsieht — bei
+      Bedarf entkoppeln. Beides ist Komfort, kein „reagiert nicht"-Blocker.
 - [ ] **Bankshot-Faktor (UMBAUPLAN-LP „Was dieser Umbau nicht löst")**: auf
       Nutzerwunsch von 2,0 auf **2,5** angehoben (`balance.json:
       bullet.wallBounceDamageMult`) — der freiwillige Bankshot fühlte sich zu
@@ -2865,7 +2900,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v101`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v102`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2902,6 +2937,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 python3 -m http.server 8099        # dann http://localhost:8099/index.html
 node --check src/<datei>.js         # Syntax
 node tests/regression.mjs           # Regressionssuite (eingecheckt!)
+node tests/gamepad.mjs              # Controller-Eingabe (dependency-frei, gestubbtes Gamepad)
 node tests/uilayout.mjs             # Overlay-Layout (braucht Playwright)
 node tests/viewport.mjs             # DPR/Viewport + Zielkoordinaten (Playwright, braucht eigenen Server auf :8099)
 node tests/fogperf.mjs              # Additive Lichtmaske: Korrektheit + Renderzeit (Playwright, P11)
