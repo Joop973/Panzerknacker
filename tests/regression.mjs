@@ -2086,9 +2086,14 @@ function check(ok, msg) {
     e2.hp = 900;
     const gebandet = schadenAn(st2, e2, st2.player, { explosive: true, bounces: 1 });
     const aufschlag = st1.player.cfg.damage;
+    // Nur der AUFSCHLAG traegt den Faktor: die Differenz ist der Extra-Aufschlag
+    // (round(dmg*MULT) - dmg), NICHT der ganze Aufschlag -- bei MULT=2 waren beide
+    // zufaellig gleich, bei 2,5 nicht mehr. Die Explosion bleibt konstant.
+    const MULT = tanksData.balance.bullet.wallBounceDamageMult;
+    const extra = Math.round(aufschlag * MULT) - aufschlag;
     check(
-      gebandet - direkt === aufschlag,
-      `Phase 4: gebandetes Sprenggeschoss macht ${gebandet - direkt} mehr statt ${aufschlag} -- die Explosion wurde mitverdoppelt`,
+      gebandet - direkt === extra,
+      `Phase 4: gebandetes Sprenggeschoss macht ${gebandet - direkt} mehr statt ${extra} -- die Explosion wurde mitskaliert`,
     );
   }
 
@@ -2683,8 +2688,13 @@ function check(ok, msg) {
     const prism = resolveCfg(tanksData, 't_prism');
     const normal = resolveCfg(tanksData, 't_brown');
     check(trefferAuf(prism, { bounces: 0 }) === 10, 'Phase 8: Prisma nimmt keinen normalen Direktschaden');
-    check(trefferAuf(prism, { bounces: 1 }) === 30, 'Phase 8: Prisma nimmt aus dem Bankshot nicht 3x (30)');
-    check(trefferAuf(normal, { bounces: 1 }) === 20, 'Phase 8: normaler Gegner nimmt aus dem Bankshot nicht 2x (20)');
+    check(trefferAuf(prism, { bounces: 1 }) === 30, 'Phase 8: Prisma nimmt aus dem Bankshot nicht 3x (30) -- der eigene Faktor ersetzt den globalen');
+    // Der normale Gegner nimmt den GLOBALEN Abprall-Faktor (balance, aktuell 2,5),
+    // nicht die 3x des Prismas -- dynamisch gelesen, damit eine Faktor-Aenderung
+    // den Test nicht grundlos rot macht. Design-Aussage: das Prisma bleibt haerter.
+    const bounceMult = tanksData.balance.bullet.wallBounceDamageMult;
+    check(trefferAuf(normal, { bounces: 1 }) === Math.round(10 * bounceMult), `Phase 8: normaler Gegner nimmt aus dem Bankshot nicht ${bounceMult}x`);
+    check(trefferAuf(prism, { bounces: 1 }) > trefferAuf(normal, { bounces: 1 }), 'Phase 8: das Prisma ist beim Bankshot nicht mehr haerter als ein normaler Gegner');
     check(trefferAuf(normal, { bounces: 0 }) === 10, 'Phase 8: normaler Direktschaden nicht 10');
   }
 
@@ -3072,10 +3082,14 @@ function check(ok, msg) {
   // (d) Kaltschütze: gebandeter Schuss ist kritisch (×2) trotz crit=false.
   //     Testschritt 3 (Zusammenspiel mit dem Bankschuss-Faktor).
   {
-    const plain = treffer({}, { damage: 10, bounces: 1 }).dmg; // Abprall ×2 = 20
-    const cold = treffer({ critOnBounce: true }, { damage: 10, bounces: 1 }).dmg; // ×2 Abprall × ×2 Krit = 40
-    check(plain === 20, `Phase 11: Vorbedingung Bankschaden ${plain} statt 20`);
-    check(cold === 40, `Phase 11: Kaltschütze macht gebandeten Schuss nicht kritisch (${cold} statt 40)`);
+    // Faktoren dynamisch aus balance.json (Abprall aktuell 2,5, Krit 2), damit
+    // eine Faktor-Aenderung den Test nicht grundlos rot macht.
+    const MULT = tanksData.balance.bullet.wallBounceDamageMult;
+    const critMult = tanksData.balance.crit.mult;
+    const plain = treffer({}, { damage: 10, bounces: 1 }).dmg; // Abprall = 10*MULT
+    const cold = treffer({ critOnBounce: true }, { damage: 10, bounces: 1 }).dmg; // Abprall * Krit
+    check(plain === Math.round(10 * MULT), `Phase 11: Vorbedingung Bankschaden ${plain} statt ${Math.round(10 * MULT)}`);
+    check(cold === Math.round(10 * MULT * critMult), `Phase 11: Kaltschütze macht gebandeten Schuss nicht kritisch (${cold} statt ${Math.round(10 * MULT * critMult)})`);
   }
 
   // (e) Splittergeschoss: Krit-Faktor +0,5 -> ×2,5.
@@ -3093,10 +3107,12 @@ function check(ok, msg) {
     check(high === 10, `Phase 11: Fangschuss trifft volles Ziel faelschlich haerter (${high} statt 10)`);
   }
 
-  // (g) Abprallkönig: gebandet Abprall ×2 UND Bonus ×2 = ×4.
+  // (g) Abprallkönig: gebandet Abprall-Faktor UND Bonus ×2 (1 + bounceDamageBonus).
   {
+    const MULT = tanksData.balance.bullet.wallBounceDamageMult;
     const king = treffer({ bounceDamageBonus: 1.0 }, { damage: 10, bounces: 1 }).dmg;
-    check(king === 40, `Phase 11: Abprallkönig gebandet ${king} statt 40`);
+    const erw = Math.round(10 * MULT * (1 + 1.0));
+    check(king === erw, `Phase 11: Abprallkönig gebandet ${king} statt ${erw}`);
   }
 
   // (h) Kopfschuss: ein Krit tötet einen Nicht-Boss sofort.
