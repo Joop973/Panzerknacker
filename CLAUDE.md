@@ -2765,11 +2765,12 @@ und die „gezogene Verteilung" an einer synthetischen Liste (Abschnitt 18b).
   manuelles Spielgefühl-Urteil, kein automatisierbarer Test, und bleibt offen.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Bankshot-Faktor-Kalttest (UMBAUPLAN-LP „Was dieser Umbau nicht löst")**:
-      sieben Tage nicht spielen, dann einen Run machen und zählen, wie oft man
-      *freiwillig* gebandet hat. Fällt die Zahl unter ein Viertel der Schüsse,
-      ist `balance.json: bullet.wallBounceDamageMult` (2,0) zu niedrig und
-      gehört auf 2,5 oder 3,0. Reine Datenänderung, kein automatisierbarer Test.
+- [ ] **Bankshot-Faktor (UMBAUPLAN-LP „Was dieser Umbau nicht löst")**: auf
+      Nutzerwunsch von 2,0 auf **2,5** angehoben (`balance.json:
+      bullet.wallBounceDamageMult`) — der freiwillige Bankshot fühlte sich zu
+      flach an. Nächster Schritt laut Plan wäre **3,0**, falls 2,5 immer noch zu
+      schwach wirkt (reine Datenänderung; die Regressionstests lesen den Faktor
+      dynamisch, kein Testumbau nötig).
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
       (Median-Todesraum, Abpraller-Anteil, minFps, nie gewählte +
@@ -2864,7 +2865,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v100`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v101`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
