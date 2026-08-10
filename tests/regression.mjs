@@ -4736,6 +4736,139 @@ for (const seed of SEEDS) {
   check(gridOf(a) === gridOf(b), 'Raum 1 ist bei gleichem Seed nicht deterministisch');
 }
 
+// ---- 36. UMBAUPLAN-LP Phase 28: Schlussabnahme des LP-Umbaus -------------
+// Die dauerhaften Abnahmetests aus Plan-Phase 28. Drei der fuenf verlangten
+// Punkte sind schon abgedeckt und bleiben, wo sie sind:
+//   - "Zeit bis zum Tod" (Trefferzahl je Gegnertyp): Abschnitt 10a.
+//   - "Rechenzeit" (Frame-Budget des Bankshot-Solvers): Abschnitt 7c (heute
+//     ~2 ms gegen 6 ms -- die 8,86-ms-Zahl im Plan ist veraltet, s. CLAUDE.md).
+//   - "Gezogene Verteilung" (Normierung bei ungleichen Poolgroessen): Abschnitt
+//     18b prueft den weightedPick-Fix an einer synthetischen Liste.
+// Hier NEU: (a) die gezogene Verteilung ueber den ECHTEN Pool via rollOffers,
+// (b) eine Poolgroessen-Zusicherung (keine leere Seltenheitsstufe) und
+// (c) die Raumdauer als deterministische HP/DPS-Schranke.
+{
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const { isBossCfg } = await import('../src/game/cfg.js');
+
+  // (a) Gezogene Verteilung ueber den echten Angebotspool. Plan: "2.000 Runs
+  //     simulieren, Abweichung von balance.rarity ueber 5 Prozentpunkte ->
+  //     Fehler." Wir ziehen 2.000 Angebote (je 3 Karten) einer echten Klasse
+  //     im Raum 10 (Legendaries ab Raum 5 frei) und zaehlen die Seltenheit der
+  //     tatsaechlich angebotenen Karten. Das prueft weightedPick + Element-/
+  //     Signatur-Filter im Zusammenspiel, nicht nur eine synthetische Liste.
+  {
+    const weights = tanksData.balance.rarity; // 60/30/10
+    const rng = mulberry32(20260728);
+    const zieh = { common: 0, rare: 0, legendary: 0 };
+    let n = 0;
+    for (let i = 0; i < 2000; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'player', elements: ['physical'],
+      });
+      for (const o of offers) {
+        if (o.fallback) continue;
+        zieh[o.rarity]++;
+        n++;
+      }
+    }
+    const pct = (k) => (100 * zieh[k]) / n;
+    for (const k of ['common', 'rare', 'legendary']) {
+      check(
+        Math.abs(pct(k) - weights[k]) <= 5,
+        `Phase 28: gezogene Verteilung ${k} ${pct(k).toFixed(1)} % weicht > 5 pp von ${weights[k]} % ab`,
+      );
+    }
+  }
+
+  // (b) Poolgroessen: der Plan wollte urspruenglich gleich grosse Stufen
+  //     (Abweichung > 1 Karte -> Fehler). Der weightedPick-Fix aus Phase 10
+  //     hat das UEBERHOLT -- die Verteilung ist jetzt groessenunabhaengig, und
+  //     die Toepfe ab Phase 11 machen die Stufen bewusst ungleich. Die
+  //     verbleibende harte Zusicherung: keine Seltenheitsstufe ist LEER (sonst
+  //     teilt weightedPick durch 0 und die 60/30/10-Garantie bricht). Fuer jede
+  //     Klasse im Raum 10 gemessen.
+  {
+    const klassen = Object.entries(tanksData.types).filter(([, t]) => t.player).map(([id]) => id);
+    for (const klass of klassen) {
+      const el = tanksData.types[klass].damageType || 'physical';
+      const rng = mulberry32(5);
+      const tiers = { common: 0, rare: 0, legendary: 0 };
+      // Viele Angebote ziehen, damit jede vorhandene Stufe mindestens einmal
+      // auftaucht (die Tag-Regel begrenzt EIN Angebot, nicht den Pool).
+      for (let i = 0; i < 300; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+          starterTank: klass, elements: [el],
+        });
+        for (const o of offers) if (!o.fallback) tiers[o.rarity]++;
+      }
+      for (const t of ['common', 'rare', 'legendary']) {
+        check(tiers[t] > 0, `Phase 28: Klasse ${klass} hat im Raum 10 keine ziehbare ${t}-Karte (leere Stufe)`);
+      }
+    }
+  }
+
+  // (c) Raumdauer: "Simulierter Raum in Raum 10 darf ein Zeitbudget nicht
+  //     ueberschreiten -- der Test, der verhindert, dass Raeume wieder lang
+  //     statt schwer werden." Ein bewegungsfaehiger Bot ist hier NICHT belastbar
+  //     (er verkantet sich bei freier Mitte-zu-Mitte-Sichtlinie, s. CLAUDE.md
+  //     Phase 3). Deshalb eine DETERMINISTISCHE Schranke: die minimale Zeit, um
+  //     alle Gegner eines Raums >=10 mit dem STANDARD-Schaden (10) und der
+  //     Grund-Feuerrate zu toeten (Trefferzahl x Nachladeschritt). Steigt die
+  //     Gegner-LP wieder unkontrolliert, waechst diese Zeit -- genau die
+  //     Regression, die der Plan fuerchtet. Einseitige Schranke (faengt
+  //     HP-Inflation, nicht KI-Traegheit -- die KI aendert der LP-Umbau nicht).
+  {
+    const { resolveCfg } = await import('../src/game/cfg.js');
+    const DMG = tanksData.types.player.damage; // 10 -- der Standardpanzer
+    const CD = resolveCfg(tanksData, 'player').fireCooldown; // Grund-Nachladeschritt (0,25 s)
+    const BUDGET = 30; // s -- deterministisch, ~25 % ueber der Messung (Gegenprobe rot)
+    let worst = 0;
+    let worstInfo = '';
+    for (const seed of SEEDS) {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
+      let guard = 200000;
+      const seen = new Set();
+      while (run.phase !== 'victory' && run.phase !== 'gameover' && guard-- > 0) {
+        if (run.phase === 'preview') enterRoom(run);
+        else if (run.phase === 'transition') stepRun(run, CMD, STEP);
+        else if (run.phase === 'playing') {
+          const st = run.state;
+          if (!seen.has(run.roomIndex)) {
+            seen.add(run.roomIndex);
+            const living = st.tanks.filter((t) => t !== st.player && t.alive);
+            const boss = living.some((t) => isBossCfg(t.cfg));
+            if (run.roomIndex >= 10 && living.length && !boss) {
+              let hits = 0;
+              for (const t of living) hits += Math.ceil(t.hp / DMG);
+              const avg = hits / living.length;
+              const pend = st.pendingWave ? st.pendingWave.types.length : 0;
+              const total = hits + pend * avg; // zweite Welle: gleiche Rezeptur
+              const minClear = total * CD;
+              if (minClear > worst) {
+                worst = minClear;
+                worstInfo = `Seed ${seed}, Raum ${run.roomIndex}: ${living.length} lebende + ${pend} Welle, ${total.toFixed(0)} Treffer`;
+              }
+            }
+          }
+          cheatKillAll(st);
+          stepRun(run, CMD, STEP);
+        } else if (run.phase === 'upgrade') chooseUpgrade(run, 0);
+        else if (run.phase === 'map') pickMapNode(run);
+        else if (run.phase === 'workshop') leaveWorkshop(run);
+        else if (run.phase === 'event') chooseEventOption(run, 0);
+        else break;
+      }
+    }
+    console.log(`Phase 28 Raumdauer: schlimmster Raum >=10 = ${worst.toFixed(1)} s Mindest-Räumzeit (Budget ${BUDGET} s) -- ${worstInfo}`);
+    check(worst > 0, 'Phase 28: kein Kampfraum >=10 gemessen (Test-Setup)');
+    check(worst <= BUDGET, `Phase 28: Raum >=10 braucht mindestens ${worst.toFixed(1)} s (Budget ${BUDGET} s) -- ${worstInfo}`);
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

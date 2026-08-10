@@ -233,9 +233,16 @@ vierter und letzter Signaturtopf mit 12 Karten (4/4/4) für den Ingenieur
 (`c_engineer`) — Minen-/Explosiv-Schlüssel plus eine **neue klassenexklusive
 Regel** `builtHpBonus` (haltbarere Sperrmauer). **Damit sind alle zehn
 Signaturtöpfe (Phasen 18–27) fertig.**
-**Nächste Sitzung: Phase 28 (Balance + neue Tests — die Schlussabnahme des
-LP-Umbaus).** `PLAN.md`/die Telemetrie-Auswertung bleibt parallel offen
-(s. To-do-Liste unten).
+**Phase 28 (Balance + neue Tests) ist gebaut** (s. eigener Abschnitt unten):
+die Schlussabnahme des LP-Umbaus — gezogene Verteilung über den echten Pool,
+Zusicherung gegen leere Seltenheitsstufen und eine deterministische
+Raumdauer-Schranke. **Damit ist der komplette `UMBAUPLAN-LP.md` (Phasen 1–28)
+abgearbeitet — das Spiel läuft vollständig auf Lebenspunkte, zehn Klassen und
+sechs Schadenstypen.**
+**Nächste Sitzung: kein Pflichtthema mehr offen.** Verbleibend nur noch
+manuelle/optionale Punkte (s. To-do-Liste unten): der Bankshot-Faktor-Kalttest
+(2,0 → ggf. 2,5/3,0, nur nach echtem Spielgefühl) und die Telemetrie-Auswertung
+echter Runs. Neue Wünsche des Nutzers abwarten.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -2723,7 +2730,46 @@ ihren Signaturtopf (Phasen 18–27).**
   Rarität verdreht → Verteilung ≠ 4/4/4; Filter aus → fremde Klasse sieht die
   Karten.
 
+### UMBAUPLAN-LP Phase 28 (Balance + neue Tests) — gemergt
+Die Schlussabnahme des LP-Umbaus. **Drei der fünf verlangten Dauertests waren
+schon abgedeckt** und bleiben, wo sie sind: „Zeit bis zum Tod" (Trefferzahl je
+Gegnertyp, Abschnitt 10a), „Rechenzeit" (Frame-Budget des Bankshot-Solvers,
+Abschnitt 7c — heute ~2 ms gegen 6 ms; die 8,86-ms-Zahl im Plan war veraltet)
+und die „gezogene Verteilung" an einer synthetischen Liste (Abschnitt 18b).
+**Neu in Abschnitt 36:**
+- **Gezogene Verteilung über den echten Pool**: 2.000 `rollOffers`-Angebote
+  (je 3 Karten) einer echten Klasse im Raum 10, die Seltenheit der tatsächlich
+  angebotenen Karten muss auf ≤ 5 Prozentpunkte an `balance.rarity` (60/30/10)
+  liegen. Prüft `weightedPick` + Element-/Signatur-Filter im Zusammenspiel.
+- **Keine leere Seltenheitsstufe**: der Plan wollte ursprünglich gleich große
+  Stufen (Abweichung > 1 Karte → Fehler); der `weightedPick`-Fix (Phase 10) hat
+  das **überholt** — die Verteilung ist größenunabhängig, die Töpfe ab Phase 11
+  machen die Stufen bewusst ungleich. Die verbleibende harte Zusicherung: für
+  jede der zehn Klassen ist im Raum 10 jede Seltenheitsstufe (common/rare/
+  legendary) ziehbar (sonst teilte `weightedPick` durch 0 und die
+  60/30/10-Garantie bräche).
+- **Raumdauer als deterministische HP/DPS-Schranke**: „verhindert, dass Räume
+  wieder lang statt schwer werden". Ein bewegungsfähiger Bot ist hier **nicht
+  belastbar** (verkantet sich bei freier Mitte-zu-Mitte-Sichtlinie, s. Phase 3),
+  deshalb eine deterministische Schranke: die minimale Zeit, alle Gegner eines
+  Raums ≥ 10 mit dem **Standard-Schaden (10)** und der Grund-Feuerrate zu töten
+  (Trefferzahl × Nachladeschritt, inkl. zweiter Welle). Gemessener schlimmster
+  Raum: **24,0 s** (Budget **30 s**). Einseitige Schranke — fängt HP-Inflation
+  (die eigentliche „lang statt schwer"-Regression des LP-Umbaus), nicht
+  KI-Trägheit (die der Umbau nicht anfasst). Gegenproben rot bestätigt:
+  Gegner-LP aufgebläht → Raumdauer 47 s > Budget; `weightedPick`-Normierung
+  ausgebaut → gezogene Verteilung ≠ 60/30/10; `legendary.minRoom` = 99 →
+  leere Legendary-Stufe.
+- **Keine Balance-Werte geändert**: alle Tests sind am aktuellen Stand grün.
+  Der im Plan genannte Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0) ist ein
+  manuelles Spielgefühl-Urteil, kein automatisierbarer Test, und bleibt offen.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **Bankshot-Faktor-Kalttest (UMBAUPLAN-LP „Was dieser Umbau nicht löst")**:
+      sieben Tage nicht spielen, dann einen Run machen und zählen, wie oft man
+      *freiwillig* gebandet hat. Fällt die Zahl unter ein Viertel der Schüsse,
+      ist `balance.json: bullet.wallBounceDamageMult` (2,0) zu niedrig und
+      gehört auf 2,5 oder 3,0. Reine Datenänderung, kein automatisierbarer Test.
 - [ ] **Nachzuholen (aufgeschoben, blockiert nichts)**: 15–20 Runs spielen
       und die Debug-Ansicht (`?debug=1`) auswerten — sie rechnet selbst
       (Median-Todesraum, Abpraller-Anteil, minFps, nie gewählte +
@@ -2818,7 +2864,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v99`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v100`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2867,8 +2913,10 @@ crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
 `tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
-LP-Umbau-Abschnitte 9–35 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
+LP-Umbau-Abschnitte 9–36 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
-Phase-18–27-Signaturtöpfe (alle zehn Klassen) + `signatureClass`-Filter). Die frühere
+Phase-18–27-Signaturtöpfe (alle zehn Klassen) + `signatureClass`-Filter,
+Phase-28-Schlussabnahme (gezogene Verteilung über den echten Pool, keine leere
+Seltenheitsstufe, Raumdauer als HP/DPS-Schranke)). Die frühere
 USP-Bankshot-Quote ist mit Phase 8 entfallen.
