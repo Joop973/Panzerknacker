@@ -4,7 +4,8 @@
   "stick": {
     "deadzone": 0.15,
     "twoZone": false,
-    "fireThreshold": 0.6
+    "fireThreshold": 0.6,
+    "menuThreshold": 0.5
   },
 
   "player": {

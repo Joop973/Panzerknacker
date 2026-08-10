@@ -505,6 +505,22 @@ async function init() {
       return;
     }
     if (input.consumePause()) pause.toggle();
+
+    // Ist ein In-Run-Overlay sichtbar (Upgrade/Karte/Shop/Event/Vorschau), wird
+    // es per Controller/Tastatur navigiert und die Spiellogik pausiert dahinter
+    // -- genau wie der Startbildschirm oben. Maus/Touch funktionieren parallel
+    // weiter (die Nav setzt nur den Fokus + loest A/Enter als Klick aus).
+    const runOverlay = visibleRunOverlay();
+    if (runOverlay) {
+      if (runOverlay !== lastRunOverlay) {
+        runOverlayNav.reset();
+        lastRunOverlay = runOverlay;
+      }
+      runOverlayNav.update(input.getMenuState(), dt);
+      return;
+    }
+    lastRunOverlay = null;
+
     if (pause.isPaused()) return;
 
     // EINZIGE Eingabequelle der Spiellogik: der vereinheitlichte Zustand.
@@ -960,6 +976,36 @@ async function init() {
   const startMenuNav = createMenuNav(focusablesIn(startOverlay));
   const settingsMenuNav = createMenuNav(focusablesIn(settingsOverlay));
   let activeMenuNav = startMenuNav;
+
+  // Controller-/Tastatur-Navigation der IN-RUN-Overlays (nach dem Rundenstart):
+  // Upgrade-Screen, Karte, Shop, Event, Raumvorschau + Ausruestungsseite. Die
+  // waren bisher nur per Maus/Touch bedienbar -- mit Controller also "nicht
+  // bedienbar". Dieselbe generische menunav wie der Startbildschirm, nur ueber
+  // das gerade sichtbare Overlay (Prioritaet: die oberste Ausruestungsseite vor
+  // der Vorschau darunter). Die Overlays werden von ihren Modulen bei der
+  // Initialisierung erzeugt, existieren hier also.
+  const RUN_OVERLAY_IDS = ['previewUpgrades', 'preview', 'upgrade', 'event', 'workshop', 'map'];
+  function visibleRunOverlay() {
+    for (const id of RUN_OVERLAY_IDS) {
+      const el = document.getElementById(id);
+      if (el && !el.classList.contains('hidden')) return el;
+    }
+    return null;
+  }
+  // Fokusliste GENAU wie beim Startbildschirm (focusablesIn): nur sichtbare,
+  // aktive Knoepfe/Eingaben -- OHNE offsetParent-Pruefung. Die haette in der
+  // Vorschau (fixed-positioniertes Overlay) faelschlich fast alle Knoepfe
+  // verworfen, sodass nur einer uebrig blieb und der Fokus nie wanderte. Da
+  // visibleRunOverlay() bereits das EINE sichtbare Overlay liefert, reicht der
+  // hidden/disabled-Filter auf dessen eigenen Knoepfen.
+  const runOverlayNav = createMenuNav(() => {
+    const ov = visibleRunOverlay();
+    if (!ov) return [];
+    return [...ov.querySelectorAll('button, input')].filter(
+      (el) => !el.classList.contains('hidden') && !el.disabled,
+    );
+  });
+  let lastRunOverlay = null;
 
   // Phase 9: Klassenauswahl-Seite. Fuellt sich aus tanks.json (player:true),
   // zeigt Name/Werte/Beschreibung, merkt die Wahl in den Prefs.
