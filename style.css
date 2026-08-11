@@ -660,6 +660,18 @@ html, body {
   background: #26241a;
 }
 
+/* Phase 2: gesperrte Klasse -- sichtbar, aber nicht waehlbar. Bewusst
+   deutlich anders als die Auswahl (.active = goldener Rahmen) und der
+   Fokusrahmen (.menu-focus = gelbe Outline): gedimmt, gestrichelt, Schloss. */
+.classlist button.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+.classlist button.locked .cl-name::after {
+  content: ' 🔒';
+}
+
 .classlist .cl-name {
   font-weight: bold;
   color: #eaf2ff;

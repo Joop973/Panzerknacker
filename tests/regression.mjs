@@ -878,6 +878,40 @@ function check(ok, msg) {
   }
 }
 
+// ---- 8l. PLAN-STARTMENU Phase 2: Klassenwahl (Freischaltung) ------------
+// Prueft die Klassenliste, die Freischalt-Regel und die drei Knopf-Zustaende
+// (gewaehlt / frei / gesperrt). Die Regel wird mit EIGENEN Zahlen geprueft
+// (synthetische defs), nicht an der aktuellen Datenlage (alle Klassen frei) --
+// sonst waere der Test bei der spaeteren Scharfschaltung grundlos rot/gruen.
+{
+  const { playerClassEntries, isClassUnlocked, createClassButton } = await import('../src/game/classes.js');
+  // (a) playerClassEntries = genau die spielbaren Klassen, keine Gegner/Bosse.
+  const entries = playerClassEntries(tanksData);
+  check(entries.length === 10, `Phase2: playerClassEntries liefert ${entries.length} statt 10 Klassen`);
+  check(entries.every(([, t]) => t.player === true), 'Phase2: playerClassEntries enthaelt einen Nicht-Spieler-Typ');
+  check(entries.some(([id]) => id === 'player') && !entries.some(([id]) => id === 't_brown'), 'Phase2: playerClassEntries filtert Gegner nicht heraus');
+  // (b) Freischalt-Regel.
+  check(isClassUnlocked({ unlocked: true }) === true, 'Phase2: unlocked:true nicht waehlbar');
+  check(isClassUnlocked({ unlocked: false }) === false, 'Phase2: unlocked:false ist trotzdem waehlbar');
+  check(isClassUnlocked({}) === true, 'Phase2: fehlendes unlocked-Feld sperrt (soll frei sein)');
+  check(isClassUnlocked({ unlocked: false }, { unlockAll: true }) === true, 'Phase2: unlockAll hebt die Sperre nicht auf');
+  // (c) createClassButton: drei Zustaende im Fake-DOM.
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const def = { label: 'Testklasse', maxHp: 42, damage: 7, desc: 'x' };
+    const sel = createClassButton(document, 'c_x', def, { selected: true, unlocked: true });
+    check(sel.classList.contains('active') && !sel.disabled && !sel.classList.contains('locked'), 'Phase2: gewaehlter Knopf nicht .active/enabled');
+    const locked = createClassButton(document, 'c_y', def, { selected: false, unlocked: false });
+    check(locked.classList.contains('locked') && locked.disabled === true, 'Phase2: gesperrter Knopf nicht .locked/disabled (sichtbar, aber nicht waehlbar)');
+    const free = createClassButton(document, 'c_z', def, { selected: false, unlocked: true });
+    check(!free.disabled && !free.classList.contains('active') && !free.classList.contains('locked'), 'Phase2: freier, nicht gewaehlter Knopf hat falsche Klassen');
+    check(free.dataset.class === 'c_z', 'Phase2: dataset.class nicht gesetzt');
+  } finally {
+    restore();
+  }
+}
+
 // ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------
 // Die Upgrade-Chips lagen im Hauptbereich der Raumvorschau und haben dort
 // bei vielen Karten den "Weiter"-Knopf aus dem Bild geschoben (Nutzer-

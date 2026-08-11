@@ -79,6 +79,7 @@
   "types": {
     "player": {
       "player": true,
+      "unlocked": true,
       "label": "Standard",
       "desc": "Ausgewogen. Keine Sonderregel — die Messlatte für alles andere.",
       "maxHp": 100,
@@ -93,6 +94,7 @@
     },
     "c_blast": {
       "player": true,
+      "unlocked": true,
       "label": "Sprengpanzer",
       "desc": "Zäh, aber langsam. Schießt Sprengstoff und legt Bomben mit +20 % Radius.",
       "maxHp": 115,
@@ -108,6 +110,7 @@
     },
     "c_frost": {
       "player": true,
+      "unlocked": true,
       "label": "Frostpanzer",
       "desc": "Schießt Frost. Seine Verlangsamung greift 20 % stärker.",
       "maxHp": 110,
@@ -123,6 +126,7 @@
     },
     "c_tesla": {
       "player": true,
+      "unlocked": true,
       "label": "Teslapanzer",
       "desc": "Zerbrechlich, schnell, hart. Blitze springen auf 4 statt 3 Ziele.",
       "maxHp": 90,
@@ -138,6 +142,7 @@
     },
     "c_toxic": {
       "player": true,
+      "unlocked": true,
       "label": "Radioaktiv",
       "desc": "Schießt Gift. Der Giftschaden hält 25 % länger an.",
       "maxHp": 105,
@@ -153,6 +158,7 @@
     },
     "c_scrap": {
       "player": true,
+      "unlocked": true,
       "label": "Schrottpanzer",
       "desc": "Wird mit dem Geldbeutel stärker: +5 % Schaden je 100 Schrott.",
       "maxHp": 95,
@@ -167,6 +173,7 @@
     },
     "c_ricochet": {
       "player": true,
+      "unlocked": true,
       "label": "Abprallpanzer",
       "desc": "Ein zusätzlicher Wandabpraller auf jedem Schuss.",
       "maxHp": 100,
@@ -181,6 +188,7 @@
     },
     "c_necro": {
       "player": true,
+      "unlocked": true,
       "label": "Nekromant",
       "desc": "25 % Chance, einen tödlichen Treffer zu überleben (volle LP).",
       "maxHp": 95,
@@ -195,6 +203,7 @@
     },
     "c_engineer": {
       "player": true,
+      "unlocked": true,
       "label": "Ingenieur",
       "desc": "Gebautes (Sperrmauer) hält 20 % mehr aus.",
       "maxHp": 105,
@@ -209,6 +218,7 @@
     },
     "c_flame": {
       "player": true,
+      "unlocked": true,
       "label": "Flammenpanzer",
       "desc": "Schießt Feuer. Der Brand hält 25 % länger an.",
       "maxHp": 100,

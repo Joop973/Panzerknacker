@@ -2838,10 +2838,42 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
     ohne Stack-Pop). Echter Browser-Smoke: Menü-Wechsel, Browser-Zurück,
     `skipToRun` — fehlerfrei.
 
+- **Phase 2 (Panzerklassenwahl-Screen) — erledigt.** Der Screen selbst
+  existierte schon (`#classScreen`, `buildClassList`); neu ist die
+  **Freischalt-Gating** und die Testbarkeit:
+  - **`src/game/classes.js`** (neu): `playerClassEntries(data)` (die zehn
+    `player:true`-Typen), `isClassUnlocked(def, {unlockAll})` (frei, wenn
+    `unlocked !== false` oder `unlockAll`; fehlendes Feld = frei) und
+    `createClassButton(doc, id, def, {selected, unlocked, fmtStats})` —
+    bewusst aus `main.js` extrahiert, damit die drei Zustände (gewählt/frei/
+    gesperrt) headless mit `domstub` prüfbar sind.
+  - **`data/tanks.json`**: `"unlocked": true` an alle zehn Klassen (Testphase
+    — alle frei; die Scharfschaltung kommt später, „Offene Punkte").
+  - **Gesperrte Klasse = sichtbar, aber nicht wählbar**: `createClassButton`
+    setzt `disabled` (die Fokus-Nav via `focusablesIn`-`!disabled` überspringt
+    sie) + `.locked` (gedimmt, gestrichelt, 🔒 in `style.css`). `main.js`
+    hängt den Klick-Handler nur bei freien Klassen an. `starterTank`-Guard
+    fällt auf `player` zurück, wenn die gespeicherte Klasse nicht (mehr)
+    spielbar/frei ist.
+  - **Auswahl vs. Fokus optisch getrennt**: `.active` = goldener Rahmen +
+    Hintergrund, `.menu-focus` = gelbe Outline (Testschritt 2).
+  - **`?debug=1&unlockAll`** hebt die Sperre pauschal auf (`classOpts` in
+    `main.js`).
+  - **Tests:** `regression.mjs` Abschnitt 8l (Klassenliste, Freischalt-Regel
+    mit **eigenen Zahlen**, drei Knopf-Zustände im Fake-DOM). Browser-Smoke
+    (mit temporär gesperrter Klasse) bestätigt: 10 Klassen, Auswahl markiert,
+    gesperrt = disabled/unklickbar, `unlockAll` macht wählbar.
+  - **`seen`-Flag (Codex) bewusst aufgeschoben** auf Phase 7 — es ist ein
+    Save-Konzept, kein statisches Datenfeld (siehe `STARTMENU-BESTAND.md`).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 2 (Klassenwahl-Screen mit
-      `unlocked`/`seen`-Flags + `unlockAll`-Debug) — die Klassenwahl selbst
-      existiert schon (`#classScreen`), es fehlen die Flags/Codex-Anbindung.
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 3 (Schwierigkeitsgrad-Auswahl).
+      Achtung Ist-Abgleich: `data/difficulty.json: modes` existiert schon
+      (`leicht`/`normal`/`schwer` mit `budgetMult`+`lives`), aber **ohne**
+      Gegner-HP-/Schadensmultiplikator — genau das will Phase 3 ergänzen.
+- [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
+      `unlocked: true`. Freischaltbedingungen definieren + `seen`/Codex in
+      Phase 7 anbinden.
 - [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
       auf dem Gamepad nur die Turmrichtung (`secondaryAim`/`gadgetAim` werden in
       `profileGamepad` nicht gesetzt) — Richtung stimmt, aber die Wurfweite lässt
@@ -2948,7 +2980,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v103`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v104`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

@@ -40,6 +40,7 @@ import { createPause } from './ui/pause.js';
 import { createMenuNav } from './ui/menunav.js';
 import { createMenu } from './ui/menu.js';
 import { DEBUG } from './core/debug.js';
+import { playerClassEntries, isClassUnlocked, createClassButton } from './game/classes.js';
 import { createTutorial } from './ui/hud.js';
 import {
   getFlag,
@@ -182,7 +183,12 @@ async function init() {
   // die Auswahl ueber Sitzungen erhalten bleibt; der laufende Run traegt sie
   // ausserdem im Snapshot (run.js), sodass "Fortsetzen" dieselbe Klasse laedt.
   let starterTank = getPref('starterTank', 'player');
-  if (!tanksData.types[starterTank]?.player) starterTank = 'player';
+  // Gueltig ist die gespeicherte Klasse nur, wenn sie eine spielbare UND
+  // freigeschaltete Klasse ist -- sonst zurueck auf Standard. Deckt auch den
+  // Fall ab, dass eine frueher gewaehlte Klasse spaeter gesperrt wird.
+  const classOpts = { unlockAll: DEBUG.unlockAll };
+  if (!tanksData.types[starterTank]?.player || !isClassUnlocked(tanksData.types[starterTank], classOpts))
+    starterTank = 'player';
 
   // ---- Telemetrie-Tracking (nur beobachtend, keine Spiellogik) ----
   let teleRoom = 0; // aktuell getimter Raum-Index
@@ -1009,7 +1015,7 @@ async function init() {
   const classScreen = document.getElementById('classScreen');
   const classListEl = document.getElementById('classList');
   const classOpenBtn = document.getElementById('classOpen');
-  const playerClasses = Object.entries(tanksData.types).filter(([, t]) => t.player);
+  const playerClasses = playerClassEntries(tanksData);
   const refreshClassBtn = () => {
     classOpenBtn.textContent = `Klasse: ${tanksData.types[starterTank]?.label || 'Standard'} ▸`;
   };
@@ -1018,26 +1024,23 @@ async function init() {
   function buildClassList() {
     classListEl.innerHTML = '';
     for (const [id, t] of playerClasses) {
-      const b = document.createElement('button');
-      b.dataset.class = id;
-      b.classList.toggle('active', id === starterTank);
-      const name = document.createElement('div');
-      name.className = 'cl-name';
-      name.textContent = t.label || id;
-      const stats = document.createElement('div');
-      stats.className = 'cl-stats';
-      stats.textContent = fmtClassStats(t);
-      const desc = document.createElement('div');
-      desc.className = 'cl-desc';
-      desc.textContent = t.desc || '';
-      b.append(name, stats, desc);
-      b.addEventListener('click', () => {
-        starterTank = id;
-        setPref('starterTank', id);
-        for (const btn of classListEl.querySelectorAll('button'))
-          btn.classList.toggle('active', btn.dataset.class === id);
-        refreshClassBtn();
+      const unlocked = isClassUnlocked(t, classOpts);
+      const b = createClassButton(document, id, t, {
+        selected: id === starterTank,
+        unlocked,
+        fmtStats: fmtClassStats,
       });
+      // Gesperrte Klassen bleiben sichtbar, sind aber nicht anklickbar
+      // (Phase-2-Testschritt 5) -- createClassButton setzt disabled + .locked.
+      if (unlocked) {
+        b.addEventListener('click', () => {
+          starterTank = id;
+          setPref('starterTank', id);
+          for (const btn of classListEl.querySelectorAll('button'))
+            btn.classList.toggle('active', btn.dataset.class === id);
+          refreshClassBtn();
+        });
+      }
       classListEl.appendChild(b);
     }
   }
