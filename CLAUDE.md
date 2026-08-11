@@ -2793,13 +2793,54 @@ war korrekt — der Bug lag im Menü. Zwei echte Lücken:
   End-to-end im Browser gegengeprüft (Fake-Xbox-Pad: Startmenü-Stick +
   Auto-Repeat, Vorschau per Stick + A → Raum startet).
 
+### Controller: Overlay-Navigation + Bomben-Zielwurf (Nutzer-Meldung) — gebaut
+Drei Beschwerden, alle behoben:
+- **Upgrade-Screen: „nur den Reroll ansteuerbar, keine Karte".** Die Upgrade-
+  und Shop-Karten sind **klickbare DIVs, keine `<button>`** (der Verbannen-
+  Knopf liegt im Kartendiv — Button-in-Button wäre ungültiges HTML), fielen
+  also aus der Fokusliste des `runOverlayNav` (`main.js`, Query war
+  `button, input`). Fix: pickbare Karten bekommen `data-navcard="1"` +
+  `tabindex=0` (`upgradescreen.js`, `roomscreens.js` — im Shop nur die
+  wirklich kaufbaren, nicht verkaufte/zu teure), die Query ist
+  `button, input, [data-navcard="1"]`. A bestätigt die fokussierte Karte
+  (`menunav.activate()` → `el.click()` auf dem DIV) — das lief schon vorher
+  über `menuConfirm`.
+- **Karten/Kartenknoten liegen nebeneinander, sollen mit LINKS/RECHTS
+  anwählbar sein, nicht nur hoch/runter.** `menunav.js` bekam eine Option
+  `{ bothAxes: true }`, die `runOverlayNav` setzt: dort traversiert die
+  X-Achse die (flache) Fokusliste genau wie die Y-Achse. Die Start-/
+  Einstellungs-/Klassenseiten bleiben beim reinen Y-Durchlauf (X nur für den
+  Lautstärkeregler), weil in den In-Run-Overlays kein Regler sitzt, mit dem
+  sich X beißen könnte. Der Kartenscreen (`mapscreen.js`) ist unverändert —
+  seine erreichbaren Knoten liegen ohnehin in einer Reihe, jetzt per
+  Links/Rechts erreichbar.
+- **Bombe „wird nur unter den Panzer gelegt, kein Radius/Richtung wählbar".**
+  Auf dem Gamepad setzte `profileGamepad` **keine** `secondaryAim` — beim
+  Loslassen von LT fehlte die Zielvorgabe, `layMine()` warf in Turmrichtung
+  die kurze Standardweite (`mine.throwPx` 58). Jetzt: **LT halten zielt mit
+  dem rechten Stick** (Richtung + Weite bis `input.json: aim.throwMaxPx` 114,
+  genau wie der Handy-Wurfstick `MINE_MAX_THROW`), **Loslassen wirft dorthin.**
+  Umsetzung in `input.js`: `padThrowAim(gp)` (Stickausschlag → `{angle, dist}`),
+  gemerkt in `padSecondaryAim`/`padGadgetAim` — die Zielvorgabe muss über
+  Frames gehalten werden, weil `secondaryHeld` auf der **fallenden Flanke**
+  (dem Wurf-Frame) schon `false` ist. Dieselbe Mechanik für den Gadgetslot
+  (RB): EMP-Wurf/Haken zielen jetzt ebenfalls über den rechten Stick.
+  `getMinePreview()`/`getGadgetPreview()`/`isGadgetAiming()` liefern die
+  Controller-Zielvorgabe für die **Live-Vorschau** (Wurflinie + Explosions-
+  radius wie am Handy). Der A-Knopf (`secondaryAlt`) bleibt als Sofort-Ablage
+  ohne Zielen erhalten (rückwärtskompatibel, siehe To-do).
+- **Tests, jeweils mit bestandener Gegenprobe**: `tests/gamepad.mjs`
+  (LT+Stick → Zielvorgabe/Vorschau, halber Ausschlag = halbe Weite, Wurf
+  übernimmt die gemerkte Vorgabe, LT ohne Stick = kein Zielwurf) und
+  `tests/regression.mjs` Abschnitt 8i-2 (Karten in der Fokusliste,
+  bothAxes-Traversierung mit X, A wählt die Karte; Gegenprobe: ohne
+  `data-navcard` 0 Karten, ohne bothAxes kein X-Durchlauf).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
-      auf dem Gamepad nur die Turmrichtung (`secondaryAim`/`gadgetAim` werden in
-      `profileGamepad` nicht gesetzt) — Richtung stimmt, aber die Wurfweite lässt
-      sich nicht wie am Handy dosieren. (2) Der A-Knopf legt im Spiel zusätzlich
-      eine Bombe (`secondaryAlt`), obwohl die Doktrin dafür LT vorsieht — bei
-      Bedarf entkoppeln. Beides ist Komfort, kein „reagiert nicht"-Blocker.
+- [ ] **Controller-Feinschliff (optional)**: Der A-Knopf legt im Spiel
+      weiterhin eine Bombe sofort ohne Zielen ab (`secondaryAlt`), obwohl die
+      Doktrin dafür LT vorsieht — bei Bedarf entkoppeln. Kein Blocker mehr, der
+      gezielte Wurf läuft jetzt über LT-Halten + rechten Stick.
 - [ ] **Bankshot-Faktor (UMBAUPLAN-LP „Was dieser Umbau nicht löst")**: auf
       Nutzerwunsch von 2,0 auf **2,5** angehoben (`balance.json:
       bullet.wallBounceDamageMult`) — der freiwillige Bankshot fühlte sich zu
@@ -2900,7 +2941,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v102`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v103`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

@@ -83,6 +83,13 @@ export function createUpgradeScreen() {
       card.className = 'card';
       card.dataset.rarity = o.rarity || 'common';
       card.dataset.tag = o.tag || '';
+      // Controller-/Tastatur-Navigation: die Karte ist ein klickbares DIV,
+      // kein <button> (der Verbannen-Knopf liegt darin -- Button-in-Button
+      // waere ungueltig). data-navcard nimmt sie in die Fokusliste der
+      // In-Run-Overlays auf (main.js: runOverlayNav), tabindex macht sie auch
+      // per Tab erreichbar.
+      card.dataset.navcard = '1';
+      card.tabIndex = 0;
       const lvl = o.fallback ? '' : ` (Stufe ${o.level}/${o.maxStacks})`;
       const meta = o.fallback
         ? ''

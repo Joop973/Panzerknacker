@@ -774,6 +774,67 @@ function check(ok, msg) {
   }
 }
 
+// ---- 8i-2. Controller-Navigation der In-Run-Overlays (Nutzermeldung) ------
+// Zwei Beschwerden: (1) im Upgrade-Screen erreichte der Controller nur die
+// Schrott-Knoepfe, keine Karte -- die Karten sind klickbare DIVs, keine
+// <button>s, und fielen deshalb aus der Fokusliste. (2) Karten/Kartenknoten
+// liegen NEBENEINANDER und sollen mit LINKS/RECHTS am Stick anwaehlbar sein,
+// nicht nur hoch/runter. Beide zusammen: cards -> [data-navcard], runOverlayNav
+// -> bothAxes.
+{
+  const { createMenuNav } = await import('../src/ui/menunav.js');
+  const { createUpgradeScreen } = await import('../src/ui/upgradescreen.js');
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const screen = createUpgradeScreen();
+    const offers = [
+      { name: 'Alpha', description: 'a', rarity: 'common', tag: 'damage', level: 1, maxStacks: 2 },
+      { name: 'Beta', description: 'b', rarity: 'rare', tag: 'reload', level: 1, maxStacks: 2 },
+      { name: 'Gamma', description: 'c', rarity: 'legendary', tag: 'speed', level: 1, maxStacks: 2 },
+    ];
+    let picked = -1;
+    screen.show({
+      getOffers: () => offers,
+      getScrap: () => 0,
+      costs: { ban: 1, reroll: 2, fourthCard: 3, shieldCharge: 4 },
+      showActions: false, // nur die Karten -- kein Schrott-Knopf
+      onPick: (i) => (picked = i),
+    });
+
+    // Genau die Fokusliste, die main.js: runOverlayNav benutzt.
+    const ov = document.getElementById('upgrade');
+    const focusables = () =>
+      [...ov.querySelectorAll('button, input, [data-navcard="1"]')].filter(
+        (el) => !el.classList.contains('hidden') && !el.disabled,
+      );
+    const list = focusables();
+    check(list.length === 3, `Overlay-Nav: Upgrade-Karten nicht in der Fokusliste (${list.length} statt 3)`);
+
+    // Gegenprobe: OHNE bothAxes traversiert die X-Achse die Liste NICHT
+    // (bisheriges Verhalten -- nur der Regler reagiert auf X).
+    const navY = createMenuNav(focusables);
+    navY.update({ menuDir: { x: 1, y: 0 }, menuConfirm: false }, 1 / 60);
+    check(
+      list[0].classList.contains('menu-focus'),
+      'Overlay-Nav (Gegenprobe): X-Achse bewegt ohne bothAxes den Fokus',
+    );
+
+    // Mit bothAxes: ein X-Schlag nach rechts wandert auf die naechste Karte...
+    const nav = createMenuNav(focusables, { bothAxes: true });
+    nav.update({ menuDir: { x: 1, y: 0 }, menuConfirm: false }, 1 / 60);
+    check(
+      list[1].classList.contains('menu-focus'),
+      'Overlay-Nav: LINKS/RECHTS am Stick bewegt den Kartenfokus nicht (bothAxes)',
+    );
+    // ...und A waehlt die fokussierte Karte aus (Klick auf das DIV).
+    nav.update({ menuDir: { x: 0, y: 0 }, menuConfirm: true }, 1 / 60);
+    check(picked === 1, `Overlay-Nav: A bestaetigt die fokussierte Karte nicht (picked=${picked})`);
+  } finally {
+    restore();
+  }
+}
+
 // ---- 8j. P9: getMenuState() braucht keinen Spieler -----------------------
 // Der Startbildschirm existiert vor dem ersten Run -- getState(player)
 // wuerde dort abstuerzen (kein Spieler). getMenuState() ist der eigens

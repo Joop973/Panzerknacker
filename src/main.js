@@ -998,13 +998,21 @@ async function init() {
   // verworfen, sodass nur einer uebrig blieb und der Fokus nie wanderte. Da
   // visibleRunOverlay() bereits das EINE sichtbare Overlay liefert, reicht der
   // hidden/disabled-Filter auf dessen eigenen Knoepfen.
-  const runOverlayNav = createMenuNav(() => {
-    const ov = visibleRunOverlay();
-    if (!ov) return [];
-    return [...ov.querySelectorAll('button, input')].filter(
-      (el) => !el.classList.contains('hidden') && !el.disabled,
-    );
-  });
+  // [data-navcard]: die Upgrade-/Shop-Karten sind KLICKBARE DIVs, keine
+  // <button>s -- ohne diese Aufnahme erreichte der Controller nur die
+  // Schrott-Knoepfe (Nutzermeldung "kann nur den Reroll ansteuern") und keine
+  // einzige Karte. bothAxes: der linke Stick navigiert die Karten/Kartenknoten
+  // auch mit LINKS/RECHTS, nicht nur hoch/runter.
+  const runOverlayNav = createMenuNav(
+    () => {
+      const ov = visibleRunOverlay();
+      if (!ov) return [];
+      return [...ov.querySelectorAll('button, input, [data-navcard="1"]')].filter(
+        (el) => !el.classList.contains('hidden') && !el.disabled,
+      );
+    },
+    { bothAxes: true },
+  );
   let lastRunOverlay = null;
 
   // Phase 9: Klassenauswahl-Seite. Fuellt sich aus tanks.json (player:true),
