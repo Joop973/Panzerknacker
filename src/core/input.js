@@ -360,11 +360,14 @@ export function createInput(target, canvas, opts = {}) {
     // der Landepunkt frei waehlen, statt die Bombe nur unter den Panzer zu
     // legen. Die gemerkte Zielvorgabe (padSecondaryAim) traegt auch die
     // fallende Flanke, weil secondaryHeld beim Loslassen schon false ist.
+    // Ohne Stickausschlag {angle:0,dist:0} = am Panzer -- genau wie der
+    // Handy-Wurfstick beim blossen Antippen: so zeigt die Sichtlinie/der
+    // Explosionsradius sofort beim Halten (Nutzerwunsch), nicht erst beim
+    // Auslenken.
     if (gp.secondaryHeld) {
       st.secondaryHeld = true;
-      const a = padThrowAim(gp);
-      if (a) padSecondaryAim = a;
-      if (padSecondaryAim) st.secondaryAim = padSecondaryAim;
+      padSecondaryAim = padThrowAim(gp) || { angle: 0, dist: 0 };
+      st.secondaryAim = padSecondaryAim;
     }
     if (gp.secondaryRelease || gp.secondaryAlt) {
       st.secondaryRelease = true;
@@ -485,7 +488,10 @@ export function createInput(target, canvas, opts = {}) {
       const menuDir = gpDir && (gpDir.x || gpDir.y) ? gpDir : kb;
       const menuConfirm = !!(queued.menuConfirm || gp?.menuConfirm);
       queued.menuConfirm = false;
-      return { menuDir, menuConfirm };
+      // stick = ROHER (analoger) linker Stick fuer den Gamepad-Cursor in
+      // main.js: der linke Stick faehrt einen freien Zeiger ueber die Overlays
+      // wie eine Maus. menuDir bleibt fuer die diskrete Tastatur-Navigation.
+      return { menuDir, menuConfirm, stick: gp ? gp.move : { x: 0, y: 0 } };
     },
     // Esc / P / Gamepad-Start (einmal pro Druck). Die Gamepad-Flanke legt
     // profileGamepad() in dieselbe Warteschlange -- hier nur auslesen.
