@@ -1,10 +1,12 @@
-// Prozedurales Audio via WebAudio (Phase 7b).
+// Prozedurales Audio via WebAudio (Phase 7b) + echte Musik-Loop-Datei.
 //
-// Kein einziges Sound-Asset: jeder Ton wird zur Laufzeit synthetisiert.
-// Bis Phase 7b war das eine gewachsene if/else-Kette mit hartkodierten
-// Frequenzen; jetzt kommt JEDE Zahl aus data/sounds.json (Wellenform,
-// Frequenzverlauf, Dauer, Lautstaerke, Filter, Musik-Loop) -- vom Handy
-// tunbar, ohne Code anzufassen. Dieses Modul kennt nur noch die Synthese.
+// Alle SOUND-EFFEKTE sind weiterhin Synthese ohne Asset: jeder Ton wird zur
+// Laufzeit erzeugt, JEDE Zahl kommt aus data/sounds.json (Wellenform,
+// Frequenzverlauf, Dauer, Lautstaerke, Filter) -- vom Handy tunbar, ohne Code
+// anzufassen. Einzige Ausnahme (Nutzerwunsch): die HINTERGRUNDMUSIK ist ein
+// echtes Audio-Asset (data/sounds.json: music.track), das als Endlosschleife
+// laeuft; der bisherige prozedurale 16-Step-Loop bleibt als Fallback, falls
+// das Asset nicht laedt.
 //
 // Stereopanning: Ereignisse mit Ort (Schuss, Abpraller, Explosion, Mine,
 // Tod) melden ihre x-Koordinate; play() platziert sie im Stereobild.
@@ -114,14 +116,46 @@ export function createAudio() {
     return true;
   }
 
-  // --- Prozedurale Hintergrundmusik (Werte aus data/sounds.json: music) ---
-  let musicTimer = null;
+  // --- Hintergrundmusik (Werte aus data/sounds.json: music) ---------------
+  // Nutzerwunsch: ein echtes Audio-Asset (music.track) als Endlosschleife,
+  // statt des bisherigen prozeduralen Loops -- die einzige Ausnahme von
+  // "kein Sound-Asset" im Projekt. Der prozedurale Loop bleibt als FALLBACK,
+  // falls das Asset nicht laedt (Netzfehler, Offline-Erstbesuch ohne Cache).
+  let musicTimer = null; // prozeduraler Fallback-Loop
   let nextNote = 0;
   let stepIdx = 0;
+  let musicBuffer = null; // dekodiertes music.track, einmal geladen
+  let musicSource = null; // laufender AudioBufferSourceNode (loop:true)
+  let musicLoading = null; // laufendes fetch+decode (Promise), gegen Doppel-Laden
 
-  function startMusic() {
-    unlock();
-    if (!ctx || musicTimer || !data?.music) return;
+  // decodeAudioData() ist in aelteren Implementierungen callback- statt
+  // promise-basiert -- beide Formen abdecken, ohne doppelt aufzuloesen.
+  function decodeAudioDataCompat(arrayBuffer) {
+    return new Promise((resolve, reject) => {
+      const maybePromise = ctx.decodeAudioData(arrayBuffer, resolve, reject);
+      if (maybePromise && typeof maybePromise.then === 'function') maybePromise.then(resolve, reject);
+    });
+  }
+
+  function playMusicBuffer() {
+    // musicSource-Check macht wiederholte startMusic()-Aufrufe (jede
+    // Eingabe-Geste ruft sie ueber unlockAll() erneut auf) idempotent.
+    if (!ctx || !musicBuffer || musicSource) return;
+    const src = ctx.createBufferSource();
+    src.buffer = musicBuffer;
+    src.loop = true;
+    const gain = ctx.createGain();
+    gain.gain.value = data?.music?.trackVol ?? 1;
+    src.connect(gain);
+    gain.connect(master);
+    src.start(0);
+    musicSource = src;
+  }
+
+  // Prozeduraler 16-Step-Loop (Bass + sparsames Arpeggio) -- Fallback, falls
+  // music.track fehlt oder nicht laedt.
+  function startProceduralMusic() {
+    if (musicTimer || !data?.music) return;
     const m = data.music;
     const stepS = m.stepS ?? 0.22;
     const len = Math.max(m.bass?.notes?.length || 0, m.lead?.notes?.length || 0);
@@ -138,6 +172,37 @@ export function createAudio() {
         nextNote += stepS;
       }
     }, 60);
+  }
+
+  function startMusic() {
+    unlock();
+    if (!ctx || !data?.music) return;
+    if (musicTimer || musicSource) return; // laeuft schon (Fallback oder Asset)
+    const track = data.music.track;
+    if (!track) {
+      startProceduralMusic();
+      return;
+    }
+    if (musicBuffer) {
+      playMusicBuffer();
+      return;
+    }
+    if (!musicLoading) {
+      musicLoading = fetch(track)
+        .then((r) => r.arrayBuffer())
+        .then((buf) => decodeAudioDataCompat(buf))
+        .then((decoded) => {
+          musicBuffer = decoded;
+        })
+        .catch(() => {
+          // Laden/Dekodieren fehlgeschlagen -> prozeduraler Fallback, damit
+          // das Spiel nicht stumm bleibt.
+          startProceduralMusic();
+        });
+    }
+    musicLoading.then(() => {
+      if (musicBuffer && !musicSource && !musicTimer) playMusicBuffer();
+    });
   }
 
   return {

@@ -2876,6 +2876,48 @@ möchte") und löst das „Controller erreicht Element X nicht" universell.
   4 Cursor-Checks rot; `stick` entfernt → Analog-/Cursor-Checks rot;
   Vorschau-Fallback entfernt → Sichtlinie-Checks rot.
 
+### Echte Hintergrundmusik als Loop (Nutzerwunsch) — gebaut
+Der Nutzer hat eine eigene Musikaufnahme geliefert (`assets/audio/theme.mp3`,
+~2:35 min) mit dem Auftrag, sie als Endlosschleife laufen zu lassen. Das ist
+die **einzige Ausnahme** vom sonst durchgehaltenen Grundsatz „kein
+Sound-Asset" (Phase 7b) — bewusst nur für die Hintergrundmusik, alle
+Sound-**Effekte** bleiben prozedurale Synthese ohne Asset.
+- **`data/sounds.json: music.track`** (`"assets/audio/theme.mp3"`) +
+  `music.trackVol` (0.35, eigener Lautstärke-Faktor für die Aufnahme,
+  unabhängig vom Lautstärkeregler/Mute — die wirken zusätzlich über den
+  Master-Gain). Der bisherige prozedurale 16-Step-Loop (`bass`/`lead`/
+  `stepS`) bleibt unverändert in derselben Datei stehen — nicht mehr als
+  Standard, sondern als **Fallback**.
+- **`audio.js: startMusic()`** laedt den Track einmalig per `fetch()` +
+  `decodeAudioData()` und spielt ihn danach über einen
+  `AudioBufferSourceNode` mit `loop: true` — echtes, klickfreies Loopen
+  (kein Timer, der Steps aneinanderreiht). Eigener Gain-Knoten für
+  `trackVol`, dahinter der bestehende Master-Gain (Mute/Lautstärkeregler
+  wirken also unverändert). **Fallback bei Ladefehler ODER fehlendem
+  `music.track`**: `startProceduralMusic()` (der alte Loop) springt ein,
+  damit ein Netzfehler oder ein fehlendes Asset das Spiel nicht stumm lässt.
+  `decodeAudioDataCompat()` deckt sowohl die promise- als auch die
+  callback-basierte `decodeAudioData()`-Fassung ab (ältere Browser).
+- **Idempotent gegen wiederholte Aufrufe**: `main.js` ruft `startMusic()` bei
+  **jeder** ersten Eingabe-Geste erneut auf (`unlockAll()` hängt an
+  `pointerdown`/`keydown`, ohne sich selbst abzumelden) — ein `musicSource`-
+  Guard verhindert eine zweite, überlagerte Wiedergabe.
+- **SW-Cache**: `assets/audio/theme.mp3` in `sw.js: ASSETS` (Offline-Cache
+  beim ersten Besuch) + `isAsset()`-Regex um `mp3` erweitert (cache-first wie
+  Sprites/Icons, nicht network-first wie Code/Daten — die Datei ändert sich
+  nicht bei jedem Deploy).
+- **Neuer Test `tests/music.mjs`** (dependency-frei, gestubbtes
+  `AudioContext`+`fetch`): Track lädt → `AudioBufferSourceNode` mit
+  `loop: true`, korrektem Buffer, `trackVol`-Gain, `start()` aufgerufen;
+  zweiter `startMusic()`-Aufruf startet keine zweite Wiedergabe; Netz- oder
+  Dekodierfehler → prozeduraler Fallback erklingt tatsächlich (kein stummes
+  Spiel); ohne `music.track` sofort Fallback, ohne überhaupt zu fetchen.
+  Gegenproben bestätigt: `loop` nicht gesetzt → Loop-Check rot;
+  Fallback-Aufruf im `.catch()` entfernt → beide Fallback-Checks rot.
+  Zusätzlich end-to-end im echten Browser (Playwright) gegengeprüft: Seite
+  lädt, Nutzergeste löst `startMusic()` aus, `fetch()` + `decodeAudioData()`
+  der echten Datei laufen ohne Konsolenfehler durch.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Controller-Feinschliff (optional)**: Der A-Knopf legt im Spiel
       weiterhin eine Bombe sofort ohne Zielen ab (`secondaryAlt`), obwohl die
@@ -2975,17 +3017,20 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `devicePixelRatio` (gedeckelt über `options.json: maxPixelRatio`),
   `visualViewport` → CSS-Variablen `--vvh`/`--vvw`. Setzt bewusst KEINE
   CSS-Maße am Canvas (das würde `aspect-ratio` außer Kraft setzen).
-- `src/core/audio.js` — prozedurale Synthese (Phase 7b): kennt nur noch
-  Oszillator/Rauschen/Filter/Panner, ALLE Werte kommen aus
+- `src/core/audio.js` — Sound-**Effekte** prozedural (Phase 7b): kennt nur
+  noch Oszillator/Rauschen/Filter/Panner, ALLE Werte kommen aus
   `data/sounds.json`. `play(name, x)` — `x` optional, platziert den Ton im
-  Stereobild.
+  Stereobild. **Hintergrundmusik ist die einzige Ausnahme** (Nutzerwunsch):
+  echtes Asset `assets/audio/theme.mp3` (`data/sounds.json: music.track`)
+  als `AudioBufferSourceNode`-Loop, mit prozeduralem Fallback bei
+  Lade-/Dekodierfehler.
 - `src/core/telemetry.js` — Run-Telemetrie in `localStorage.runs` +
   Debug-Ansicht. **Die Aufzeichnung läuft IMMER**, `?debug=1` blendet nur
   die Ansicht ein (dort eingeklappt, aufklappbar). Reine Beobachtung,
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v104`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v105`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -3023,6 +3068,7 @@ python3 -m http.server 8099        # dann http://localhost:8099/index.html
 node --check src/<datei>.js         # Syntax
 node tests/regression.mjs           # Regressionssuite (eingecheckt!)
 node tests/gamepad.mjs              # Controller-Eingabe (dependency-frei, gestubbtes Gamepad)
+node tests/music.mjs                # Hintergrundmusik-Loop + Fallback (dependency-frei, gestubbtes AudioContext/fetch)
 node tests/gamepadcursor.mjs        # Gamepad-Cursor end-to-end (Playwright, eigener Server)
 node tests/uilayout.mjs             # Overlay-Layout (braucht Playwright)
 node tests/viewport.mjs             # DPR/Viewport + Zielkoordinaten (Playwright, braucht eigenen Server auf :8099)

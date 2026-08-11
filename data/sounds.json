@@ -17,7 +17,9 @@
   },
 
   "music": {
-    "_comment": "Prozeduraler 16-Step-Loop in a-Moll (Bass + sparsames Arpeggio), bis Phase 7b als Konstanten in audio.js hartkodiert. 0 = Pause.",
+    "_comment": "track = echtes Audio-Asset (Nutzerwunsch), als Endlosschleife via AudioBufferSourceNode.loop abgespielt -- die einzige Ausnahme von 'kein Sound-Asset' im Projekt (Phase 7b), weil der Nutzer explizit eine eigene Aufnahme geliefert hat. trackVol skaliert die Lautstaerke (unabhaengig vom Lautstaerkeregler/Mute, die zusaetzlich ueber den Master-Gain wirken). bass/lead/stepS bleiben als prozeduraler FALLBACK erhalten, falls das Asset nicht laedt (Offline-Erstbesuch ohne Cache, Netzfehler) -- 0 = Pause.",
+    "track": "assets/audio/theme.mp3",
+    "trackVol": 0.35,
     "stepS": 0.22,
     "bass": { "notes": [55, 0, 55, 0, 65.4, 0, 82.4, 0, 55, 0, 55, 0, 98, 0, 82.4, 0], "dur": 0.2, "vol": 0.05, "wave": "sawtooth" },
     "lead": { "notes": [220, 0, 262, 0, 330, 0, 0, 392, 0, 330, 0, 262, 0, 0, 440, 0], "dur": 0.12, "vol": 0.028, "wave": "triangle" }

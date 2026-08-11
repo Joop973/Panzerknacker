@@ -2,8 +2,8 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v104';
-const PREV_CACHE = 'panzerknacker-v103'; // bleibt fuer eine evtl. offene Alt-Seite intakt
+const CACHE = 'panzerknacker-v105';
+const PREV_CACHE = 'panzerknacker-v104'; // bleibt fuer eine evtl. offene Alt-Seite intakt
 
 const ASSETS = [
   './',
@@ -89,6 +89,7 @@ const ASSETS = [
   'assets/sprites/bullet_bounce.png',
   'assets/sprites/bullet_tungsten.png',
   'assets/sprites/bullet_explosive.png',
+  'assets/audio/theme.mp3',
   'src/ui/hud.js',
   'src/ui/menunav.js',
   'src/ui/pause.js',
@@ -126,7 +127,7 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-const isAsset = (url) => /\.(png|jpe?g|gif|webp|svg|ico|woff2?)$/i.test(url.pathname);
+const isAsset = (url) => /\.(png|jpe?g|gif|webp|svg|ico|woff2?|mp3)$/i.test(url.pathname);
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
