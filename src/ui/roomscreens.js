@@ -84,6 +84,11 @@ export function createShopScreen() {
       if (scrap < ctx.costs.shopCard) {
         card.classList.add('tooexpensive');
       } else {
+        // Nur kaufbare Karten in die Controller-Fokusliste aufnehmen (main.js:
+        // runOverlayNav liest [data-navcard]) -- die Karte ist ein klickbares
+        // DIV, kein <button>. Verkaufte/zu teure Karten bleiben aussen vor.
+        card.dataset.navcard = '1';
+        card.tabIndex = 0;
         card.addEventListener('click', () => {
           if (ctx.onBuyCard(i)) render();
         });

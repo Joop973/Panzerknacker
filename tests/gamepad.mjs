@@ -138,6 +138,66 @@ function releaseAll() {
   check(m2.menuConfirm === false, 'Gamepad: gehaltenes A bestaetigt mehrfach (keine Flanke)');
 }
 
+// --- 6. In-Game: Bombe zielen (rechter Stick) + werfen (LT loslassen) ------
+// Nutzermeldung: der Controller legte die Bombe nur unter den Panzer, ohne
+// Richtung/Weite. Jetzt zielt der rechte Stick waehrend LT gehalten wird, und
+// beim Loslassen fliegt die Bombe dorthin -- wie der Handy-Wurfstick.
+{
+  releaseAll();
+  const lt = inputCfg.gamepad.secondary; // 6
+  const maxThrow = inputCfg.aim.throwMaxPx; // 114
+  // LT halten + rechten Stick nach rechts (voller Ausschlag).
+  pad.buttons[lt] = 1;
+  pad.axes[2] = 1; // aimX rechts
+  pad.axes[3] = 0; // aimY
+  let st = input.getState(player);
+  check(st.secondaryHeld === true, 'Gamepad: LT gehalten -> secondaryHeld nicht true');
+  check(st.secondaryRelease === false, 'Gamepad: LT gehalten darf noch nicht werfen');
+  check(
+    st.secondaryAim && Math.abs(st.secondaryAim.angle - 0) < 1e-6 && Math.abs(st.secondaryAim.dist - maxThrow) < 1e-6,
+    `Gamepad: Bomben-Zielvorgabe beim Halten ${JSON.stringify(st.secondaryAim)} statt {angle:0,dist:${maxThrow}}`,
+  );
+  // Live-Vorschau muss dieselbe Zielvorgabe liefern (Rendering).
+  const prev = input.getMinePreview();
+  check(
+    prev && Math.abs(prev.dist - maxThrow) < 1e-6,
+    `Gamepad: getMinePreview beim Zielen ${JSON.stringify(prev)} statt Wurfvorschau`,
+  );
+  // Halber Ausschlag -> halbe Weite (Weite ist dosierbar, nicht fest).
+  pad.axes[2] = 0.5;
+  st = input.getState(player);
+  check(
+    st.secondaryAim && Math.abs(st.secondaryAim.dist - maxThrow * 0.5) < 1e-6,
+    `Gamepad: halber Stick -> Weite ${st.secondaryAim?.dist} statt ${maxThrow * 0.5}`,
+  );
+  // LT loslassen (Stick zentriert): jetzt wirft es -- mit der GEMERKTEN
+  // Richtung/Weite (auf der fallenden Flanke ist der Stick schon los).
+  pad.buttons[lt] = 0;
+  pad.axes[2] = 0;
+  st = input.getState(player);
+  check(st.secondaryRelease === true, 'Gamepad: LT loslassen -> secondaryRelease nicht true');
+  check(
+    st.secondaryAim && Math.abs(st.secondaryAim.dist - maxThrow * 0.5) < 1e-6,
+    `Gamepad: Wurf uebernimmt die gemerkte Zielvorgabe nicht (${JSON.stringify(st.secondaryAim)})`,
+  );
+  // Nach dem Wurf ist die Vorschau wieder leer.
+  check(input.getMinePreview() == null, 'Gamepad: Vorschau nach dem Wurf nicht zurueckgesetzt');
+}
+
+// --- 7. In-Game: LT ohne Stick -> kein Zielwurf (faellt vor den Panzer) ----
+{
+  releaseAll();
+  const lt = inputCfg.gamepad.secondary; // 6
+  pad.buttons[lt] = 1; // nur LT, rechter Stick zentriert
+  let st = input.getState(player);
+  check(st.secondaryHeld === true, 'Gamepad: LT ohne Stick -> secondaryHeld nicht true');
+  check(st.secondaryAim == null, `Gamepad: LT ohne Stickausschlag setzt trotzdem eine Zielvorgabe (${JSON.stringify(st.secondaryAim)})`);
+  pad.buttons[lt] = 0;
+  st = input.getState(player);
+  check(st.secondaryRelease === true, 'Gamepad: LT loslassen (ohne Ziel) -> secondaryRelease nicht true');
+  check(st.secondaryAim == null, 'Gamepad: Wurf ohne Zielvorgabe soll null bleiben (Bombe faellt in Blickrichtung)');
+}
+
 if (failures) {
   console.error(`\n${failures} Gamepad-Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

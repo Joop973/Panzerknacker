@@ -17,7 +17,13 @@
 const REPEAT_FIRST_S = 0.35; // Verzoegerung bis zur ersten Wiederholung
 const REPEAT_S = 0.12; // danach, solange die Richtung gehalten wird
 
-export function createMenuNav(getFocusables) {
+// opts.bothAxes: In-Run-Overlays (Upgrade-Karten nebeneinander, Kartenknoten
+// nebeneinander) sollen auch mit LINKS/RECHTS am Stick durch die Liste
+// wandern, nicht nur hoch/runter -- dort gibt es keinen Regler, mit dem sich
+// die X-Achse beissen koennte. Ohne die Option (Start-/Einstellungsseite)
+// bleibt es beim reinen Y-Durchlauf, X nur fuer den Lautstaerkeregler.
+export function createMenuNav(getFocusables, opts = {}) {
+  const bothAxes = !!opts.bothAxes;
   let index = 0;
   let heldY = 0;
   let timer = 0;
@@ -76,13 +82,19 @@ export function createMenuNav(getFocusables) {
       if (index >= list.length) index = list.length - 1;
       highlight(list);
 
-      const y = menuState.menuDir.y;
+      const focused = list[index];
+      const isRange = focused && focused.tagName === 'INPUT' && focused.type === 'range';
+      // Durchlauf-Richtung: immer Y; bei bothAxes zusaetzlich X, ausser das
+      // fokussierte Element ist ein Regler (dann bleibt X fuer den Regler).
+      const dirY = menuState.menuDir.y;
+      const dirX = menuState.menuDir.x;
+      const step = dirY || (bothAxes && !isRange ? dirX : 0);
       let fire = false;
-      if (y !== heldY) {
-        heldY = y;
+      if (step !== heldY) {
+        heldY = step;
         timer = REPEAT_FIRST_S;
-        if (y !== 0) fire = true;
-      } else if (y !== 0) {
+        if (step !== 0) fire = true;
+      } else if (step !== 0) {
         timer -= dt;
         if (timer <= 0) {
           fire = true;
@@ -90,16 +102,19 @@ export function createMenuNav(getFocusables) {
         }
       }
       if (fire) {
-        index = (index + (y > 0 ? 1 : -1) + list.length) % list.length;
+        index = (index + (step > 0 ? 1 : -1) + list.length) % list.length;
         highlight(list);
       }
 
-      const x = menuState.menuDir.x;
-      // X wird bewusst NICHT wiederholt wie Y -- ein Regler soll pro
-      // Tastendruck/D-Pad-Schlag einen Schritt machen, nicht durchlaufen.
-      if (x !== heldX) {
-        heldX = x;
-        if (x !== 0) adjustRange(list[index], x > 0 ? 1 : -1);
+      // X-Achse fuer den Regler -- nur wenn sie nicht schon fuer den Durchlauf
+      // verbraucht wurde (bothAxes ohne Regler). X wird bewusst NICHT
+      // wiederholt wie Y: ein Regler soll pro D-Pad-Schlag einen Schritt
+      // machen, nicht durchlaufen.
+      if (isRange || !bothAxes) {
+        if (dirX !== heldX) {
+          heldX = dirX;
+          if (dirX !== 0) adjustRange(focused, dirX > 0 ? 1 : -1);
+        }
       }
 
       if (menuState.menuConfirm) activate(list[index]);

@@ -51,6 +51,9 @@ export function createInput(target, canvas, opts = {}) {
   const padAxes = pad.axes || { moveX: 0, moveY: 1, aimX: 2, aimY: 3 };
   const deadzone = stickCfg.deadzone ?? 0.15;
   const reachPx = cfg.aim?.reachPx ?? 120;
+  // Maximale Wurfweite des Controller-Zielsticks (wie MINE_MAX_THROW beim
+  // Touch-Wurfstick). Voller Stickausschlag = throwMaxPx weit.
+  const throwMaxPx = cfg.aim?.throwMaxPx ?? 114;
 
   const has = (list, code) => Array.isArray(list) && list.includes(code);
 
@@ -61,6 +64,14 @@ export function createInput(target, canvas, opts = {}) {
   let debug = false;
   let stats = false; // P7: Werte-Anzeige eingeblendet?
   let wasFiring = false; // fuer die Feuer-Flanke (primaryPressed)
+  // Gemerkte Wurf-Zielvorgabe des Controllers (rechter Stick), solange der
+  // Bomben-/Gadget-Knopf GEHALTEN wird. Dient zweierlei: der Live-Vorschau
+  // (getMinePreview/getGadgetPreview) UND dem Wurf beim Loslassen -- auf der
+  // fallenden Flanke ist secondaryHeld/gadgetHeld schon false, die Richtung
+  // muss also gemerkt sein, sonst faellt die Bombe wie bisher direkt unter
+  // den Panzer.
+  let padSecondaryAim = null;
+  let padGadgetAim = null;
 
   // Flankengetriggerte Wuensche, die zwischen zwei getState()-Aufrufen
   // anfallen. Werden beim Auslesen verbraucht.
@@ -285,6 +296,17 @@ export function createInput(target, canvas, opts = {}) {
     return { x, y };
   }
 
+  // Wurf-Zielvorgabe aus dem rechten Stick (Richtung + Weite) -- genau wie der
+  // Touch-Wurfstick auf dem Handy: die Auslenkung bestimmt die Weite (bis
+  // throwMaxPx), die Richtung den Winkel. Ohne Stickausschlag null (dann faellt
+  // die Bombe wie bisher in Blickrichtung dicht vor den Panzer).
+  function padThrowAim(gp) {
+    const d = gp.aimDir;
+    if (!d) return null;
+    const len = Math.min(1, Math.hypot(d.x, d.y));
+    return { angle: Math.atan2(d.y, d.x), dist: len * throwMaxPx };
+  }
+
   // ---- Die drei Profile ------------------------------------------------
   // Jedes schreibt NUR in den uebergebenen InputState. Reihenfolge in
   // getState(): Touch < Gamepad < Tastatur/Maus -- die zuletzt tatsaechlich
@@ -333,10 +355,35 @@ export function createInput(target, canvas, opts = {}) {
     }
     if (gp.fireHeld) st.primaryFire = true;
     if (gp.firePressed) st.primaryPressed = true;
-    if (gp.secondaryHeld) st.secondaryHeld = true;
-    if (gp.secondaryRelease || gp.secondaryAlt) st.secondaryRelease = true;
-    if (gp.gadgetHeld) st.gadgetHeld = true;
-    if (gp.gadgetRelease) st.gadgetRelease = true;
+    // Bombe (Sekundaerslot): Halten zielt mit dem rechten Stick (Richtung +
+    // Weite wie der Handy-Wurfstick), Loslassen wirft dorthin. So laesst sich
+    // der Landepunkt frei waehlen, statt die Bombe nur unter den Panzer zu
+    // legen. Die gemerkte Zielvorgabe (padSecondaryAim) traegt auch die
+    // fallende Flanke, weil secondaryHeld beim Loslassen schon false ist.
+    if (gp.secondaryHeld) {
+      st.secondaryHeld = true;
+      const a = padThrowAim(gp);
+      if (a) padSecondaryAim = a;
+      if (padSecondaryAim) st.secondaryAim = padSecondaryAim;
+    }
+    if (gp.secondaryRelease || gp.secondaryAlt) {
+      st.secondaryRelease = true;
+      if (padSecondaryAim) st.secondaryAim = padSecondaryAim;
+      padSecondaryAim = null;
+    }
+    // Gadgetslot (RB) genauso: Halten zielt mit dem rechten Stick, Loslassen
+    // loest aus (EMP-Wurf dorthin, Haken in diese Richtung).
+    if (gp.gadgetHeld) {
+      st.gadgetHeld = true;
+      const a = padThrowAim(gp);
+      if (a) padGadgetAim = a;
+      if (padGadgetAim) st.gadgetAim = padGadgetAim;
+    }
+    if (gp.gadgetRelease) {
+      st.gadgetRelease = true;
+      if (padGadgetAim) st.gadgetAim = padGadgetAim;
+      padGadgetAim = null;
+    }
     if (gp.detonate) st.detonate = true;
     if (gp.dash) st.dash = true;
     if (gp.menuConfirm) st.menuConfirm = true;
@@ -463,20 +510,24 @@ export function createInput(target, canvas, opts = {}) {
     getSource() {
       return source;
     },
-    // Live-Vorschau des Bombenwurfs (Rendering); null ohne Touch-Zug.
+    // Live-Vorschau des Bombenwurfs (Rendering). Touch-Wurfstick hat Vorrang,
+    // sonst die gemerkte Controller-Zielvorgabe, solange die Bombe gehalten
+    // wird; null, wenn gerade nirgends gezielt wird.
     getMinePreview() {
-      return touch ? touch.getMinePreview() : null;
+      const t = touch ? touch.getMinePreview() : null;
+      return t || padSecondaryAim;
     },
     // P6: getrennte Vorschau des Gadgetslots -- der Haken zeichnet eine
-    // Linie, die EMP-Bombe einen Wurfbogen.
+    // Linie, die EMP-Bombe einen Wurfbogen. Wie beim Bombenwurf zeigt auch
+    // der Controller waehrend des Haltens eine Vorschau (padGadgetAim).
     getGadgetPreview() {
-      return touch ? touch.getGadgetPreview?.() : null;
+      const t = touch ? touch.getGadgetPreview?.() : null;
+      return t || padGadgetAim;
     },
     // Wird gerade auf das Gadget gezielt? Auf Touch das Halten des
-    // Wurfsticks; auf PC/Controller gibt es keine Zielphase, dort zeigt die
-    // Vorschau dauerhaft (siehe main.js).
+    // Wurfsticks, auf dem Controller das Halten des Gadget-Knopfs (RB).
     isGadgetAiming() {
-      return !!touch?.isGadgetHeld?.();
+      return !!touch?.isGadgetHeld?.() || !!padGadgetAim;
     },
     isDebug() {
       return debug;
