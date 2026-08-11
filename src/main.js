@@ -38,6 +38,8 @@ import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
 import { createMenuNav } from './ui/menunav.js';
+import { createMenu } from './ui/menu.js';
+import { DEBUG } from './core/debug.js';
 import { createTutorial } from './ui/hud.js';
 import {
   getFlag,
@@ -405,7 +407,7 @@ async function init() {
     lastSeed = seed;
     updateSecondaryLabel();
     beginTelemetry();
-    startOverlay.classList.add('hidden');
+    menu.hideAll();
     hideRoomScreens();
     pause.set(false); // frischer Run startet NIE pausiert (Portrait-Altlast)
     goFullscreen();
@@ -501,7 +503,7 @@ async function init() {
       // P9: Startbildschirm -- Tastatur-/Gamepad-Fokusnavigation statt
       // Spiellogik. getMenuState() braucht keinen Spieler (anders als
       // getState()), deshalb funktioniert das schon vor dem ersten Run.
-      activeMenuNav.update(input.getMenuState(), dt);
+      menu.update(input.getMenuState(), dt);
       return;
     }
     if (input.consumePause()) pause.toggle();
@@ -912,18 +914,8 @@ async function init() {
   // mehr ohne Scrollen passen (gemessen per tests/uilayout.mjs: 6-7
   // Bedienelemente unterhalb des sichtbaren Bereichs bei 667x375).
   const settingsOverlay = document.getElementById('settings');
-  document.getElementById('settingsOpen').addEventListener('click', () => {
-    startOverlay.classList.add('hidden');
-    settingsOverlay.classList.remove('hidden');
-    activeMenuNav = settingsMenuNav;
-    settingsMenuNav.reset();
-  });
-  document.getElementById('settingsBack').addEventListener('click', () => {
-    settingsOverlay.classList.add('hidden');
-    startOverlay.classList.remove('hidden');
-    activeMenuNav = startMenuNav;
-    startMenuNav.reset();
-  });
+  document.getElementById('settingsOpen').addEventListener('click', () => menu.show('settings'));
+  document.getElementById('settingsBack').addEventListener('click', () => menu.back());
   document.getElementById('resetBtn').addEventListener('click', () => {
     if (window.confirm('Bestwerte wirklich löschen?')) {
       resetStats();
@@ -963,19 +955,24 @@ async function init() {
     b.addEventListener('click', () => setProfileUI(b.dataset.profile));
   }
   setProfileUI(getPref('inputProfile', ''));
-  // P9: Tastatur-/Gamepad-Navigation auf Start- UND Einstellungsseite
-  // (SPEC.md 9). Fokussierbare Elemente sind alle sichtbaren, nicht
-  // deaktivierten Bedienelemente IN DOKUMENTORDNUNG -- eine feste
-  // ID-Liste haette bei jeder spaeteren UI-Aenderung von Hand nachgezogen
-  // werden muessen. `activeMenuNav` zeigt auf die gerade sichtbare Seite;
-  // update(dt) ruft immer nur die aktive auf.
+  // P9: Tastatur-/Gamepad-Navigation der Menue-Screens (SPEC.md 9).
+  // Fokussierbare Elemente sind alle sichtbaren, nicht deaktivierten
+  // Bedienelemente IN DOKUMENTORDNUNG -- eine feste ID-Liste haette bei
+  // jeder spaeteren UI-Aenderung von Hand nachgezogen werden muessen. Die
+  // Screen-State-Machine (menu, Phase 1) navigiert immer nur den gerade
+  // sichtbaren Screen.
   const focusablesIn = (overlay) => () =>
     [...overlay.querySelectorAll('button, input')].filter(
       (el) => !el.classList.contains('hidden') && !el.disabled,
     );
-  const startMenuNav = createMenuNav(focusablesIn(startOverlay));
-  const settingsMenuNav = createMenuNav(focusablesIn(settingsOverlay));
-  let activeMenuNav = startMenuNav;
+  // Phase 1: Screen-State-Machine verwaltet, WELCHES Menue-Overlay sichtbar
+  // ist, den Zurueck-Stack und die Browser-History. Jeder Screen bekommt
+  // dabei seine eigene menunav-Instanz (das Fokus-System aus P9). Die
+  // Klassenseite wird weiter unten registriert (classScreen entsteht dort).
+  const menu = createMenu({ history: window.history });
+  menu
+    .register('main', startOverlay, focusablesIn(startOverlay))
+    .register('settings', settingsOverlay, focusablesIn(settingsOverlay));
 
   // Controller-/Tastatur-Navigation der IN-RUN-Overlays (nach dem Rundenstart):
   // Upgrade-Screen, Karte, Shop, Event, Raumvorschau + Ausruestungsseite. Die
@@ -1046,19 +1043,12 @@ async function init() {
   }
   buildClassList();
   refreshClassBtn();
-  const classMenuNav = createMenuNav(focusablesIn(classScreen));
-  classOpenBtn.addEventListener('click', () => {
-    startOverlay.classList.add('hidden');
-    classScreen.classList.remove('hidden');
-    activeMenuNav = classMenuNav;
-    classMenuNav.reset();
-  });
-  document.getElementById('classBack').addEventListener('click', () => {
-    classScreen.classList.add('hidden');
-    startOverlay.classList.remove('hidden');
-    activeMenuNav = startMenuNav;
-    startMenuNav.reset();
-  });
+  // Jetzt sind alle Menue-Screens bekannt -> Klassenseite anmelden und die
+  // History-Wurzel setzen (Erstanzeige Hauptmenue).
+  menu.register('class', classScreen, focusablesIn(classScreen));
+  menu.root('main');
+  classOpenBtn.addEventListener('click', () => menu.show('class'));
+  document.getElementById('classBack').addEventListener('click', () => menu.back());
   // Tages-Seed: fuer alle Spieler am selben Tag derselbe Run.
   document.getElementById('dailyBtn').addEventListener('click', () => {
     const d = new Date();
@@ -1075,18 +1065,15 @@ async function init() {
   function backToStart() {
     refreshBestStats();
     refreshResumeBtn(); // abgebrochener Run bleibt fortsetzbar
-    startOverlay.classList.remove('hidden');
-    settingsOverlay.classList.add('hidden'); // P9: falls noch offen -- defensiv
-    classScreen.classList.add('hidden'); // Phase 9: Klassenseite ebenfalls schliessen
     seedInput.select();
     hideRoomScreens();
     endlessBtn.classList.add('hidden');
     run = null;
-    // P9: Fokus zurueck auf den Anfang -- sonst haengt die Hervorhebung
-    // auf einem Element, das beim letzten Besuch fokussiert war (z. B.
-    // "Run fortsetzen", das jetzt vielleicht gar nicht mehr sichtbar ist).
-    activeMenuNav = startMenuNav;
-    startMenuNav.reset();
+    // Menues zurueck auf die Wurzel (Hauptmenue). root() blendet die anderen
+    // Screens aus, setzt den Fokus auf den Anfang und legt die History-Wurzel
+    // neu an -- sonst haengt die Hervorhebung auf einem Element, das beim
+    // letzten Besuch fokussiert war (z. B. "Run fortsetzen").
+    menu.root('main');
   }
   const dashBtn = document.getElementById('dashBtn');
   dashBtn.addEventListener(
@@ -1222,6 +1209,22 @@ async function init() {
     },
     { passive: true },
   );
+
+  // Browser-Zurueck-Geste (Handy) / Alt+Links (Desktop): im Menue einen
+  // Screen zurueck (menu.onPopState), im laufenden Run das Spiel pausieren
+  // (Grundsatz PLAN-STARTMENU). In beiden Faellen wird ein Ersatz-Eintrag
+  // gepusht, damit die Geste nicht die Seite verlaesst.
+  window.addEventListener('popstate', () => {
+    if (run && run.phase === 'playing') {
+      pause.set(true);
+      window.history.pushState({ menuDepth: 0 }, '');
+      return;
+    }
+    menu.onPopState();
+  });
+
+  // Debug: Menue ueberspringen und direkt in einen Run (?debug=1&skipToRun).
+  if (DEBUG.skipToRun) startRun();
 
   loop.start();
 }

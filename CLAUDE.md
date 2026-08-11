@@ -2793,7 +2793,55 @@ war korrekt — der Bug lag im Menü. Zwei echte Lücken:
   End-to-end im Browser gegengeprüft (Fake-Xbox-Pad: Startmenü-Stick +
   Auto-Repeat, Vorschau per Stick + A → Raum startet).
 
+### Neuer Plan: `PLAN-STARTMENU.md` (Startmenü, Klassen, Codex, Post-Run)
+Vom Nutzer geliefert: 15-Phasen-Plan (Phase 0–14) für Hauptmenü,
+Klassenwahl, Schwierigkeit, Einstellungen, **Codex-Galerie** und
+Post-Run-Screen. Eine Phase pro Session. Maßgeblich ist die Ist-Referenz
+**`STARTMENU-BESTAND.md`** (Phase-0-Deliverable) — der Plan nennt mehrere
+Dateien falsch/„neu", obwohl sie existieren. **Entwicklungsbranch dieses
+Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
+
+- **Phase 0 (Bestandsaufnahme) — erledigt.** `STARTMENU-BESTAND.md`:
+  Save-Code (`storage.js`, kein `version`-Feld, kein Codex), kein
+  Pause-Overlay, Panzer = Sprites+Fallback (alle Klassen aliasen auf
+  `player` → Codex-Silhouette per Einfärbung, nicht Sprite-Kopie), vier
+  Codex-Quellen in `tanks.json`/`upgrades.json` (10 Klassen, 246 Upgrades,
+  11 Gegner, 3 Bosse). **Festlegung: Eliten sind Laufzeit-Affixe → KEINE
+  eigene Codex-Kategorie** (4 Kategorien bleiben). Element-Karten haben
+  eigene IDs → keine künstliche Aufspaltung.
+- **Phase 1 (Screen-State-Machine + Browser-Zurück + Debug-Flags) —
+  erledigt.** Das Fokus-System war schon da (`ui/menunav.js`), neu ist die
+  **Screen-Verwaltung** darüber:
+  - **`src/ui/menu.js`** (neu, `createMenu`): Registry benannter
+    Menü-Overlays + Zurück-Stack + History. **Eine Quelle der Wahrheit:**
+    Vorwärts pusht (`show`→`pushState`), JEDE Rückwärtsnavigation
+    (Zurück-Knopf/ESC/Controller-B/Browser-Geste) läuft über
+    `history.back()` → `popstate` → `onPopState()` macht die Anzeige. An
+    der Wurzel wird ein Ersatz-Eintrag gepusht, damit die Geste nicht die
+    Seite verlässt. `hideAll()` beim Run-Start, `root('main')` beim
+    Zurückkehren. Die **In-Run-Overlays** (Upgrade/Karte/Shop/Event/
+    Vorschau) bleiben bewusst getrennt (`runOverlayNav`, hängen an
+    `run.phase`).
+  - **`src/core/debug.js`** (neu): liest `?debug=1` + `skipToRun`/
+    `unlockAll`/`codexRevealAll` aus der URL; Einzelflags wirken nur bei
+    gesetztem `debug=1`. `main.js` startet bei `skipToRun` direkt einen Run.
+  - **`input.js`/`input.json`**: neues `menuBack` (ESC/P oder Controller-B =
+    Button 1) in `getMenuState()`. Verbraucht `queued.pause` — im Menü läuft
+    `consumePause()` nicht, also keine Doppelentnahme; im Run konsumiert
+    `consumePause()` zuerst.
+  - **`main.js`**: die drei Menü-Screens (Start/Einstellungen/Klasse) laufen
+    jetzt über `menu` statt der Ad-hoc-`activeMenuNav`-Umschaltung; neuer
+    `popstate`-Handler (im Run → Pause + Ersatz-Push).
+  - **Tests:** `regression.mjs` Abschnitt 8k (Stack/History mit Fake-History,
+    `menuBack`, Wurzel-Verhalten, `hideAll`), `gamepad.mjs` Fall 6 (B→
+    `menuBack`, Flanke). Gegenproben rot bestätigt (menuBack aus, `onPopState`
+    ohne Stack-Pop). Echter Browser-Smoke: Menü-Wechsel, Browser-Zurück,
+    `skipToRun` — fehlerfrei.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 2 (Klassenwahl-Screen mit
+      `unlocked`/`seen`-Flags + `unlockAll`-Debug) — die Klassenwahl selbst
+      existiert schon (`#classScreen`), es fehlen die Flags/Codex-Anbindung.
 - [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
       auf dem Gamepad nur die Turmrichtung (`secondaryAim`/`gadgetAim` werden in
       `profileGamepad` nicht gesetzt) — Richtung stimmt, aber die Wurfweite lässt
@@ -2900,7 +2948,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v102`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v103`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

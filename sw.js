@@ -2,8 +2,8 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v102';
-const PREV_CACHE = 'panzerknacker-v101'; // bleibt fuer eine evtl. offene Alt-Seite intakt
+const CACHE = 'panzerknacker-v103';
+const PREV_CACHE = 'panzerknacker-v102'; // bleibt fuer eine evtl. offene Alt-Seite intakt
 
 const ASSETS = [
   './',
@@ -36,6 +36,7 @@ const ASSETS = [
   'src/core/loop.js',
   'src/core/rng.js',
   'src/core/storage.js',
+  'src/core/debug.js',
   'src/game/ai.js',
   'src/game/armor.js',
   'src/game/bossai.js',
@@ -91,6 +92,7 @@ const ASSETS = [
   'assets/sprites/bullet_explosive.png',
   'src/ui/hud.js',
   'src/ui/menunav.js',
+  'src/ui/menu.js',
   'src/ui/pause.js',
   'src/ui/preview.js',
   'src/ui/touchcontrols.js',

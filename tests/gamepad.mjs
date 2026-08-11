@@ -138,6 +138,19 @@ function releaseAll() {
   check(m2.menuConfirm === false, 'Gamepad: gehaltenes A bestaetigt mehrfach (keine Flanke)');
 }
 
+// --- 6. Menue: B geht zurueck (PLAN-STARTMENU Phase 1) --------------------
+{
+  releaseAll();
+  const b = inputCfg.gamepad.menuBack; // 1
+  check(b != null, 'input.json: gamepad.menuBack fehlt');
+  pad.buttons[b] = 1;
+  const m = input.getMenuState();
+  check(m.menuBack === true, 'Gamepad: B -> menuBack nicht true');
+  // Nur EINE Flanke -- gehaltenes B darf nicht mehrfach zurueckspringen.
+  const m2 = input.getMenuState();
+  check(m2.menuBack === false, 'Gamepad: gehaltenes B loest mehrfach aus (keine Flanke)');
+}
+
 if (failures) {
   console.error(`\n${failures} Gamepad-Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

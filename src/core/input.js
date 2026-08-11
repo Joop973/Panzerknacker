@@ -240,6 +240,9 @@ export function createInput(target, canvas, opts = {}) {
       dash: edge(pad.dash),
       pause: edge(pad.pause),
       menuConfirm: edge(pad.menuConfirm),
+      // Menue-Zurueck (Controller-B). edge() cached pro Poll, deshalb kollidiert
+      // das Lesen von Button 1 hier nicht mit dem Dash-edge(pad.dash) darueber.
+      menuBack: edge(pad.menuBack),
       menuDir: {
         x: (edge(dpad.right) ? 1 : 0) - (edge(dpad.left) ? 1 : 0),
         y: (edge(dpad.down) ? 1 : 0) - (edge(dpad.up) ? 1 : 0),
@@ -437,8 +440,14 @@ export function createInput(target, canvas, opts = {}) {
       const gpDir = gp?.menuAxis;
       const menuDir = gpDir && (gpDir.x || gpDir.y) ? gpDir : kb;
       const menuConfirm = !!(queued.menuConfirm || gp?.menuConfirm);
+      // Zurueck: ESC/P (Tastatur, dieselbe queued.pause wie consumePause) oder
+      // Controller-B. queued.pause wird hier verbraucht -- im Menue laeuft
+      // consumePause() nicht (das ruft main.js nur im Run auf), es gibt also
+      // keine Doppelentnahme.
+      const menuBack = !!(queued.pause || gp?.menuBack);
+      queued.pause = false;
       queued.menuConfirm = false;
-      return { menuDir, menuConfirm };
+      return { menuDir, menuConfirm, menuBack };
     },
     // Esc / P / Gamepad-Start (einmal pro Druck). Die Gamepad-Flanke legt
     // profileGamepad() in dieselbe Warteschlange -- hier nur auslesen.

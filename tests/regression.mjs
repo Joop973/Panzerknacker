@@ -804,6 +804,80 @@ function check(ok, msg) {
   }
 }
 
+// ---- 8k. PLAN-STARTMENU Phase 1: Screen-State-Machine (menu.js) ---------
+// Prueft den Zurueck-Stack und die History-Anbindung: Vorwaerts pusht,
+// JEDE Rueckwaertsnavigation (Knopf/ESC/B/Browser-Geste) laeuft ueber
+// history.back() -> popstate -> onPopState (eine Quelle der Wahrheit).
+{
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { createMenu } = await import('../src/ui/menu.js');
+    // Minimale Browser-History, die das echte Verhalten nachbildet: back()
+    // dekrementiert und ruft den registrierten popstate-Handler -- genau der
+    // Weg, ueber den auch die Handy-Zurueck-Geste laeuft.
+    function fakeHistory() {
+      const entries = [{ state: null }];
+      let idx = 0;
+      let onpop = null;
+      return {
+        replaceState(state) { entries[idx] = { state }; },
+        pushState(state) { entries.length = idx + 1; entries.push({ state }); idx = entries.length - 1; },
+        back() { if (idx > 0) { idx--; onpop?.(); } },
+        _bindPop(f) { onpop = f; },
+        _idx: () => idx,
+      };
+    }
+    const hist = fakeHistory();
+    const main = document.createElement('div');
+    const settings = document.createElement('div');
+    const cls = document.createElement('div');
+    const menu = createMenu({ history: hist });
+    hist._bindPop(() => menu.onPopState());
+    // getFocusables leer -> nav tut nichts, wir testen nur die Maschine.
+    menu.register('main', main, () => []);
+    menu.register('settings', settings, () => []);
+    menu.register('class', cls, () => []);
+
+    // (a) root('main'): nur main sichtbar, Tiefe 1, kein History-Push.
+    menu.root('main');
+    check(!main.classList.contains('hidden'), 'Phase1: root zeigt main nicht');
+    check(settings.classList.contains('hidden') && cls.classList.contains('hidden'), 'Phase1: root blendet andere Screens nicht aus');
+    check(menu.current() === 'main' && menu.depth() === 1, 'Phase1: root setzt Stack nicht auf [main]');
+
+    // (b) show('settings'): settings sichtbar, main weg, Tiefe 2.
+    menu.show('settings');
+    check(!settings.classList.contains('hidden') && main.classList.contains('hidden'), 'Phase1: show wechselt den sichtbaren Screen nicht');
+    check(menu.current() === 'settings' && menu.depth() === 2, 'Phase1: show erhoeht die Stack-Tiefe nicht');
+
+    // (c) back() -> ueber history.back()/popstate zurueck auf main.
+    menu.back();
+    check(menu.current() === 'main' && menu.depth() === 1, 'Phase1: back kehrt nicht auf main zurueck');
+    check(!main.classList.contains('hidden') && settings.classList.contains('hidden'), 'Phase1: back stellt die Sichtbarkeit nicht her');
+
+    // (d) menuBack (ESC/Controller-B) im update() geht ebenfalls zurueck.
+    menu.show('class');
+    check(menu.current() === 'class', 'Phase1: Testaufbau (class nicht offen)');
+    menu.update({ menuDir: { x: 0, y: 0 }, menuConfirm: false, menuBack: true }, 1 / 60);
+    check(menu.current() === 'main', 'Phase1: menuBack im update() navigiert nicht zurueck');
+
+    // (e) back an der Wurzel tut nichts (und verlaesst die Seite nicht).
+    const idxBefore = hist._idx();
+    check(menu.back() === false, 'Phase1: back an der Wurzel meldet einen Schritt');
+    check(hist._idx() === idxBefore, 'Phase1: back an der Wurzel bewegt die History');
+    // Browser-Zurueck-Geste an der Wurzel: onPopState haelt uns auf der Seite
+    // (Stack bleibt bei 1) statt sie zu verlassen.
+    check(menu.onPopState() === true && menu.depth() === 1, 'Phase1: onPopState an der Wurzel verlaesst die Seite');
+
+    // (f) hideAll(): Run laeuft -> keine Menues, onPopState() ist ein No-op.
+    menu.hideAll();
+    check(main.classList.contains('hidden') && menu.current() === null, 'Phase1: hideAll blendet die Menues nicht aus');
+    check(menu.onPopState() === false, 'Phase1: onPopState greift, obwohl kein Menue sichtbar ist (Run)');
+  } finally {
+    restore();
+  }
+}
+
 // ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------
 // Die Upgrade-Chips lagen im Hauptbereich der Raumvorschau und haben dort
 // bei vielen Karten den "Weiter"-Knopf aus dem Bild geschoben (Nutzer-

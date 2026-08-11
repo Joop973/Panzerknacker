@@ -39,6 +39,7 @@
     "dash": 1,
     "pause": 9,
     "menuConfirm": 0,
+    "menuBack": 1,
     "dpad": { "up": 12, "down": 13, "left": 14, "right": 15 }
   },
 
