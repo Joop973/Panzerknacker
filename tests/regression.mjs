@@ -686,6 +686,15 @@ function check(ok, msg) {
   check(audio.getVolume() === 0.4, 'P9: Mute loescht den Reglerwert');
   audio.setMuted(false);
   check(audio.getVolume() === 0.4, 'P9: Regler verliert seinen Wert nach dem Entstummen');
+  // Phase 4: getrennte Musik-/SFX-Regler (Standard 1), einzeln setzbar,
+  // unabhaengig vom Master und voneinander. Laufen ebenfalls vor unlock().
+  check(audio.getMusicVolume() === 1 && audio.getSfxVolume() === 1, 'Phase4: Musik/SFX-Standard nicht 1');
+  audio.setMusicVolume(0);
+  check(audio.getMusicVolume() === 0 && audio.getSfxVolume() === 1, 'Phase4: Musik auf 0 zieht SFX mit');
+  audio.setSfxVolume(0);
+  check(audio.getSfxVolume() === 0 && audio.getMusicVolume() === 0, 'Phase4: SFX/Musik getrennt auf 0 setzbar');
+  audio.setMusicVolume(0.5);
+  check(audio.getMusicVolume() === 0.5 && audio.getVolume() === 0.4, 'Phase4: Musik-Regler verstellt den Master');
 }
 
 // ---- 8i. P9: Menue-Navigation (Tastatur/Gamepad, Startbildschirm) -------
@@ -873,6 +882,22 @@ function check(ok, msg) {
     menu.hideAll();
     check(main.classList.contains('hidden') && menu.current() === null, 'Phase1: hideAll blendet die Menues nicht aus');
     check(menu.onPopState() === false, 'Phase1: onPopState greift, obwohl kein Menue sichtbar ist (Run)');
+
+    // (g) PLAN-STARTMENU Phase 4: der "from"-Zurueckpfad ergibt sich aus dem
+    //     Stack. Einstellungen aus der Pause geoeffnet -> Zurueck fuehrt zur
+    //     Pause; aus dem Hauptmenue geoeffnet -> Zurueck fuehrt ins Hauptmenue.
+    //     Derselbe settings-Screen, unterschiedliches Zurueck -- ohne
+    //     from-Parameter (Testschritt 5).
+    const pause = document.createElement('div');
+    menu.register('pause', pause, () => []);
+    menu.root('pause');
+    menu.show('settings');
+    menu.back();
+    check(menu.current() === 'pause', 'Phase4: Einstellungen aus der Pause -> Zurueck landet nicht bei der Pause');
+    menu.root('main');
+    menu.show('settings');
+    menu.back();
+    check(menu.current() === 'main', 'Phase4: Einstellungen aus dem Hauptmenue -> Zurueck landet nicht im Hauptmenue');
   } finally {
     restore();
   }

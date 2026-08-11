@@ -16,16 +16,27 @@
 export function createAudio() {
   let ctx = null;
   let master = null;
+  // Phase 4: getrennte Zwischen-Gains fuer Musik und SFX, beide haengen am
+  // master. So regelt der Master alles, Musik und SFX zusaetzlich einzeln
+  // (getrennt auf 0 setzbar). Musik-Toene laufen ueber musicGain, alle
+  // Spiel-Ereignisse (play()) ueber sfxGain.
+  let musicGain = null;
+  let sfxGain = null;
   let muted = false;
-  let volume = 1; // P9: Lautstaerkeregler (0..1), unabhaengig vom Mute-Schalter
+  let volume = 1; // Master-Lautstaerke (0..1), unabhaengig vom Mute-Schalter
+  let musicVolume = 1; // Phase 4
+  let sfxVolume = 1; // Phase 4
   let data = null; // Inhalt von data/sounds.json (via setData)
   let panWidth = 0; // Arenabreite in px -- 0 = kein Panning
 
   // P9: EIN Ort fuer die tatsaechliche Gain-Berechnung -- Mute UND Regler
   // wirken auf denselben Knoten, statt zwei Zustaende gegeneinander
   // auszuspielen. Stumm gewinnt immer (0), sonst gilt der Reglerwert.
+  // Phase 4: Musik/SFX bekommen zusaetzlich ihren eigenen Faktor.
   function applyGain() {
     if (master) master.gain.value = muted ? 0 : volume;
+    if (musicGain) musicGain.gain.value = musicVolume;
+    if (sfxGain) sfxGain.gain.value = sfxVolume;
   }
 
   function unlock() {
@@ -36,6 +47,12 @@ export function createAudio() {
       master = ctx.createGain();
       master.gain.value = muted ? 0 : volume;
       master.connect(ctx.destination);
+      musicGain = ctx.createGain();
+      musicGain.gain.value = musicVolume;
+      musicGain.connect(master);
+      sfxGain = ctx.createGain();
+      sfxGain.gain.value = sfxVolume;
+      sfxGain.connect(master);
     }
     if (ctx.state === 'suspended') ctx.resume();
   }
@@ -44,7 +61,8 @@ export function createAudio() {
   // Beides pro Sound frisch, damit sich gleichzeitige Toene nicht
   // gegenseitig umpannen.
   function outputFor(def, x) {
-    let head = master;
+    let head = sfxGain; // Phase 4: Spiel-Ereignisse laufen ueber den SFX-Bus
+
     // Panning nur, wenn das Ereignis einen Ort gemeldet hat UND der Browser
     // StereoPannerNode kennt (aeltere Safari nicht -> dann eben mittig).
     if (x != null && panWidth > 0 && ctx.createStereoPanner) {
@@ -132,7 +150,7 @@ export function createAudio() {
       while (nextNote < ctx.currentTime + 0.15) {
         for (const voice of [m.bass, m.lead]) {
           const f = voice?.notes?.[stepIdx];
-          if (f) toneAt(master, f, nextNote, voice.dur, voice.vol, voice.wave, null);
+          if (f) toneAt(musicGain, f, nextNote, voice.dur, voice.vol, voice.wave, null);
         }
         stepIdx = (stepIdx + 1) % len;
         nextNote += stepS;
@@ -170,6 +188,18 @@ export function createAudio() {
       applyGain();
     },
     getVolume: () => volume,
+    // Phase 4: getrennte Musik-/SFX-Regler (0..1). Wirken multiplikativ unter
+    // dem Master; getrennt auf 0 setzbar (Testschritt 4).
+    setMusicVolume(v) {
+      musicVolume = v;
+      applyGain();
+    },
+    getMusicVolume: () => musicVolume,
+    setSfxVolume(v) {
+      sfxVolume = v;
+      applyGain();
+    },
+    getSfxVolume: () => sfxVolume,
     // Benanntes Spiel-Ereignis abspielen. `x` ist die Welt-x-Koordinate des
     // Ereignisses (optional) -- damit wird der Ton im Stereobild platziert.
     play(name, x) {

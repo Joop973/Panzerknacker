@@ -62,11 +62,19 @@
       <!-- P2 legt den Knopf an und blendet ihn ein, wenn der Browser
            Element-Vollbild kann (iOS kann es nicht -> bleibt versteckt). -->
       <button id="fullscreenBtn" class="secondary hidden">Vollbild</button>
-      <!-- P9: Lautstaerkeregler statt reinem Mute (der Knopf oben im Spiel
-           bleibt fuer den schnellen Zugriff waehrend der Runde). -->
-      <label class="volumelabel" for="volumeSlider">Lautst&auml;rke
-        <input type="range" id="volumeSlider" min="0" max="100" step="5" value="100" />
-      </label>
+      <!-- Phase 4: Sound-Bereich -- Gesamt/Musik/Effekte getrennt regelbar,
+           10%-Schritte (auch per Pfeiltasten/D-Pad, siehe menunav.js). -->
+      <div class="soundsection" role="group" aria-label="Sound">
+        <label class="volumelabel" for="volMaster">Gesamt
+          <input type="range" id="volMaster" min="0" max="100" step="10" value="100" />
+        </label>
+        <label class="volumelabel" for="volMusic">Musik
+          <input type="range" id="volMusic" min="0" max="100" step="10" value="100" />
+        </label>
+        <label class="volumelabel" for="volSfx">Effekte
+          <input type="range" id="volSfx" min="0" max="100" step="10" value="100" />
+        </label>
+      </div>
       <!-- P9: Eingabeprofil-Override (P1 hat setProfile()/getProfile()
            bereits gebaut). Knopfreihe statt <select> -- gleiches Muster wie
            die Schwierigkeitsauswahl, jeder Knopf ein eigener Fokusstopp
@@ -87,6 +95,16 @@
       <h1>Klasse w&auml;hlen</h1>
       <div id="classList" class="classlist"></div>
       <button id="classBack">Zur&uuml;ck</button>
+    </div>
+    <!-- Phase 4: echtes Pause-Overlay (bisher nur Canvas-Text + Tastatur
+         R/M). Einstellungen sind von hier aus mit from:'pause' erreichbar --
+         der Menue-Stack fuehrt "Zurueck" dann hierher, nicht ins Hauptmenue. -->
+    <div id="pauseMenu" class="overlay hidden">
+      <h1>Pause</h1>
+      <button id="pauseResume">Fortsetzen</button>
+      <button id="pauseSettings" class="secondary">Einstellungen &#9656;</button>
+      <button id="pauseRestart" class="secondary">Neustart (gleicher Seed)</button>
+      <button id="pauseHome" class="linklike">Hauptmen&uuml;</button>
     </div>
   </main>
   <!-- Inline-Guard laeuft auch bei file:// (wo Modul-Skripte blockiert

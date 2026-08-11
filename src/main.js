@@ -39,6 +39,7 @@ import { createTouchControls } from './ui/touchcontrols.js';
 import { createPause } from './ui/pause.js';
 import { createMenuNav } from './ui/menunav.js';
 import { createMenu } from './ui/menu.js';
+import { createSettings } from './ui/settings.js';
 import { DEBUG } from './core/debug.js';
 import { playerClassEntries, isClassUnlocked, createClassButton } from './game/classes.js';
 import { createTutorial } from './ui/hud.js';
@@ -424,6 +425,10 @@ async function init() {
     menu.hideAll();
     hideRoomScreens();
     pause.set(false); // frischer Run startet NIE pausiert (Portrait-Altlast)
+    // Ersatz-History-Eintrag, damit die Browser-Zurueck-Geste im laufenden
+    // Spiel einen popstate ausloest (-> Pause oeffnen) statt die Seite zu
+    // verlassen (Phase 4).
+    window.history.pushState({ inRun: true }, '');
     goFullscreen();
     requestWakeLock();
   }
@@ -475,32 +480,9 @@ async function init() {
     );
   }
 
-  // P2: manueller Vollbild-Umschalter im Startmenue. Nur sichtbar, wenn der
-  // Browser Element-Vollbild ueberhaupt kann -- auf iOS gibt es das nicht,
-  // dort waere der Knopf eine Sackgasse. Der automatische Aufruf beim
-  // Run-Start (goFullscreen) bleibt unveraendert; dieser Knopf ist der
-  // ausdrueckliche Weg fuer Desktop und Android. P9 haengt ihn zusaetzlich
-  // an die Einstellungen.
-  const fullscreenBtn = document.getElementById('fullscreenBtn');
-  const canFullscreen = !!document.documentElement.requestFullscreen;
-  function refreshFullscreenBtn() {
-    if (!canFullscreen) return;
-    fullscreenBtn.textContent = document.fullscreenElement ? 'Vollbild verlassen' : 'Vollbild';
-  }
-  if (canFullscreen) {
-    fullscreenBtn.classList.remove('hidden');
-    refreshFullscreenBtn();
-    fullscreenBtn.addEventListener('click', () => {
-      if (document.fullscreenElement) document.exitFullscreen?.();
-      else document.documentElement.requestFullscreen?.().catch(() => {});
-    });
-    // Vollbild kann auch per F11/Escape wechseln -- Beschriftung nachziehen
-    // und die Canvasgroesse neu rechnen (der Viewport aendert sich dabei).
-    document.addEventListener('fullscreenchange', () => {
-      refreshFullscreenBtn();
-      viewport.update();
-    });
-  }
+  // Der manuelle Vollbild-Umschalter (#fullscreenBtn) wird jetzt in
+  // ui/settings.js verdrahtet (Phase 4). Der automatische Aufruf beim
+  // Run-Start (goFullscreen, oben) bleibt hier.
 
   // Display-Wachsperre: beim Gamepad-Spielen fasst man den Touchscreen
   // nicht an -- ohne Wake Lock dimmt das Handy mitten im Gefecht.
@@ -520,7 +502,25 @@ async function init() {
       menu.update(input.getMenuState(), dt);
       return;
     }
-    if (input.consumePause()) pause.toggle();
+
+    // Phase 4: das Pause-Overlay (und die davon geoeffneten Einstellungen)
+    // sind Screens der Menue-Maschine. Solange eines sichtbar ist, wird es
+    // navigiert und die Spiellogik friert dahinter ein. menuBack (ESC/B) an
+    // der Pause-Wurzel setzt fort, sonst geht es einen Screen zurueck.
+    if (menu.current()) {
+      const ms = input.getMenuState();
+      if (ms.menuBack) {
+        if (menu.current() === 'pause') resumeGame();
+        else menu.back();
+      } else {
+        menu.update(ms, dt);
+      }
+      return;
+    }
+    // Kein Menue offen: ESC/Pause-Taste oeffnet das Pause-Overlay (nur im
+    // laufenden Spiel, nicht waehrend eines Run-Overlays -- openPause prueft
+    // run.phase === 'playing').
+    if (input.consumePause()) togglePause();
 
     // Ist ein In-Run-Overlay sichtbar (Upgrade/Karte/Shop/Event/Vorschau), wird
     // es per Controller/Tastatur navigiert und die Spiellogik pausiert dahinter
@@ -922,53 +922,24 @@ async function init() {
   const loop = createLoop({ update: timedUpdate, render: timedRender, step: STEP });
 
   startBtn.addEventListener('click', startRun);
-  // P9: Vollbild/Lautstaerke/Eingabeprofil/Reset/Beenden liegen auf einer
-  // eigenen Seite (Muster P8: Ausruestungsseite) -- alle fuenf zusaetzlich
-  // auf den Hauptbildschirm gepackt liess ihn im Handy-Querformat nicht
-  // mehr ohne Scrollen passen (gemessen per tests/uilayout.mjs: 6-7
-  // Bedienelemente unterhalb des sichtbaren Bereichs bei 667x375).
+  // Einstellungen (Phase 4): der Inhalt (Sound Gesamt/Musik/Effekte,
+  // Eingabeprofil, Vollbild, Reset, Beenden) wird von ui/settings.js
+  // verdrahtet -- derselbe Screen dient Haupt- UND Pause-Menue. Die
+  // Navigation (oeffnen/zurueck) laeuft ueber die Screen-State-Machine.
   const settingsOverlay = document.getElementById('settings');
+  createSettings({
+    doc: document,
+    audio,
+    input,
+    getPref,
+    setPref,
+    resetStats,
+    onStatsReset: refreshBestStats,
+    viewport,
+    win: window,
+  });
   document.getElementById('settingsOpen').addEventListener('click', () => menu.show('settings'));
   document.getElementById('settingsBack').addEventListener('click', () => menu.back());
-  document.getElementById('resetBtn').addEventListener('click', () => {
-    if (window.confirm('Bestwerte wirklich löschen?')) {
-      resetStats();
-      refreshBestStats();
-    }
-  });
-  // P9: "Spiel beenden" -- window.close() wirkt nur auf Tabs/Fenster, die
-  // per Skript geoeffnet wurden (Sicherheitsvorgabe der Browser) oder in
-  // einer installierten PWA; sonst passiert nach der Bestaetigung bewusst
-  // nichts Sichtbares, statt eine Fehlermeldung zu zeigen. Gleiches
-  // Bestaetigungsmuster wie "Bestwerte zuruecksetzen" (window.confirm).
-  document.getElementById('quitBtn').addEventListener('click', () => {
-    if (window.confirm('Spiel wirklich beenden?')) window.close();
-  });
-  // P9: Lautstaerkeregler statt reinem Mute. setPref speichert 0..100 (wie
-  // im DOM), audio.setVolume erwartet 0..1.
-  const volumeSlider = document.getElementById('volumeSlider');
-  const initialVolume = getPref('volume', 100);
-  volumeSlider.value = String(initialVolume);
-  audio.setVolume(initialVolume / 100);
-  volumeSlider.addEventListener('input', () => {
-    const v = Number(volumeSlider.value);
-    audio.setVolume(v / 100);
-    setPref('volume', v);
-  });
-  // P9: Eingabeprofil-Override -- setProfile()/getProfile() stehen seit P1.
-  // Knopfreihe statt <select>, gleiches Muster wie die Schwierigkeitswahl:
-  // ein Klick setzt .active um und ruft input.setProfile().
-  const profileRow = document.getElementById('profileSelect');
-  const profileBtns = [...profileRow.children];
-  function setProfileUI(name) {
-    input.setProfile(name || null);
-    setPref('inputProfile', name || '');
-    for (const b of profileBtns) b.classList.toggle('active', (b.dataset.profile || '') === (name || ''));
-  }
-  for (const b of profileBtns) {
-    b.addEventListener('click', () => setProfileUI(b.dataset.profile));
-  }
-  setProfileUI(getPref('inputProfile', ''));
   // P9: Tastatur-/Gamepad-Navigation der Menue-Screens (SPEC.md 9).
   // Fokussierbare Elemente sind alle sichtbaren, nicht deaktivierten
   // Bedienelemente IN DOKUMENTORDNUNG -- eine feste ID-Liste haette bei
@@ -1086,6 +1057,40 @@ async function init() {
     // letzten Besuch fokussiert war (z. B. "Run fortsetzen").
     menu.root('main');
   }
+
+  // Pause-Overlay (Phase 4): ein echter, geraeteuebergreifend bedienbarer
+  // Screen der Menue-Maschine statt des bisherigen Canvas-Texts + der
+  // Tastatur-only R/M. Einstellungen sind von hier aus per menu.show('settings')
+  // erreichbar -- der Stack fuehrt "Zurueck" dann hierher zurueck (der
+  // from:'pause'-Zurueckpfad, ohne eigenen Parameter).
+  const pauseMenu = document.getElementById('pauseMenu');
+  menu.register('pause', pauseMenu, focusablesIn(pauseMenu));
+  function openPause() {
+    if (!run || run.phase !== 'playing') return; // nicht waehrend Upgrade/Vorschau/Boss-Setup
+    pause.set(true);
+    menu.root('pause');
+  }
+  function resumeGame() {
+    pause.set(false);
+    menu.hideAll();
+  }
+  function togglePause() {
+    if (menu.current() === 'pause') return resumeGame();
+    if (menu.current()) return; // ein anderes Menue (z. B. Einstellungen) ist offen
+    if (pause.isPaused()) return pause.set(false); // Auto-Pause (Tab/Portrait) direkt aufheben
+    openPause();
+  }
+  document.getElementById('pauseResume').addEventListener('click', resumeGame);
+  document.getElementById('pauseSettings').addEventListener('click', () => menu.show('settings'));
+  document.getElementById('pauseRestart').addEventListener('click', () => {
+    clearCurrentRun();
+    launchRun(lastSeed, mode); // launchRun ruft menu.hideAll()
+  });
+  document.getElementById('pauseHome').addEventListener('click', () => {
+    pause.set(false);
+    backToStart();
+  });
+
   const dashBtn = document.getElementById('dashBtn');
   dashBtn.addEventListener(
     'touchstart',
@@ -1109,8 +1114,9 @@ async function init() {
     if (e.key === 'Enter' && (run.phase === 'gameover' || run.phase === 'victory')) {
       backToStart();
     }
-    // Pause-Menue: R = Run mit gleichem Seed neu starten, M = Hauptmenue.
-    if (pause.isPaused() && run.phase === 'playing') {
+    // Pause-Menue (Tastatur-Kuerzel zu den Overlay-Knoepfen): R = Run mit
+    // gleichem Seed neu, M = Hauptmenue. Nur wenn das Pause-Overlay offen ist.
+    if (menu.current() === 'pause') {
       if (e.code === 'KeyR') {
         clearCurrentRun();
         launchRun(lastSeed, mode);
@@ -1175,8 +1181,11 @@ async function init() {
     endScreenTapArmed = false;
   });
 
-  // Pause-Button oben mittig, Mute daneben.
-  document.getElementById('pauseBtn').addEventListener('click', () => pause.toggle());
+  // Pause-Button oben mittig, Mute daneben. Oeffnet/schliesst das Pause-Overlay
+  // (Phase 4) bzw. hebt eine Auto-Pause auf.
+  document.getElementById('pauseBtn').addEventListener('click', () => {
+    if (run) togglePause();
+  });
   const muteBtn = document.getElementById('muteBtn');
   muteBtn.classList.toggle('muted', audio.isMuted());
   muteBtn.addEventListener('click', () => {
@@ -1221,17 +1230,17 @@ async function init() {
     { passive: true },
   );
 
-  // Browser-Zurueck-Geste (Handy) / Alt+Links (Desktop): im Menue einen
-  // Screen zurueck (menu.onPopState), im laufenden Run das Spiel pausieren
-  // (Grundsatz PLAN-STARTMENU). In beiden Faellen wird ein Ersatz-Eintrag
-  // gepusht, damit die Geste nicht die Seite verlaesst.
+  // Browser-Zurueck-Geste (Handy) / Alt+Links (Desktop): im Pause-Overlay
+  // schliesst sie die Pause (fortsetzen), in den Einstellungen fuehrt sie zum
+  // aufrufenden Screen zurueck (Stack), im laufenden Run oeffnet sie das
+  // Pause-Overlay (Grundsatz PLAN-STARTMENU), sonst navigiert sie die
+  // Menue-Screens (menu.onPopState).
   window.addEventListener('popstate', () => {
-    if (run && run.phase === 'playing') {
-      pause.set(true);
-      window.history.pushState({ menuDepth: 0 }, '');
-      return;
-    }
-    menu.onPopState();
+    const cur = menu.current();
+    if (cur === 'pause') return resumeGame(); // In-Run: Geste schliesst die Pause
+    if (cur) return void menu.onPopState(); // z. B. Einstellungen -> Pause/Hauptmenue
+    if (run && run.phase === 'playing') return openPause(); // Spiel laeuft -> Pause oeffnen
+    menu.onPopState(); // Sicherheitsnetz
   });
 
   // Debug: Menue ueberspringen und direkt in einen Run (?debug=1&skipToRun).

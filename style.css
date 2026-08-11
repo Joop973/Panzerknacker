@@ -713,7 +713,20 @@ html, body {
   color: #9aa0a8;
 }
 
-#volumeSlider {
+/* Phase 4: Sound-Bereich -- drei Regler (Gesamt/Musik/Effekte) untereinander,
+   je Label links, Regler rechts (gleiche Breite fuer eine ruhige Spalte). */
+.soundsection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  width: 100%;
+  max-width: 280px;
+}
+.soundsection .volumelabel {
+  justify-content: space-between;
+}
+.soundsection input[type='range'] {
   width: 160px;
   accent-color: #c8b24a;
 }

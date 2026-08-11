@@ -2892,13 +2892,43 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
     bestätigt (Verdrahtung `run→state` gekappt → Gegner unskaliert). Browser-
     Smoke: Beschreibung sichtbar/aktualisiert, Auswahl übersteht Reload.
 
+- **Phase 4 (Einstellungen — Grundgerüst + Sound) — erledigt.** Zwei neue
+  Bausteine: die Settings als wiederverwendbare Komponente und ein **echtes
+  Pause-Overlay** (bisher nur Canvas-Text + Tastatur-R/M).
+  - **`src/ui/settings.js`** (neu, `createSettings`): verdrahtet den INHALT des
+    `#settings`-Overlays an EINER Stelle (Sound Gesamt/Musik/Effekte,
+    Eingabeprofil, Vollbild, Reset, Beenden) — derselbe Screen dient Haupt-
+    UND Pause-Menü. **Der `from`-Zurückpfad kommt aus dem Menü-Stack**
+    (`menu.show('settings')` → `menu.back()` landet automatisch beim
+    Aufrufer), **kein manueller `from`-Parameter** — kann per Konstruktion
+    nicht auseinanderlaufen (das ist die Ist-Abgleich-Abweichung zum Plan).
+  - **`src/core/audio.js`**: Master/**Musik**/**SFX** getrennt. Zwei neue
+    Zwischen-Gains (`musicGain`/`sfxGain`) unter dem `master`; Musik läuft
+    über `musicGain`, alle `play()`-Ereignisse über `sfxGain`. Neue Setter
+    `setMusicVolume`/`setSfxVolume` (+ Getter), getrennt auf 0 setzbar.
+    `#settings` hat drei Regler (`#volMaster`/`#volMusic`/`#volSfx`,
+    10%-Schritte), sofort persistiert (`volume`/`musicVolume`/`sfxVolume`).
+  - **Pause-Overlay** (`#pauseMenu`): ein **Screen der Menü-Maschine**
+    (Phase 1) — `openPause()` = `pause.set(true)` + `menu.root('pause')`,
+    `resumeGame()` = `pause.set(false)` + `menu.hideAll()`. Knöpfe:
+    Fortsetzen, Einstellungen (`menu.show('settings')` → Zurück führt zur
+    **Pause**, nicht ins Hauptmenü — der `from:'pause'`-Pfad), Neustart,
+    Hauptmenü. `update()` friert das Spiel ein, solange `menu.current()` in
+    einem Run gesetzt ist; ESC/B an der Pause-Wurzel setzt fort, sonst einen
+    Screen zurück. `popstate` im Run: Pause offen → fortsetzen, Einstellungen
+    → zur Pause, sonst Pause öffnen. `launchRun` pusht einen Ersatz-Eintrag,
+    damit die Zurück-Geste im Spiel einen `popstate` auslöst statt die Seite
+    zu verlassen.
+  - **Tests:** `regression.mjs` 8h (Musik/SFX getrennt, Gegenprobe rot
+    bestätigt), 8k(g) (from-Zurückpfad via Stack: Pause→Einstellungen→Zurück
+    landet bei Pause, aus dem Hauptmenü bei Hauptmenü). Browser-Smoke:
+    Pause-Overlay, Einstellungen-aus-Pause → Zurück zur Pause, Musik auf 0
+    persistiert, Browser-Zurück/Fortsetzen schließen die Pause.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 4 (Einstellungen — Grundgerüst
-      als wiederverwendbare Komponente `settings.js` mit `from`-Kontext +
-      Sound-Bereich). Ist-Abgleich: ein `#settings`-Screen existiert schon
-      (Lautstärke/Profil/Reset/Beenden), aber **nicht** als
-      wiederverwendbares Modul mit Pause-Kontext, und ein echtes
-      **Pause-Overlay** fehlt noch ganz.
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 5 (Einstellungen — Steuerung:
+      Profil-Wahl steht schon, neu wäre ein Sensitivitäts-Regler auf die
+      Aim-Geschwindigkeit).
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren + `seen`/Codex in
       Phase 7 anbinden.
@@ -2960,6 +2990,21 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `effects.js`/`cfg.js`).
 
 ### Wichtige Dateien
+- `src/ui/menu.js` — Screen-State-Machine der Menü-Overlays (PLAN-STARTMENU
+  Phase 1): `createMenu` mit Zurück-Stack + Browser-History. Vorwärts pusht,
+  jede Rückwärtsnavigation läuft über `history.back()` → `popstate` →
+  `onPopState()`. Screens: `main`/`settings`/`class`/`pause`. Die In-Run-
+  Overlays (Upgrade/Karte/Shop/Event/Vorschau) laufen bewusst NICHT hierüber
+  (eigener `runOverlayNav` an `run.phase`).
+- `src/ui/settings.js` — wiederverwendbarer Einstellungs-Inhalt (Phase 4):
+  `createSettings` verdrahtet Sound (Master/Musik/SFX), Eingabeprofil,
+  Vollbild, Reset, Beenden. Der `from`-Zurückpfad kommt aus dem Menü-Stack,
+  nicht aus einem Parameter.
+- `src/game/classes.js` — spielbare Klassen (PLAN-STARTMENU Phase 2):
+  `playerClassEntries`, `isClassUnlocked` (Freischaltung + `unlockAll`),
+  `createClassButton` (testbare Knopf-Erzeugung).
+- `src/core/debug.js` — Debug-Flags aus der URL (`?debug=1` + `skipToRun`/
+  `unlockAll`/`codexRevealAll`), eingefroren in `DEBUG`.
 - `src/game/state.js` — `stepState`, Treffer, Minen, `killTank`.
 - `src/game/armor.js` — gerichtete Panzerung (Phase 4): `armorBlocks`,
   `reflectBullet`, `hasWallBounced`, `isLive`.
@@ -3008,7 +3053,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v105`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v106`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
