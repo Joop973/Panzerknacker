@@ -346,8 +346,14 @@ async function init() {
     setPref('reduceMotion', optMotion.checked);
   });
 
-  // Schwierigkeits-Auswahl (Segment-Buttons).
+  // Schwierigkeits-Auswahl (Segment-Buttons). Phase 3: unter den Knoepfen
+  // steht die Kurzbeschreibung der Auswirkung der gewaehlten Stufe.
   const modeSelect = document.getElementById('modeSelect');
+  const modeDesc = document.getElementById('modeDesc');
+  const modesData = diffData.modes || {};
+  const refreshModeDesc = () => {
+    if (modeDesc) modeDesc.textContent = modesData[mode]?.desc || '';
+  };
   modeSelect.querySelectorAll('button').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.mode === mode);
     btn.addEventListener('click', () => {
@@ -355,8 +361,10 @@ async function init() {
       setPref('mode', mode);
       modeSelect.querySelectorAll('button').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
+      refreshModeDesc();
     });
   });
+  refreshModeDesc();
 
   let fps = 0;
   let frameCount = 0;

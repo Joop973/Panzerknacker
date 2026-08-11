@@ -420,6 +420,10 @@ function buildCombatRoom(run, type, isFinal) {
       (1 + (diff.hpScaling?.perRoom || 0) * (run.roomIndex - 1)) *
       (type === 'elite' || type === 'cursed' ? diff.elite?.hpMult || 1 : 1),
     hpSkipBosses: diff.hpScaling?.skipBosses !== false,
+    // Schwierigkeitsmodus (Phase 3): getrennt von der Raumtiefen-Skalierung
+    // -- ein globaler Regler auf alle Gegner (inkl. Bosse), LP und Schaden.
+    enemyHpMult: run.enemyHpMult,
+    enemyDamageMult: run.enemyDamageMult,
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.
@@ -627,6 +631,11 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     mode: mode.label,
     modeKey,
     budgetMult: mode.budgetMult,
+    // Schwierigkeitsmodus (PLAN-STARTMENU Phase 3): globale Regler auf die
+    // GEGNER (nie den Spieler). Default 1 fuer Alt-/Fallback-Modi ohne die
+    // Felder. budgetMult (oben) ist der bestehende Gegner-Dichte-Regler.
+    enemyHpMult: mode.hpMult ?? 1,
+    enemyDamageMult: mode.damageMult ?? 1,
     starterTank: opts.starterTank || 'player', // Phase 9: gewaehlte Klasse (Default: Standard). Gehoert in die Seed-Wiedergabe.
     upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}. Die Bombe ist seit P4 keine Karte mehr, sondern fester Slot.
     equippedSecondary: 'mine', // Phase 6/P4: fester Bombenslot, nicht tauschbar

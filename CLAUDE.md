@@ -2866,11 +2866,39 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
   - **`seen`-Flag (Codex) bewusst aufgeschoben** auf Phase 7 — es ist ein
     Save-Konzept, kein statisches Datenfeld (siehe `STARTMENU-BESTAND.md`).
 
+- **Phase 3 (Schwierigkeitsgrad-Auswahl) — erledigt.** Ist-Abgleich: die
+  Auswahl (`#modeSelect`, `leicht`/`normal`/`schwer`) existierte schon auf dem
+  Startbildschirm und ist per Tastatur/Gamepad navigierbar — ein **separater
+  Screen war nicht nötig** (die Testschritte verlangen nur wählbar/beschrieben/
+  persistiert/navigierbar/messbar). Neu ist die **Wirkung** und die Anzeige:
+  - **`data/difficulty.json: modes`** je Stufe um `hpMult`/`damageMult`/`desc`
+    ergänzt (leicht 0,7/0,7, normal 1/1, schwer 1,4/1,3). `budgetMult` (Gegner-
+    Dichte) und `lives` bestehen weiter.
+  - **`src/game/cfg.js: applyModeScaling(cfg, hpMult, damageMult)`** (neu):
+    globaler Regler auf **Gegner** (nie den Spieler), **getrennt** von der
+    Raumtiefen-`applyHpScaling` und **inkl. Bosse** (ein `schwer`-Boss ist
+    zäher UND härter). Skaliert `maxHp` und `damage`.
+  - **Verdrahtung:** `run.js` zieht `mode.hpMult`/`damageMult` (Default 1) und
+    reicht sie als `enemyHpMult`/`enemyDamageMult` an `createState()`; `state.js`
+    wendet `applyModeScaling` an **beiden** Gegner-Erzeugungsstellen an (erste
+    Welle + `updateWave`, über `state.enemyHpMult`/`enemyDamageMult`). Der
+    Spieler wird separat gebaut und bleibt unberührt.
+  - **UI:** `#modeDesc` unter der Auswahl zeigt die Kurzbeschreibung der
+    gewählten Stufe (`main.js: refreshModeDesc`), Auswahl persistiert wie bisher
+    (`getPref('mode')`).
+  - **Tests:** `regression.mjs` Abschnitt 8m — `applyModeScaling` mit **eigenen
+    Zahlen** + Integration (gleicher Seed, jeder Gegner trägt exakt seinen
+    Modus-Faktor auf die Basis-LP, Spieler unverändert). Gegenprobe rot
+    bestätigt (Verdrahtung `run→state` gekappt → Gegner unskaliert). Browser-
+    Smoke: Beschreibung sichtbar/aktualisiert, Auswahl übersteht Reload.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 3 (Schwierigkeitsgrad-Auswahl).
-      Achtung Ist-Abgleich: `data/difficulty.json: modes` existiert schon
-      (`leicht`/`normal`/`schwer` mit `budgetMult`+`lives`), aber **ohne**
-      Gegner-HP-/Schadensmultiplikator — genau das will Phase 3 ergänzen.
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 4 (Einstellungen — Grundgerüst
+      als wiederverwendbare Komponente `settings.js` mit `from`-Kontext +
+      Sound-Bereich). Ist-Abgleich: ein `#settings`-Screen existiert schon
+      (Lautstärke/Profil/Reset/Beenden), aber **nicht** als
+      wiederverwendbares Modul mit Pause-Kontext, und ein echtes
+      **Pause-Overlay** fehlt noch ganz.
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren + `seen`/Codex in
       Phase 7 anbinden.
@@ -2980,7 +3008,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v104`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v105`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

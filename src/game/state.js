@@ -19,7 +19,7 @@ import { applyTypeEffects } from './damagetypes.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
-import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, isBossCfg } from './cfg.js';
+import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyModeScaling, applyScrapDamage, isBossCfg } from './cfg.js';
 import { armorBlocks, reflectBullet, reflectFromAim, hasWallBounced, isLive } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
@@ -119,6 +119,7 @@ export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
     destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses,
+    enemyHpMult = 1, enemyDamageMult = 1,
     starterTank = 'player', starterScrap = 0 } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
@@ -196,7 +197,11 @@ export function createState(data, tiles, opts) {
     const s = room.enemySpawns[i];
     const t = createTank(
       type,
-      applyHpScaling(applyRoomModifier(resolveCfg(data, type), modifier, false), hpScale, hpSkipBosses),
+      applyModeScaling(
+        applyHpScaling(applyRoomModifier(resolveCfg(data, type), modifier, false), hpScale, hpSkipBosses),
+        enemyHpMult,
+        enemyDamageMult,
+      ),
       s.x,
       s.y,
     );
@@ -236,6 +241,10 @@ export function createState(data, tiles, opts) {
     lightningArcs: [],
     hpScale: hpScale ?? 1,
     hpSkipBosses: !!hpSkipBosses,
+    // Schwierigkeitsmodus (Phase 3): gemerkt, damit die zweite Welle
+    // (updateWave) dieselben Gegner-Regler bekommt wie die erste.
+    enemyHpMult: enemyHpMult ?? 1,
+    enemyDamageMult: enemyDamageMult ?? 1,
     rng: mulberry32((aiSeed ^ 0x9e3779b9) >>> 0), // KI-Strom, getrennt
     playerSpawn: room.playerSpawn,
     emergencyRoom: room.emergency,
@@ -764,10 +773,14 @@ function updateWave(state, dt) {
     const s = w.spawns[i];
     const t = createTank(
       type,
-      applyHpScaling(
-        applyRoomModifier(resolveCfg(state.data, type), state.modifier, false),
-        state.hpScale,
-        state.hpSkipBosses,
+      applyModeScaling(
+        applyHpScaling(
+          applyRoomModifier(resolveCfg(state.data, type), state.modifier, false),
+          state.hpScale,
+          state.hpSkipBosses,
+        ),
+        state.enemyHpMult,
+        state.enemyDamageMult,
       ),
       s.x,
       s.y,

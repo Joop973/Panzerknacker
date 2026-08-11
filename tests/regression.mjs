@@ -27,7 +27,7 @@ import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorks
 import { traceTrajectory } from '../src/game/bullet.js';
 import { validateArenas } from '../src/game/generator.js';
 import { createMine, updateMines } from '../src/game/mine.js';
-import { resolveCfg, applyUpgrades } from '../src/game/cfg.js';
+import { resolveCfg, applyUpgrades, applyModeScaling } from '../src/game/cfg.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const load = (n) => JSON.parse(readFileSync(join(root, 'data', n + '.json'), 'utf8'));
@@ -910,6 +910,41 @@ function check(ok, msg) {
   } finally {
     restore();
   }
+}
+
+// ---- 8m. PLAN-STARTMENU Phase 3: Schwierigkeitsmodus skaliert Gegner ----
+// applyModeScaling mit EIGENEN Zahlen (nicht den JSON-Werten) + Integration:
+// derselbe Seed, Modus leicht vs. schwer -> jeder Gegner traegt exakt den
+// Modus-Faktor auf seine Basis-LP. Der Spieler bleibt unberuehrt.
+{
+  // (a) Mechanismus.
+  const c = { maxHp: 20, damage: 25 };
+  applyModeScaling(c, 1, 1);
+  check(c.maxHp === 20 && c.damage === 25, 'Phase3: Faktor 1 ist kein No-op');
+  applyModeScaling(c, 1.5, 2);
+  check(c.maxHp === 30 && c.damage === 50, `Phase3: applyModeScaling skaliert falsch (${c.maxHp}/${c.damage})`);
+  const cNoDmg = { maxHp: 10 };
+  applyModeScaling(cNoDmg, 2, 3);
+  check(cNoDmg.maxHp === 20 && cNoDmg.damage === undefined, 'Phase3: applyModeScaling erfindet ein damage-Feld');
+
+  // (b) Integration: jeder Gegner traegt exakt seinen Modus-Faktor (Raum 1:
+  //     Raumtiefe-hpScale = 1, nicht Elite). Modus schwer verlangt einen
+  //     hoeheren Faktor als leicht -> Raeume sind messbar zaeher.
+  for (const [modeKey, mult] of [['leicht', diffData.modes.leicht.hpMult], ['schwer', diffData.modes.schwer.hpMult]]) {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 12345, modeKey);
+    const enemies = run.state.tanks.slice(1);
+    check(enemies.length > 0, `Phase3: Modus ${modeKey} hat keine Gegner`);
+    for (const e of enemies) {
+      const base = resolveCfg(tanksData, e.type).maxHp;
+      const expected = Math.max(1, Math.round(base * mult));
+      // Die skalierte cfg.maxHp UND die frischen LP (createTank: hp = maxHp).
+      check(e.cfg.maxHp === expected && e.hp === expected, `Phase3: ${modeKey} Gegner ${e.type} LP ${e.cfg.maxHp}/${e.hp} statt ${expected} (Basis ${base} x ${mult})`);
+    }
+    // Der Spieler wird NIE vom Modus-Faktor getroffen.
+    const pBase = resolveCfg(tanksData, run.state.player.type).maxHp;
+    check(run.state.player.cfg.maxHp === pBase, `Phase3: Spieler-LP ${run.state.player.cfg.maxHp} vom Modus verstellt (Basis ${pBase})`);
+  }
+  check(diffData.modes.schwer.hpMult > diffData.modes.leicht.hpMult, 'Phase3: schwer ist nicht zaeher als leicht (hpMult)');
 }
 
 // ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------

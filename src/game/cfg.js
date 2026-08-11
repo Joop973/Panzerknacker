@@ -502,6 +502,21 @@ export function applyHpScaling(cfg, scale, skipBosses) {
   return cfg;
 }
 
+// Schwierigkeitsmodus (PLAN-STARTMENU Phase 3): globaler Regler auf die
+// GEGNER (Aufrufer wenden das nie auf den Spieler an). Bewusst getrennt von
+// applyHpScaling -- der Modus ist KEIN Raumeffekt, gilt fuer den ganzen Run
+// und trifft AUCH Bosse (ein 'schwer'-Boss ist zaeher UND haerter). Skaliert
+// Gegner-LP und Gegner-Schaden; Werte je Stufe in difficulty.json: modes.
+export function applyModeScaling(cfg, hpMult = 1, damageMult = 1) {
+  if (hpMult && hpMult !== 1 && typeof cfg.maxHp === 'number') {
+    cfg.maxHp = Math.max(1, Math.round(cfg.maxHp * hpMult));
+  }
+  if (damageMult && damageMult !== 1 && typeof cfg.damage === 'number') {
+    cfg.damage = Math.max(1, Math.round(cfg.damage * damageMult));
+  }
+  return cfg;
+}
+
 export function applyRoomContext(cfg, ctx) {
   if (!ctx) return cfg;
   // Konterschild: nur in Elite-/Verflucht-/Bossraeumen. In normalen
