@@ -498,28 +498,33 @@ async function init() {
 
   function update(dt) {
     if (!run) {
-      // P9: Startbildschirm -- Tastatur-/Gamepad-Fokusnavigation statt
-      // Spiellogik. getMenuState() braucht keinen Spieler (anders als
-      // getState()), deshalb funktioniert das schon vor dem ersten Run.
-      activeMenuNav.update(input.getMenuState(), dt);
+      // P9: Startbildschirm -- Controller faehrt den Maus-Cursor (gamepadCursor),
+      // Tastatur die diskrete Fokusnavigation. getMenuState() braucht keinen
+      // Spieler (anders als getState()), funktioniert also schon vor dem
+      // ersten Run.
+      const m = input.getMenuState();
+      if (!gamepadCursor(m, dt)) activeMenuNav.update(m, dt);
       return;
     }
     if (input.consumePause()) pause.toggle();
 
     // Ist ein In-Run-Overlay sichtbar (Upgrade/Karte/Shop/Event/Vorschau), wird
-    // es per Controller/Tastatur navigiert und die Spiellogik pausiert dahinter
-    // -- genau wie der Startbildschirm oben. Maus/Touch funktionieren parallel
-    // weiter (die Nav setzt nur den Fokus + loest A/Enter als Klick aus).
+    // es per Controller-Cursor bzw. Tastatur bedient und die Spiellogik
+    // pausiert dahinter -- genau wie der Startbildschirm oben. Maus/Touch
+    // funktionieren parallel weiter.
     const runOverlay = visibleRunOverlay();
     if (runOverlay) {
       if (runOverlay !== lastRunOverlay) {
         runOverlayNav.reset();
         lastRunOverlay = runOverlay;
       }
-      runOverlayNav.update(input.getMenuState(), dt);
+      const m = input.getMenuState();
+      if (!gamepadCursor(m, dt)) runOverlayNav.update(m, dt);
       return;
     }
     lastRunOverlay = null;
+    // Im Spiel faehrt der linke Stick den Panzer -- kein Cursor.
+    gpCursor.classList.add('hidden');
 
     if (pause.isPaused()) return;
 
@@ -1014,6 +1019,46 @@ async function init() {
     { bothAxes: true },
   );
   let lastRunOverlay = null;
+
+  // Gamepad-Cursor (Nutzerwunsch): der linke Stick faehrt einen FREIEN Zeiger
+  // ueber die Overlays -- wie eine Maus --, A klickt das Element darunter. Das
+  // loest das wiederkehrende "Controller erreicht Element X nicht" universell:
+  // es wird ein echtes Klick-Ereignis an der Cursorposition ausgeloest,
+  // unabhaengig von der DOM-Struktur (Karten-DIVs, Kartenknoten, Knoepfe --
+  // alles klickbar). Die diskrete Fokus-Navigation (menunav) bleibt fuer die
+  // TASTATUR; sobald der Controller die Quelle ist, uebernimmt der Cursor.
+  const gpCursor = document.createElement('div');
+  gpCursor.id = 'gpCursor';
+  gpCursor.classList.add('hidden');
+  document.body.appendChild(gpCursor);
+  let cursorX = window.innerWidth / 2;
+  let cursorY = window.innerHeight / 2;
+  const CURSOR_SPEED = 900; // Bildschirm-px/s bei vollem Stickausschlag
+  // Gibt true zurueck, wenn der Cursor die Overlay-Eingabe uebernommen hat --
+  // dann laeuft die diskrete Fokus-Navigation NICHT zusaetzlich.
+  function gamepadCursor(menuState, dt) {
+    const active = input.getSource() === 'gamepad';
+    gpCursor.classList.toggle('hidden', !active);
+    if (!active) return false;
+    // Eine haengende Fokus-Markierung aus einer vorigen Tastatur-Sitzung
+    // entfernen -- sonst leuchten Cursor UND Fokusrahmen gleichzeitig.
+    for (const e of document.querySelectorAll('.menu-focus')) e.classList.remove('menu-focus');
+    const s = menuState.stick || { x: 0, y: 0 };
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    cursorX = Math.max(0, Math.min(w, cursorX + s.x * CURSOR_SPEED * dt));
+    cursorY = Math.max(0, Math.min(h, cursorY + s.y * CURSOR_SPEED * dt));
+    gpCursor.style.left = `${cursorX}px`;
+    gpCursor.style.top = `${cursorY}px`;
+    // A klickt: der Cursor ist pointer-events:none, elementFromPoint liefert
+    // also das Element DARUNTER; click() bubbelt zu dessen Handler (Karten-DIV
+    // oder Knopf).
+    if (menuState.menuConfirm) {
+      const el = document.elementFromPoint(cursorX, cursorY);
+      el?.click?.();
+    }
+    return true;
+  }
 
   // Phase 9: Klassenauswahl-Seite. Fuellt sich aus tanks.json (player:true),
   // zeigt Name/Werte/Beschreibung, merkt die Wahl in den Prefs.

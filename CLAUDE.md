@@ -2836,11 +2836,55 @@ Drei Beschwerden, alle behoben:
   bothAxes-Traversierung mit X, A wählt die Karte; Gegenprobe: ohne
   `data-navcard` 0 Karten, ohne bothAxes kein X-Durchlauf).
 
+### Controller: freier Maus-Cursor + Bomben-Sichtlinie (Nutzer-Meldung) — gebaut
+Nachfassung, weil die diskrete Fokus-Navigation den Nutzer nicht überzeugte
+(„kann die einzelnen Upgrades immer noch nicht auswählen, nur den Reroll").
+Statt weiter an der Fokusliste zu drehen, **ein freier Maus-Cursor** — das war
+der ausdrückliche Wunsch („linker Stick als Maus, damit rumfahren wie ich
+möchte") und löst das „Controller erreicht Element X nicht" universell.
+- **`main.js: gamepadCursor(menuState, dt)`** + `#gpCursor`-DOM-Element
+  (`style.css`): sobald der Controller die **Quelle** ist (`input.getSource()
+  === 'gamepad'`) und ein Menü/Overlay offen ist, fährt der **linke Stick**
+  einen frei beweglichen Zeiger (`CURSOR_SPEED` 900 px/s) über den Bildschirm,
+  **A klickt** das Element darunter. Umsetzung bewusst über
+  `document.elementFromPoint(x, y)?.click()` — der Cursor ist
+  `pointer-events: none`, trifft also das Element darunter, und `click()`
+  bubbelt zum Handler (Karten-DIV **oder** Knopf **oder** Kartenknoten, egal
+  wie das DOM aussieht). Damit ist die frühere DOM-Fummelei (`data-navcard`,
+  `bothAxes`) für den Controller obsolet, bleibt aber für die **Tastatur**
+  (Pfeiltasten + Enter) als diskrete `menunav`-Navigation erhalten.
+- **Verdrahtung in `update()`**: in ALLEN Menü-Kontexten (Startbildschirm +
+  In-Run-Overlays) läuft zuerst `gamepadCursor()`; gibt es `true` zurück
+  (Controller aktiv), wird die diskrete `menunav` NICHT zusätzlich gefahren
+  (sonst leuchten Cursor UND Fokusrahmen). Im Spiel (`playing`) fährt der linke
+  Stick weiter den Panzer — der Cursor wird dort ausgeblendet.
+- **`input.js: getMenuState()`** liefert jetzt zusätzlich `stick` (den ROHEN,
+  analogen linken Stick) für die Cursorbewegung; `menuDir` bleibt die
+  quantisierte Richtung für die Tastatur-Navigation.
+- **Bomben-Sichtlinie** (Punkt 1 der Meldung): `profileGamepad` setzt
+  `padSecondaryAim` jetzt **immer, solange LT gehalten wird** — ohne
+  Stickausschlag `{angle:0, dist:0}` (am Panzer), genau wie der Handy-Wurfstick
+  beim bloßen Antippen. So zeigt `drawMinePreview` sofort beim Halten eine
+  Wurflinie + Explosionsradius (vorher erst beim Auslenken sichtbar), und ein
+  LT-Tipp ohne Ziel legt die Bombe am Panzer ab (dist 0) statt 58 px voraus.
+- **Tests (je mit Gegenprobe)**: `tests/gamepadcursor.mjs` (**neu**,
+  Playwright, eigener Static-Server, injiziertes Standard-Gamepad) fährt den
+  Cursor per Stick end-to-end auf den Startknopf und weist nach, dass **A einen
+  echten Klick** auf das Element darunter auslöst; `tests/gamepad.mjs`
+  (`getMenuState.stick` analog + deadzone, LT-ohne-Stick → Sichtlinie/Wurf am
+  Panzer mit `dist 0`). Gegenproben bestätigt: Cursor deaktiviert →
+  4 Cursor-Checks rot; `stick` entfernt → Analog-/Cursor-Checks rot;
+  Vorschau-Fallback entfernt → Sichtlinie-Checks rot.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Controller-Feinschliff (optional)**: Der A-Knopf legt im Spiel
       weiterhin eine Bombe sofort ohne Zielen ab (`secondaryAlt`), obwohl die
       Doktrin dafür LT vorsieht — bei Bedarf entkoppeln. Kein Blocker mehr, der
       gezielte Wurf läuft jetzt über LT-Halten + rechten Stick.
+- [ ] **Diskrete Overlay-Fokus-Navigation (`data-navcard`/`bothAxes`)** ist
+      seit dem Gamepad-Cursor nur noch für die **Tastatur** relevant — der
+      Controller nutzt den Cursor. Kann bleiben; bei einer Aufräumrunde prüfen,
+      ob die `bothAxes`-Option für die Tastatur überhaupt gewollt ist.
 - [ ] **Bankshot-Faktor (UMBAUPLAN-LP „Was dieser Umbau nicht löst")**: auf
       Nutzerwunsch von 2,0 auf **2,5** angehoben (`balance.json:
       bullet.wallBounceDamageMult`) — der freiwillige Bankshot fühlte sich zu
@@ -2941,7 +2985,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v103`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v104`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -2979,6 +3023,7 @@ python3 -m http.server 8099        # dann http://localhost:8099/index.html
 node --check src/<datei>.js         # Syntax
 node tests/regression.mjs           # Regressionssuite (eingecheckt!)
 node tests/gamepad.mjs              # Controller-Eingabe (dependency-frei, gestubbtes Gamepad)
+node tests/gamepadcursor.mjs        # Gamepad-Cursor end-to-end (Playwright, eigener Server)
 node tests/uilayout.mjs             # Overlay-Layout (braucht Playwright)
 node tests/viewport.mjs             # DPR/Viewport + Zielkoordinaten (Playwright, braucht eigenen Server auf :8099)
 node tests/fogperf.mjs              # Additive Lichtmaske: Korrektheit + Renderzeit (Playwright, P11)

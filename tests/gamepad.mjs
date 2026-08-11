@@ -184,18 +184,49 @@ function releaseAll() {
   check(input.getMinePreview() == null, 'Gamepad: Vorschau nach dem Wurf nicht zurueckgesetzt');
 }
 
-// --- 7. In-Game: LT ohne Stick -> kein Zielwurf (faellt vor den Panzer) ----
+// --- 7. In-Game: LT ohne Stick -> Sichtlinie/Wurf am Panzer (dist 0) -------
+// Wie der Handy-Wurfstick beim blossen Antippen: sofort eine Sichtlinie + ein
+// Explosionsradius AM Panzer, kein "unsichtbares" Ablegen.
 {
   releaseAll();
   const lt = inputCfg.gamepad.secondary; // 6
   pad.buttons[lt] = 1; // nur LT, rechter Stick zentriert
   let st = input.getState(player);
   check(st.secondaryHeld === true, 'Gamepad: LT ohne Stick -> secondaryHeld nicht true');
-  check(st.secondaryAim == null, `Gamepad: LT ohne Stickausschlag setzt trotzdem eine Zielvorgabe (${JSON.stringify(st.secondaryAim)})`);
+  check(
+    st.secondaryAim && st.secondaryAim.dist === 0,
+    `Gamepad: LT ohne Stick -> Zielvorgabe ${JSON.stringify(st.secondaryAim)} statt {dist:0} (Vorschau am Panzer)`,
+  );
+  const prev = input.getMinePreview();
+  check(
+    prev && prev.dist === 0,
+    `Gamepad: Sichtlinie am Panzer fehlt beim Halten ohne Stick (${JSON.stringify(prev)})`,
+  );
   pad.buttons[lt] = 0;
   st = input.getState(player);
-  check(st.secondaryRelease === true, 'Gamepad: LT loslassen (ohne Ziel) -> secondaryRelease nicht true');
-  check(st.secondaryAim == null, 'Gamepad: Wurf ohne Zielvorgabe soll null bleiben (Bombe faellt in Blickrichtung)');
+  check(st.secondaryRelease === true, 'Gamepad: LT loslassen -> secondaryRelease nicht true');
+  check(
+    st.secondaryAim && st.secondaryAim.dist === 0,
+    'Gamepad: Wurf ohne Stick legt nicht am Panzer ab (dist 0)',
+  );
+}
+
+// --- 8. Menue/Overlay: analoger linker Stick fuer den Gamepad-Cursor -------
+// getMenuState liefert den ROHEN linken Stick, mit dem main.js den freien
+// Maus-Cursor ueber die Overlays faehrt (menuDir bleibt fuer die diskrete
+// Tastatur-Navigation).
+{
+  releaseAll();
+  pad.axes[0] = 0.5; // linker Stick halb rechts
+  pad.axes[1] = -1; // ganz hoch
+  const m = input.getMenuState();
+  check(m.stick && Math.abs(m.stick.x - 0.5) < 1e-6, `Gamepad: getMenuState.stick.x ${m.stick?.x} statt 0.5 (Cursor-Analogwert)`);
+  check(m.stick && m.stick.y === -1, `Gamepad: getMenuState.stick.y ${m.stick?.y} statt -1`);
+  // unter der Fahr-Deadzone -> 0 (kein Cursor-Zittern im Stillstand)
+  releaseAll();
+  pad.axes[0] = 0.05;
+  const m2 = input.getMenuState();
+  check(m2.stick.x === 0, `Gamepad: getMenuState.stick unter Deadzone ${m2.stick?.x} statt 0`);
 }
 
 if (failures) {

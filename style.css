@@ -725,6 +725,28 @@ html, body {
   outline-offset: 2px;
 }
 
+/* Gamepad-Cursor: freier Maus-Zeiger, den der linke Stick ueber die Overlays
+   faehrt (A klickt). pointer-events:none, damit elementFromPoint das Element
+   DARUNTER trifft und der Cursor sich nicht selbst faengt. */
+#gpCursor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  margin-top: -12px;
+  border: 3px solid #ffe98a;
+  border-radius: 50%;
+  background: rgba(255, 233, 138, 0.28);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7), 0 0 10px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  z-index: 100000;
+}
+#gpCursor.hidden {
+  display: none;
+}
+
 /* P9: Einstellungsseite (Muster P8: #previewUpgrades) -- "Zurueck" bleibt
    immer im Bild, gleiche Vorsorge wie #previewUpBack. */
 #settingsBack {
