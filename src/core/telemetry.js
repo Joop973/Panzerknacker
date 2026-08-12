@@ -11,12 +11,14 @@
 // dagegen immer -- man kann also ohne den Parameter spielen und die Daten
 // spaeter mit ?debug=1 ansehen/exportieren.
 
+import { DEBUG } from './debug.js';
+
 const KEY = 'runs';
 const MAX_RUNS = 100;
 // Bei jeder Bedeutungsaenderung der Felder hochzaehlen -- sonst werden
 // spaeter Runs verglichen, die gar nicht vergleichbar sind.
 const SCHEMA_VERSION = 2;
-const GAME_VERSION = 'v114'; // an den sw.js-Cache-Namen gekoppelt halten
+const GAME_VERSION = 'v115'; // an den sw.js-Cache-Namen gekoppelt halten
 
 let current = null; // Sammelpuffer des laufenden Runs (null = keiner aktiv)
 
@@ -74,7 +76,6 @@ export function beginRun({ seed, mode, secondary }) {
     upgrades: [], // { chosen, rejected: [] }
     scrapSpends: [], // { room, type, amount }
     bans: [], // { room, id }
-    doors: [], // { room, chosen, rejected: [] }  (Phase 4)
     eventChoices: [], // { room, event, option }   (Phase 4)
     transformations: [], // { room, id }          (Phase 5)
   };
@@ -116,12 +117,6 @@ export function recordScrapSpend({ room, type, amount }) {
 export function recordBan({ room, id }) {
   if (!current) return;
   current.bans.push({ room, id });
-}
-
-// Eine Tuerwahl (Phase 4): gewaehlter + abgelehnter Typ pro Raum.
-export function recordDoor({ room, chosen, rejected }) {
-  if (!current) return;
-  current.doors.push({ room, chosen, rejected: rejected || [] });
 }
 
 // Eine freigeschaltete Transformation (Phase 5).
@@ -182,7 +177,6 @@ export function endRun({ won, roomReached, deathCause, deathCauseLabel, enemyTyp
     upgrades: current.upgrades,
     scrapSpends: current.scrapSpends,
     bans: current.bans,
-    doors: current.doors,
     eventChoices: current.eventChoices,
     transformations: current.transformations,
   };
@@ -197,12 +191,13 @@ export function endRun({ won, roomReached, deathCause, deathCauseLabel, enemyTyp
 
 // ---- Debug-Ansicht (nur bei ?debug=1) ----------------------------------
 
+// PLAN-STARTMENU Phase 14: liest den Schalter jetzt aus der EINEN Quelle
+// (core/debug.js) statt die URL selbst noch einmal zu parsen -- vorher gab
+// es drei unabhaengige Debug-Erkennungen (debug.js, hier, input.js), die
+// auseinanderlaufen konnten. readDebugFlags() faengt ein fehlendes `window`
+// bereits selbst ab (Node-Tests), der try/catch hier ist damit ueberfluessig.
 export function isDebugEnabled() {
-  try {
-    return new URLSearchParams(window.location.search).get('debug') === '1';
-  } catch {
-    return false;
-  }
+  return DEBUG.on;
 }
 
 let debugBody = null; // <tbody> der Debug-Tabelle (null = nicht montiert)
@@ -225,12 +220,6 @@ function fmtScrap(r) {
 
 function fmtBans(r) {
   return (r.bans || []).map((b) => b.id).join(', ') || '–';
-}
-
-function fmtDoors(r) {
-  return (r.doors || [])
-    .map((d) => `R${d.room}:${d.chosen}${d.rejected && d.rejected.length ? `(↯${d.rejected.join('/')})` : ''}`)
-    .join('  ·  ') || '–';
 }
 
 function fmtTransforms(r) {
@@ -344,7 +333,6 @@ function refreshDebugView() {
       fmtUpgrades(r.upgrades),
       fmtScrap(r),
       fmtBans(r),
-      fmtDoors(r),
       fmtEvents(r),
       fmtTransforms(r),
       fmtRooms(r.rooms),
@@ -441,7 +429,6 @@ export function mountDebugView() {
     'Upgrades (gewählt / abgelehnt)',
     'Schrott (verd. / ausg.)',
     'Verbannt',
-    'Türen (gewählt ↯abgelehnt)',
     'Events',
     'Transformationen',
     'Räume (Dauer / Leben / Schrott)',

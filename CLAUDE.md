@@ -2793,13 +2793,14 @@ war korrekt — der Bug lag im Menü. Zwei echte Lücken:
   End-to-end im Browser gegengeprüft (Fake-Xbox-Pad: Startmenü-Stick +
   Auto-Repeat, Vorschau per Stick + A → Raum startet).
 
-### Neuer Plan: `PLAN-STARTMENU.md` (Startmenü, Klassen, Codex, Post-Run)
+### `PLAN-STARTMENU.md` (Startmenü, Klassen, Codex, Post-Run) — **komplett abgearbeitet**
 Vom Nutzer geliefert: 15-Phasen-Plan (Phase 0–14) für Hauptmenü,
 Klassenwahl, Schwierigkeit, Einstellungen, **Codex-Galerie** und
 Post-Run-Screen. Eine Phase pro Session. Maßgeblich ist die Ist-Referenz
 **`STARTMENU-BESTAND.md`** (Phase-0-Deliverable) — der Plan nennt mehrere
 Dateien falsch/„neu", obwohl sie existieren. **Entwicklungsbranch dieses
 Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
+**Alle 15 Phasen sind gebaut** (Stand: Phase 14, Integration & Polish).
 
 - **Phase 0 (Bestandsaufnahme) — erledigt.** `STARTMENU-BESTAND.md`:
   Save-Code (`storage.js`, kein `version`-Feld, kein Codex), kein
@@ -3358,11 +3359,86 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
     geprüfte Klassen-Hook, der Boss-Hook exakt dasselbe wie der geprüfte
     Gegner-Hook — beide gelten dadurch als mitabgedeckt.
 
+- **Phase 14 (Integration & Polish) — erledigt. Damit ist `PLAN-STARTMENU.md`
+  (Phasen 0–14) vollständig abgearbeitet.** Die Phase war kein Aufräumen —
+  der Ist-Abgleich hat **zwei echte Fehler** gefunden:
+  - **Die F1-Debug-Ansicht war NICHT auf `?debug=1` gegated** (Testschritt 5).
+    Jeder Spieler konnte in der Veröffentlichung mit F1 das Performance-Panel
+    öffnen — und F1 wurde dort auch noch der Browser-Hilfe weggeschnappt.
+    `input.js` liest den Schalter jetzt aus `core/debug.js`.
+  - **Ein Zwischenstand ohne `lives` machte den Run unverlierbar.** `createRun()`
+    übernahm `r.lives`/`r.roomIndex` ungeprüft; fehlte `lives`, lief der Run
+    mit `NaN` weiter — `run.lives -= 1` bleibt `NaN` und `NaN <= 0` ist
+    **immer falsch**, der Run konnte also nie mehr enden (still, ohne
+    Fehlermeldung). Ohne `roomIndex` entstand ein Raum ganz **ohne Gegner**.
+    Neu: **`game/run.js: migrateRunSnapshot()`** nach dem Muster von
+    `migrateCodex()` (Phase 7) — fehlende Felder werden mit Defaults
+    aufgefüllt (`lives` aus dem Schwierigkeitsmodus), ein völlig kaputter
+    Rohwert (String/Zahl/Array) liefert `null` und wird wie „kein
+    Zwischenstand" behandelt statt einen Phantom-Run zu starten. Läuft an
+    **beiden** Stellen: `createRun()`s Resume-Zweig und `main.js`s
+    „Run fortsetzen"-Knopf (der sonst „Raum undefined, undefined ❤" zeigte).
+  - **Drei Debug-Erkennungen auf eine Quelle zusammengeführt**: `debug.js`
+    behauptete seit Phase 1, „EINE Quelle für alle Entwickler-Schalter" zu
+    sein — `telemetry.js` und `input.js` haben die URL aber je selbst
+    geparst. Beide lesen jetzt `DEBUG`. **Dabei fiel `debug.js` selbst als
+    nicht-Node-sicher auf**: die Prüfung `typeof window !== 'undefined'`
+    reichte nicht, weil `tests/domstub.mjs` ein `window` **ohne** `location`
+    definiert — `window.location.search` warf dort. (Die Konsolidierung hat
+    den Fehler erst sichtbar gemacht: `telemetry.js` hatte vorher einen
+    eigenen try/catch, der genau das abfing.)
+  - **Tote Platzhalter**: `telemetry.recordDoor()` samt Datenfeld,
+    Formatter und Debug-Tabellenspalte **entfernt** — die Türwahl gibt es
+    seit dem v2-Rückbau nicht mehr. `telemetry.recordTransformation()`
+    dagegen **verdrahtet statt gelöscht**: die Funktion und ihre
+    Tabellenspalte existieren seit Phase 5, aufgerufen hat sie nie jemand
+    (Transformationen waren stillgelegt und wurden in Phase 17 ohne diesen
+    Hook wiederbelebt) — die Spalte stand bei **jedem** Run auf „–". Der
+    doppelte „Transformation freigeschaltet"-Block aus Upgrade-Screen und
+    Shop liegt jetzt als `announceTransformation()` an EINER Stelle und
+    meldet zusätzlich einen Toast (Phase 13).
+  - **Veralteter Kommentar korrigiert**: `run.js: ensureBankshotEnemy()`
+    beschrieb die USP-Bankshot-Garantie als aktive Designentscheidung und
+    verwies auf das gelöschte `tests/uspcheck.mjs` — tatsächlich hat
+    UMBAUPLAN-LP Phase 8 sie auf `chance: 0` gestellt (No-op) und `t_prism`
+    sein `requiresRicochet` genommen. Steht jetzt explizit dort.
+  - **Tests:** `regression.mjs` Abschnitt 8x — (a) Snapshot-Migration mit
+    **eigenen** Zahlen: jedes Feld einzeln entfernt (nichts darf
+    `undefined`/`NaN` werden), kaputte Rohwerte → `null`, ein **intakter**
+    Save darf sich nicht verändern, und ein Resume ohne `lives` muss wieder
+    **verlierbar** sein; (b) Debug-Flags (leere URL, Einzelflags ohne
+    `debug=1`, `telemetry.isDebugEnabled()` deckungsgleich mit `debug.js`,
+    F1 schaltet ohne `?debug=1` nichts ein); (c) drei komplette Runs mit je
+    einer anderen Klasse bis Sieg/Niederlage + Codex-Fortschritt in **allen
+    vier** Kategorien, der einen Neustart übersteht.
+  - **Eine Gegenprobe war zuerst wertlos — und eine zweite ergebnislos.**
+    Der Codex-Test prüfte „`seen > 0` je Kategorie": mit absichtlich
+    kaputten Gegner-ids blieb er **grün**, weil die Elite-Schlüssel weiter
+    passten (21→19 statt 0). Jetzt prüft er die echte Invariante: **jeder
+    Typ, der wirklich in einem Raum stand, muss ein Schlüssel sein, den der
+    Codex kennt.** Zweiter Fallstrick: die erste, grobe Mutation ließ die
+    Suite schon in Abschnitt Phase 10 **abstürzen**, also weit vor 8x — das
+    sah wie „grün" aus, war aber gar keine Messung. Erst eine chirurgische
+    Mutation (ein Basistyp umbenannt, Anzahl bleibt 22) erreichte 8x und
+    zeigte den Fehler. **Merke: eine Gegenprobe, die die Suite vorher
+    abbricht, beweist nichts.**
+  - **Browser-Smoke** (nicht eingecheckt): kompletter Screen-Durchlauf
+    (Klasse → Schwierigkeit → Run → Pause → Hauptmenü, „Run fortsetzen"
+    ohne `undefined`), Save ohne `lives` lädt und startet, Einstellungen
+    (Regler/Checkbox/Knopfreihe/Modus) über zwei Reloads erhalten, und
+    Testschritt 5 in **beide** Richtungen. Auch hier ein Fund an der
+    eigenen Messung: die erste Pixel-Sonde für die F1-Ansicht maß die
+    **untere** Bildhälfte, das Panel zeichnet aber bei (4,4) — sie zeigte
+    6 % *mit* und 17 % *ohne* Panel, war also blind. Nach der Korrektur:
+    50 % ohne, 78 % mit (Schwelle 60 %).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 14 (Integration & Polish —
-      Übergänge abrunden, tote Platzhalter entfernen, Save-Migration final
-      testen, Debug-Flags standardmäßig deaktiviert prüfen. Letzte Phase
-      des Plans).
+- [ ] **Kein Pflichtthema mehr offen** — `PLAN.md`, `PLAN-INPUT.md`,
+      `UMBAUPLAN-LP.md` und `PLAN-STARTMENU.md` sind vollständig
+      abgearbeitet. Die Punkte darunter sind optional; neue Wünsche des
+      Nutzers abwarten. `PLAN-STARTMENU.md` nennt am Ende selbst vier
+      Ideen für später (Klassen-Freischaltung scharfschalten, Codex-
+      Detailansicht, persistente Meta-Statistiken, Telemetrie-Export).
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren.
 - [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
@@ -3496,7 +3572,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v114`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v115`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

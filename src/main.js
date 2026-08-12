@@ -29,6 +29,7 @@ import {
   buyShopLife,
   rerollSecondElement,
   ROOM_TYPE_INFO,
+  migrateRunSnapshot,
 } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
 import { createEventScreen, createShopScreen } from './ui/roomscreens.js';
@@ -441,6 +442,33 @@ async function init() {
     touch.setGadgetLabel(run.equippedGadget ? tanksData.secondaries?.[run.equippedGadget]?.label || 'GADGET' : '');
   }
 
+  // Frisch freigeschaltete Transformation (Phase 17) melden: Text im Raum +
+  // Toast (Phase 13) + Telemetrie. Beide Kartenwege (Upgrade-Screen und
+  // Shop-Kauf) hatten dafuer bisher denselben Block doppelt -- hier EINMAL.
+  //
+  // PLAN-STARTMENU Phase 14: `telemetry.recordTransformation()` existiert seit
+  // Phase 5 und hat eine eigene Spalte in der Debug-Tabelle -- aufgerufen hat
+  // sie aber NIE jemand (die Transformationen waren im v2-Rueckbau
+  // stillgelegt und wurden in Phase 17 ohne diesen Hook wiederbelebt). Die
+  // Spalte stand deshalb bei jedem Run auf "–".
+  function announceTransformation() {
+    if (!run?.newTransformation) return;
+    const t = run.newTransformation;
+    if (run.state) {
+      run.state.texts.push({
+        x: run.state.player.x,
+        y: run.state.player.y - 40,
+        text: `${t.symbol} ${t.name} freigeschaltet!`,
+        age: 0,
+        life: 2.0,
+        color: '#ffd23c',
+      });
+    }
+    notify.push(t.symbol || '✦', `Transformation: ${t.name}`);
+    telemetry.recordTransformation({ room: run.roomIndex, id: t.id });
+    run.newTransformation = null;
+  }
+
   // Phase 17: "Elemente: Feuer + Frost" -- Primaer- + Zweitelement der Klasse,
   // Anzeigenamen aus status.json. Zeigt das Zweitelement nur, wenn es sich vom
   // Primaerelement unterscheidet.
@@ -487,8 +515,11 @@ async function init() {
   // selbst wird aus Seed + Raumnummer neu erzeugt (deterministisch), ein
   // mitten im Raum abgebrochener Versuch beginnt den Raum also von vorn.
   const resumeBtn = document.getElementById('resumeBtn');
+  // Phase 14: derselbe Migrationsweg wie in createRun() -- sonst stuende auf
+  // dem Knopf "Raum undefined, undefined ❤", wenn dem Save ein Feld fehlt.
+  const loadMigratedRun = () => migrateRunSnapshot(loadCurrentRun(), diffData, mode);
   function refreshResumeBtn() {
-    const saved = loadCurrentRun();
+    const saved = loadMigratedRun();
     if (!saved) {
       resumeBtn.classList.add('hidden');
       return;
@@ -497,13 +528,13 @@ async function init() {
     resumeBtn.classList.remove('hidden');
   }
   resumeBtn.addEventListener('click', () => {
-    const saved = loadCurrentRun();
+    const saved = loadMigratedRun();
     if (!saved) {
       refreshResumeBtn();
       return;
     }
-    seedInput.value = String(saved.seed >>> 0);
-    launchRun(saved.seed >>> 0, saved.modeKey || mode, saved);
+    seedInput.value = String(saved.seed);
+    launchRun(saved.seed, saved.modeKey || mode, saved);
   });
   refreshResumeBtn();
 
@@ -703,22 +734,7 @@ async function init() {
             }
           }
           chooseUpgrade(run, idx);
-          // Frisch freigeschaltete Transformation (Phase 17) kurz einblenden --
-          // sonst verpufft die Mechanik unbemerkt.
-          if (run.newTransformation) {
-            const t = run.newTransformation;
-            if (run.state) {
-              run.state.texts.push({
-                x: run.state.player.x,
-                y: run.state.player.y - 40,
-                text: `${t.symbol} ${t.name} freigeschaltet!`,
-                age: 0,
-                life: 2.0,
-                color: '#ffd23c',
-              });
-            }
-            run.newTransformation = null;
-          }
+          announceTransformation();
           updateSecondaryLabel();
           upgradeShown = false;
         },
@@ -801,20 +817,7 @@ async function init() {
             updateSecondaryLabel(); // Sekundärkarten wechseln die Waffe
             // Transformationen (Phase 17): auch ein Kartenkauf im Shop
             // zaehlt gegen den Tag-Fortschritt, siehe onPick oben.
-            if (run.newTransformation) {
-              const t = run.newTransformation;
-              if (run.state) {
-                run.state.texts.push({
-                  x: run.state.player.x,
-                  y: run.state.player.y - 40,
-                  text: `${t.symbol} ${t.name} freigeschaltet!`,
-                  age: 0,
-                  life: 2.0,
-                  color: '#ffd23c',
-                });
-              }
-              run.newTransformation = null;
-            }
+            announceTransformation();
           }
           return ok;
         },

@@ -67,19 +67,24 @@ function totalRooms(diff) {
   return diff.roomsBeforeFinal + 1; // 15 + Finalraum
 }
 
-// USP-Garantie (PLAN.md, Pruefpunkt 1 "Erzwungene Bankshots"): Der Plan
-// verlangt, dass in 60 % der Kampfraeume ab Raum 5 mindestens ein nicht
-// direkt toetbarer Gegner steht, und nennt dafuer ausdruecklich
-// "Design-Kontrolle ueber den Generator". Die reine Zufallsauswahl in
-// buyEnemies() kam nur auf 33 % (tests/uspcheck.mjs) -- ein Prisma ist teuer
-// und nur einer von elf Typen.
+// ⚠️ AKTUELL ABGESCHALTET (`difficulty.json: bankshotGuarantee.chance = 0`)
+// -- die Funktion laeuft, ist aber ein No-op. UMBAUPLAN-LP Phase 8 hat die
+// erzwungenen Bankshots bewusst zurueckgezogen: einen Panzer in 58 % der
+// Raeume zu einem Gegner zu zwingen, den seine Klasse nicht spielt, ist im
+// LP-Modell unfair. Der Tauschmechanismus bleibt erhalten, damit eine
+// spaetere Abprallpanzer-Eigenschaft ihn ohne Code-Neubau wieder scharf
+// schalten kann. Zwei Dinge sind seit Phase 8 zu beachten, falls das
+// passiert: `t_prism` traegt kein `requiresRicochet` mehr (es nimmt jetzt
+// 3x Schaden aus Bankshots), die "steht schon ein Bankshot-Gegner im Raum"-
+// Pruefung unten greift fuer normale Raeume also nicht mehr; und das
+// Messwerkzeug tests/uspcheck.mjs ist geloescht.
 //
-// Deshalb wird hier in `chance` der Raeume ab `minRoom` ein bereits
-// gekaufter Gegner GETAUSCHT statt einer ergaenzt: das Gefahrenbudget des
-// Raums bleibt damit unveraendert, der Raum wird nicht voller, nur anders
-// zusammengesetzt. Getauscht wird der teuerste Gegner -- er kommt dem
-// Prisma (7 Punkte) am naechsten, die Budget-Verschiebung bleibt klein.
-// Ist ohnehin schon ein Bankshot-Gegner dabei, passiert nichts.
+// Urspruengliche Begruendung (PLAN.md, Pruefpunkt 1 "Erzwungene Bankshots"):
+// In `chance` der Raeume ab `minRoom` wird ein bereits gekaufter Gegner
+// GETAUSCHT statt einer ergaenzt -- das Gefahrenbudget des Raums bleibt
+// damit unveraendert, der Raum wird nicht voller, nur anders
+// zusammengesetzt. Getauscht wird der teuerste Gegner, er kommt dem Prisma
+// (7 Punkte) am naechsten.
 function ensureBankshotEnemy(run, types) {
   const g = run.difficulty.bankshotGuarantee;
   if (!g || !g.types?.length || run.roomIndex < g.minRoom) return types;
@@ -270,6 +275,44 @@ export function runSnapshot(run) {
     kills: run.kills,
     deaths: run.deaths,
     roomsCleared: run.roomsCleared,
+  };
+}
+
+// Migration eines gespeicherten Zwischenstands (PLAN-STARTMENU Phase 14,
+// Testschritt 4: "manuell ein Feld aus dem Save loeschen, Spiel laedt
+// trotzdem fehlerfrei"). Gleiche Haltung wie migrateCodex() aus Phase 7:
+// fehlende Felder werden mit Defaults aufgefuellt statt den Save zu
+// verwerfen -- ein voellig unbrauchbarer Rohwert (null, String, Zahl)
+// liefert dagegen `null`, damit der Aufrufer ihn wie "kein Zwischenstand"
+// behandelt statt einen Phantom-Run zu starten.
+//
+// Der Fund, der dazu gefuehrt hat: `roomIndex` und `lives` wurden vorher
+// ungeprueft uebernommen. Fehlte `lives`, lief der Run mit `NaN` weiter --
+// `run.lives -= 1` bleibt NaN und `NaN <= 0` ist immer falsch, der Run war
+// also nicht mehr VERLIERBAR (still, ohne Fehlermeldung). Fehlte
+// `roomIndex`, entstand ein Raum ganz ohne Gegner.
+export function migrateRunSnapshot(raw, difficulty, modeKey) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const mode = (difficulty?.modes && difficulty.modes[modeKey ?? raw.modeKey]) || null;
+  const defaultLives = mode?.lives ?? difficulty?.lives ?? 3;
+  const num = (v, fallback) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+  return {
+    ...raw,
+    seed: num(raw.seed, 0) >>> 0,
+    modeKey: typeof raw.modeKey === 'string' ? raw.modeKey : 'normal',
+    roomIndex: Math.max(1, Math.floor(num(raw.roomIndex, 1))),
+    roomType: typeof raw.roomType === 'string' ? raw.roomType : 'combat',
+    lives: Math.max(1, Math.floor(num(raw.lives, defaultLives))),
+    scrap: Math.max(0, Math.floor(num(raw.scrap, 0))),
+    playTime: Math.max(0, num(raw.playTime, 0)),
+    kills: Math.max(0, Math.floor(num(raw.kills, 0))),
+    deaths: Math.max(0, Math.floor(num(raw.deaths, 0))),
+    roomsCleared: Math.max(0, Math.floor(num(raw.roomsCleared, 0))),
+    shieldCharges: Array.isArray(raw.shieldCharges) ? raw.shieldCharges : [],
+    upgrades: raw.upgrades && typeof raw.upgrades === 'object' ? raw.upgrades : {},
+    banned: Array.isArray(raw.banned) ? raw.banned : [],
+    tagCounts: raw.tagCounts && typeof raw.tagCounts === 'object' ? raw.tagCounts : {},
+    transformations: Array.isArray(raw.transformations) ? raw.transformations : [],
   };
 }
 
@@ -722,8 +765,13 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
   run.secondElement = drawSecondElement(run.seed, primaryElementOf(run), run.elementRerolls);
   // Fortsetzen: Zustand vor dem Raumbau einspielen, damit startRoom()
   // denselben Raum wie beim Abbruch erzeugt (Seed + Raumnummer genuegen).
-  if (opts.resume) {
-    const r = opts.resume;
+  // Phase 14: der Zwischenstand laeuft IMMER durch die Migration -- ein
+  // unvollstaendiger Save fuellt sich mit Defaults auf, ein voellig
+  // kaputter liefert null und wird wie "kein Zwischenstand" behandelt
+  // (frischer Run statt Phantom-Run mit NaN-Leben).
+  const resumeSnap = opts.resume ? migrateRunSnapshot(opts.resume, difficulty, modeKey) : null;
+  if (resumeSnap) {
+    const r = resumeSnap;
     run.starterTank = r.starterTank || run.starterTank; // Phase 9: Klasse aus dem Snapshot
     // Phase 17: Zweitelement aus dem Snapshot (nach evtl. Shop-Rerolls). Fehlt
     // es (Altstand), aus Seed + Reroll-Index deterministisch nachziehen.

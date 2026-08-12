@@ -37,6 +37,7 @@
 // Belegungen, Deadzones und Reichweiten kommen aus data/input.json.
 
 import { WIDTH, HEIGHT } from '../config.js';
+import { DEBUG } from './debug.js';
 
 const EMPTY_AIM = null;
 
@@ -94,7 +95,12 @@ export function createInput(target, canvas, opts = {}) {
 
   // ---- Rohe Geraete-Events (nur hier!) --------------------------------
   function onKeyDown(e) {
-    if (has(keys.debug, e.code)) {
+    // PLAN-STARTMENU Phase 14, Testschritt 5: OHNE ?debug=1 gibt es die
+    // F1-Debug-Ansicht gar nicht -- vorher konnte sie jeder Spieler in der
+    // Veroeffentlichung aufrufen (und F1 wurde dort auch noch der
+    // Browser-Hilfe weggeschnappt). Der Schalter kommt aus der einen
+    // Quelle (core/debug.js), nicht aus einem zweiten URL-Parser.
+    if (DEBUG.on && has(keys.debug, e.code)) {
       e.preventDefault(); // F1 oeffnet sonst die Browser-Hilfe
       if (!e.repeat) debug = !debug;
       return;

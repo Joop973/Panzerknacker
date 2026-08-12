@@ -5749,6 +5749,199 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 8x. PLAN-STARTMENU Phase 14: Integration & Polish -------------------
+// (a) Testschritt 4: "manuell ein Feld aus dem Save loeschen, Spiel laedt
+//     trotzdem fehlerfrei". Geprueft wird der MECHANISMUS (jedes Feld
+//     einzeln entfernt) mit eigenen Zahlen, nicht die aktuelle Datenlage.
+//     Der Fund dahinter: ohne `lives` lief der Run mit NaN weiter und war
+//     dadurch NICHT MEHR VERLIERBAR (NaN <= 0 ist immer falsch).
+{
+  const { migrateRunSnapshot } = await import('../src/game/run.js');
+  const voll = {
+    schema: 1, seed: 42, modeKey: 'normal', starterTank: 'player',
+    roomIndex: 4, roomType: 'combat', lives: 3, shieldCharges: [2],
+    scrap: 7, upgrades: { turbo: 1 }, banned: ['x'], tagCounts: { stat: 2 },
+    transformations: ['bollwerk'], endless: false, playTime: 12,
+    kills: 5, deaths: 1, roomsCleared: 3,
+  };
+  // Unbrauchbarer Rohwert -> null (wie "kein Zwischenstand"), kein Phantom-Run.
+  for (const kaputt of [null, undefined, 'text', 42, []]) {
+    check(migrateRunSnapshot(kaputt, diffData, 'normal') === null,
+      `Phase14: kaputter Save (${JSON.stringify(kaputt)}) liefert keinen null-Wert`);
+  }
+  // Jedes einzelne Feld entfernen -- nichts darf undefined/NaN werden.
+  for (const feld of Object.keys(voll)) {
+    const snap = { ...voll };
+    delete snap[feld];
+    const m = migrateRunSnapshot(snap, diffData, 'normal');
+    check(!!m, `Phase14: Save ohne "${feld}" wird komplett verworfen`);
+    if (!m) continue;
+    for (const [k, v] of Object.entries({ roomIndex: m.roomIndex, lives: m.lives, scrap: m.scrap, seed: m.seed, playTime: m.playTime })) {
+      check(typeof v === 'number' && Number.isFinite(v),
+        `Phase14: Save ohne "${feld}" laesst ${k} als ${v} stehen (undefined/NaN)`);
+    }
+    check(m.roomIndex >= 1, `Phase14: Save ohne "${feld}" ergibt roomIndex ${m.roomIndex} (< 1)`);
+    check(m.lives >= 1, `Phase14: Save ohne "${feld}" ergibt lives ${m.lives} (< 1)`);
+    check(Array.isArray(m.shieldCharges) && Array.isArray(m.banned) && Array.isArray(m.transformations),
+      `Phase14: Save ohne "${feld}" liefert kein Array fuer shieldCharges/banned/transformations`);
+    check(m.upgrades && typeof m.upgrades === 'object', `Phase14: Save ohne "${feld}" liefert kein upgrades-Objekt`);
+  }
+  // Der vollstaendige Save darf sich NICHT veraendern (die Migration ist
+  // kein stiller Umschreiber).
+  const unveraendert = migrateRunSnapshot(voll, diffData, 'normal');
+  for (const k of Object.keys(voll)) {
+    const a = JSON.stringify(unveraendert[k]);
+    const b = JSON.stringify(voll[k]);
+    check(a === b, `Phase14: Migration aendert das intakte Feld "${k}" (${b} -> ${a})`);
+  }
+  // Und der Run laeuft danach wirklich: ohne "lives" muss er verlierbar sein.
+  {
+    const ohneLives = { ...voll };
+    delete ohneLives.lives;
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42, 'normal', { resume: ohneLives });
+    check(Number.isFinite(run.lives) && run.lives >= 1, `Phase14: Resume ohne "lives" ergibt lives=${run.lives}`);
+    enterRoom(run);
+    let g = 400;
+    while (run.phase === 'transition' && g-- > 0) stepRun(run, CMD, STEP);
+    for (let tod = 0; tod < 12 && run.phase === 'playing'; tod++) {
+      run.state.killTank(run.state.player, 'test');
+      for (let i = 0; i < 200 && run.phase === 'playing'; i++) stepRun(run, CMD, STEP);
+    }
+    check(run.phase === 'gameover',
+      `Phase14: Run aus einem Save ohne "lives" endet nie (Phase "${run.phase}", lives=${run.lives}) -- nicht verlierbar`);
+  }
+}
+
+// (b) Testschritt 5: "Ohne ?debug=1 sind keine Debug-Funktionen aktiv."
+{
+  const { readDebugFlags } = await import('../src/core/debug.js');
+  const aus = readDebugFlags('');
+  check(!aus.on && !aus.skipToRun && !aus.unlockAll && !aus.codexRevealAll,
+    'Phase14: leere URL schaltet Debug-Funktionen ein');
+  // Einzelflags OHNE debug=1 duerfen NICHTS tun (versehentlicher Link).
+  const geschmuggelt = readDebugFlags('?skipToRun&unlockAll&codexRevealAll');
+  check(!geschmuggelt.on && !geschmuggelt.skipToRun && !geschmuggelt.unlockAll && !geschmuggelt.codexRevealAll,
+    'Phase14: Einzelflags wirken auch ohne ?debug=1 (Veroeffentlichungs-Risiko)');
+  const an = readDebugFlags('?debug=1&unlockAll');
+  check(an.on && an.unlockAll && !an.skipToRun, 'Phase14: ?debug=1&unlockAll setzt die Flags nicht korrekt');
+  // Ohne window/location darf nichts werfen (Node-Tests, s. debug.js).
+  let warf = false;
+  try { readDebugFlags(undefined); } catch { warf = true; }
+  check(!warf, 'Phase14: readDebugFlags() wirft ohne window.location');
+  // telemetry.isDebugEnabled() liest jetzt DIESELBE Quelle (vorher ein
+  // zweiter eigener URL-Parser).
+  const tele = await import('../src/core/telemetry.js');
+  check(tele.isDebugEnabled() === readDebugFlags(undefined).on,
+    'Phase14: telemetry.isDebugEnabled() weicht von core/debug.js ab (zwei Quellen)');
+  // Und die F1-Debug-Ansicht bleibt ohne ?debug=1 aus -- vorher konnte sie
+  // jeder Spieler in der Veroeffentlichung aufrufen.
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { createInput } = await import('../src/core/input.js');
+    const canvas = document.createElement('canvas');
+    const input = createInput(window, canvas, { inputCfg: tanksData.input });
+    check(input.isDebug() === false, 'Phase14: Debug-Ansicht ist von Anfang an aktiv');
+    for (const code of tanksData.input.keyboard.debug) {
+      window.emit('keydown', { code, repeat: false, preventDefault() {} });
+    }
+    check(input.isDebug() === false,
+      'Phase14: F1 schaltet die Debug-Ansicht auch OHNE ?debug=1 ein (Testschritt 5)');
+    input.destroy?.();
+  } finally {
+    restore();
+  }
+}
+
+// (c) Testschritt 1+3: kompletter Durchlauf mit einer GEWAEHLTEN Klasse bis
+//     zum Post-Run-Screen, und danach plausibler Codex-Fortschritt in ALLEN
+//     vier Kategorien. Faengt die Fehlerklasse "der Codex fuellt sich nie",
+//     wenn die id-Raeume (categoryIds) und die im echten Raum vorkommenden
+//     Typen auseinanderlaufen -- das wuerde still passieren.
+{
+  const { createCodex, markVisibleEnemies, markVisibleBosses } = await import('../src/game/codex.js');
+  const gespeichert = {};
+  const codex = createCodex({
+    tanksData, upgradesData,
+    loadRaw: () => gespeichert.data || null,
+    saveRaw: (d) => { gespeichert.data = JSON.parse(JSON.stringify(d)); },
+  });
+  const klassen = ['player', 'c_flame', 'c_ricochet'];
+  const echtGesehen = new Set(); // jeder Typ, der wirklich in einem Raum stand
+  let siege = 0;
+  for (const klasse of klassen) {
+    codex.markSeen('playerTanks', klasse); // Klassenwahl (main.js: buildClassList)
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 4711 + siege, 'normal', { starterTank: klasse });
+    check(run.starterTank === klasse, `Phase14: gewaehlte Klasse ${klasse} kommt nicht im Run an`);
+    let guard = 200000;
+    while (run.phase !== 'victory' && run.phase !== 'gameover' && guard-- > 0) {
+      if (run.phase === 'preview') enterRoom(run);
+      else if (run.phase === 'transition') stepRun(run, CMD, STEP);
+      else if (run.phase === 'playing') {
+        // Dieselbe Pro-Tick-Abtastung wie main.js: sampleRoomTelemetry().
+        const sichtbar = run.state.tanks.slice(1).map((t) => ({ type: t.type, affixes: t.affixes || [] }));
+        for (const t of sichtbar) echtGesehen.add(t.type);
+        markVisibleEnemies(codex, sichtbar);
+        markVisibleBosses(codex, sichtbar);
+        cheatKillAll(run.state);
+        stepRun(run, CMD, STEP);
+      } else if (run.phase === 'upgrade') {
+        const o = run.pendingOffers[0];
+        if (o && !o.fallback && o.id) codex.markSeen('upgrades', o.id); // main.js: onPick
+        chooseUpgrade(run, 0);
+      } else if (run.phase === 'map') pickMapNode(run);
+      else if (run.phase === 'workshop') leaveWorkshop(run);
+      else if (run.phase === 'event') chooseEventOption(run, 0);
+      else break;
+    }
+    check(run.phase === 'victory' || run.phase === 'gameover',
+      `Phase14: Durchlauf mit ${klasse} endet in Phase "${run.phase}" statt im Post-Run`);
+    if (run.phase === 'victory') siege++;
+    // Post-Run-Screen braucht diese Felder (main.js baut daraus seine Anzeige).
+    check(Number.isFinite(run.playTime) && Number.isFinite(run.kills) && Number.isFinite(run.roomsCleared),
+      `Phase14: Post-Run-Kennzahlen unbrauchbar (${run.playTime}/${run.kills}/${run.roomsCleared})`);
+    check(run.kills > 0 && run.roomsCleared > 0,
+      `Phase14: Durchlauf mit ${klasse} zaehlt weder Kills noch geraeumte Raeume`);
+    // `run.damageByType` wird hier BEWUSST nicht geprueft: cheatKillAll()
+    // ruft killTank() direkt auf und umgeht damit den Schadenspfad, der
+    // state.damageByType fuellt -- die Summe bliebe zwangslaeufig 0. Die
+    // Faltung selbst prueft Abschnitt 8v (Phase 12) mit eigenen Zahlen.
+    check(run.damageByType && typeof run.damageByType === 'object',
+      `Phase14: run.damageByType fehlt nach einem vollen Run mit ${klasse}`);
+    codex.flush();
+  }
+  const p = codex.progress();
+  for (const kat of ['playerTanks', 'upgrades', 'enemies', 'bosses']) {
+    check(p[kat].seen > 0, `Phase14: Codex-Kategorie "${kat}" bleibt nach ${klassen.length} Runs bei 0/${p[kat].total} (Testschritt 3)`);
+    check(p[kat].seen <= p[kat].total, `Phase14: Codex "${kat}" zaehlt ${p[kat].seen} von ${p[kat].total} (mehr gesehen als es gibt)`);
+  }
+  // Die eigentliche Invariante hinter "plausibler Fortschritt": JEDER Typ, der
+  // wirklich in einem Raum stand, muss auch ein Schluessel sein, den der Codex
+  // kennt. Ein blosses `seen > 0` ist dafuer zu schwach -- laufen die
+  // id-Raeume auseinander, fuellt sich die Kategorie still nur noch zur
+  // Haelfte (per Gegenprobe bestaetigt: mit kaputten Gegner-ids blieb
+  // `seen > 0` gruen, weil die Elite-Schluessel weiter passten).
+  for (const typ of echtGesehen) {
+    const bekannt = codex.categoryIds.enemies.includes(typ) || codex.categoryIds.bosses.includes(typ);
+    check(bekannt, `Phase14: Typ "${typ}" steht im echten Raum, ist dem Codex aber unbekannt (id-Raeume laufen auseinander)`);
+  }
+  check(echtGesehen.size >= 5, `Phase14: nur ${echtGesehen.size} verschiedene Gegnertypen in ${klassen.length} Runs (Testaufbau zu duenn)`);
+  check(p.playerTanks.seen === klassen.length, `Phase14: ${p.playerTanks.seen} statt ${klassen.length} gesehene Klassen`);
+  // Der Fortschritt muss einen Neustart ueberleben (gebuendeltes Schreiben).
+  const nachReload = createCodex({
+    tanksData, upgradesData, loadRaw: () => gespeichert.data, saveRaw: () => {},
+  }).progress();
+  for (const kat of ['playerTanks', 'upgrades', 'enemies', 'bosses']) {
+    check(nachReload[kat].seen === p[kat].seen,
+      `Phase14: Codex "${kat}" ueberlebt den Neustart nicht (${nachReload[kat].seen} statt ${p[kat].seen})`);
+  }
+  console.log(
+    `Phase 14 Durchlauf: ${klassen.length} Runs (${siege} Siege) -> Codex ` +
+    `Panzer ${p.playerTanks.seen}/${p.playerTanks.total}, Upgrades ${p.upgrades.seen}/${p.upgrades.total}, ` +
+    `Gegner ${p.enemies.seen}/${p.enemies.total}, Bosse ${p.bosses.seen}/${p.bosses.total}`,
+  );
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

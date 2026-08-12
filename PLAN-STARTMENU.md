@@ -385,6 +385,19 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 
 ## Phase 14: Integration & Polish
 
+> **Erledigt — damit ist der ganze Plan (Phasen 0–14) abgearbeitet.**
+> Die Phase war kein Aufräumen, sondern hat **zwei echte Fehler** gefunden:
+> (1) die F1-Debug-Ansicht war **nicht** auf `?debug=1` gegated, jeder
+> Spieler konnte sie in der Veröffentlichung öffnen (Testschritt 5);
+> (2) ein Zwischenstand ohne `lives` machte den Run **unverlierbar**
+> (`NaN <= 0` ist immer falsch) — neu: `game/run.js: migrateRunSnapshot()`
+> nach dem Muster von `migrateCodex()`. Dazu drei Debug-Erkennungen auf die
+> eine Quelle `core/debug.js` zusammengeführt (die dabei selbst als
+> nicht-Node-sicher aufgefallen ist), `recordDoor()` entfernt (Türwahl gibt
+> es seit dem v2-Rückbau nicht mehr) und `recordTransformation()`
+> **verdrahtet** — die Spalte existierte seit Phase 5 und war immer leer.
+> Details siehe `CLAUDE.md`, Abschnitt „Phase 14 (Integration & Polish)".
+
 **Änderungen:**
 - Übergänge zwischen Screens abrunden
 - Tote Platzhalter aus früheren Phasen entfernen
@@ -392,11 +405,11 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 - Debug-Flags standardmäßig deaktiviert prüfen
 
 **Testschritte:**
-1. Kompletter Durchlauf: Hauptmenü → Klasse → Schwierigkeit → Run → Post-Run → Hauptmenü
-2. Einstellungen bleiben über mehrere Sessions korrekt erhalten
-3. Codex zeigt nach mehreren Runs plausiblen Fortschritt in allen Kategorien
-4. Save-Migration: manuell ein Feld aus dem Save löschen, Spiel lädt trotzdem fehlerfrei
-5. Ohne `?debug=1` sind keine Debug-Funktionen aktiv
+1. ✅ Kompletter Durchlauf: Hauptmenü → Klasse → Schwierigkeit → Run → Post-Run → Hauptmenü
+2. ✅ Einstellungen bleiben über mehrere Sessions korrekt erhalten
+3. ✅ Codex zeigt nach mehreren Runs plausiblen Fortschritt in allen Kategorien
+4. ✅ Save-Migration: manuell ein Feld aus dem Save löschen, Spiel lädt trotzdem fehlerfrei
+5. ✅ Ohne `?debug=1` sind keine Debug-Funktionen aktiv
 
 ---
 
