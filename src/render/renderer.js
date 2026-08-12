@@ -932,31 +932,39 @@ export function createRenderer(ctx) {
     }
   }
 
-  // Geisterpanzer (Phase 7): einfache, durchscheinende Wanne+Rohr-Form in
-  // der Farbe des Ursprungstyps -- kein Sprite, keine der tankspezifischen
-  // Overlays (Schild/Panzerung/Powershot), nur konstante Transparenz statt
-  // Blinken wie bei t_white.
+  // Geisterpanzer (Phase 7): EIN gemeinsames Geister-Sprite fuer alle Panzer,
+  // die zum Geist werden -- durchscheinend gezeichnet (konstante Transparenz
+  // statt Blinken), unabhaengig vom Ursprungstyp. Faellt ohne geladenes
+  // Sprite auf die alte prozedurale Wanne+Rohr-Form in der Typfarbe zurueck.
   function drawGhosts(ctx, state, alpha) {
+    const ghostBody = sprite('body', 'ghost');
+    const ghostTur = sprite('turret', 'ghost');
     for (const g of state.ghosts) {
       const x = lerp(g.prevX, g.x, alpha);
       const y = lerp(g.prevY, g.y, alpha);
       const r = g.cfg.radius;
-      ctx.globalAlpha = 0.4;
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(g.heading);
-      ctx.fillStyle = TANK_COLORS[g.type] || '#ffffff';
-      ctx.fillRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
-      ctx.restore();
-      ctx.save();
-      ctx.translate(x, y);
-      ctx.rotate(g.turret);
-      ctx.fillStyle = TANK_COLORS[g.type] || '#ffffff';
-      ctx.fillRect(4, -2.5, r + 4, 5); // Rohr
-      ctx.beginPath();
-      ctx.arc(0, 0, 7, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
+      ctx.globalAlpha = 0.55;
+      if (ghostBody && ghostTur) {
+        // Front zeigt im Sprite nach oben -> heading + PI/2 (wie drawTank).
+        drawSpriteRot(ghostBody, x, y, g.heading + Math.PI / 2, 2.9 * r, false);
+        drawSpriteRot(ghostTur, x, y, g.turret, 2.1 * r, true);
+      } else {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(g.heading);
+        ctx.fillStyle = TANK_COLORS[g.type] || '#ffffff';
+        ctx.fillRect(-r + 2, -r + 5, 2 * r - 4, 2 * r - 10);
+        ctx.restore();
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(g.turret);
+        ctx.fillStyle = TANK_COLORS[g.type] || '#ffffff';
+        ctx.fillRect(4, -2.5, r + 4, 5); // Rohr
+        ctx.beginPath();
+        ctx.arc(0, 0, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       ctx.globalAlpha = 1;
     }
   }

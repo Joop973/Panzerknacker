@@ -2,8 +2,8 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v105';
-const PREV_CACHE = 'panzerknacker-v104'; // bleibt fuer eine evtl. offene Alt-Seite intakt
+const CACHE = 'panzerknacker-v106';
+const PREV_CACHE = 'panzerknacker-v105'; // bleibt fuer eine evtl. offene Alt-Seite intakt
 
 const ASSETS = [
   './',
@@ -70,6 +70,11 @@ const ASSETS = [
   'assets/sprites/body_t_purple.png',
   'assets/sprites/body_t_white.png',
   'assets/sprites/body_t_black.png',
+  'assets/sprites/body_c_frost.png',
+  'assets/sprites/body_c_flame.png',
+  'assets/sprites/body_c_necro.png',
+  'assets/sprites/body_c_blast.png',
+  'assets/sprites/body_ghost.png',
   'assets/sprites/turret_player.png',
   'assets/sprites/turret_t_brown.png',
   'assets/sprites/turret_t_grey.png',
@@ -80,6 +85,11 @@ const ASSETS = [
   'assets/sprites/turret_t_purple.png',
   'assets/sprites/turret_t_white.png',
   'assets/sprites/turret_t_black.png',
+  'assets/sprites/turret_c_frost.png',
+  'assets/sprites/turret_c_flame.png',
+  'assets/sprites/turret_c_necro.png',
+  'assets/sprites/turret_c_blast.png',
+  'assets/sprites/turret_ghost.png',
   'assets/sprites/tile_floor.png',
   'assets/sprites/tile_wall.png',
   'assets/sprites/tile_breakable.png',
