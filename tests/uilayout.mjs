@@ -42,6 +42,17 @@ const tanks = JSON.parse(readFileSync(join(root, 'data/tanks.json'), 'utf8'));
 const ownedUpgrades = Object.values(upgrades)
   .slice(0, 25)
   .map((c) => ({ name: c.name, level: 2, description: c.description, symbol: c.symbol || '•' }));
+// Post-Run-Screen: ein spaeter Run kann deutlich mehr als 25 Karten sammeln
+// (60 Kernkarten allein) -- 25 reicht nicht, um die Sticky-Aktionsreihe
+// wirklich zu fordern (Gegenprobe bei der Umsetzung: mit 25 Karten blieb der
+// "Nochmal"-Knopf AUCH ohne sticky im Bild, der Test waere also wirkungslos
+// gewesen). Alle vorhandenen Karten voll ausschoepfen.
+const manyUpgrades = Object.values(upgrades).map((c) => ({
+  name: c.name,
+  level: 2,
+  description: c.description,
+  symbol: c.symbol || '•',
+}));
 
 const VIEWPORTS = [
   [844, 390, 'iPhone quer'],
@@ -172,7 +183,15 @@ try {
         tagCounts: { defense: 2 }, unlocked: new Set(), threshold: 3, hasDash: false,
         onPick: () => {}, onReroll: () => true, onBan: () => true, onFourth: () => true, onShield: () => true,
       });
-      const ov = document.getElementById('upgrade');
+      // Nebenfund (Phase 12): die echte App (main.js) haelt schon ein EIGENES,
+      // leeres #upgrade-Overlay (createUpgradeScreen() laeuft dort beim
+      // Runstart) -- getElementById('upgrade') traf bisher IMMER dieses
+      // erste, unberuehrte Overlay statt des hier frisch gezeigten. Der Test
+      // war dadurch wirkungslos (leere Knopfliste, nie ein Fehler moeglich).
+      // Fix: das ZULETZT angehaengte Element mit dieser id nehmen -- jeder
+      // Screen haengt sich per document.body.appendChild ans Ende an.
+      const upMatches = document.querySelectorAll('[id="upgrade"]');
+      const ov = upMatches[upMatches.length - 1];
       const out = [...ov.querySelectorAll('button')].filter((c) => {
         const r = c.getBoundingClientRect();
         return r.height > 0 && (r.top < 0 || r.bottom > window.innerHeight);
@@ -183,7 +202,51 @@ try {
       fail(`${label} (${width}x${height}): Upgrade-Screen -- ${us.length} Bedienelement(e) ausserhalb: ${us.join(', ')}`);
     }
 
-    if (!startOff.length && !settingsOff.length && pv.sichtbar && pv.up.sichtbar && !us.length) {
+    // --- Post-Run-Screen (Phase 12): alle Aktionsknoepfe (inkl. Endlos)
+    // im Bild, auch bei vielen gesammelten Upgrades (voller Lauf) --
+    // dieselbe Falle wie beim Upgrade-Screen/der Raumvorschau. ---
+    const pr = await page.evaluate(
+      async ({ ups }) => {
+        const { createPostRun } = await import('./src/ui/post-run.js');
+        createPostRun().show({
+          won: true,
+          classLabel: 'Standard',
+          modeLabel: 'Normal',
+          roomLabel: 'Raum 16/16',
+          timeLabel: '12:34',
+          kills: 80,
+          deaths: 3,
+          roomsCleared: 15,
+          hitRatePct: 55,
+          bestCombo: 9,
+          seed: 123456789,
+          killTypeLine: 'Brauner ×10 · Grauer ×8 · Gelber ×6',
+          damageLine: 'Physisch 400 · Feuer 120',
+          newRecord: true,
+          bestLine: 'Best: 15 Räume | 300 Kills gesamt | Sieg 10:00',
+          upgrades: ups,
+          showEndless: true,
+          onEndless: () => {},
+          onAgain: () => {},
+          onHome: () => {},
+        });
+        // Wie beim Upgrade-Screen oben: main.js haelt schon ein eigenes,
+        // leeres #postrun -- das ZULETZT angehaengte Element nehmen.
+        const prMatches = document.querySelectorAll('[id="postrun"]');
+        const ov = prMatches[prMatches.length - 1];
+        const out = [...ov.querySelectorAll('button')].filter((c) => {
+          const r = c.getBoundingClientRect();
+          return r.height > 0 && (r.top < 0 || r.bottom > window.innerHeight);
+        });
+        return out.map((c) => c.textContent.trim().slice(0, 24));
+      },
+      { ups: manyUpgrades },
+    );
+    if (pr.length) {
+      fail(`${label} (${width}x${height}): Post-Run-Screen -- ${pr.length} Bedienelement(e) ausserhalb: ${pr.join(', ')}`);
+    }
+
+    if (!startOff.length && !settingsOff.length && pv.sichtbar && pv.up.sichtbar && !us.length && !pr.length) {
       console.log(`OK  ${label.padEnd(20)} ${width}x${height}`);
     }
     await page.close();

@@ -5540,6 +5540,145 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 8v. PLAN-STARTMENU Phase 12: Post-Run-Screen ------------------------
+// (a) run.damageByType (game/run.js: foldRoomDamage): faltet den
+//     Raum-Schaden (state.damageByType, UMBAUPLAN-LP Phase 8) beim
+//     Raumwechsel UND beim Run-Ende in einen laufzeitweiten Akkumulator --
+//     EIGENE Zahlen, nicht die aktuelle Balance (Faustregel: den
+//     Mechanismus pruefen, nicht die Datenlage).
+{
+  const runA = createRun(tanksData, tilesData, diffData, upgradesData, 900001);
+  enterRoom(runA);
+  let g = 500;
+  while (runA.phase === 'transition' && g-- > 0) stepRun(runA, CMD, STEP);
+  check(runA.phase === 'playing', 'Phase12: Raum 1 kommt nicht in "playing" an (Testaufbau)');
+  check(Object.keys(runA.damageByType).length === 0, 'Phase12: run.damageByType ist zu Beginn nicht leer');
+  // Eigene Zahlen, KEIN echtes Gefecht.
+  runA.state.damageByType.physical = 37;
+  runA.state.damageByType.fire = 5;
+  cheatKillAll(runA.state);
+  stepRun(runA, CMD, STEP); // Raum geraeumt -> Belohnungsphase
+  // Bis zum naechsten "playing" durchklicken (Belohnung + evtl. Karte +
+  // 1,5-s-Uebergang in 1/60-s-Schritten).
+  g = 300;
+  while (runA.phase !== 'playing' && runA.phase !== 'victory' && runA.phase !== 'gameover' && g-- > 0) {
+    if (runA.phase === 'upgrade') chooseUpgrade(runA, 0);
+    else if (runA.phase === 'map') pickMapNode(runA);
+    else if (runA.phase === 'preview') enterRoom(runA);
+    else if (runA.phase === 'transition') stepRun(runA, CMD, STEP);
+    else break;
+  }
+  check(runA.phase === 'playing', `Phase12: Raum 2 nicht erreicht (Phase "${runA.phase}", Testaufbau)`);
+  check(
+    runA.damageByType.physical === 37 && runA.damageByType.fire === 5,
+    `Phase12: Raum-1-Schaden nicht beim Raumwechsel gefaltet (${JSON.stringify(runA.damageByType)})`,
+  );
+  // Zweiter Raum: weitere eigene Zahlen -- MUSS sich addieren, nicht ersetzen.
+  runA.state.damageByType.physical = 8;
+  runA.state.damageByType.poison = 3;
+  runA.lives = 1; // naechster Spielertod beendet den Run
+  runA.state.killTank(runA.state.player, 'test');
+  stepRun(runA, CMD, STEP);
+  check(runA.phase === 'gameover', `Phase12: Run endet nicht nach dem letzten Leben (Phase "${runA.phase}", Testaufbau)`);
+  check(
+    runA.damageByType.physical === 45 && runA.damageByType.fire === 5 && runA.damageByType.poison === 3,
+    `Phase12: Schaden des letzten Raums (finishRun) nicht gefaltet oder falsch summiert (${JSON.stringify(runA.damageByType)})`,
+  );
+}
+
+// (b) post-run.js: der DOM-Screen selbst -- Titel/Ergebnis, alle Stat-Zeilen,
+// das VOLLSTAENDIGE Upgrade-Grid (Testschritt 2), der bedingte Endlos-Knopf
+// und alle drei Aktionen loesen genau ihren Callback aus und schliessen den
+// Screen.
+{
+  const { installDom } = await import('./domstub.mjs');
+  const { createPostRun } = await import('../src/ui/post-run.js');
+  const upgrades = Array.from({ length: 7 }, (_, i) => ({
+    symbol: '★',
+    name: `Karte ${i}`,
+    level: (i % 3) + 1,
+    description: `Wirkung ${i}`,
+  }));
+  const withPostRun = (fn) => {
+    const restore = installDom();
+    try {
+      fn(createPostRun());
+    } finally {
+      restore();
+    }
+  };
+  const baseOpts = (extra) => ({
+    won: true,
+    classLabel: 'Standard',
+    modeLabel: 'Normal',
+    roomLabel: 'Raum 12/16',
+    timeLabel: '4:12',
+    kills: 30,
+    deaths: 1,
+    roomsCleared: 11,
+    hitRatePct: 42,
+    bestCombo: 5,
+    seed: 12345,
+    upgrades,
+    showEndless: true,
+    onEndless: () => {},
+    onAgain: () => {},
+    onHome: () => {},
+    ...extra,
+  });
+
+  // Sieg: Titel + data-result, alle Stat-Zeilen, volles Upgrade-Grid.
+  withPostRun((pr) => {
+    pr.show(baseOpts());
+    const el = document.getElementById('postrun');
+    check(!el.classList.contains('hidden'), 'Phase12: Screen oeffnet nicht');
+    check(el.dataset.result === 'win', `Phase12: data-result bei Sieg falsch ("${el.dataset.result}")`);
+    check(el.querySelector('h1').textContent === 'SIEG!', `Phase12: Sieg-Titel falsch ("${el.querySelector('h1').textContent}")`);
+    const txt = el.textContent;
+    check(txt.includes('4:12') && txt.includes('30') && txt.includes('11') && txt.includes('42') && txt.includes('5'),
+      'Phase12: nicht alle Stat-Werte stehen im Screen');
+    const cells = el.querySelectorAll('.pr-upcell');
+    check(cells.length === upgrades.length, `Phase12: Upgrade-Grid unvollstaendig (${cells.length}/${upgrades.length})`);
+    check(txt.includes('Karte 0') && txt.includes('Wirkung 0'), 'Phase12: Upgrade-Name/-Wirkung fehlt im Grid');
+    check(!!document.getElementById('postrunEndless'), 'Phase12: Endlos-Knopf fehlt beim Sieg (showEndless)');
+  });
+
+  // Niederlage: eigener Titel, Todesursache sichtbar, KEIN Endlos-Knopf.
+  withPostRun((pr) => {
+    pr.show(baseOpts({ won: false, showEndless: false, deathLine: 'Erledigt durch Testgegner' }));
+    const el = document.getElementById('postrun');
+    check(el.dataset.result === 'loss', `Phase12: data-result bei Niederlage falsch ("${el.dataset.result}")`);
+    check(el.querySelector('h1').textContent === 'NIEDERLAGE', `Phase12: Niederlage-Titel falsch ("${el.querySelector('h1').textContent}")`);
+    check(el.textContent.includes('Erledigt durch Testgegner'), 'Phase12: Todesursache fehlt im Screen');
+    check(!document.getElementById('postrunEndless'), 'Phase12: Endlos-Knopf erscheint trotz showEndless:false');
+  });
+
+  // Drei Aktionen: jeder Knopf loest GENAU seinen Callback aus und
+  // schliesst den Screen (sonst bliebe er als tote Overlay-Leiche stehen).
+  withPostRun((pr) => {
+    let again = 0, home = 0, endless = 0;
+    pr.show(baseOpts({ onAgain: () => again++, onHome: () => home++, onEndless: () => endless++ }));
+    document.getElementById('postrunAgain').click();
+    check(again === 1 && home === 0 && endless === 0, 'Phase12: "Nochmal" loest den falschen/keinen Callback aus');
+    check(document.getElementById('postrun').classList.contains('hidden'), 'Phase12: Screen schliesst nach "Nochmal" nicht');
+
+    pr.show(baseOpts({ onAgain: () => again++, onHome: () => home++, onEndless: () => endless++ }));
+    document.getElementById('postrunHome').click();
+    check(again === 1 && home === 1 && endless === 0, 'Phase12: "Zurueck zum Hauptmenue" loest den falschen Callback aus');
+
+    pr.show(baseOpts({ onAgain: () => again++, onHome: () => home++, onEndless: () => endless++ }));
+    document.getElementById('postrunEndless').click();
+    check(again === 1 && home === 1 && endless === 1, 'Phase12: "Endlos weiterspielen" loest den falschen Callback aus');
+  });
+
+  // hide() raeumt den Screen weg (Muster: hideRoomScreens() in main.js).
+  withPostRun((pr) => {
+    pr.show(baseOpts());
+    pr.hide();
+    check(document.getElementById('postrun').classList.contains('hidden'), 'Phase12: hide() schliesst den Screen nicht');
+  });
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

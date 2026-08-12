@@ -3209,11 +3209,103 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
     Kategorien. **Damit ist der komplette Codex (Phasen 7–11, alle vier
     Kategorien) fertig.**
 
+- **Phase 12 (Post-Run-Screen) — erledigt.** Ersetzt den alten Canvas-Text
+  (`hud.js: drawEnd()`, „Tippen oder Enter: neuer Run") durch einen echten
+  DOM-Screen — konsistent mit den übrigen In-Run-Overlays statt eines
+  Sonderfalls.
+  - **`src/ui/post-run.js`** (neu, Muster `preview.js`/`roomscreens.js`:
+    selbst erzeugte DOM-Struktur, kein Eintrag in `index.html`). In
+    `main.js: RUN_OVERLAY_IDS` aufgenommen — der Screen ist dadurch **ohne
+    Sonderfall** per Tastatur/Gamepad navigierbar (`runOverlayNav`), genau
+    wie Upgrade/Karte/Shop/Event/Vorschau (Testschritt 5). Zeigt an: Titel
+    (Sieg/Niederlage über `data-result`), Klasse/Schwierigkeit/Raum/Zeit,
+    Kills/Tode/Räume/Trefferquote/beste Combo, Todesursache (nur bei
+    Niederlage), Kills nach Typ, Gesamtschaden nach Typ, „Neuer Rekord",
+    Seed + Bestwerte, ein **vollständiges** Upgrade-Grid (Testschritt 2 —
+    der alte Canvas-Text zeigte nur die Top 4 Kill-Typen und gar keine
+    Upgrades) sowie drei Aktionsknöpfe.
+  - **`run.damageByType`** (neu, `game/run.js`): „Gesamtschaden" gab es
+    bisher nicht auf Run-Ebene — `state.damageByType` (UMBAUPLAN-LP Phase 8)
+    zählt nur **innerhalb** des aktuellen Raums und wird bei jedem
+    Raumaufbau zurückgesetzt. Neue Funktion `foldRoomDamage(run)` faltet das
+    alte Delta hinein, **bevor** `run.state` überschrieben wird (Aufruf in
+    `buildCombatRoom()` direkt vor `createState()`) UND beim Run-Ende
+    (`finishRun()`, für den letzten, noch nicht durch einen Raumwechsel
+    gefalteten Raum). Ein Zustands-Zeiger-Wächter (`run._foldedDamageState`)
+    verhindert Doppelzählung, wenn **dieselbe**, noch nicht ersetzte
+    `run.state`-Instanz aus zwei Aufrufstellen gefaltet würde — konkret:
+    Sieg (`finishRun` faltet) gefolgt von „Endlos weiterspielen"
+    (`continueEndless()` → `startRoom()` → `buildCombatRoom()` würde ohne
+    den Wächter denselben, noch unveränderten Zustand ein zweites Mal
+    falten). Wie `killsByType` **nicht** im `runSnapshot()` — beginnt bei
+    jedem Fortsetzen wieder bei 0 (bestehende Asymmetrie, kein neuer Bruch).
+  - **„Nochmal" liest explizit `run.starterTank`/`run.modeKey`** des GERADE
+    BEENDETEN Runs (nicht die live editierbaren Menü-Felder, die zufällig
+    denselben Wert haben könnten) — `starterTank` (Modulvariable) wird vor
+    `launchRun()` explizit gesetzt, robust auch falls eine spätere Phase die
+    Klassenwahl von einem neuen Ort aus erreichbar macht.
+  - **`#endlessBtn` (schwebender Knopf über dem Canvas) entfernt** — „Endlos
+    weiterspielen" ist jetzt ein regulärer, bedingter Knopf dieses Screens
+    (`showEndless: won`), gleiche grüne Farbe wie vorher. Der alte
+    canvas-weite Tipp-zum-Weitermachen-Handler (`pointerdown`/`pointerup`
+    auf `canvas`) und der Enter-Sonderfall in `keydown` sind ebenfalls weg —
+    das DOM-Overlay deckt den Canvas vollständig ab und die generische
+    Run-Overlay-Navigation (`menuConfirm`) übernimmt Enter/A.
+  - **`hud.js: drawEnd()` komplett entfernt** (samt der `dim(0.8)`-Vollbild-
+    Abdunklung nur für Sieg/Niederlage); `fmtTime()` exportiert, damit
+    `main.js`/`post-run.js` dieselbe Zeitformatierung verwenden (keine
+    zweite Implementierung).
+  - **`codex.flush()` explizit an der Post-Run-Anzeigestelle**, zusätzlich
+    zum bestehenden Phase-7-Hook in `updateTelemetry()` (der im selben Tick
+    ohnehin schon flusht) — ein zweiter Aufruf ist dank des `dirty`-Flags
+    ein No-op, aber die Plan-Vorgabe „`flushCodex()` beim Betreten des
+    Screens" gilt dadurch nicht nur zufällig über einen anderen Hook.
+  - **Zwei Nebenfunde, kein Testartefakt:**
+    1. **`tests/domstub.mjs`-Selektor-Lücke**: der Tag-Teil des
+       `querySelectorAll`-Regex erlaubte nur Buchstaben — `querySelector('h1')`
+       gab deshalb immer `null` zurück (der unmatchte Rest „1" ließ die ganze
+       Regex durchfallen). Fix: `[a-zA-Z][a-zA-Z0-9]*` statt `[a-zA-Z]*` für
+       den Tag-Teil — h1–h6 und ähnliche Tags sind jetzt abfragbar, bestehende
+       Selektoren unverändert.
+    2. **`tests/uilayout.mjs` hatte einen seit seiner Einführung wirkungslosen
+       Check**: sowohl der neue Post-Run- als auch der SCHON BESTEHENDE
+       Upgrade-Screen-Check griffen per `document.getElementById('upgrade'/
+       'postrun')` auf das **erste** Element mit dieser id zu — das ist aber
+       das leere, nie gezeigte Overlay, das die echte App (`main.js`) beim
+       Laden selbst schon anlegt (`createUpgradeScreen()`/`createPostRun()`
+       laufen dort unconditional beim Init). Der Test erzeugte per
+       `import()` + `.show()` ein ZWEITES, tatsächlich befülltes Overlay,
+       maß aber am ersten (leeren) — `ov.querySelectorAll('button')` war
+       dadurch **immer** leer, der Check konnte nie rot werden. Per
+       Duplikat-Zähler-Probe bestätigt (`document.querySelectorAll('[id="upgrade"]')`
+       → 2 Treffer). Fix an beiden Stellen: das **zuletzt** angehängte
+       Element mit dieser id nehmen (`matches[matches.length - 1]` —
+       `appendChild` hängt immer ans Ende). Gegenprobe: mit dem Fix und
+       künstlich aufgeblähten Karten schlägt der Upgrade-Screen-Check jetzt
+       tatsächlich fehl (vorher: immer grün, ungeprüft seit der ursprünglichen
+       Einführung des Tests).
+  - **Tests:** `regression.mjs` Abschnitt 8v — (a) `run.damageByType` mit
+    **eigenen** Zahlen über zwei echte Räume + Run-Ende (Raumwechsel-Faltung
+    UND finishRun-Faltung, beide einzeln geprüft, Summen statt Ersetzung);
+    (b) `post-run.js` mit Domstub (Titel/`data-result` bei Sieg/Niederlage,
+    alle Stat-Werte im Text, vollständiges Upgrade-Grid, bedingter
+    Endlos-Knopf, alle drei Aktionen lösen genau ihren Callback aus und
+    schließen den Screen, `hide()`). Vier Gegenproben rot bestätigt:
+    `foldRoomDamage()`-Aufruf vor `createState()` entfernt → Raumwechsel-
+    Faltung fehlt; Aufruf in `finishRun()` entfernt → letzter Raum fehlt;
+    `showEndless`-Zweig hart auf `false` → Endlos-Knopf fehlt beim Sieg;
+    `.pr-actions` auf `position: static` → alle drei Aktionsknöpfe fallen
+    bei 246 Upgrades aus dem Bild (uilayout.mjs, alle vier Viewports).
+    `tests/uilayout.mjs` um den Post-Run-Screen erweitert (voller
+    246-Karten-Kartensatz statt nur 25 — Gegenprobe zeigte, dass 25 Karten
+    NICHT reichen, um die Sticky-Aktionsreihe wirklich zu fordern: der
+    Knopf blieb auch ohne `sticky` im Bild).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 12 (Post-Run-Screen,
-      Brotato-Stil Auswertungsscreen nach jedem Run — Plan-Vorgabe u. a.
-      `runStats`-Objekt sammeln und `codex.flush()` beim Betreten des
-      Screens statt erst beim eigentlichen Run-Ende-Hook).
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 13 (Freischalt-
+      Notification-System — Toast-Queue für Upgrade-Erhalt, Gegner-/Elite-/
+      Boss-Erstsichtung, Klassen-Freischaltung; blockiert keine Eingaben,
+      pausiert das Spiel nicht).
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren.
 - [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
@@ -3318,6 +3410,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/ui/mapscreen.js` — Kartenscreen (Phase 12): zeigt den ganzen
   Kartengraphen, klickbar nur die von der aktuellen Position erreichbaren
   Knoten der nächsten Reihe.
+- `src/ui/post-run.js` — Post-Run-Screen (PLAN-STARTMENU Phase 12): DOM-
+  Auswertungsscreen nach Run-Ende (Sieg/Niederlage), ersetzt den alten
+  Canvas-Text (`hud.js: drawEnd`). In `main.js: RUN_OVERLAY_IDS`, also per
+  Tastatur/Gamepad navigierbar wie die übrigen In-Run-Overlays.
 - `src/render/renderer.js` — zeichnet alles (interpoliert). Nutzt Sprites,
   fällt auf prozedurale Formen zurück, falls Grafik fehlt/lädt.
 - `src/render/sprites.js` — lädt die PNG-Sprites (async, mit Fallback).
@@ -3337,7 +3433,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v112`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v113`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

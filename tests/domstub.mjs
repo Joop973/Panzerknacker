@@ -181,11 +181,14 @@ class El {
   // kommagetrennte Listen davon ("button, input"), wie sie main.js fuer
   // die Fokusnavigation benutzt. Ein einziger Durchlauf durch descendants()
   // haelt die Dokumentordnung, statt Teillisten zu vereinigen.
+  // Tag-Teil erlaubt seit PLAN-STARTMENU Phase 12 auch Ziffern (h1-h6 sind
+  // echte HTML-Tags) -- vorher liess "h1" die ganze Regex durchfallen
+  // (unmatchter Rest "1"), querySelector('h1') gab also immer null zurueck.
   querySelectorAll(sel) {
     const matchers = sel
       .split(',')
       .map((part) => {
-        const m = /^([a-zA-Z]*)((?:\.[\w-]+)*)(?:\[data-([\w-]+)="([^"]*)"\])?$/.exec(part.trim());
+        const m = /^([a-zA-Z][a-zA-Z0-9]*)?((?:\.[\w-]+)*)(?:\[data-([\w-]+)="([^"]*)"\])?$/.exec(part.trim());
         if (!m) return null;
         const [, tag, clsPart, dataKey, dataVal] = m;
         const classes = clsPart ? clsPart.slice(1).split('.') : [];

@@ -8,7 +8,7 @@ import { WIDTH, HEIGHT } from '../config.js';
 import { enemyCount, totalRooms } from '../game/run.js';
 import { resolveCfg } from '../game/cfg.js';
 
-function fmtTime(s) {
+export function fmtTime(s) {
   const m = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m}:${String(sec).padStart(2, '0')}`;
@@ -101,50 +101,6 @@ export function createHud(ctx) {
       ],
       HEIGHT / 2 - 10,
       36,
-    );
-  }
-
-  function drawEnd(run, title, color) {
-    dim(0.8);
-    const s = run.finalStats || {};
-    // Kills pro Typ (Top 4), Labels aus tanks.json.
-    const byType = Object.entries(run.killsByType || {})
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([ty, n]) => `${run.data.types[ty]?.label || ty} ×${n}`)
-      .join(' · ');
-    center(
-      [
-        [title, 'bold 40px monospace', color],
-        [`Zeit ${fmtTime(run.playTime)}   Kills ${run.kills}   Tode ${run.deaths}`, '16px monospace', '#e8e4d8'],
-        [
-          `Raeume: ${run.roomsCleared}   Upgrades: ${run.upgradeChoices}   Quote: ${
-            run.shotsFired ? Math.round((100 * run.kills) / run.shotsFired) : 0
-          } %`,
-          '16px monospace',
-          '#e8e4d8',
-        ],
-        [byType || ' ', '13px monospace', '#9aa0a8'],
-        [`Beste Combo: ×${run.bestCombo}`, '13px monospace', '#ffd23c'],
-        [
-          title === 'GAME OVER' && run.lastDeathCause
-            ? `Erledigt durch ${run.lastDeathCause}`
-            : ' ',
-          '13px monospace',
-          '#d47ba6',
-        ],
-        [run.newRecord ? '★ Neuer Rekord! ★' : ' ', 'bold 15px monospace', '#ffd23c'],
-        [`Seed: ${run.seed}   Modus: ${run.mode}`, 'bold 16px monospace', '#8ecae6'],
-        [
-          `Best: ${s.mostRooms ?? 0} Raeume | ${s.totalKills ?? 0} Kills gesamt` +
-            (s.fastestWinS ? ` | Sieg ${fmtTime(s.fastestWinS)}` : ''),
-          '13px monospace',
-          '#9aa0a8',
-        ],
-        ['Tippen oder Enter: neuer Run', '15px monospace', '#c8b24a'],
-      ],
-      HEIGHT / 2 - 70,
-      32,
     );
   }
 
@@ -261,8 +217,10 @@ export function createHud(ctx) {
       if (run.phase === 'playing' || run.phase === 'transition') drawBar(run);
       if (opts.toast && run.phase === 'playing') drawToast(opts.toast);
       if (run.phase === 'transition') drawTransition(run);
-      else if (run.phase === 'gameover') drawEnd(run, 'GAME OVER', '#ff6a5e');
-      else if (run.phase === 'victory') drawEnd(run, 'SIEG!', '#7ade6a');
+      // Sieg/Niederlage: kein Canvas-Text mehr (PLAN-STARTMENU Phase 12) --
+      // src/ui/post-run.js zeigt jetzt einen echten DOM-Screen mit denselben
+      // Werten, aber vollstaendig (alle Upgrades statt Top 4) und per
+      // Tastatur/Gamepad bedienbar statt nur "Tippen oder Enter".
       if (opts.paused && run.phase === 'playing') drawPause(run);
       // P7: Stats-Anzeige. Sichtbar per Umschalter (Tab) und IMMER waehrend
       // der Pause -- so ist sie auf dem Handy ohne zusaetzlichen Knopf

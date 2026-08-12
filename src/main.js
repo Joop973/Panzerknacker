@@ -44,7 +44,8 @@ import { DEBUG } from './core/debug.js';
 import { playerClassEntries, isClassUnlocked, createClassButton, fmtClassStats } from './game/classes.js';
 import { createCodex, markVisibleEnemies, markVisibleBosses } from './game/codex.js';
 import { renderCodexCategories, renderPlayerTankList, renderUpgradeList, renderEnemyList, renderBossList } from './ui/codexscreen.js';
-import { createTutorial } from './ui/hud.js';
+import { createTutorial, fmtTime } from './ui/hud.js';
+import { createPostRun } from './ui/post-run.js';
 import {
   getFlag,
   setFlag,
@@ -173,6 +174,7 @@ async function init() {
   const workshopScreen = createShopScreen();
   const preview = createPreview();
   const mapScreen = createMapScreen();
+  const postRun = createPostRun(); // Phase 12: Auswertungsscreen nach Run-Ende
   const pause = createPause();
   const tutorial = createTutorial(getFlag('tutorial_seen'));
 
@@ -183,6 +185,7 @@ async function init() {
   let workshopShown = false;
   let mapShown = false;
   let previewShown = false;
+  let postrunShown = false;
   let toast = null;
   let lastSeed = 0;
   let mode = getPref('mode', 'normal');
@@ -407,11 +410,13 @@ async function init() {
     eventScreen.hide();
     workshopScreen.hide();
     mapScreen.hide();
+    postRun.hide();
     upgradeShown = false;
     previewShown = false;
     eventShown = false;
     workshopShown = false;
     mapShown = false;
+    postrunShown = false;
   }
 
   // Sekundärslot (Phase 6): Touch-Button-Beschriftung der aktiven
@@ -888,6 +893,86 @@ async function init() {
         },
       );
     }
+
+    // Post-Run-Screen (Phase 12): ersetzt den alten Canvas-Text
+    // (hud.js: drawEnd) durch einen echten, per Tastatur/Gamepad
+    // navigierbaren DOM-Screen (Testschritt 1/5). Genau einmal pro
+    // Run-Ende einblenden -- gleiches !xShown-Muster wie die anderen
+    // Raum-Overlays oben.
+    if ((run.phase === 'gameover' || run.phase === 'victory') && !postrunShown) {
+      postrunShown = true;
+      const won = run.phase === 'victory';
+      // Codex-Schreiben explizit an dieser Stelle ausloesen (Plan-Vorgabe),
+      // auch wenn updateTelemetry() (Phase 7) im selben Tick schon einmal
+      // flusht -- flush() ist ein no-op, wenn seitdem nichts markiert
+      // wurde, ein zweiter Aufruf ist also gefahrlos.
+      codex.flush();
+      const s = run.finalStats || {};
+      const bestLine =
+        `Best: ${s.mostRooms ?? 0} Räume | ${s.totalKills ?? 0} Kills gesamt` +
+        (s.fastestWinS ? ` | Sieg ${fmtTime(s.fastestWinS)}` : '');
+      // Kills nach Typ, VOLLSTAENDIG (der alte Canvas-Text zeigte nur die
+      // Top 4 -- hier ist Platz fuer die ganze Liste).
+      const killTypeLine = Object.entries(run.killsByType || {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([ty, n]) => `${tanksData.types[ty]?.label || ty} ×${n}`)
+        .join(' · ');
+      const damageLine = Object.entries(run.damageByType || {})
+        .filter(([, v]) => v > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([ty, v]) => `${tanksData.status?.damageTypes?.[ty]?.name || ty} ${Math.round(v)}`)
+        .join(' · ');
+      // Alle gesammelten Upgrades (Testschritt 2: vollstaendig, nicht nur
+      // die aktiven Stat-Zeilen).
+      const upgrades = Object.entries(run.upgrades || {})
+        .filter(([, l]) => l > 0)
+        .map(([id, l]) => {
+          const def = upgradesData.upgrades[id];
+          return { symbol: def?.symbol || '•', name: def?.name || id, level: l, description: def?.description || '' };
+        });
+      postRun.show({
+        won,
+        classLabel: tanksData.types[run.starterTank]?.label || run.starterTank,
+        modeLabel: run.mode,
+        roomLabel: run.endless
+          ? `Endlos-Raum ${run.roomIndex}`
+          : `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
+        timeLabel: fmtTime(run.playTime),
+        kills: run.kills,
+        deaths: run.deaths,
+        roomsCleared: run.roomsCleared,
+        hitRatePct: run.shotsFired ? Math.round((100 * run.kills) / run.shotsFired) : 0,
+        bestCombo: run.bestCombo,
+        deathLine: !won && run.lastDeathCause ? `Erledigt durch ${run.lastDeathCause}` : null,
+        killTypeLine,
+        damageLine,
+        newRecord: run.newRecord,
+        seed: run.seed,
+        bestLine,
+        upgrades,
+        showEndless: won,
+        onEndless: () => {
+          continueEndless(run);
+          previewShown = false;
+          postrunShown = false;
+        },
+        // "Nochmal": neuer Seed, aber explizit dieselbe Klasse + Schwierigkeit
+        // wie der GERADE BEENDETE Run. launchRun() liest die Klasse aus der
+        // Modul-Variable starterTank (Klassenwahl ist von hier aus nicht
+        // erreichbar, sie bliebe also ohnehin gleich) -- hier trotzdem
+        // explizit aus run.starterTank gesetzt, damit die Garantie nicht an
+        // dieser stillschweigenden Annahme haengt.
+        onAgain: () => {
+          const seed = Date.now() >>> 0;
+          starterTank = run.starterTank;
+          seedInput.value = String(seed);
+          clearCurrentRun();
+          refreshResumeBtn();
+          launchRun(seed, run.modeKey);
+        },
+        onHome: () => backToStart(),
+      });
+    }
   }
 
   function render(alpha) {
@@ -916,7 +1001,6 @@ async function init() {
       debugOverlay.render(run.state, fps, { logicMs: lastFrameLogicMs, renderMs: lastFrameRenderMs, worstLogicMs, worstRenderMs });
     }
     hud.render(run, { paused: pause.isPaused(), toast, stats: input.isStats() });
-    endlessBtn.classList.toggle('hidden', run.phase !== 'victory');
 
     frameCount++;
     const now = performance.now();
@@ -1004,7 +1088,7 @@ async function init() {
   // das gerade sichtbare Overlay (Prioritaet: die oberste Ausruestungsseite vor
   // der Vorschau darunter). Die Overlays werden von ihren Modulen bei der
   // Initialisierung erzeugt, existieren hier also.
-  const RUN_OVERLAY_IDS = ['previewUpgrades', 'preview', 'upgrade', 'event', 'workshop', 'map'];
+  const RUN_OVERLAY_IDS = ['previewUpgrades', 'preview', 'upgrade', 'event', 'workshop', 'map', 'postrun'];
   function visibleRunOverlay() {
     for (const id of RUN_OVERLAY_IDS) {
       const el = document.getElementById(id);
@@ -1145,14 +1229,14 @@ async function init() {
   seedInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') startRun();
   });
-  // Endscreens: Enter ODER Tipp/Klick auf das Spielfeld fuehrt zurueck
-  // zum Start-Screen (Seed vorbefuellt) -> neuer Run.
+  // Zurueck zum Start-Screen (Seed vorbefuellt) -> neuer Run. Aufgerufen vom
+  // Post-Run-Screen ("Zurueck zum Hauptmenue", Phase 12) und vom
+  // Pause-Overlay ("Hauptmenue").
   function backToStart() {
     refreshBestStats();
     refreshResumeBtn(); // abgebrochener Run bleibt fortsetzbar
     seedInput.select();
     hideRoomScreens();
-    endlessBtn.classList.add('hidden');
     run = null;
     // Menues zurueck auf die Wurzel (Hauptmenue). root() blendet die anderen
     // Screens aus, setzt den Fokus auf den Anfang und legt die History-Wurzel
@@ -1204,19 +1288,13 @@ async function init() {
     },
     { passive: false },
   );
-  const endlessBtn = document.getElementById('endlessBtn');
-  endlessBtn.addEventListener('click', () => {
-    if (run && run.phase === 'victory') {
-      continueEndless(run);
-      previewShown = false;
-      endlessBtn.classList.add('hidden');
-    }
-  });
   window.addEventListener('keydown', (e) => {
     if (!run) return;
-    if (e.key === 'Enter' && (run.phase === 'gameover' || run.phase === 'victory')) {
-      backToStart();
-    }
+    // Post-Run-Screen (Phase 12): Enter/A bestaetigt jetzt den fokussierten
+    // Knopf ueber die generische Run-Overlay-Navigation (runOverlayNav,
+    // menuConfirm) wie jeder andere In-Run-Screen -- kein Sonderfall mehr
+    // noetig (vorher: Enter ging IMMER zu backToStart(), auch wenn "Nochmal"
+    // oder "Endlos" gemeint war).
     // Pause-Menue (Tastatur-Kuerzel zu den Overlay-Knoepfen): R = Run mit
     // gleichem Seed neu, M = Hauptmenue. Nur wenn das Pause-Overlay offen ist.
     if (menu.current() === 'pause') {
@@ -1269,20 +1347,10 @@ async function init() {
       }
     }
   });
-  // Endscreens: nur ein NEU auf dem Endscreen begonnener Tipp fuehrt zum
-  // Start-Screen zurueck. Der Tipp, der das Spiel gewinnt/verliert, darf das
-  // nicht ausloesen -- sonst wird beim Sieg der Endlos-Button uebersprungen
-  // (dessen Finger-Hoch faellt sonst schon in die Victory-Phase und schickt
-  // direkt ins Menue).
-  let endScreenTapArmed = false;
-  const onEndScreen = () => run && (run.phase === 'gameover' || run.phase === 'victory');
-  canvas.addEventListener('pointerdown', () => {
-    endScreenTapArmed = onEndScreen();
-  });
-  canvas.addEventListener('pointerup', () => {
-    if (endScreenTapArmed && onEndScreen()) backToStart();
-    endScreenTapArmed = false;
-  });
+  // Post-Run-Screen (Phase 12): das DOM-Overlay deckt den Canvas vollstaendig
+  // ab und faengt Klicks/Taps selbst (echte Buttons statt "irgendwo tippen")
+  // -- der alte canvas-weite Tipp-zum-Weitermachen-Handler ist damit
+  // ueberfluessig geworden.
 
   // Pause-Button oben mittig, Mute daneben. Oeffnet/schliesst das Pause-Overlay
   // (Phase 4) bzw. hebt eine Auto-Pause auf.

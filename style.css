@@ -591,26 +591,6 @@ html, body {
   text-decoration: line-through;
 }
 
-#endlessBtn {
-  position: fixed;
-  left: 50%;
-  bottom: 12%;
-  transform: translateX(-50%);
-  z-index: 8;
-  background: #7ade6a;
-  border: none;
-  color: #12200c;
-  font-family: monospace;
-  font-weight: bold;
-  font-size: 16px;
-  padding: 10px 28px;
-  cursor: pointer;
-}
-
-#endlessBtn.hidden {
-  display: none;
-}
-
 /* Portrait-Overlay: nur im Hochformat sichtbar (Spec Abschnitt 9) */
 .rotate-overlay {
   display: none;
@@ -1409,4 +1389,140 @@ body.touch-on .throwstick.slot-empty {
   font-size: 13px;
   color: #9aa0a8;
   text-align: center;
+}
+
+/* Post-Run-Screen (PLAN-STARTMENU Phase 12): DOM-Auswertungsscreen nach
+   Run-Ende statt des bisherigen Canvas-Texts (hud.js: drawEnd). Titelfarbe
+   nach Sieg/Niederlage -- dieselben Farben wie vorher im Canvas-Text
+   (#7ade6a / #ff6a5e), jetzt per data-Attribut statt Inline-Style. */
+#postrun[data-result="win"] h1 {
+  color: #7ade6a;
+}
+
+#postrun[data-result="loss"] h1 {
+  color: #ff6a5e;
+}
+
+.pr-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 4px 18px;
+  width: 100%;
+  max-width: 560px;
+}
+
+.pr-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: monospace;
+  font-size: 14px;
+  padding: 3px 0;
+  border-bottom: 1px solid #2a2a34;
+}
+
+.pr-stat span:first-child {
+  color: #9aa0a8;
+}
+
+.pr-stat span:last-child {
+  color: #e8e4d8;
+  font-weight: bold;
+}
+
+.pr-record {
+  font-family: monospace;
+  font-weight: bold;
+  font-size: 15px;
+  color: #ffd23c;
+}
+
+.pr-subhead {
+  font-family: monospace;
+  font-size: 15px;
+  color: #c8b24a;
+  align-self: flex-start;
+  margin: 4px 0 -4px;
+}
+
+/* Upgrade-"Grid" (Plan-Wortlaut): dieselben Bausteine wie die eigene-
+   Ausruestung-Seite der Raumvorschau (pv-sym), aber als echtes CSS-Grid --
+   bei bis zu ~30 gesammelten Karten in einem Run soll die Liste kompakt
+   in mehreren Spalten stehen statt in einer langen einspaltigen Liste. */
+.pr-upgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 6px;
+  width: 100%;
+  max-width: 760px;
+  padding-bottom: 4px;
+}
+
+.pr-upcell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 9px;
+  background: #1b1b22;
+  border-left: 3px solid #2f5a70;
+  font-family: monospace;
+  text-align: left;
+}
+
+.pr-upcell-head {
+  color: #8ecae6;
+  font-weight: bold;
+  font-size: 13px;
+}
+
+.pr-upcell-head em {
+  color: #9aa0a8;
+  font-style: normal;
+  font-weight: normal;
+  font-size: 11px;
+}
+
+.pr-upcell-desc {
+  color: #c8c4b8;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+/* Aktionsreihe bleibt immer erreichbar, egal wie lang das Upgrade-Grid wird
+   -- dieselbe Vorsorge wie #previewGo/#previewUpBack. */
+.pr-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  padding-top: 6px;
+  box-shadow: 0 0 0 6px rgba(10, 10, 14, 0.92);
+}
+
+/* Nur beim Sieg vorhanden -- eigener gruener Ton statt des generischen
+   Golds, dieselbe Farbe wie vorher das schwebende #endlessBtn. */
+#postrunEndless {
+  background: #7ade6a;
+  color: #12200c;
+}
+
+#postrunEndless:hover {
+  background: #8eea7a;
+}
+
+@media (max-height: 500px) {
+  .pr-stats {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  }
+  .pr-stat {
+    font-size: 12px;
+  }
+  .pr-upcell {
+    padding: 4px 7px;
+  }
+  .pr-upcell-desc {
+    font-size: 10px;
+  }
 }

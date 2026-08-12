@@ -308,6 +308,23 @@ function startRoom(run, type = 'combat') {
   }
 }
 
+// Faltet state.damageByType (Schaden IM AKTUELLEN Raum) in run.damageByType
+// (Schaden ueber den GANZEN Run). Muss vor jedem createState()-Aufruf laufen,
+// der run.state ersetzt -- sonst geht das Delta des alten Raums verloren.
+// Der Zustand-Zeiger-Vergleich (_foldedDamageState) verhindert Doppelzaehlung,
+// wenn dieselbe run.state-Instanz aus zwei Aufrufstellen gefaltet wird (z. B.
+// finishRun() beim Sieg UND danach continueEndless() -> buildCombatRoom() fuer
+// denselben, noch nicht ausgetauschten Raumzustand).
+function foldRoomDamage(run) {
+  const dmg = run.state?.damageByType;
+  if (!dmg || run.state === run._foldedDamageState) return;
+  if (!run.damageByType) run.damageByType = {};
+  for (const [ty, v] of Object.entries(dmg)) {
+    run.damageByType[ty] = (run.damageByType[ty] || 0) + v;
+  }
+  run._foldedDamageState = run.state;
+}
+
 function buildCombatRoom(run, type, isFinal) {
   const diff = run.difficulty;
   // Raum-Modifikator (Phase 10): ab data/modifiers.json.minRoom einer pro
@@ -378,6 +395,7 @@ function buildCombatRoom(run, type, isFinal) {
     !isFinal && wavesCfg && enemyTypes.length >= wavesCfg.minEnemiesForWaves
       ? Math.ceil(enemyTypes.length / 2)
       : null;
+  foldRoomDamage(run); // altes Raum-Delta sichern, BEVOR run.state ersetzt wird
   run.state = createState(run.data, run.tiles, {
     genRng: run.rng.rooms,
     enemyTypes,
@@ -665,6 +683,13 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     roomHazard: null, // {type,name,desc} aus data/tiles.json: hazards (Phase 15)
     bossName: null, // Boss-Arena des Finalraums (Phase 14), erst dort gesetzt
     killsByType: {}, // Statistik fuer die Endscreens
+    // Gesamtschaden je Schadenstyp ueber den ganzen Run (PLAN-STARTMENU
+    // Phase 12, Post-Run-Screen). state.damageByType (UMBAUPLAN-LP Phase 8)
+    // zaehlt nur INNERHALB des aktuellen Raums und wird bei jedem Raumaufbau
+    // zurueckgesetzt -- foldRoomDamage() faltet das alte Raum-Delta hier
+    // hinein, BEVOR es ueberschrieben wird. Wie killsByType nicht im
+    // runSnapshot (beginnt bei jedem Fortsetzen wieder bei 0).
+    damageByType: {},
     shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)
     combo: 0, // laufende Kill-Combo
     comboTimer: 0, // s bis die Combo verfaellt
@@ -731,6 +756,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
 
 function finishRun(run, won) {
   run.phase = won ? 'victory' : 'gameover';
+  foldRoomDamage(run); // letzten (noch nicht durch einen Raumwechsel gefalteten) Raum mitzaehlen
   clearCurrentRun(); // beendeter Run ist nicht mehr fortsetzbar
   // Rekord-Erkennung VOR dem Eintragen (alte Bestwerte vergleichen).
   const prev = loadStats();

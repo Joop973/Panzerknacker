@@ -330,7 +330,14 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 
 ## Phase 12: Post-Run-Screen
 
-**Ziel:** Auswertungsscreen nach Run-Ende (Brotato-Stil).
+> **Erledigt.** `ui/post-run.js` (neu) ersetzt den alten Canvas-Text
+> (`hud.js: drawEnd`) durch einen echten DOM-Screen, per Tastatur/Gamepad
+> navigierbar wie Upgrade/Karte/Shop/Event/Vorschau (`RUN_OVERLAY_IDS`).
+> `run.damageByType` (neu, `game/run.js: foldRoomDamage()`) liefert den
+> „Gesamtschaden"-Wert. Das alte schwebende `#endlessBtn` ist jetzt ein
+> Knopf dieses Screens. Details siehe `CLAUDE.md`, Abschnitt „Phase 12
+> (Post-Run-Screen)" — dort auch zwei Nebenfunde (ein vorher wirkungsloser
+> Layout-Test + eine domstub-Selektor-Lücke).
 
 **Änderungen:**
 - Neu: `post-run.js`
@@ -340,11 +347,11 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 - `flushCodex()` beim Betreten des Screens auslösen
 
 **Testschritte:**
-1. Nach Tod erscheint der Auswertungsscreen statt direktem Menü-Sprung
-2. Alle gesammelten Upgrades werden vollständig angezeigt
-3. Finale Stats stimmen mit dem Spielzustand kurz vor Tod überein
-4. „Nochmal" startet direkt mit gleicher Klasse und Schwierigkeit
-5. Auf dem Handy ohne Abschneiden lesbar, mit allen Eingabearten bedienbar
+1. ✅ Nach Tod erscheint der Auswertungsscreen statt direktem Menü-Sprung
+2. ✅ Alle gesammelten Upgrades werden vollständig angezeigt
+3. ✅ Finale Stats stimmen mit dem Spielzustand kurz vor Tod überein
+4. ✅ „Nochmal" startet direkt mit gleicher Klasse und Schwierigkeit
+5. ✅ Auf dem Handy ohne Abschneiden lesbar, mit allen Eingabearten bedienbar
 
 ---
 
