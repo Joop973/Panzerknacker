@@ -357,17 +357,29 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 
 ## Phase 13: Freischalt-Notification-System
 
+> **Erledigt.** `ui/notification.js` (neu, `createNotifications`): reines
+> DOM-Element mit `pointer-events: none`, tickt in `main.js: update(dt)`
+> als ALLERERSTES vor jedem fruehen `return` (Menue/Pause/Run-Overlay/kein
+> Run). `game/codex.js: markSeen()` gibt jetzt `true`/`false` zurueck
+> (Erstkontakt ja/nein) — das Signal, an dem alle vier Hooks (Upgrade-
+> Erhalt in Upgrade-Screen UND Shop, Gegner-/Elite-/Boss-Erstsichtung,
+> Klassen-Erstwahl) entscheiden, ob ein Toast faellig ist.
+> „Klassen-Freischaltung" bildet sich auf die erste Wahl einer Klasse ab
+> (alle zehn sind aktuell `unlocked: true`, echte Freischaltbedingungen
+> fehlen noch — s. CLAUDE.md To-do). Details siehe `CLAUDE.md`, Abschnitt
+> „Phase 13 (Freischalt-Notification-System)".
+
 **Änderungen:**
 - Neu: `notification.js` — Toast (Icon, Name, kurze Einblendzeit, Queue)
 - Hooks bei Upgrade-Erhalt, Gegner-/Elite-/Boss-Erstsichtung, Klassen-Freischaltung
 - Toast blockiert keine Eingaben, pausiert das Spiel nicht
 
 **Testschritte:**
-1. Neues Upgrade löst sichtbaren Toast aus
-2. Neuer Boss/Elite bei Erstsichtung löst Toast aus
-3. Bereits gesehene Inhalte lösen keinen erneuten Toast aus
-4. Mehrere gleichzeitige Freischaltungen laufen als Queue nacheinander
-5. Toast verschwindet automatisch, Gameplay läuft ununterbrochen weiter
+1. ✅ Neues Upgrade löst sichtbaren Toast aus
+2. ✅ Neuer Boss/Elite bei Erstsichtung löst Toast aus
+3. ✅ Bereits gesehene Inhalte lösen keinen erneuten Toast aus
+4. ✅ Mehrere gleichzeitige Freischaltungen laufen als Queue nacheinander
+5. ✅ Toast verschwindet automatisch, Gameplay läuft ununterbrochen weiter
 
 ---
 

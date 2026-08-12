@@ -5679,6 +5679,76 @@ for (const seed of SEEDS) {
   });
 }
 
+// ---- 8w. PLAN-STARTMENU Phase 13: Freischalt-Notification-System --------
+// (a) codex.markSeen() liefert jetzt true/false (Erstkontakt ja/nein) --
+//     das Signal, an dem main.js entscheidet, ob ein Toast faellig ist.
+{
+  const { createCodex, markVisibleEnemies, markVisibleBosses, eliteKey } = await import('../src/game/codex.js');
+  const fakeTanks = { types: { e_a: { label: 'A' }, e_b: { label: 'B' }, b_x: { label: 'Boss X', bossInvincible: true } } };
+  const mkCodex = () => createCodex({ tanksData: fakeTanks, upgradesData: { upgrades: {} }, loadRaw: () => null, saveRaw: () => {} });
+
+  const c0 = mkCodex();
+  check(c0.markSeen('enemies', 'e_a') === true, 'Phase13: erster markSeen() liefert nicht true (Erstkontakt)');
+  check(c0.markSeen('enemies', 'e_a') === false, 'Phase13: zweiter markSeen() liefert nicht false (schon gesehen)');
+  check(c0.markSeen('keine_kategorie', 'x') === false, 'Phase13: unbekannte Kategorie liefert nicht false');
+
+  // markVisibleEnemies/-Bosses reichen die NEU markierten Schluessel durch --
+  // main.js loest darauf Toasts aus, ohne den Mechanismus selbst zu kennen.
+  // EIGENER, frischer Codex -- c0 oben hat 'e_a' schon selbst markiert.
+  const c = mkCodex();
+  const firstContact = markVisibleEnemies(c, [{ type: 'e_a', affixes: [] }, { type: 'e_b', affixes: [{ id: 'x' }] }]);
+  check(
+    firstContact.length === 2 && firstContact.includes('e_a') && firstContact.includes(eliteKey('e_b')),
+    `Phase13: Erstkontakt liefert nicht beide Schluessel (${JSON.stringify(firstContact)})`,
+  );
+  const repeatContact = markVisibleEnemies(c, [{ type: 'e_a', affixes: [] }]);
+  check(repeatContact.length === 0, `Phase13: wiederholter Kontakt liefert erneut Schluessel -- Dauer-Toast (${JSON.stringify(repeatContact)})`);
+
+  const bossFirst = markVisibleBosses(c, [{ type: 'b_x', affixes: [] }]);
+  check(bossFirst.length === 1 && bossFirst[0] === 'b_x', `Phase13: Boss-Erstkontakt liefert nicht den Schluessel (${JSON.stringify(bossFirst)})`);
+  const bossRepeat = markVisibleBosses(c, [{ type: 'b_x', affixes: [] }]);
+  check(bossRepeat.length === 0, `Phase13: wiederholter Boss-Kontakt liefert erneut den Schluessel (${JSON.stringify(bossRepeat)})`);
+}
+
+// (b) notification.js: Toast-Queue -- sofort zeigen wenn idle, warten
+// solange ein anderer laeuft (Testschritt 4), automatisches Verschwinden
+// nach Ablauf (Testschritt 5). Eigene, kleine durationS statt der
+// Produktionswerte -- der Mechanismus wird geprueft, nicht die Zahl 3.0.
+{
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { createNotifications } = await import('../src/ui/notification.js');
+    const n = createNotifications({ durationS: 2 });
+    const el = document.getElementById('toast');
+    check(el.classList.contains('hidden'), 'Phase13: Toast startet nicht versteckt');
+    check(!n.isShowing(), 'Phase13: isShowing() meldet vor jedem push() true');
+
+    n.push('★', 'Erstes');
+    check(n.isShowing() && !el.classList.contains('hidden'), 'Phase13: push() zeigt nicht sofort, wenn idle (Testschritt 1)');
+    check(el.textContent.includes('Erstes'), `Phase13: Toast-Text fehlt ("${el.textContent}")`);
+
+    // Ein zweiter push(), waehrend der erste noch laeuft -- er MUSS warten,
+    // nicht den laufenden Toast ueberschreiben (Testschritt 4: nacheinander,
+    // nicht uebereinander).
+    n.push('☠', 'Zweites');
+    check(el.textContent.includes('Erstes'), 'Phase13: zweiter push() ueberschreibt den laufenden Toast sofort');
+    check(n.queueLength() === 1, `Phase13: zweiter Eintrag steht nicht in der Warteschlange (${n.queueLength()})`);
+
+    n.update(1); // halbe Dauer -- noch derselbe Toast
+    check(el.textContent.includes('Erstes'), 'Phase13: Toast wechselt vor Ablauf der Dauer');
+
+    n.update(1.1); // Dauer abgelaufen -> naechster aus der Queue
+    check(el.textContent.includes('Zweites'), 'Phase13: kein automatischer Wechsel zum naechsten Toast (Testschritt 4)');
+    check(n.queueLength() === 0, 'Phase13: Warteschlange leert sich nicht');
+
+    n.update(2.1); // zweiter Toast laeuft ab, Queue leer -> verschwindet
+    check(el.classList.contains('hidden') && !n.isShowing(), 'Phase13: Toast verschwindet nicht automatisch nach Ablauf (Testschritt 5)');
+  } finally {
+    restore();
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

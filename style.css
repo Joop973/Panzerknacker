@@ -1526,3 +1526,34 @@ body.touch-on .throwstick.slot-empty {
     font-size: 10px;
   }
 }
+
+/* Freischalt-Toast (PLAN-STARTMENU Phase 13): schwebt ueber ALLEM (auch
+   ueber Overlays, falls ein Erhalt waehrend eines offenen Screens feuert --
+   z. B. ein Upgrade-Pick auf dem Upgrade-Screen selbst), blockiert aber
+   nie Eingaben (pointer-events: none). KEIN `.overlay`-Nachfahre -- eigene,
+   minimale Regel, weil dieses Projekt keine generische `.hidden`-Regel hat
+   (`X.hidden { display:none }` muss je Element explizit stehen, sonst hat
+   classList.add('hidden') keine optische Wirkung -- siehe Phase 6/7). */
+.toast {
+  position: fixed;
+  left: 50%;
+  top: 34px;
+  transform: translateX(-50%);
+  z-index: 20;
+  pointer-events: none;
+  background: rgba(10, 10, 14, 0.85);
+  border: 1px solid rgba(200, 178, 74, 0.6);
+  color: #e8e4d8;
+  font-family: monospace;
+  font-size: 14px;
+  padding: 8px 18px;
+  max-width: 80vw;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast.hidden {
+  display: none;
+}

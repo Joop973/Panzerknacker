@@ -42,10 +42,11 @@ import { createMenu } from './ui/menu.js';
 import { createSettings } from './ui/settings.js';
 import { DEBUG } from './core/debug.js';
 import { playerClassEntries, isClassUnlocked, createClassButton, fmtClassStats } from './game/classes.js';
-import { createCodex, markVisibleEnemies, markVisibleBosses } from './game/codex.js';
+import { createCodex, markVisibleEnemies, markVisibleBosses, isEliteKey, baseIdOf } from './game/codex.js';
 import { renderCodexCategories, renderPlayerTankList, renderUpgradeList, renderEnemyList, renderBossList } from './ui/codexscreen.js';
 import { createTutorial, fmtTime } from './ui/hud.js';
 import { createPostRun } from './ui/post-run.js';
+import { createNotifications } from './ui/notification.js';
 import {
   getFlag,
   setFlag,
@@ -175,6 +176,7 @@ async function init() {
   const preview = createPreview();
   const mapScreen = createMapScreen();
   const postRun = createPostRun(); // Phase 12: Auswertungsscreen nach Run-Ende
+  const notify = createNotifications(); // Phase 13: Freischalt-Toast-Queue
   const pause = createPause();
   const tutorial = createTutorial(getFlag('tutorial_seen'));
 
@@ -271,8 +273,17 @@ async function init() {
     // derselben Pro-Tick-Abtastung wie teleEnemies oben, damit auch ein
     // Gegner zaehlt, der den Spieler sofort toetet (Testschritt 2, "auch
     // wenn der Spieler stirbt").
-    markVisibleEnemies(codex, teleEnemies);
-    markVisibleBosses(codex, teleEnemies); // Phase 11: markSeen bei Boss-Spawn
+    // Phase 13: beide geben die NEU markierten Schluessel zurueck -- ein
+    // Toast pro echtem Erstkontakt, pro-Tick-Aufrufe fuer laengst bekannte
+    // Gegner/Bosse liefern ein leeres Array (Testschritt 3).
+    for (const key of markVisibleEnemies(codex, teleEnemies)) {
+      const elite = isEliteKey(key);
+      const label = tanksData.types[baseIdOf(key)]?.label || key;
+      notify.push(elite ? '★' : '👾', elite ? `Elite entdeckt: ${label}` : `Neuer Gegner: ${label}`);
+    }
+    for (const type of markVisibleBosses(codex, teleEnemies)) { // Phase 11: markSeen bei Boss-Spawn
+      notify.push('☠', `Neuer Boss: ${tanksData.types[type]?.label || type}`);
+    }
     teleRic = st.ricochetKills;
     teleDir = st.directKills;
     teleDmgType = { ...st.damageByType };
@@ -524,6 +535,12 @@ async function init() {
   }
 
   function update(dt) {
+    // Phase 13: die Toast-Queue tickt IMMER, vor jedem fruehen return unten
+    // -- ein Toast (z. B. Klassen-Entdeckung auf dem Startbildschirm) darf
+    // nicht an Menue/Pause/Run-Overlay/"kein Run" haengenbleiben und muss
+    // automatisch verschwinden, ohne die Spiellogik zu beeinflussen
+    // (Testschritt 5).
+    notify.update(dt);
     if (!run) {
       // P9: Startbildschirm -- Tastatur-/Gamepad-Fokusnavigation statt
       // Spiellogik. getMenuState() braucht keinen Spieler (anders als
@@ -677,7 +694,14 @@ async function init() {
           // Ein Fallback-Angebot (Pool erschoepft) hat keine echte Codex-id.
           // Kein sofortiger Flush -- laeuft im Run, also ueber den Batching-
           // Rhythmus aus Phase 7 (naechster Raumwechsel/Run-Ende).
-          if (!offers[idx].fallback && offers[idx].id) codex.markSeen('upgrades', offers[idx].id);
+          if (!offers[idx].fallback && offers[idx].id) {
+            // Phase 13: Toast nur beim ECHTEN Erstkontakt (markSeen()
+            // liefert dafuer jetzt true/false statt nichts).
+            if (codex.markSeen('upgrades', offers[idx].id)) {
+              const sym = upgradesData.upgrades[offers[idx].id]?.symbol || '•';
+              notify.push(sym, `Neu: ${offers[idx].name}`);
+            }
+          }
           chooseUpgrade(run, idx);
           // Frisch freigeschaltete Transformation (Phase 17) kurz einblenden --
           // sonst verpufft die Mechanik unbemerkt.
@@ -767,7 +791,13 @@ async function init() {
             });
             // Phase 9: ein Kauf im Shop ist genauso ein "Erhalt" wie eine
             // gewaehlte Karte auf dem Upgrade-Screen (siehe onPick oben).
-            if (!offer.fallback && offer.id) codex.markSeen('upgrades', offer.id);
+            if (!offer.fallback && offer.id) {
+              // Phase 13: Toast nur beim ECHTEN Erstkontakt.
+              if (codex.markSeen('upgrades', offer.id)) {
+                const sym = upgradesData.upgrades[offer.id]?.symbol || '•';
+                notify.push(sym, `Neu: ${offer.name}`);
+              }
+            }
             updateSecondaryLabel(); // Sekundärkarten wechseln die Waffe
             // Transformationen (Phase 17): auch ein Kartenkauf im Shop
             // zaehlt gegen den Tag-Fortschritt, siehe onPick oben.
@@ -1142,7 +1172,12 @@ async function init() {
           // eine Menue-Auswahl ist kein Gameplay-Frame, das gebuendelte
           // Schreiben schuetzt nur den 60-Hz-Spiel-Loop (Plan-Grundsatz
           // "Einstellungen werden sofort geschrieben, kein Gameplay aktiv").
-          codex.markSeen('playerTanks', id);
+          // Phase 13: "Klassen-Freischaltung" bildet sich auf denselben
+          // Erstkontakt ab -- alle Klassen sind aktuell `unlocked: true`
+          // (echte Freischaltbedingungen sind noch nicht gebaut, s.
+          // CLAUDE.md To-do), das erste WAEHLEN einer Klasse ist der
+          // einzige reale "jetzt neu im Codex"-Moment, den es gibt.
+          if (codex.markSeen('playerTanks', id)) notify.push('🎖', `Klasse entdeckt: ${t.label}`);
           codex.flush();
         });
       }

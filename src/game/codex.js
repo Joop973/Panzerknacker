@@ -85,11 +85,17 @@ export function createCodex({ tanksData, upgradesData, loadRaw, saveRaw }) {
   const ids = categoryIds(tanksData, upgradesData);
 
   return {
+    // Gibt zurueck, ob DIESER Aufruf den Eintrag neu markiert hat (true) oder
+    // er schon vorher gesehen war (false) -- Phase 13 (Notification-System)
+    // braucht genau dieses Signal, um einen Toast nur beim ECHTEN Erstkontakt
+    // auszuloesen, nicht bei jedem erneuten markSeen() (z. B. jeden Tick fuer
+    // denselben Gegner).
     markSeen(category, id) {
-      if (!state.seen[category]) return;
-      if (state.seen[category][id]) return; // schon gesehen -> kein Write noetig
+      if (!state.seen[category]) return false;
+      if (state.seen[category][id]) return false; // schon gesehen -> kein Write noetig
       state.seen[category][id] = true;
       dirty = true;
+      return true;
     },
     isSeen(category, id) {
       return !!state.seen[category]?.[id];
@@ -131,13 +137,19 @@ export const CODEX_CATEGORIES = CATEGORIES;
 // Tick des Raums schon reicht). Boss-Typen fallen automatisch durch den
 // categoryIds.enemies-Filter (die enthaelt nur echte generische Typen +
 // deren Elite-Schluessel, keine Bosse).
+// Gibt die Liste der Schluessel zurueck, die DIESER Aufruf neu markiert hat
+// (Phase 13: main.js loest darauf einen Toast aus, ohne den Mechanismus
+// selbst zu kennen -- pro-Tick-Aufrufe fuer laengst bekannte Gegner liefern
+// ein leeres Array).
 export function markVisibleEnemies(codex, tanks) {
+  const newly = [];
   for (const t of tanks || []) {
     const type = t?.type;
     if (!type || !codex.categoryIds.enemies.includes(type)) continue;
     const key = t.affixes && t.affixes.length > 0 ? eliteKey(type) : type;
-    codex.markSeen('enemies', key);
+    if (codex.markSeen('enemies', key)) newly.push(key);
   }
+  return newly;
 }
 
 // Phase 11: markSeen bei Boss-SPAWN -- Bosse bekommen nie Elite-Affixe
@@ -146,11 +158,14 @@ export function markVisibleEnemies(codex, tanks) {
 // Typ, run.js), deshalb keine eliteKey-Verzweigung noetig -- einfacher als
 // markVisibleEnemies. "Spawn" und "erster simulierter Tick" fallen in
 // diesem Code strukturell zusammen (createState() erzeugt den Boss-Tank
-// synchron), also dieselbe Wiederverwendung der Pro-Tick-Abtastung.
+// synchron), also dieselbe Wiederverwendung der Pro-Tick-Abtastung. Gibt
+// wie markVisibleEnemies die neu markierten ids zurueck (Phase 13).
 export function markVisibleBosses(codex, tanks) {
+  const newly = [];
   for (const t of tanks || []) {
     const type = t?.type;
     if (!type || !codex.categoryIds.bosses.includes(type)) continue;
-    codex.markSeen('bosses', type);
+    if (codex.markSeen('bosses', type)) newly.push(type);
   }
+  return newly;
 }

@@ -3301,11 +3301,68 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
     NICHT reichen, um die Sticky-Aktionsreihe wirklich zu fordern: der
     Knopf blieb auch ohne `sticky` im Bild).
 
+- **Phase 13 (Freischalt-Notification-System) — erledigt.** Toast-Queue für
+  „zum ersten Mal gesehen"-Ereignisse: Upgrade-Erhalt, Gegner-/Elite-/
+  Boss-Erstsichtung, Klassen-Erstwahl.
+  - **`game/codex.js: markSeen()` gibt jetzt `true`/`false` zurück**
+    (Erstkontakt ja/nein) statt nichts — das Signal, an dem jeder Aufrufer
+    entscheidet, ob ein Toast fällig ist, ohne den Mechanismus selbst zu
+    kennen. `markVisibleEnemies`/`markVisibleBosses` (Phasen 10/11) geben
+    passend dazu jetzt die Liste der **neu** markierten Schlüssel zurück
+    (vorher: reiner Seiteneffekt) — ein Aufruf für längst bekannte
+    Gegner/Bosse liefert ein leeres Array, kein Dauer-Toast pro Tick.
+  - **`src/ui/notification.js`** (neu, `createNotifications`): reines
+    DOM-Element (Muster `preview.js`), **kein** `.overlay` — `pointer-events:
+    none` blockiert dadurch **strukturell** keine Eingabe (Plan-Vorgabe).
+    `push(icon, text)` reiht ein, zeigt sofort wenn gerade nichts läuft;
+    läuft schon ein Toast, wartet der neue in der Reihe (Testschritt 4:
+    mehrere gleichzeitige Freischaltungen nacheinander, nicht
+    übereinander). `update(dt)` zählt nur beim sichtbaren Toast herunter und
+    zieht den nächsten aus der Queue, sobald er abläuft; leere Queue →
+    automatisch verschwinden (Testschritt 5).
+  - **`main.js: update(dt)` ruft `notify.update(dt)` als ALLERERSTES**, vor
+    jedem frühen `return` (kein Run/Menü offen/Run-Overlay offen/pausiert) —
+    ein Toast muss auch auf dem Startbildschirm (Klassenwahl) ticken und von
+    selbst verschwinden, ohne je die Spiellogik zu berühren.
+  - **Vier Hook-Stellen**, alle nach demselben Muster
+    `if (codex.markSeen(...)) notify.push(icon, text)`: Upgrade-Screen-
+    `onPick` und Shop-`onBuyCard` (Symbol aus `upgradesData.upgrades[id]
+    .symbol`), die Pro-Tick-Abtastung in `sampleRoomTelemetry()` (jetzt über
+    die Rückgabewerte von `markVisibleEnemies`/`markVisibleBosses` statt
+    blind bei jedem Aufruf), und der Klassenauswahl-Klick-Handler.
+  - **„Klassen-Freischaltung" bildet sich auf die Erst-WAHL einer Klasse
+    ab**: eine echte Freischalt-Bedingung gibt es noch nicht (alle zehn
+    Klassen stehen auf `unlocked: true`, s. To-do unten) — das erste
+    Anklicken einer Klasse ist der einzige reale „jetzt neu im Codex"-
+    Moment, den es aktuell gibt, und deckt sich mit demselben Erstkontakt-
+    Ereignis, das Codex-Phase 8 schon nutzt.
+  - **Tests:** `regression.mjs` Abschnitt 8w — `markSeen()`-Rückgabewert
+    (eigene Kategorien/ids), `markVisibleEnemies`/`markVisibleBosses`
+    liefern die neuen Schlüssel nur beim echten Erstkontakt (zwei
+    **getrennte** Codex-Instanzen, damit ein vorheriger Testschritt den
+    „Erstkontakt" nicht selbst schon verbraucht), `notification.js` mit
+    Domstub (sofort zeigen wenn idle, Warteschlange bei laufendem Toast,
+    kein Wechsel vor Ablauf, automatisches Verschwinden nach der Queue).
+    Drei Gegenproben rot bestätigt: `markSeen()`-Rückgabe ausgebaut → alle
+    Erstkontakt-Prüfungen rot; `push()` überschreibt sofort statt zu warten
+    → Warteschlangen-Test rot; `showNext()` versteckt bei leerer Queue nicht
+    mehr → Testschritt-5-Prüfung rot.
+  - **main.js-Verdrahtung nicht unit-testbar** (imperative Wiring, wie
+    schon bei den Codex-Phasen) — zwei Playwright-Smokes: (1) Klassenwahl
+    zeigt „🎖 Klasse entdeckt: …", verschwindet nach Ablauf, löst bei
+    erneuter Wahl derselben Klasse **keinen** zweiten Toast aus, `pointer-
+    events: computed style = none`, ein Klick auf „Zurück" funktioniert
+    trotz sichtbarem Toast; (2) `?debug=1&skipToRun` bis in Raum 1 gespielt
+    zeigt „👾 Neuer Gegner: …" beim ersten simulierten Tick. Der Upgrade-
+    Erhalt-Hook nutzt exakt dasselbe Codemuster wie der bereits live
+    geprüfte Klassen-Hook, der Boss-Hook exakt dasselbe wie der geprüfte
+    Gegner-Hook — beide gelten dadurch als mitabgedeckt.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 13 (Freischalt-
-      Notification-System — Toast-Queue für Upgrade-Erhalt, Gegner-/Elite-/
-      Boss-Erstsichtung, Klassen-Freischaltung; blockiert keine Eingaben,
-      pausiert das Spiel nicht).
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 14 (Integration & Polish —
+      Übergänge abrunden, tote Platzhalter entfernen, Save-Migration final
+      testen, Debug-Flags standardmäßig deaktiviert prüfen. Letzte Phase
+      des Plans).
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren.
 - [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
@@ -3414,6 +3471,12 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Auswertungsscreen nach Run-Ende (Sieg/Niederlage), ersetzt den alten
   Canvas-Text (`hud.js: drawEnd`). In `main.js: RUN_OVERLAY_IDS`, also per
   Tastatur/Gamepad navigierbar wie die übrigen In-Run-Overlays.
+- `src/ui/notification.js` — Freischalt-Toast-Queue (PLAN-STARTMENU
+  Phase 13): `createNotifications()`, reines DOM-Element ohne `.overlay`
+  (`pointer-events: none`), tickt in `main.js: update(dt)` als Allererstes,
+  unabhängig von Run/Menü-Zustand. `game/codex.js: markSeen()` liefert
+  `true`/`false` (Erstkontakt), darauf reagieren vier Hook-Stellen in
+  `main.js` mit `notify.push(icon, text)`.
 - `src/render/renderer.js` — zeichnet alles (interpoliert). Nutzt Sprites,
   fällt auf prozedurale Formen zurück, falls Grafik fehlt/lädt.
 - `src/render/sprites.js` — lädt die PNG-Sprites (async, mit Fallback).
@@ -3433,7 +3496,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v113`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v114`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
