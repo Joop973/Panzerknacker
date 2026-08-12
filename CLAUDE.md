@@ -3092,12 +3092,53 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
   - `tests/uilayout.mjs` bleibt grün (neue Sub-Seite `#codexPlayerTanks`
     passt ohne weitere Kompaktmodus-Anpassung).
 
+- **Phase 9 (Codex — Upgrades) — erledigt.**
+  - **`renderUpgradeList(doc, container, upgradesData, codex, {revealAll})`**
+    (`codexscreen.js`): 246 Einträge, jede `id` ein eigener Codex-Eintrag —
+    Element-Karten haben laut `STARTMENU-BESTAND.md` schon eigene ids, keine
+    Basis+Variante-Aufspaltung nötig. Nur zwei Zustände (kein „gesperrt" wie
+    bei Klassen): ungesehen zeigt ausschließlich „???", gesehen zeigt
+    Symbol+Name, Seltenheit+Tag, Beschreibung.
+  - **Einträge sind `<button>`, nicht `<div>`** (anders als Phase 8) — bei
+    246 Stück braucht die Tastatur-/Gamepad-Navigation echte Fokusziele.
+    Rahmenfarbe nach Seltenheit wiederverwendet dasselbe Vokabular wie die
+    Upgrade-Karten im Spiel (`data-rarity`, `style.css`).
+  - **`src/ui/menunav.js` global erweitert**: `highlight()` ruft jetzt
+    `el.scrollIntoView({block:'nearest'})` bei einem ECHTEN Fokuswechsel
+    (nicht bei jedem `update()`-Tick, sonst waere es auf jedem Tick ein
+    wirkungsloses `scrollIntoView`) — Testschritt 5 „Scroll-Position folgt
+    dem Fokus". Gilt für **jeden** Screen mit `menunav`, nicht nur die neue
+    Upgrade-Liste (universeller Nutzen, kein Sonderfall).
+  - **Zwei echte `markSeen()`-Aufrufstellen**: `onPick` (Upgrade-Screen) und
+    `onBuyCard` (Shop) — beide markieren nur die tatsächlich **erhaltene**
+    Karte, nie die abgelehnten Alternativen, und überspringen
+    Fallback-Angebote (kein reale Codex-id, Pool erschöpft). **Kein**
+    sofortiger Flush wie bei der Klassenwahl (Phase 8) — passiert innerhalb
+    eines Runs, läuft also über den Batching-Rhythmus aus Phase 7
+    (Raumwechsel/Run-Ende).
+  - **`#codexPlayerTanksBack`/`#codexUpgradesBack` jetzt `sticky`** (Muster
+    `#settingsBack`) — bei bis zu 246 Einträgen wäre „Zurück" sonst nur nach
+    komplettem Durchscrollen erreichbar.
+  - **Tests:** `regression.mjs` Abschnitt 8s — `renderUpgradeList` mit
+    **synthetischen** Karten (ungesehen/gesehen, Seltenheit/Tag/Symbol,
+    `codexRevealAll`) plus eine Zählprobe gegen die **echten** 246 Upgrades
+    (Testschritt 4). Zwei Gegenproben rot bestätigt. `main.js`-Verdrahtung
+    wieder nicht unit-testbar — Browser-Smoke: 0/246 → simulierter Erhalt →
+    1/246 mit echten Daten, 245/246 bleiben „???", **echte Tastatur-
+    Navigation durch 40 Einträge** zeigt den fokussierten Eintrag zuverlässig
+    im sichtbaren Bereich (Testschritt 5, kein Domstub-Ersatz möglich, da
+    `scrollIntoView` dort nur ein No-op-Stub ist).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 9 (Codex — Upgrades:
-      Listenansicht der 246 Karten inkl. Element-Varianten als eigene
-      Einträge, ggf. Filter/Untertabs nach Rarity/Element bei so langer
-      Liste). Erste `markSeen('upgrades', ...)`-Aufrufstelle: Erhalt einer
-      Karte markiert genau die gewählte id.
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 10 (Codex — Gegner: generische
+      Feindpanzer + Eliten. `markSeen` bei ERSTKONTAKT, nicht erst bei Kill —
+      braucht einen neuen Hook in `state.js`/`ai.js`, nicht nur in `main.js`
+      wie bisher). **Ungeklärter Punkt für die Phase selbst:** der Plan
+      verlangt „Elite-Varianten sind eigene Einträge" (Testschritt 3), aber
+      Elite ist laut `STARTMENU-BESTAND.md` ein reiner Laufzeit-Affix auf
+      einem normalen Gegnertyp — es gibt keine separate `id` dafür in
+      `tanks.json`. Muss in Phase 10 geklärt werden (z. B. affix-bewusster
+      Codex-Schlüssel wie `t_grey+elite` statt einer echten Typ-id).
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren.
 - [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
@@ -3221,7 +3262,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v109`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v110`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

@@ -98,3 +98,52 @@ export function renderPlayerTankList(doc, container, tanksData, codex, { revealA
     container.appendChild(el);
   }
 }
+
+// Phase 9: Listenansicht "Upgrades". Jede der 246 ids ist ein eigener
+// Codex-Eintrag -- Element-Karten (Feuer/Frost/...) haben laut
+// STARTMENU-BESTAND.md schon eigene ids statt einer Basis+Variante-
+// Aufspaltung, also keine Sonderbehandlung noetig. Die Eintraege sind
+// Knoepfe (nicht nur Divs wie bei "Eigene Panzer") -- bei 246 Stueck
+// braucht die Tastatur-/Gamepad-Navigation echte Fokusziele, damit
+// menunav.js sie ueberhaupt anlaufen und ins Bild scrollen kann
+// (Testschritt 5).
+const RARITY_LABELS = { common: 'Gewöhnlich', rare: 'Selten', legendary: 'Legendär' };
+
+export function renderUpgradeList(doc, container, upgradesData, codex, { revealAll = false } = {}) {
+  container.innerHTML = '';
+  const ids = Object.keys(upgradesData?.upgrades || {});
+  for (const id of ids) {
+    const def = upgradesData.upgrades[id];
+    const seen = revealAll || codex.isSeen('upgrades', id);
+    const el = doc.createElement('button');
+    el.type = 'button';
+    el.className = 'codex-entry';
+    el.dataset.upgrade = id;
+
+    if (!seen) {
+      el.classList.add('codex-unseen');
+      const q = doc.createElement('div');
+      q.className = 'codex-entry-name';
+      q.textContent = '???';
+      el.appendChild(q);
+      container.appendChild(el);
+      continue;
+    }
+
+    el.dataset.rarity = def.rarity || 'common';
+    const name = doc.createElement('div');
+    name.className = 'codex-entry-name';
+    name.textContent = `${def.symbol ? def.symbol + ' ' : ''}${def.name || id}`;
+    const meta = doc.createElement('div');
+    meta.className = 'codex-entry-stats';
+    meta.textContent = `${RARITY_LABELS[def.rarity] || def.rarity || ''} · ${def.tag || ''}`;
+    const desc = doc.createElement('div');
+    desc.className = 'codex-entry-desc';
+    desc.textContent = def.description || '';
+    const textCol = doc.createElement('div');
+    textCol.className = 'codex-entry-text';
+    textCol.append(name, meta, desc);
+    el.appendChild(textCol);
+    container.appendChild(el);
+  }
+}

@@ -259,17 +259,25 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 
 ## Phase 9: Codex — Upgrades
 
+> **Erledigt.** Kein Filter/Untertab gebaut — nicht nötig für die fünf
+> Testschritte, `.overlay { overflow-y: auto }` reicht bei 246 Einträgen.
+> „Element-Varianten" gibt es laut `STARTMENU-BESTAND.md` nicht als
+> Konzept (jede Element-Karte hat schon eine eigene `id`) — Testschritt 2/3
+> reduzieren sich dadurch auf „die erhaltene id wird markiert, alle anderen
+> bleiben unberührt", ohne Sonderlogik. `menunav.js` global um
+> Scroll-Follow-Fokus erweitert (Testschritt 5). Details in `CLAUDE.md`.
+
 **Änderungen:**
 - `menu.js` — Upgrade-Ansicht
 - Element-Varianten als separate Einträge
 - Filter oder Untertabs nach Rarity/Element, falls die Liste zu lang wird
 
 **Testschritte:**
-1. Ungesehene Upgrades erscheinen als „???"
-2. Erhalt eines Upgrades markiert genau die richtige Element-Variante als gesehen
-3. Andere Element-Varianten derselben Basis-Karte bleiben ungesehen
-4. Gesamtzahl der Einträge stimmt mit tatsächlicher Pool-Größe inkl. Varianten überein
-5. Scroll-Position folgt dem Fokus bei Tastatur/Controller
+1. ✅ Ungesehene Upgrades erscheinen als „???"
+2. ✅ Erhalt eines Upgrades markiert genau die richtige Element-Variante als gesehen
+3. ✅ Andere Element-Varianten derselben Basis-Karte bleiben ungesehen
+4. ✅ Gesamtzahl der Einträge stimmt mit tatsächlicher Pool-Größe inkl. Varianten überein
+5. ✅ Scroll-Position folgt dem Fokus bei Tastatur/Controller
 
 ---
 

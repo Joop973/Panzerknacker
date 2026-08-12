@@ -43,7 +43,7 @@ import { createSettings } from './ui/settings.js';
 import { DEBUG } from './core/debug.js';
 import { playerClassEntries, isClassUnlocked, createClassButton, fmtClassStats } from './game/classes.js';
 import { createCodex } from './game/codex.js';
-import { renderCodexCategories, renderPlayerTankList } from './ui/codexscreen.js';
+import { renderCodexCategories, renderPlayerTankList, renderUpgradeList } from './ui/codexscreen.js';
 import { createTutorial } from './ui/hud.js';
 import {
   getFlag,
@@ -661,6 +661,12 @@ async function init() {
             chosen: cardOf(offers[idx]),
             rejected: offers.filter((_, i) => i !== idx).map(cardOf),
           });
+          // Phase 9: markSeen fuer die tatsaechlich ERHALTENE Karte -- nicht
+          // fuer die abgelehnten Alternativen (Testschritt 2: "Erhalt").
+          // Ein Fallback-Angebot (Pool erschoepft) hat keine echte Codex-id.
+          // Kein sofortiger Flush -- laeuft im Run, also ueber den Batching-
+          // Rhythmus aus Phase 7 (naechster Raumwechsel/Run-Ende).
+          if (!offers[idx].fallback && offers[idx].id) codex.markSeen('upgrades', offers[idx].id);
           chooseUpgrade(run, idx);
           // Frisch freigeschaltete Transformation (Phase 17) kurz einblenden --
           // sonst verpufft die Mechanik unbemerkt.
@@ -748,6 +754,9 @@ async function init() {
               chosen: { id: offer.fallback ? null : offer.id, name: offer.name, tag: offer.tag, rarity: offer.rarity },
               rejected: [],
             });
+            // Phase 9: ein Kauf im Shop ist genauso ein "Erhalt" wie eine
+            // gewaehlte Karte auf dem Upgrade-Screen (siehe onPick oben).
+            if (!offer.fallback && offer.id) codex.markSeen('upgrades', offer.id);
             updateSecondaryLabel(); // Sekundärkarten wechseln die Waffe
             // Transformationen (Phase 17): auch ein Kartenkauf im Shop
             // zaehlt gegen den Tag-Fortschritt, siehe onPick oben.
@@ -1059,20 +1068,29 @@ async function init() {
   // vollstaendig, OHNE den echten gespeicherten Zustand zu veraendern.
   const codexScreen = document.getElementById('codexScreen');
   const codexCategoriesEl = document.getElementById('codexCategories');
-  // Phase 8: Listenansicht "Eigene Panzer". Die anderen drei Kategorien
-  // haben noch kein Ziel (Phasen 9-11) -- onOpen() ignoriert sie bewusst.
+  // Phase 8/9: Listenansichten "Eigene Panzer"/"Upgrades". Die verbleibenden
+  // zwei Kategorien haben noch kein Ziel (Phasen 10-11) -- onOpen()
+  // ignoriert sie bewusst.
   const codexPlayerTanksScreen = document.getElementById('codexPlayerTanks');
   const codexPlayerTanksListEl = document.getElementById('codexPlayerTanksList');
+  const codexUpgradesScreen = document.getElementById('codexUpgrades');
+  const codexUpgradesListEl = document.getElementById('codexUpgradesList');
   function refreshCodexScreen() {
     renderCodexCategories(document, codexCategoriesEl, codex, {
       revealAll: DEBUG.codexRevealAll,
       onOpen: (cat) => {
-        if (cat !== 'playerTanks') return;
-        renderPlayerTankList(document, codexPlayerTanksListEl, tanksData, codex, {
-          revealAll: DEBUG.codexRevealAll,
-          unlockOpts: classOpts,
-        });
-        menu.show('codexPlayerTanks');
+        if (cat === 'playerTanks') {
+          renderPlayerTankList(document, codexPlayerTanksListEl, tanksData, codex, {
+            revealAll: DEBUG.codexRevealAll,
+            unlockOpts: classOpts,
+          });
+          menu.show('codexPlayerTanks');
+        } else if (cat === 'upgrades') {
+          renderUpgradeList(document, codexUpgradesListEl, upgradesData, codex, {
+            revealAll: DEBUG.codexRevealAll,
+          });
+          menu.show('codexUpgrades');
+        }
       },
     });
   }
@@ -1082,6 +1100,7 @@ async function init() {
   menu.register('class', classScreen, focusablesIn(classScreen));
   menu.register('codex', codexScreen, focusablesIn(codexScreen));
   menu.register('codexPlayerTanks', codexPlayerTanksScreen, focusablesIn(codexPlayerTanksScreen));
+  menu.register('codexUpgrades', codexUpgradesScreen, focusablesIn(codexUpgradesScreen));
   menu.root('main');
   classOpenBtn.addEventListener('click', () => menu.show('class'));
   document.getElementById('classBack').addEventListener('click', () => menu.back());
@@ -1091,6 +1110,7 @@ async function init() {
   });
   document.getElementById('codexBack').addEventListener('click', () => menu.back());
   document.getElementById('codexPlayerTanksBack').addEventListener('click', () => menu.back());
+  document.getElementById('codexUpgradesBack').addEventListener('click', () => menu.back());
   // Tages-Seed: fuer alle Spieler am selben Tag derselbe Run.
   document.getElementById('dailyBtn').addEventListener('click', () => {
     const d = new Date();

@@ -1255,6 +1255,65 @@ function check(ok, msg) {
   }
 }
 
+// ---- 8s. PLAN-STARTMENU Phase 9: Codex -- Upgrades -----------------------
+// renderUpgradeList mit EIGENEN, synthetischen Karten. Anders als bei den
+// Klassen gibt es hier kein "gesperrt" -- nur ungesehen/gesehen.
+{
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { createCodex } = await import('../src/game/codex.js');
+    const { renderUpgradeList } = await import('../src/ui/codexscreen.js');
+    const fakeUpgrades = {
+      upgrades: {
+        u_common: { name: 'Testkarte Gewoehnlich', description: 'Desc-Common', tag: 'damage', rarity: 'common', symbol: '★' },
+        u_rare: { name: 'Testkarte Selten', description: 'Desc-Rare', tag: 'reload', rarity: 'rare', symbol: '◆' },
+        u_legendary: { name: 'Testkarte Legendaer', description: 'Desc-Legendary', tag: 'crit', rarity: 'legendary', symbol: '♛' },
+      },
+    };
+    const testCodex = createCodex({ tanksData: { types: {} }, upgradesData: fakeUpgrades, loadRaw: () => null, saveRaw: () => {} });
+    testCodex.markSeen('upgrades', 'u_common');
+    testCodex.markSeen('upgrades', 'u_rare');
+    // u_legendary bleibt ungesehen.
+
+    const container = document.createElement('div');
+    renderUpgradeList(document, container, fakeUpgrades, testCodex, {});
+    const entries = [...container.querySelectorAll('.codex-entry')];
+    check(entries.length === 3, `Phase9: ${entries.length} Eintraege statt 3`);
+    check(entries.every((e) => e.tagName === 'BUTTON'), 'Phase9: Upgrade-Eintraege sind keine Knoepfe (Testschritt 5 braucht Fokusziele)');
+
+    const common = entries.find((e) => e.dataset.upgrade === 'u_common');
+    check(!common.classList.contains('codex-unseen'), 'Phase9: gesehene Karte gilt als ungesehen');
+    check(common.textContent.includes('Testkarte Gewoehnlich') && common.textContent.includes('Desc-Common'), `Phase9: Name/Beschreibung fehlen ("${common.textContent}")`);
+    check(common.textContent.includes('★'), 'Phase9: Symbol fehlt in der Anzeige');
+    check(common.textContent.includes('Gewöhnlich') && common.textContent.includes('damage'), `Phase9: Seltenheit/Tag fehlen ("${common.textContent}")`);
+    check(common.dataset.rarity === 'common', 'Phase9: data-rarity fehlt (Rahmenfarbe haengt daran)');
+
+    const legendary = entries.find((e) => e.dataset.upgrade === 'u_legendary');
+    check(legendary.classList.contains('codex-unseen'), 'Phase9: ungesehene Karte ist nicht als ungesehen markiert');
+    check(legendary.textContent.trim() === '???', `Phase9: ungesehene Karte zeigt mehr als "???" ("${legendary.textContent.trim()}")`);
+    check(!legendary.textContent.includes('Legendaer'), 'Phase9: ungesehene Karte verraet ihren Namen (Testschritt 1)');
+
+    // codexRevealAll: zeigt die ungesehene Karte, veraendert den echten
+    // Zustand nicht (Testschritt 5 des Codex-Hauptscreens, hier fuer die
+    // Listenansicht selbst gegengeprueft).
+    renderUpgradeList(document, container, fakeUpgrades, testCodex, { revealAll: true });
+    const legendaryRevealed = [...container.querySelectorAll('.codex-entry')].find((e) => e.dataset.upgrade === 'u_legendary');
+    check(legendaryRevealed.textContent.includes('Legendaer'), `Phase9: codexRevealAll zeigt die ungesehene Karte nicht ("${legendaryRevealed.textContent}")`);
+    check(testCodex.isSeen('upgrades', 'u_legendary') === false, 'Phase9: codexRevealAll veraendert den echten gespeicherten Zustand');
+
+    // Testschritt 4: Gesamtzahl der Eintraege = tatsaechliche Pool-Groesse
+    // -- gegen die ECHTEN 246 Upgrades, nicht die synthetischen drei.
+    const realContainer = document.createElement('div');
+    const realCodex = createCodex({ tanksData, upgradesData, loadRaw: () => null, saveRaw: () => {} });
+    renderUpgradeList(document, realContainer, upgradesData, realCodex, {});
+    const realCount = realContainer.querySelectorAll('.codex-entry').length;
+    check(realCount === 246, `Phase9: echte Upgrade-Liste zeigt ${realCount} statt 246 Eintraege`);
+  } finally {
+    restore();
+  }
+}
+
 // ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------
 // Die Upgrade-Chips lagen im Hauptbereich der Raumvorschau und haben dort
 // bei vielen Karten den "Weiter"-Knopf aus dem Bild geschoben (Nutzer-

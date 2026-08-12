@@ -22,11 +22,23 @@ export function createMenuNav(getFocusables) {
   let heldY = 0;
   let timer = 0;
   let heldX = 0; // eigener Flankenspeicher fuer die X-Achse (kein Wiederholen)
+  let lastScrolled = null; // Phase 9: nur bei echtem Fokuswechsel scrollen
 
   function highlight(list) {
     for (const el of list) el.classList.remove('menu-focus');
     const el = list[index];
     el?.classList.add('menu-focus');
+    // Phase 9 (Codex-Upgrades, Testschritt 5 "Scroll-Position folgt dem
+    // Fokus"): highlight() laeuft pro update()-Tick bis zu zweimal, auch
+    // wenn sich nichts bewegt hat -- nur bei einem ECHTEN Wechsel scrollen,
+    // sonst waere es auf jedem Tick ein (wirkungsloses, aber unnoetiges)
+    // scrollIntoView. Gilt fuer JEDEN Screen mit menunav (nicht nur lange
+    // Listen), weil sonst auch ein normaler Knopf ausserhalb eines kurzen
+    // Overlays haengen bleiben koennte.
+    if (el && el !== lastScrolled) {
+      el.scrollIntoView?.({ block: 'nearest' });
+      lastScrolled = el;
+    }
     return el;
   }
 
@@ -67,6 +79,7 @@ export function createMenuNav(getFocusables) {
       heldY = 0;
       timer = 0;
       heldX = 0;
+      lastScrolled = null;
     },
     // Vom Aufrufer jeden Logikschritt aufgerufen, waehrend das Overlay
     // aktiv ist. menuState kommt aus input.js: getMenuState().
