@@ -156,17 +156,28 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 
 ## Phase 5: Einstellungen — Steuerung
 
+> **Erledigt, Sensitivität auf Nutzerentscheidung ersatzlos gestrichen**
+> (Muster `PLAN-INPUT.md` P5/Schild). Ist-Abgleich: der Turm zielt bei jedem
+> Gerät instant (kein Turn-Speed-Wert im Code) — ein „spürbarer"
+> Sensitivitäts-Regler hätte eine neue Dreh-Geschwindigkeitsbegrenzung
+> gebraucht, die das Kernzielgefühl für alle Profile ändert. Phase 5 bleibt
+> bei der Verifikation der bestehenden Profil-Wahl (Testschritte 1/3/4/5).
+> Details in `CLAUDE.md`.
+
 **Änderungen:**
-- `settings.js` — Steuerung-Bereich
-- Profil-Wahl (Touch/Controller/Tastatur) + Sensitivität
-- Verknüpfung mit PLAN_ERWEITERUNG_INPUT_REWORK.md
+- ~~`settings.js` — Steuerung-Bereich~~ (Profil-Wahl existierte schon seit
+  P1/P9, seit Phase 4 in `settings.js` verdrahtet)
+- ~~Profil-Wahl (Touch/Controller/Tastatur) + Sensitivität~~ — Sensitivität
+  gestrichen, Profil-Wahl verifiziert (`regression.mjs` 8n)
+- ~~Verknüpfung mit PLAN_ERWEITERUNG_INPUT_REWORK.md~~ (heißt real
+  `PLAN-INPUT.md`, war bereits verknüpft)
 
 **Testschritte:**
-1. Profilwechsel ändert tatsächliches Eingabeverhalten im Spiel
-2. Sensitivitäts-Regler wirkt spürbar auf Aim-Geschwindigkeit
-3. Manuelle Wahl überschreibt Auto-Erkennung dauerhaft
-4. Einstellung übersteht Reload
-5. Wechsel ohne Seiten-Neuladen möglich, Menü bleibt danach bedienbar
+1. ✅ Profilwechsel ändert tatsächliches Eingabeverhalten im Spiel
+2. ❌ *entfällt* (Sensitivitäts-Regler gestrichen)
+3. ✅ Manuelle Wahl überschreibt Auto-Erkennung dauerhaft
+4. ✅ Einstellung übersteht Reload
+5. ✅ Wechsel ohne Seiten-Neuladen möglich, Menü bleibt danach bedienbar
 
 ---
 

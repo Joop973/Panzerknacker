@@ -2925,10 +2925,41 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
     Pause-Overlay, Einstellungen-aus-Pause → Zurück zur Pause, Musik auf 0
     persistiert, Browser-Zurück/Fortsetzen schließen die Pause.
 
+- **Phase 5 (Einstellungen — Steuerung) — erledigt, Sensitivität auf
+  Nutzerwunsch gestrichen.** Ist-Abgleich: der Turm zielt bei JEDEM Gerät
+  **instant** (`state.js: p.turret = atan2(cmd.aim.y - p.y, cmd.aim.x - p.x)`,
+  kein Turn-Speed-Wert im Code). Ein „spürbarer" Sensitivitäts-Regler hätte
+  also eine komplett neue Dreh-Geschwindigkeitsbegrenzung gebraucht (Risiko:
+  ändert das Kernzielgefühl für Maus/Stick/Gamepad gleichermaßen, berührt
+  Ziellinie/Bankshot-Solver/Bosskämpfe). **Auf Nutzerentscheidung ersatzlos
+  gestrichen** — dasselbe Muster wie `PLAN-INPUT.md` P5 (Schild). Phase 5
+  bleibt bei der **Verifikation der bestehenden Profil-Wahl** (aus P1/P9,
+  seit Phase 4 in `settings.js`) — die war bisher ungetestet:
+  - **`setProfile()` überschreibt die Geräte-Auto-Erkennung dauerhaft**:
+    `markSource(s)` schreibt `source` nur, wenn `manualProfile` NICHT gesetzt
+    ist — eine Tastatur-/Touch-/Gamepad-Eingabe kann die erzwungene Quelle
+    also nicht zurücksetzen. `setProfile(null)` stellt die Auto-Erkennung
+    wieder her.
+  - **`getMenuState()` ignoriert den Override bewusst** (liest Tastatur/
+    Gamepad immer direkt) — ein erzwungenes „touch"-Profil auf einem
+    Desktop ohne Touchscreen sperrt dadurch NICHT die Tastatur-Menünavigation
+    (Testschritt 5).
+  - **Tests:** `regression.mjs` Abschnitt 8n — Auto-Erkennung, dauerhafter
+    Override, Reset auf `null`, Menü-Unabhängigkeit vom Override. Beide
+    Gegenproben rot bestätigt (Override-Schutz ausgehebelt →
+    „nicht dauerhaft"-Check rot; `getMenuState()` künstlich vom Profil
+    abhängig gemacht → Menü-Check rot). Browser-Smoke (im echten Run):
+    `touch-on`-Klasse erscheint bei erzwungenem „touch", Wahl übersteht
+    Zurück/Reload, Menü bleibt danach bedienbar.
+  - Keine Code-Änderung an Kern-Mechaniken, kein Service-Worker-Bump nötig
+    (nur Tests + Doku).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 5 (Einstellungen — Steuerung:
-      Profil-Wahl steht schon, neu wäre ein Sensitivitäts-Regler auf die
-      Aim-Geschwindigkeit).
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 6 (Einstellungen — Grafik &
+      Fortschritt zurücksetzen: Partikeldichte/Performance-Modus +
+      zweistufige Reset-Bestätigung, die auch Codex/Freischaltungen löscht
+      — Codex existiert aber erst ab Phase 7, „Fortschritt" ist also vorerst
+      nur die Bestwerte-Statistik).
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren + `seen`/Codex in
       Phase 7 anbinden.

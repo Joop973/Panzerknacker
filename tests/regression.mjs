@@ -972,6 +972,56 @@ function check(ok, msg) {
   check(diffData.modes.schwer.hpMult > diffData.modes.leicht.hpMult, 'Phase3: schwer ist nicht zaeher als leicht (hpMult)');
 }
 
+// ---- 8n. PLAN-STARTMENU Phase 5: Eingabeprofil-Override -----------------
+// Nutzerentscheidung: der Turm zielt bei JEDEM Geraet instant (kein
+// Turn-Speed-Konzept im Code, state.js: p.turret = atan2(...) ohne
+// Zwischenschritt) -- ein "spuerbarer" Sensitivitaets-Regler haette also eine
+// NEUE Dreh-Geschwindigkeitsbegrenzung gebraucht. Auf Nutzerwunsch ersatzlos
+// gestrichen (Muster PLAN-INPUT.md P5/Schild). Phase 5 ist damit nur noch die
+// Verifikation der schon bestehenden Profil-Wahl -- bisher UNGETESTET.
+{
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { createInput } = await import('../src/core/input.js');
+    const canvas = document.createElement('canvas');
+    const input = createInput(window, canvas, { inputCfg: tanksData.input });
+
+    // (a) Auto-Erkennung: eine Tastatureingabe setzt die Quelle.
+    window.emit('keydown', { code: 'ArrowRight', repeat: false, preventDefault() {} });
+    check(input.getState({ x: 0, y: 0 }).source === 'keyboard', 'Phase5: Auto-Erkennung setzt die Quelle nicht auf keyboard');
+    window.emit('keyup', { code: 'ArrowRight' });
+
+    // (b) Manuelle Wahl ueberschreibt Auto-Erkennung DAUERHAFT (Testschritt 3):
+    // eine weitere Tastatureingabe darf die erzwungene Quelle NICHT zuruecksetzen.
+    input.setProfile('gamepad');
+    check(input.getProfile() === 'gamepad', 'Phase5: getProfile() liefert die gesetzte Wahl nicht');
+    check(input.getState({ x: 0, y: 0 }).source === 'gamepad', 'Phase5: setProfile aendert die Quelle nicht sofort');
+    window.emit('keydown', { code: 'ArrowLeft', repeat: false, preventDefault() {} });
+    check(input.getState({ x: 0, y: 0 }).source === 'gamepad', 'Phase5: Tastatureingabe ueberschreibt die manuelle Profilwahl (nicht dauerhaft)');
+    window.emit('keyup', { code: 'ArrowLeft' });
+
+    // (c) null stellt die Auto-Erkennung wieder her.
+    input.setProfile(null);
+    check(input.getProfile() === null, 'Phase5: setProfile(null) hebt die Wahl nicht auf');
+    window.emit('keydown', { code: 'ArrowUp', repeat: false, preventDefault() {} });
+    check(input.getState({ x: 0, y: 0 }).source === 'keyboard', 'Phase5: Auto-Erkennung greift nach setProfile(null) nicht wieder');
+    window.emit('keyup', { code: 'ArrowUp' });
+
+    // (d) Testschritt 5: das Menue bleibt bedienbar, egal welches Profil
+    // erzwungen ist -- getMenuState() liest Tastatur/Gamepad IMMER direkt,
+    // unabhaengig von einem forcierten Profil (z. B. "touch" auf einem
+    // Desktop ohne Touchscreen wuerde die Tastaturnavigation sonst sperren).
+    input.setProfile('touch');
+    window.emit('keydown', { code: 'ArrowDown', repeat: false, preventDefault() {} });
+    check(input.getMenuState().menuDir.y > 0, 'Phase5: erzwungenes "touch"-Profil sperrt die Tastatur-Menuenavigation');
+    window.emit('keyup', { code: 'ArrowDown' });
+    input.setProfile(null);
+  } finally {
+    restore();
+  }
+}
+
 // ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------
 // Die Upgrade-Chips lagen im Hauptbereich der Raumvorschau und haben dort
 // bei vielen Karten den "Weiter"-Knopf aus dem Bild geschoben (Nutzer-
