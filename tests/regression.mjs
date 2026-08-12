@@ -1084,20 +1084,29 @@ function check(ok, msg) {
 
 // ---- 8q. PLAN-STARTMENU Phase 7: Codex-Grundgerüst ----------------------
 {
-  const { migrateCodex, categoryIds, createCodex, CODEX_VERSION } = await import('../src/game/codex.js');
+  const { migrateCodex, categoryIds, createCodex, CODEX_VERSION, isEliteKey, baseIdOf } = await import('../src/game/codex.js');
 
   // (a) categoryIds gegen die ECHTEN Daten -- 10 Klassen, 246 Upgrades,
-  // 11 generische Gegner, 3 Bosse (Eliten sind Laufzeit-Affixe, keine eigene
-  // Kategorie -- STARTMENU-BESTAND.md/Nutzerentscheidung). Eigene Zahlen aus
+  // 11 generische Gegner (Phase 10: je 2 Codex-Schluessel = 22, normal +
+  // Elite-Variante), 3 Bosse (Eliten sind Laufzeit-Affixe, keine eigene
+  // KATEGORIE -- STARTMENU-BESTAND.md/Nutzerentscheidung -- aber innerhalb
+  // der Gegner-Kategorie ein eigener EINTRAG, Phase 10). Eigene Zahlen aus
   // Abschnitt 4 der Bestandsaufnahme, nicht aus dem Code zurueckgerechnet.
   const ids = categoryIds(tanksData, upgradesData);
   check(ids.playerTanks.length === 10, `Phase7: ${ids.playerTanks.length} spielbare Klassen statt 10`);
   check(ids.upgrades.length === 246, `Phase7: ${ids.upgrades.length} Upgrades statt 246`);
-  check(ids.enemies.length === 11, `Phase7: ${ids.enemies.length} generische Gegner statt 11`);
+  check(ids.enemies.length === 22, `Phase10: ${ids.enemies.length} Gegner-Codex-Schluessel statt 22 (11 Typen x normal+Elite)`);
   check(ids.bosses.length === 3, `Phase7: ${ids.bosses.length} Bosse statt 3`);
+  const enemyBaseIds = ids.enemies.filter((k) => !isEliteKey(k));
+  const enemyEliteIds = ids.enemies.filter((k) => isEliteKey(k));
+  check(enemyBaseIds.length === 11 && enemyEliteIds.length === 11, `Phase10: nicht je 11 normale/Elite-Schluessel (${enemyBaseIds.length}/${enemyEliteIds.length})`);
   check(
-    new Set([...ids.playerTanks, ...ids.enemies, ...ids.bosses]).size === 24,
-    'Phase7: Klassen/Gegner/Bosse ueberlappen sich oder fehlen (24 Typen insgesamt erwartet)',
+    enemyEliteIds.every((k) => enemyBaseIds.includes(baseIdOf(k))),
+    'Phase10: eine Elite-id zeigt auf keinen echten Basistyp',
+  );
+  check(
+    new Set([...ids.playerTanks, ...enemyBaseIds, ...ids.bosses]).size === 24,
+    'Phase7: Klassen/Gegner/Bosse ueberlappen sich oder fehlen (24 echte Typen insgesamt erwartet)',
   );
 
   // (b) migrateCodex: eigene, synthetische Rohdaten -- nicht die aktuelle
@@ -1168,7 +1177,7 @@ function check(ok, msg) {
     saveRaw: () => {},
   });
   const prog = reloaded.progress();
-  check(prog.enemies.seen === 1 && prog.enemies.total === 11, `Phase7: Fortschritt nach "Reload" falsch (${JSON.stringify(prog.enemies)})`);
+  check(prog.enemies.seen === 1 && prog.enemies.total === 22, `Phase7: Fortschritt nach "Reload" falsch (${JSON.stringify(prog.enemies)})`);
   check(prog.playerTanks.seen === 0 && prog.playerTanks.total === 10, 'Phase7: unberuehrte Kategorie zeigt falschen Fortschritt');
 
   // (e) renderCodexCategories (Codex-Hauptscreen, ui/codexscreen.js):
@@ -1183,13 +1192,13 @@ function check(ok, msg) {
     const btns = container.querySelectorAll('button');
     check(btns.length === 4, `Phase7: Codex-Hauptscreen zeigt ${btns.length} statt 4 Kategorie-Knoepfe`);
     const enemiesBtn = [...btns].find((b) => b.dataset.category === 'enemies');
-    check(enemiesBtn?.textContent.includes('1/11'), `Phase7: Gegner-Zaehler falsch ("${enemiesBtn?.textContent}")`);
+    check(enemiesBtn?.textContent.includes('1/22'), `Phase7: Gegner-Zaehler falsch ("${enemiesBtn?.textContent}")`);
     const tanksBtn = [...btns].find((b) => b.dataset.category === 'playerTanks');
     check(tanksBtn?.textContent.includes('0/10'), `Phase7: Klassen-Zaehler falsch ("${tanksBtn?.textContent}")`);
 
     renderCodexCategories(document, container, reloaded, { revealAll: true });
     const enemiesBtnRevealed = [...container.querySelectorAll('button')].find((b) => b.dataset.category === 'enemies');
-    check(enemiesBtnRevealed?.textContent.includes('11/11'), `Phase7: codexRevealAll zeigt Gegner nicht vollstaendig ("${enemiesBtnRevealed?.textContent}")`);
+    check(enemiesBtnRevealed?.textContent.includes('22/22'), `Phase7: codexRevealAll zeigt Gegner nicht vollstaendig ("${enemiesBtnRevealed?.textContent}")`);
     check(reloaded.progress().enemies.seen === 1, 'Phase7: codexRevealAll veraendert den echten gespeicherten Zustand');
 
     // Klick ruft onOpen(category) mit der richtigen Kategorie auf.
@@ -1309,6 +1318,80 @@ function check(ok, msg) {
     renderUpgradeList(document, realContainer, upgradesData, realCodex, {});
     const realCount = realContainer.querySelectorAll('.codex-entry').length;
     check(realCount === 246, `Phase9: echte Upgrade-Liste zeigt ${realCount} statt 246 Eintraege`);
+  } finally {
+    restore();
+  }
+}
+
+// ---- 8t. PLAN-STARTMENU Phase 10: Codex -- Gegner ------------------------
+{
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { createCodex, markVisibleEnemies, eliteKey, isEliteKey, baseIdOf } = await import('../src/game/codex.js');
+    const { renderEnemyList } = await import('../src/ui/codexscreen.js');
+
+    // (a) markVisibleEnemies mit EIGENEN Tank-Objekten -- Erstkontakt ohne
+    // Kill, Elite-Schluessel bei Affix, Bosse fallen automatisch durch.
+    const fakeTanks = {
+      types: {
+        e_normal: { label: 'Normal', maxHp: 10, damage: 1, desc: 'x' },
+        e_elite: { label: 'EliteTyp', maxHp: 10, damage: 1, desc: 'y' },
+        b_boss: { label: 'Boss', maxHp: 999, damage: 9, desc: 'z', bossInvincible: true },
+      },
+    };
+    const testCodex = createCodex({ tanksData: fakeTanks, upgradesData: { upgrades: {} }, loadRaw: () => null, saveRaw: () => {} });
+    check(eliteKey('e_normal') === 'e_normal::elite', 'Phase10: eliteKey liefert nicht das erwartete Schluesselformat');
+    check(isEliteKey('e_normal::elite') === true && isEliteKey('e_normal') === false, 'Phase10: isEliteKey erkennt den Schluessel nicht korrekt');
+    check(baseIdOf('e_normal::elite') === 'e_normal' && baseIdOf('e_normal') === 'e_normal', 'Phase10: baseIdOf liefert den falschen Basistyp');
+
+    // Testschritt 2: Kontakt OHNE Kill reicht -- markVisibleEnemies macht
+    // keinen Unterschied zwischen "getroffen" und "getoetet".
+    markVisibleEnemies(testCodex, [
+      { type: 'e_normal', affixes: [] },
+      { type: 'e_elite', affixes: ['twinshot'] }, // Elite: mind. ein Affix
+      { type: 'b_boss', affixes: [] }, // Boss -- gehoert NICHT zu 'enemies'
+    ]);
+    check(testCodex.isSeen('enemies', 'e_normal') === true, 'Phase10: normaler Kontakt markiert nicht');
+    check(testCodex.isSeen('enemies', 'e_elite') === false, 'Phase10: normaler Schluessel wird faelschlich fuer den Elite-Kontakt markiert');
+    check(testCodex.isSeen('enemies', eliteKey('e_elite')) === true, 'Phase10: Elite-Kontakt markiert nicht den Elite-Schluessel (Testschritt 3)');
+    check(testCodex.isSeen('enemies', 'e_elite') === false, 'Phase10: der NICHT-Elite-Schluessel desselben Typs wird faelschlich mitmarkiert');
+    check(testCodex.isSeen('enemies', 'b_boss') === false, 'Phase10: ein Boss-Kontakt landet faelschlich in der Gegner-Kategorie');
+
+    // (b) renderEnemyList: vier Eintraege (2 Basistypen x normal/Elite),
+    // Bosse tauchen nicht auf (categoryIds.enemies enthaelt keine Bosse).
+    const container = document.createElement('div');
+    renderEnemyList(document, container, fakeTanks, testCodex, {});
+    const entries = [...container.querySelectorAll('.codex-entry')];
+    check(entries.length === 4, `Phase10: ${entries.length} Eintraege statt 4 (2 Basistypen x normal/Elite)`);
+    check(!entries.some((e) => e.dataset.enemy?.startsWith('b_boss')), 'Phase10: ein Boss erscheint in der Gegner-Liste (Testschritt 4, keine Duplikate/Fremdeintraege)');
+    check(new Set(entries.map((e) => e.dataset.enemy)).size === 4, 'Phase10: doppelte Eintraege in der Gegner-Liste');
+
+    const normalEntry = entries.find((e) => e.dataset.enemy === 'e_normal');
+    check(!normalEntry.classList.contains('codex-unseen') && normalEntry.textContent.includes('Normal'), `Phase10: gesehener normaler Gegner zeigt keine Daten ("${normalEntry.textContent}")`);
+    check(!normalEntry.classList.contains('codex-elite'), 'Phase10: normaler Gegner ist als Elite markiert');
+
+    const eliteEntry = entries.find((e) => e.dataset.enemy === eliteKey('e_elite'));
+    check(eliteEntry.classList.contains('codex-elite'), 'Phase10: Elite-Eintrag ist nicht visuell abgesetzt (Testschritt 3)');
+    check(eliteEntry.textContent.includes('EliteTyp') && eliteEntry.textContent.includes('(Elite)'), `Phase10: Elite-Eintrag zeigt keinen erkennbaren Elite-Hinweis ("${eliteEntry.textContent}")`);
+
+    const eliteBaseEntry = entries.find((e) => e.dataset.enemy === 'e_elite'); // normale Variante desselben Typs
+    check(eliteBaseEntry.classList.contains('codex-unseen') && eliteBaseEntry.textContent.trim() === '???', `Phase10: normale Variante eines nur-elite-gesehenen Typs verraet sich (Testschritt 1) ("${eliteBaseEntry.textContent}")`);
+
+    // codexRevealAll zeigt auch die ungesehene normale Variante, ohne den
+    // echten Zustand zu veraendern.
+    renderEnemyList(document, container, fakeTanks, testCodex, { revealAll: true });
+    const eliteBaseRevealed = [...container.querySelectorAll('.codex-entry')].find((e) => e.dataset.enemy === 'e_elite');
+    check(eliteBaseRevealed.textContent.includes('EliteTyp'), `Phase10: codexRevealAll zeigt die ungesehene Variante nicht ("${eliteBaseRevealed.textContent}")`);
+    check(testCodex.isSeen('enemies', 'e_elite') === false, 'Phase10: codexRevealAll veraendert den echten gespeicherten Zustand');
+
+    // (c) Testschritt 4 gegen die ECHTEN Daten: 22 Eintraege, keine Duplikate.
+    const realContainer = document.createElement('div');
+    const realCodex = createCodex({ tanksData, upgradesData, loadRaw: () => null, saveRaw: () => {} });
+    renderEnemyList(document, realContainer, tanksData, realCodex, {});
+    const realEntries = [...realContainer.querySelectorAll('.codex-entry')];
+    check(realEntries.length === 22, `Phase10: echte Gegner-Liste zeigt ${realEntries.length} statt 22 Eintraege`);
+    check(new Set(realEntries.map((e) => e.dataset.enemy)).size === 22, 'Phase10: doppelte Eintraege in der echten Gegner-Liste');
   } finally {
     restore();
   }

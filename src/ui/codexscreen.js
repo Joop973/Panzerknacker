@@ -4,6 +4,7 @@
 // diese Phase baut nur die Uebersicht + den Mechanismus dahinter.
 
 import { playerClassEntries, isClassUnlocked, fmtClassStats } from '../game/classes.js';
+import { isEliteKey, baseIdOf } from '../game/codex.js';
 
 const LABELS = {
   playerTanks: 'Eigene Panzer',
@@ -143,6 +144,64 @@ export function renderUpgradeList(doc, container, upgradesData, codex, { revealA
     const textCol = doc.createElement('div');
     textCol.className = 'codex-entry-text';
     textCol.append(name, meta, desc);
+    el.appendChild(textCol);
+    container.appendChild(el);
+  }
+}
+
+// Phase 10: Listenansicht "Gegner". Elite ist ein Laufzeit-Affix ohne eigene
+// id in data/tanks.json (STARTMENU-BESTAND.md) -- `codex.categoryIds.enemies`
+// enthaelt deshalb je Basistyp zwei SYNTHETISCHE Schluessel (normal +
+// `::elite`, game/codex.js: eliteKey/isEliteKey/baseIdOf), hier als zwei
+// eigene, unterscheidbare Zeilen dargestellt ("eigene Eintraege",
+// Testschritt 3). Nur 22 Eintraege (nicht 246 wie bei Upgrades) -- plain
+// Divs wie bei "Eigene Panzer" reichen, kein <button> noetig.
+export function renderEnemyList(doc, container, tanksData, codex, { revealAll = false } = {}) {
+  container.innerHTML = '';
+  for (const key of codex.categoryIds.enemies) {
+    const elite = isEliteKey(key);
+    const baseId = baseIdOf(key);
+    const def = tanksData.types?.[baseId];
+    if (!def) continue;
+    const seen = revealAll || codex.isSeen('enemies', key);
+    const el = doc.createElement('div');
+    el.className = 'codex-entry';
+    el.dataset.enemy = key;
+    if (elite) el.classList.add('codex-elite');
+
+    const icon = doc.createElement('div');
+    icon.className = 'codex-icon';
+    if (seen) {
+      // Eliten visuell abgesetzt (Testschritt 3): goldener statt neutraler
+      // Icon-Ton -- dasselbe Gold-Vokabular wie legendaere Upgrades/Affixe.
+      icon.style.background = elite ? '#d8a83a' : '#7d8794';
+    } else {
+      el.classList.add('codex-unseen');
+      icon.classList.add('codex-icon-unseen');
+    }
+    el.appendChild(icon);
+
+    if (!seen) {
+      const q = doc.createElement('div');
+      q.className = 'codex-entry-name';
+      q.textContent = '???';
+      el.appendChild(q);
+      container.appendChild(el);
+      continue;
+    }
+
+    const name = doc.createElement('div');
+    name.className = 'codex-entry-name';
+    name.textContent = (def.label || baseId) + (elite ? ' (Elite)' : '');
+    const stats = doc.createElement('div');
+    stats.className = 'codex-entry-stats';
+    stats.textContent = `LP ${def.maxHp} · Schaden ${def.damage}`;
+    const desc = doc.createElement('div');
+    desc.className = 'codex-entry-desc';
+    desc.textContent = def.desc || '';
+    const textCol = doc.createElement('div');
+    textCol.className = 'codex-entry-text';
+    textCol.append(name, stats, desc);
     el.appendChild(textCol);
     container.appendChild(el);
   }

@@ -3129,16 +3129,50 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
     im sichtbaren Bereich (Testschritt 5, kein Domstub-Ersatz möglich, da
     `scrollIntoView` dort nur ein No-op-Stub ist).
 
+- **Phase 10 (Codex — Gegner) — erledigt.**
+  - **Elite-Frage aus Phase 9 gelöst**: Elite ist ein reiner Laufzeit-Affix
+    ohne eigene `id` in `tanks.json` — statt neuer Typdaten bekommt jeder der
+    11 Gegnertypen einen zweiten, **synthetischen** Codex-Schlüssel
+    (`game/codex.js: eliteKey('t_grey') → 't_grey::elite'`, `isEliteKey`,
+    `baseIdOf`). `categoryIds().enemies` liefert dadurch **22** statt 11
+    Einträge (Struktur-Test + `renderEnemyList` aktualisiert; die
+    Kategorie-**Entscheidung** aus Phase 0/7 bleibt unberührt — nur
+    innerhalb der Kategorie „Gegner" gibt es jetzt zwei Einträge je Typ).
+    `::` kollidiert nie mit einer echten id (die nutzen nur `a-z0-9_`).
+  - **`markSeen` bei Erstkontakt blieb in `main.js`** (keine neue Datei in
+    `state.js`/`ai.js` nötig, entgegen meiner eigenen Spekulation im letzten
+    To-do): `game/codex.js: markVisibleEnemies(codex, tanks)` ist eine reine
+    Funktion, die dieselbe Pro-Tick-Abtastung wiederverwendet, die
+    `sampleRoomTelemetry()` für `teleEnemies` ohnehin schon macht (Phase 1) —
+    kein Kill nötig, "auch wenn der Spieler stirbt" (Testschritt 2) ist
+    dadurch automatisch erfüllt, weil schon der erste simulierte Tick reicht.
+    Boss-Typen fallen automatisch durch den `categoryIds.enemies`-Filter
+    (der enthält nur echte generische Typen + ihre Elite-Schlüssel).
+  - **`renderEnemyList`** (`codexscreen.js`): 22 Einträge, Elite **visuell
+    abgesetzt** (goldener Rahmen/Icon, dasselbe Vokabular wie legendäre
+    Karten) UND mit Textzusatz „(Elite)" — nicht nur eine Farbe, ein
+    „eigener Eintrag" (Testschritt 3) muss auch eigenständig **benennbar**
+    sein. Nur zwei Zustände wie bei Upgrades (kein „gesperrt").
+  - **Tests:** `regression.mjs` Abschnitt 8t — `markVisibleEnemies` mit
+    **synthetischen** Tanks (Kontakt ohne Kill, Elite- vs. Normal-Schlüssel,
+    Boss-Ausschluss), `renderEnemyList` (4 Einträge aus 2 synthetischen
+    Basistypen, Elite-Optik, `codexRevealAll`), Zählprobe gegen die echten
+    22. Drei Gegenproben rot bestätigt. Bestandstests aus Phase 7 mit
+    aktualisierten Zahlen (11→22) — eine legitime Strukturänderung, keine
+    Balance-Datenänderung.
+  - **Browser-Smoke**: 0/22 mit „???" → simulierter Kontakt (normal + Elite
+    eines Typs) → 2/22 mit echten Daten, 20/22 bleiben „???",
+    `codexRevealAll` zeigt alle 22. **Kein Live-Kampf-E2E** — der Codex ist
+    (wie bei Phase 7/9) nur vom Hauptmenü aus erreichbar, nicht aus der
+    Pause, ein zuverlässiger Live-Test bräuchte einen fixen Seed + eine
+    Debug-Fensterfreigabe des `codex`-Objekts; die deterministischen Tests
+    decken den Mechanismus bereits mit eigenen Daten ab.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 10 (Codex — Gegner: generische
-      Feindpanzer + Eliten. `markSeen` bei ERSTKONTAKT, nicht erst bei Kill —
-      braucht einen neuen Hook in `state.js`/`ai.js`, nicht nur in `main.js`
-      wie bisher). **Ungeklärter Punkt für die Phase selbst:** der Plan
-      verlangt „Elite-Varianten sind eigene Einträge" (Testschritt 3), aber
-      Elite ist laut `STARTMENU-BESTAND.md` ein reiner Laufzeit-Affix auf
-      einem normalen Gegnertyp — es gibt keine separate `id` dafür in
-      `tanks.json`. Muss in Phase 10 geklärt werden (z. B. affix-bewusster
-      Codex-Schlüssel wie `t_grey+elite` statt einer echten Typ-id).
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 11 (Codex — Bosse, letzte
+      Kategorie: `markSeen` bei Boss-Spawn — hier reicht laut Plan-Wortlaut
+      tatsächlich der Spawn, nicht „Erstkontakt" wie bei Phase 10; nur 3
+      Einträge, kein neuer Schlüssel-Mechanismus nötig).
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren.
 - [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
@@ -3262,7 +3296,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v110`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v111`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

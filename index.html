@@ -140,6 +140,14 @@
       <div id="codexUpgradesList" class="codexlist"></div>
       <button id="codexUpgradesBack">Zur&uuml;ck</button>
     </div>
+    <!-- Phase 10: Listenansicht "Gegner". Elite hat keine eigene id in
+         data/tanks.json -- je Basistyp zwei Eintraege (normal + Elite,
+         game/codex.js: eliteKey()). -->
+    <div id="codexEnemies" class="overlay hidden">
+      <h1>Gegner</h1>
+      <div id="codexEnemiesList" class="codexlist"></div>
+      <button id="codexEnemiesBack">Zur&uuml;ck</button>
+    </div>
     <!-- Phase 4: echtes Pause-Overlay (bisher nur Canvas-Text + Tastatur
          R/M). Einstellungen sind von hier aus mit from:'pause' erreichbar --
          der Menue-Stack fuehrt "Zurueck" dann hierher, nicht ins Hauptmenue. -->

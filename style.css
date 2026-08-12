@@ -761,6 +761,13 @@ button.codex-entry {
   border-color: #d8a83a;
   box-shadow: 0 0 8px rgba(216, 168, 58, 0.3);
 }
+/* Phase 10: Elite-Variante visuell abgesetzt -- dasselbe Gold-Vokabular wie
+   legendaere Karten (Testschritt 3, "eigene Eintraege" braucht auch eine
+   eigene Optik, nicht nur einen Textzusatz). */
+.codex-entry.codex-elite {
+  border-color: #d8a83a;
+  box-shadow: 0 0 6px rgba(216, 168, 58, 0.25);
+}
 /* Silhouette (STARTMENU-BESTAND.md): alle Klassen teilen ein Sprite, daher
    ein generisches, nach Schadenstyp eingefaerbtes Icon statt einer
    Sprite-Kopie. Ungesehen bleibt es neutral grau + gestrichelt. */

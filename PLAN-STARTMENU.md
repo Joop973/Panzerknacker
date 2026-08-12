@@ -283,17 +283,25 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 
 ## Phase 10: Codex — Gegner (generische Panzer + Eliten)
 
+> **Erledigt.** Elite-Frage gelöst: Elite ist ein reiner Laufzeit-Affix ohne
+> eigene `id` in `tanks.json` — statt neuer Typdaten ein zweiter,
+> synthetischer Codex-Schlüssel je Typ (`t_grey::elite`), 22 statt 11
+> Einträge. `markSeen` läuft weiterhin in `main.js` (keine neue Datei in
+> `state.js`/`ai.js`) — eine reine Funktion `markVisibleEnemies()` nutzt die
+> bereits bestehende Pro-Tick-Abtastung von Phase 1 (`teleEnemies`) mit.
+> Details in `CLAUDE.md`.
+
 **Änderungen:**
 - `menu.js` — Gegner-Ansicht
 - `markSeen` bei erstem Kontakt, nicht erst bei Kill
 - Eliten visuell abgesetzt
 
 **Testschritte:**
-1. Ungesehene Gegner als „???"
-2. Erstkontakt markiert Gegner als gesehen, auch wenn der Spieler stirbt
-3. Elite-Varianten sind eigene Einträge
-4. Liste vollständig, keine Duplikate
-5. Navigation und Scrolling mit allen Eingabearten
+1. ✅ Ungesehene Gegner als „???"
+2. ✅ Erstkontakt markiert Gegner als gesehen, auch wenn der Spieler stirbt
+3. ✅ Elite-Varianten sind eigene Einträge
+4. ✅ Liste vollständig, keine Duplikate
+5. ✅ Navigation und Scrolling mit allen Eingabearten
 
 ---
 

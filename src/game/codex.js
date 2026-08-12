@@ -48,13 +48,32 @@ function isBossType(t) {
   return !!(t?.bossInvincible || t?.mirrorBoss || t?.phalanx);
 }
 
+// Phase 10: Elite ist ein reiner LAUFZEIT-Affix auf einem normalen
+// Gegnertyp -- es gibt keine eigene "t_grey_elite"-id in data/tanks.json
+// (STARTMENU-BESTAND.md). Der Plan verlangt trotzdem "Elite-Varianten sind
+// eigene Eintraege" (Testschritt 3). Geloest ueber einen zweiten,
+// SYNTHETISCHEN Codex-Schluessel je Basistyp (`t_grey::elite`) statt
+// zusaetzlicher echter Typdaten -- `::` kollidiert nie mit einer echten id
+// (die nutzen nur `a-z0-9_`).
+const ELITE_SUFFIX = '::elite';
+export function eliteKey(baseId) {
+  return baseId + ELITE_SUFFIX;
+}
+export function isEliteKey(key) {
+  return key.endsWith(ELITE_SUFFIX);
+}
+export function baseIdOf(key) {
+  return isEliteKey(key) ? key.slice(0, -ELITE_SUFFIX.length) : key;
+}
+
 // Die vier Kategorie-ID-Listen kommen aus den echten Daten, nicht aus einer
 // gepflegten Liste -- sonst laeuft der Codex bei der naechsten Balancerunde
 // (neue Karte/neuer Gegner) lautlos aus dem Ruder.
 export function categoryIds(tanksData, upgradesData) {
   const types = tanksData?.types || {};
   const playerTanks = Object.keys(types).filter((id) => types[id]?.player);
-  const enemies = Object.keys(types).filter((id) => !types[id]?.player && !isBossType(types[id]));
+  const enemyBaseIds = Object.keys(types).filter((id) => !types[id]?.player && !isBossType(types[id]));
+  const enemies = enemyBaseIds.flatMap((id) => [id, eliteKey(id)]);
   const bosses = Object.keys(types).filter((id) => isBossType(types[id]));
   const upgrades = Object.keys(upgradesData?.upgrades || {});
   return { playerTanks, upgrades, enemies, bosses };
@@ -102,3 +121,21 @@ export function createCodex({ tanksData, upgradesData, loadRaw, saveRaw }) {
 }
 
 export const CODEX_CATEGORIES = CATEGORIES;
+
+// Phase 10: markSeen bei ERSTEM KONTAKT, nicht erst bei Kill. Reine Funktion
+// statt Inline-Code in main.js -- damit ist der eigentliche Mechanismus
+// (welcher Gegner bekommt welchen Schluessel) mit EIGENEN Tank-Objekten
+// testbar, ohne main.js anzufassen. `tanks` ist eine Liste einfacher
+// {type, affixes}-Objekte (main.js: teleEnemies, ohnehin schon pro Tick
+// abgetastet -- "auch wenn der Spieler stirbt", weil der erste simulierte
+// Tick des Raums schon reicht). Boss-Typen fallen automatisch durch den
+// categoryIds.enemies-Filter (die enthaelt nur echte generische Typen +
+// deren Elite-Schluessel, keine Bosse).
+export function markVisibleEnemies(codex, tanks) {
+  for (const t of tanks || []) {
+    const type = t?.type;
+    if (!type || !codex.categoryIds.enemies.includes(type)) continue;
+    const key = t.affixes && t.affixes.length > 0 ? eliteKey(type) : type;
+    codex.markSeen('enemies', key);
+  }
+}
