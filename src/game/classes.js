@@ -19,6 +19,12 @@ export function isClassUnlocked(def, { unlockAll = false } = {}) {
   return !!(unlockAll || !def || def.unlocked !== false);
 }
 
+// Kurzstats-Zeile, gemeinsam genutzt von Klassenwahl UND Codex (Phase 8) --
+// eine Quelle statt zweier Kopien, die auseinanderlaufen koennten.
+export function fmtClassStats(t) {
+  return `LP ${t.maxHp} · Schaden ${t.damage} · Tempo ${Math.round((t.speedMult ?? 1) * 100)} % · Krit ${Math.round((t.crit ?? 0.05) * 100)} %`;
+}
+
 // Erzeugt einen Klassen-Knopf (Name/Werte/Beschreibung). Bewusst hier statt
 // inline in main.js, damit die drei Zustaende (gewaehlt / frei / gesperrt)
 // headless mit einem Fake-DOM pruefbar sind. Ein gesperrter Knopf ist

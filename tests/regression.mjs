@@ -1202,6 +1202,59 @@ function check(ok, msg) {
   }
 }
 
+// ---- 8r. PLAN-STARTMENU Phase 8: Codex -- Eigene Panzer -----------------
+// renderPlayerTankList mit EIGENEN, synthetischen Klassen (nicht den echten
+// zehn) -- deckt alle drei Zustaende gezielt ab: ungesehen, gesehen+gesperrt,
+// gesehen+frei.
+{
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { createCodex } = await import('../src/game/codex.js');
+    const { renderPlayerTankList } = await import('../src/ui/codexscreen.js');
+    const fakeTanks = {
+      types: {
+        c_a: { player: true, label: 'Alpha', maxHp: 10, damage: 1, desc: 'Alpha-Text', unlocked: true, damageType: 'fire' },
+        c_b: { player: true, label: 'Beta', maxHp: 20, damage: 2, desc: 'Beta-Text', unlocked: false, damageType: 'frost' },
+        c_c: { player: true, label: 'Gamma', maxHp: 30, damage: 3, desc: 'Gamma-Text', unlocked: true },
+      },
+      status: { damageTypes: { fire: { color: '#ff5533' }, frost: { color: '#33ccff' } } },
+    };
+    const testCodex = createCodex({ tanksData: fakeTanks, upgradesData: { upgrades: {} }, loadRaw: () => null, saveRaw: () => {} });
+    testCodex.markSeen('playerTanks', 'c_a'); // gesehen, freigeschaltet
+    testCodex.markSeen('playerTanks', 'c_b'); // gesehen, gesperrt
+    // c_c bleibt ungesehen.
+
+    const container = document.createElement('div');
+    renderPlayerTankList(document, container, fakeTanks, testCodex, {});
+    const entries = [...container.querySelectorAll('.codex-entry')];
+    check(entries.length === 3, `Phase8: ${entries.length} Eintraege statt 3`);
+
+    const a = entries.find((e) => e.dataset.tank === 'c_a');
+    check(!a.classList.contains('codex-unseen') && !a.classList.contains('codex-locked'), 'Phase8: gesehene freigeschaltete Klasse ist gesperrt/ungesehen markiert');
+    check(a.textContent.includes('Alpha') && a.textContent.includes('Alpha-Text'), `Phase8: Name/Beschreibung der freigeschalteten Klasse fehlen ("${a.textContent}")`);
+    check(a.querySelector('.codex-icon').style.background !== '', 'Phase8: freigeschaltete Klasse hat kein eingefaerbtes Icon');
+
+    const b = entries.find((e) => e.dataset.tank === 'c_b');
+    check(!b.classList.contains('codex-unseen'), 'Phase8: gesehene gesperrte Klasse gilt als ungesehen');
+    check(b.classList.contains('codex-locked'), 'Phase8: gesperrte, aber gesehene Klasse ist nicht als gesperrt markiert (Testschritt 4)');
+    check(b.textContent.includes('Beta'), `Phase8: Name der gesperrten Klasse fehlt trotz "gesehen" ("${b.textContent}")`);
+
+    const c = entries.find((e) => e.dataset.tank === 'c_c');
+    check(c.classList.contains('codex-unseen'), 'Phase8: ungesehene Klasse ist nicht als ungesehen markiert');
+    check(c.textContent.trim() === '???', `Phase8: ungesehene Klasse zeigt mehr als "???" ("${c.textContent.trim()}")`);
+    check(!c.textContent.includes('Gamma'), 'Phase8: ungesehene Klasse verraet ihren Namen (Testschritt 1)');
+
+    // codexRevealAll: c_c wird ANGEZEIGT, der echte Zustand bleibt "ungesehen".
+    renderPlayerTankList(document, container, fakeTanks, testCodex, { revealAll: true });
+    const cRevealed = [...container.querySelectorAll('.codex-entry')].find((e) => e.dataset.tank === 'c_c');
+    check(cRevealed.textContent.includes('Gamma'), `Phase8: codexRevealAll zeigt die ungesehene Klasse nicht (Testschritt 5) ("${cRevealed.textContent}")`);
+    check(testCodex.isSeen('playerTanks', 'c_c') === false, 'Phase8: codexRevealAll veraendert den echten gespeicherten Zustand');
+  } finally {
+    restore();
+  }
+}
+
 // ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------
 // Die Upgrade-Chips lagen im Hauptbereich der Raumvorschau und haben dort
 // bei vielen Karten den "Weiter"-Knopf aus dem Bild geschoben (Nutzer-

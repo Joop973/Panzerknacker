@@ -3050,13 +3050,54 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
     Browser-Smoke: Screen öffnet mit „0/N" je Kategorie, `codexRevealAll`
     zeigt „N/N", Reset löscht den Codex-Schlüssel.
 
+- **Phase 8 (Codex — Eigene Panzer) — erledigt.**
+  - **`src/ui/codexscreen.js`** um `renderPlayerTankList(doc, container,
+    tanksData, codex, {revealAll, unlockOpts})` erweitert: iteriert
+    `playerClassEntries(tanksData)`, pro Klasse drei Zustände
+    (`isSeen`/`isClassUnlocked`, letzteres aus `src/game/classes.js` wie
+    schon in Phase 2).
+  - **Silhouette ohne Sprite-Umbau**: alle zehn Klassen teilen laut
+    `STARTMENU-BESTAND.md` dasselbe `player`-Sprite — eine „eingefärbte
+    Sprite-Kopie" wäre für alle zehn identisch gewesen. Stattdessen ein
+    generisches `.codex-icon` (reiner CSS-Kreis), eingefärbt nach
+    `data/status.json: damageTypes[…].color` der Klasse; ungesehen bleibt es
+    neutral grau + gestrichelt.
+  - **Drei Zustände, zwei Ebenen**: „ungesehen" zeigt ausschließlich „???"
+    (kein Name, keine Werte — sonst wäre die Überraschung weg); „gesehen +
+    gesperrt" nutzt dasselbe Vokabular wie die Klassenwahl (Phase 2:
+    gedimmt, gestrichelter Rahmen, Schloss-Symbol) und zeigt volle
+    Werte/Beschreibung; „gesehen + frei" ist die normale Anzeige.
+  - **`fmtClassStats` aus `main.js` nach `src/game/classes.js` verschoben**
+    (eine Quelle statt einer Kopie, die zwischen Klassenwahl und Codex
+    hätte auseinanderlaufen können).
+  - **Erste echte `markSeen()`-Aufrufstelle**: der Klick-Handler in
+    `buildClassList()` (Klassenwahl) ruft `codex.markSeen('playerTanks', id)`
+    **und sofort `codex.flush()`** — bewusst abweichend vom Batching-Rhythmus
+    aus Phase 7 (Raumwechsel/Run-Ende), weil eine Menü-Auswahl kein
+    60-Hz-Gameplay-Frame ist (Plan-Grundsatz: „Einstellungen werden sofort
+    geschrieben, kein Gameplay aktiv" — dieselbe Logik gilt für jede
+    Codex-Markierung außerhalb eines laufenden Runs).
+  - **`codexRevealAll` bleibt reine Anzeige**: zeigt jede Klasse als „gesehen"
+    (Testschritt 5), verändert aber nie den echten gespeicherten Zustand —
+    verifiziert per Test UND Browser-Smoke.
+  - **Tests:** `regression.mjs` Abschnitt 8r — `renderPlayerTankList` mit
+    **synthetischen** Klassen (nicht den echten zehn), die gezielt alle drei
+    Zustände abdecken. Zwei Gegenproben rot bestätigt (ungesehene Klasse
+    verrät ihren Namen; Gesperrt-Markierung fehlt). Die
+    `main.js`-Verdrahtung (Klick → `markSeen`/`flush`) ist **nicht**
+    unit-testbar (imperative Wiring) — end-to-end per Browser-Smoke
+    verifiziert: Zähler „0/10" → Klasse wählen → „1/10", Codex-Eintrag zeigt
+    Name/Werte statt „???", 9 von 10 bleiben „???", Fortschritt übersteht
+    Reload, `codexRevealAll` zeigt alle zehn vollständig.
+  - `tests/uilayout.mjs` bleibt grün (neue Sub-Seite `#codexPlayerTanks`
+    passt ohne weitere Kompaktmodus-Anpassung).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 8 (Codex — Eigene Panzer:
-      Listenansicht der zehn Klassen mit Silhouetten-Lösung für ungesehene
-      Einträge — laut `STARTMENU-BESTAND.md` Einfärbung statt Sprite-Kopie,
-      da alle Klassen dasselbe `player`-Sprite teilen). Erste echte
-      `markSeen('playerTanks', ...)`-Aufrufstelle: Klassenwahl markiert die
-      gewählte Klasse als gesehen.
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 9 (Codex — Upgrades:
+      Listenansicht der 246 Karten inkl. Element-Varianten als eigene
+      Einträge, ggf. Filter/Untertabs nach Rarity/Element bei so langer
+      Liste). Erste `markSeen('upgrades', ...)`-Aufrufstelle: Erhalt einer
+      Karte markiert genau die gewählte id.
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren.
 - [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
@@ -3180,7 +3221,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v108`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v109`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

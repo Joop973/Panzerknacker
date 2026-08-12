@@ -720,6 +720,77 @@ html, body {
   color: #9aa0a8;
 }
 
+/* Phase 8: Codex-Listenansicht (Eigene Panzer, spaeter Upgrades/Gegner/
+   Bosse) -- Icon links, Text rechts, gleiches Grundmuster wie .classlist. */
+.codexlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 480px;
+}
+.codex-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: #1b1b22;
+  border: 2px solid #4a4a5a;
+  padding: 8px 12px;
+}
+/* Silhouette (STARTMENU-BESTAND.md): alle Klassen teilen ein Sprite, daher
+   ein generisches, nach Schadenstyp eingefaerbtes Icon statt einer
+   Sprite-Kopie. Ungesehen bleibt es neutral grau + gestrichelt. */
+.codex-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 2px solid #14141a;
+  flex-shrink: 0;
+}
+.codex-icon-unseen {
+  background: #2a2a32 !important;
+  border-style: dashed;
+  border-color: #4a4a5a;
+}
+.codex-entry.codex-unseen {
+  color: #6a707a;
+  justify-content: flex-start;
+}
+.codex-entry.codex-unseen .codex-entry-name {
+  color: #6a707a;
+  font-size: 15px;
+  letter-spacing: 2px;
+}
+/* Gesehen, aber gesperrt -- dasselbe Vokabular wie die Klassenwahl (Phase 2):
+   gedimmt, gestrichelter Rahmen, Schloss-Symbol. Bewusst deutlich anders als
+   die "ungesehen"-Darstellung (die zeigt gar nichts preis). */
+.codex-entry.codex-locked {
+  opacity: 0.55;
+  border-style: dashed;
+}
+.codex-entry.codex-locked .codex-entry-name::after {
+  content: ' 🔒';
+}
+.codex-entry-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.codex-entry-name {
+  font-weight: bold;
+  color: #eaf2ff;
+  font-size: 15px;
+}
+.codex-entry-stats {
+  font-size: 12px;
+  color: #9aa0a8;
+}
+.codex-entry-desc {
+  font-size: 12px;
+  color: #8a9099;
+}
+
 .classlist .cl-stats {
   font-size: 12px;
   color: #9aa0a8;

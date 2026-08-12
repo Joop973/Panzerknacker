@@ -236,17 +236,24 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 
 ## Phase 8: Codex — Eigene Panzer
 
+> **Erledigt.** Silhouette ohne Sprite-Umbau: alle zehn Klassen teilen das
+> `player`-Sprite (`STARTMENU-BESTAND.md`), eine „eingefärbte Sprite-Kopie"
+> wäre also für alle identisch gewesen — stattdessen ein generisches,
+> nach Schadenstyp eingefärbtes CSS-Icon. `fmtClassStats` aus `main.js`
+> nach `src/game/classes.js` verschoben (eine Quelle für Klassenwahl UND
+> Codex). Details in `CLAUDE.md`.
+
 **Änderungen:**
 - `menu.js` — Ansicht für spielbare Klassen
 - Silhouetten-Lösung gemäß Phase-0-Ergebnis: bei Sprites eingefärbte Kopie, bei Canvas-Rendering einfarbige Zeichnung oder generisches Platzhalter-Icon
 - Drei Zustände: ungesehen, gesehen aber gesperrt, gesehen und freigeschaltet
 
 **Testschritte:**
-1. Ungesehene Klassen als Silhouette mit „???"
-2. Gesehene Klassen zeigen Name, Icon, Kurzstats, Passiv-Beschreibung
-3. Klassenwahl markiert die gewählte Klasse als gesehen
-4. Gesperrt-aber-gesehen visuell von freigeschaltet unterscheidbar
-5. `codexRevealAll` zeigt alle Einträge vollständig an
+1. ✅ Ungesehene Klassen als Silhouette mit „???"
+2. ✅ Gesehene Klassen zeigen Name, Icon, Kurzstats, Passiv-Beschreibung
+3. ✅ Klassenwahl markiert die gewählte Klasse als gesehen
+4. ✅ Gesperrt-aber-gesehen visuell von freigeschaltet unterscheidbar
+5. ✅ `codexRevealAll` zeigt alle Einträge vollständig an
 
 ---
 

@@ -41,9 +41,9 @@ import { createMenuNav } from './ui/menunav.js';
 import { createMenu } from './ui/menu.js';
 import { createSettings } from './ui/settings.js';
 import { DEBUG } from './core/debug.js';
-import { playerClassEntries, isClassUnlocked, createClassButton } from './game/classes.js';
+import { playerClassEntries, isClassUnlocked, createClassButton, fmtClassStats } from './game/classes.js';
 import { createCodex } from './game/codex.js';
-import { renderCodexCategories } from './ui/codexscreen.js';
+import { renderCodexCategories, renderPlayerTankList } from './ui/codexscreen.js';
 import { createTutorial } from './ui/hud.js';
 import {
   getFlag,
@@ -1021,8 +1021,6 @@ async function init() {
   const refreshClassBtn = () => {
     classOpenBtn.textContent = `Klasse: ${tanksData.types[starterTank]?.label || 'Standard'} ▸`;
   };
-  const fmtClassStats = (t) =>
-    `LP ${t.maxHp} · Schaden ${t.damage} · Tempo ${Math.round((t.speedMult ?? 1) * 100)} % · Krit ${Math.round((t.crit ?? 0.05) * 100)} %`;
   function buildClassList() {
     classListEl.innerHTML = '';
     for (const [id, t] of playerClasses) {
@@ -1041,6 +1039,12 @@ async function init() {
           for (const btn of classListEl.querySelectorAll('button'))
             btn.classList.toggle('active', btn.dataset.class === id);
           refreshClassBtn();
+          // Phase 8: erste echte markSeen()-Aufrufstelle. Sofortiger Flush --
+          // eine Menue-Auswahl ist kein Gameplay-Frame, das gebuendelte
+          // Schreiben schuetzt nur den 60-Hz-Spiel-Loop (Plan-Grundsatz
+          // "Einstellungen werden sofort geschrieben, kein Gameplay aktiv").
+          codex.markSeen('playerTanks', id);
+          codex.flush();
         });
       }
       classListEl.appendChild(b);
@@ -1055,16 +1059,29 @@ async function init() {
   // vollstaendig, OHNE den echten gespeicherten Zustand zu veraendern.
   const codexScreen = document.getElementById('codexScreen');
   const codexCategoriesEl = document.getElementById('codexCategories');
+  // Phase 8: Listenansicht "Eigene Panzer". Die anderen drei Kategorien
+  // haben noch kein Ziel (Phasen 9-11) -- onOpen() ignoriert sie bewusst.
+  const codexPlayerTanksScreen = document.getElementById('codexPlayerTanks');
+  const codexPlayerTanksListEl = document.getElementById('codexPlayerTanksList');
   function refreshCodexScreen() {
     renderCodexCategories(document, codexCategoriesEl, codex, {
       revealAll: DEBUG.codexRevealAll,
+      onOpen: (cat) => {
+        if (cat !== 'playerTanks') return;
+        renderPlayerTankList(document, codexPlayerTanksListEl, tanksData, codex, {
+          revealAll: DEBUG.codexRevealAll,
+          unlockOpts: classOpts,
+        });
+        menu.show('codexPlayerTanks');
+      },
     });
   }
 
-  // Jetzt sind alle Menue-Screens bekannt -> Klassen-/Codex-Seite anmelden
+  // Jetzt sind alle Menue-Screens bekannt -> Klassen-/Codex-Seiten anmelden
   // und die History-Wurzel setzen (Erstanzeige Hauptmenue).
   menu.register('class', classScreen, focusablesIn(classScreen));
   menu.register('codex', codexScreen, focusablesIn(codexScreen));
+  menu.register('codexPlayerTanks', codexPlayerTanksScreen, focusablesIn(codexPlayerTanksScreen));
   menu.root('main');
   classOpenBtn.addEventListener('click', () => menu.show('class'));
   document.getElementById('classBack').addEventListener('click', () => menu.back());
@@ -1073,6 +1090,7 @@ async function init() {
     menu.show('codex');
   });
   document.getElementById('codexBack').addEventListener('click', () => menu.back());
+  document.getElementById('codexPlayerTanksBack').addEventListener('click', () => menu.back());
   // Tages-Seed: fuer alle Spieler am selben Tag derselbe Run.
   document.getElementById('dailyBtn').addEventListener('click', () => {
     const d = new Date();
