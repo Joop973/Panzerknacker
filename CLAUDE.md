@@ -3168,11 +3168,52 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
     Debug-Fensterfreigabe des `codex`-Objekts; die deterministischen Tests
     decken den Mechanismus bereits mit eigenen Daten ab.
 
+- **Phase 11 (Codex — Bosse) — erledigt.** Letzte der vier Codex-Kategorien,
+  nur 3 Einträge (`t_reactor`/`t_mirror`/`t_phalanx`).
+  - **`markVisibleBosses(codex, tanks)`** (`game/codex.js`): einfacher als
+    `markVisibleEnemies` aus Phase 10 — Bosse bekommen laut `run.js` nie
+    Elite-Affixe (`rollEliteAffixes` läuft nur über `buyEnemies()` für
+    normale Kampf-/Eliteräume; der Bossraum ist eine feste Arena mit
+    deterministisch gewürfeltem Typ), also keine `eliteKey`-Verzweigung
+    nötig. „Spawn" (Plan-Wortlaut) und „Erstkontakt" (Phase-10-Muster)
+    fallen hier strukturell zusammen — `createState()` erzeugt den
+    Boss-Tank synchron, derselbe Pro-Tick-Abtastungs-Aufruf
+    (`sampleRoomTelemetry()` → `teleEnemies`) reicht deshalb wieder.
+  - **`renderBossList`** (`codexscreen.js`): gleiches Grundlayout wie
+    `renderEnemyList` (Testschritt 5, „Layout konsistent mit den anderen
+    Kategorien") — aber ohne „gesperrt"-Zustand (Bosse sind nie an eine
+    Klasse gebunden) und ohne Elite-Zweig. Eigener warnender Icon-Ton
+    (`#c85a3a`) statt des neutralen Gegner-Grautons — „kein Boss ist nur
+    ein Gegner". Beschreibungstext (`def.desc`) liefert die vom Plan
+    verlangte Kurzinfo zu Angriffsmustern (Testschritt 3).
+  - **`#codexBosses`** (neues Overlay, Muster `#codexEnemies`) + Verdrahtung
+    in `main.js` (`onOpen` bei `bosses` → `renderBossList` + `menu.show`).
+    `#codexBossesBack` in die bestehende Sticky-Regel (jetzt vier Selektoren
+    statt drei) aufgenommen.
+  - **Tests:** `regression.mjs` Abschnitt 8u — `markVisibleBosses` mit
+    **synthetischen** Typen (Boss-Kontakt ohne Kill markiert, ein
+    generischer Gegner landet nicht fälschlich in der Boss-Kategorie, ein
+    nie kontaktierter Boss bleibt ungesehen), `renderBossList` (2 von 3
+    synthetischen Einträgen, „???" beim ungesehenen, Name+Kurzinfo beim
+    gesehenen, `codexRevealAll` zeigt ohne den echten Zustand zu ändern),
+    Zählprobe gegen die echten 3 Bosse ohne Duplikate. Zwei Gegenproben rot
+    bestätigt: Boss-Filter in `markVisibleBosses` ausgebaut → ein
+    generischer Gegner erscheint fälschlich in der Boss-Liste; `seen`
+    in `renderBossList` fest auf `true` gesetzt → der ungesehene Boss
+    verrät Name/Kurzinfo.
+  - **Browser-Smoke**: 0/3 mit „???" vor jedem Kontakt → simulierter
+    Kontakt mit einem Boss (`localStorage`-Vorbelegung wie bei Phase 10) →
+    1/3 mit echtem Namen+Kurzinfo, die anderen 2/3 bleiben „???",
+    `codexRevealAll` zeigt alle 3 vollständig ohne den gespeicherten
+    Zustand zu ändern, `#codexBossesBack` ist sticky wie die anderen drei
+    Kategorien. **Damit ist der komplette Codex (Phasen 7–11, alle vier
+    Kategorien) fertig.**
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 11 (Codex — Bosse, letzte
-      Kategorie: `markSeen` bei Boss-Spawn — hier reicht laut Plan-Wortlaut
-      tatsächlich der Spawn, nicht „Erstkontakt" wie bei Phase 10; nur 3
-      Einträge, kein neuer Schlüssel-Mechanismus nötig).
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 12 (Post-Run-Screen,
+      Brotato-Stil Auswertungsscreen nach jedem Run — Plan-Vorgabe u. a.
+      `runStats`-Objekt sammeln und `codex.flush()` beim Betreten des
+      Screens statt erst beim eigentlichen Run-Ende-Hook).
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren.
 - [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
@@ -3296,7 +3337,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v111`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v112`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

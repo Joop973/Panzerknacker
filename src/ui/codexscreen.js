@@ -206,3 +206,56 @@ export function renderEnemyList(doc, container, tanksData, codex, { revealAll = 
     container.appendChild(el);
   }
 }
+
+// Phase 11: Listenansicht "Bosse" -- letzte Codex-Kategorie, nur 3 Eintraege.
+// Kein "gesperrt" (wie Upgrades/Gegner), keine Elite-Variante (Bosse
+// bekommen laut run.js nie Elite-Affixe -- die laufen nur ueber
+// buyEnemies()/rollEliteAffixes() fuer normale Kampf-/Eliteraeume, der
+// Bossraum ist eine feste Arena mit deterministisch gewuerfeltem Typ).
+// Gleiches Grundlayout wie renderEnemyList (Testschritt 5: "Layout
+// konsistent mit den anderen Kategorien").
+export function renderBossList(doc, container, tanksData, codex, { revealAll = false } = {}) {
+  container.innerHTML = '';
+  for (const id of codex.categoryIds.bosses) {
+    const def = tanksData.types?.[id];
+    if (!def) continue;
+    const seen = revealAll || codex.isSeen('bosses', id);
+    const el = doc.createElement('div');
+    el.className = 'codex-entry';
+    el.dataset.boss = id;
+
+    const icon = doc.createElement('div');
+    icon.className = 'codex-icon';
+    if (seen) {
+      icon.style.background = '#c85a3a'; // eigener, warnender Ton -- kein Boss ist "nur ein Gegner"
+    } else {
+      el.classList.add('codex-unseen');
+      icon.classList.add('codex-icon-unseen');
+    }
+    el.appendChild(icon);
+
+    if (!seen) {
+      const q = doc.createElement('div');
+      q.className = 'codex-entry-name';
+      q.textContent = '???';
+      el.appendChild(q);
+      container.appendChild(el);
+      continue;
+    }
+
+    const name = doc.createElement('div');
+    name.className = 'codex-entry-name';
+    name.textContent = def.label || id;
+    const stats = doc.createElement('div');
+    stats.className = 'codex-entry-stats';
+    stats.textContent = `LP ${def.maxHp} · Schaden ${def.damage}`;
+    const desc = doc.createElement('div');
+    desc.className = 'codex-entry-desc';
+    desc.textContent = def.desc || ''; // Kurzinfo zu Angriffsmustern (Testschritt 3)
+    const textCol = doc.createElement('div');
+    textCol.className = 'codex-entry-text';
+    textCol.append(name, stats, desc);
+    el.appendChild(textCol);
+    container.appendChild(el);
+  }
+}

@@ -1397,6 +1397,68 @@ function check(ok, msg) {
   }
 }
 
+// ---- 8u. PLAN-STARTMENU Phase 11: Codex -- Bosse (letzte Kategorie) -----
+{
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { createCodex, markVisibleBosses } = await import('../src/game/codex.js');
+    const { renderBossList } = await import('../src/ui/codexscreen.js');
+
+    // (a) markVisibleBosses mit EIGENEN Typdaten -- Kontakt ohne Kill,
+    // generische Gegner fallen automatisch durch den Filter (kein
+    // Elite-Aequivalent noetig, Bosse haben nur einen Schluessel).
+    const fakeTanks = {
+      types: {
+        e_grunt: { label: 'Grunt', maxHp: 10, damage: 1, desc: 'x' },
+        b_alpha: { label: 'Alpha-Boss', maxHp: 500, damage: 40, desc: 'Angriffsmuster A', bossInvincible: true },
+        b_beta: { label: 'Beta-Boss', maxHp: 500, damage: 40, desc: 'Angriffsmuster B', mirrorBoss: true },
+      },
+    };
+    const testCodex = createCodex({ tanksData: fakeTanks, upgradesData: { upgrades: {} }, loadRaw: () => null, saveRaw: () => {} });
+    markVisibleBosses(testCodex, [
+      { type: 'b_alpha', affixes: [] },
+      { type: 'e_grunt', affixes: [] }, // kein Boss -- darf NICHT markiert werden
+    ]);
+    check(testCodex.isSeen('bosses', 'b_alpha') === true, 'Phase11: Boss-Kontakt (ohne Kill) markiert nicht (Testschritt 2)');
+    check(testCodex.isSeen('bosses', 'b_beta') === false, 'Phase11: ein nie kontaktierter Boss gilt faelschlich als gesehen');
+    check(testCodex.isSeen('bosses', 'e_grunt') === false, 'Phase11: ein generischer Gegner landet faelschlich in der Boss-Kategorie');
+
+    // (b) renderBossList: 2 Eintraege (b_alpha/b_beta), kein e_grunt.
+    const container = document.createElement('div');
+    renderBossList(document, container, fakeTanks, testCodex, {});
+    const entries = [...container.querySelectorAll('.codex-entry')];
+    check(entries.length === 2, `Phase11: ${entries.length} Eintraege statt 2 (nur Bosse, Testschritt 4)`);
+    check(!entries.some((e) => e.dataset.boss === 'e_grunt'), 'Phase11: ein generischer Gegner erscheint in der Boss-Liste');
+
+    const alpha = entries.find((e) => e.dataset.boss === 'b_alpha');
+    check(!alpha.classList.contains('codex-unseen'), 'Phase11: gesehener Boss gilt als ungesehen');
+    check(alpha.textContent.includes('Alpha-Boss') && alpha.textContent.includes('Angriffsmuster A'), `Phase11: Name/Kurzinfo zu Angriffsmustern fehlen (Testschritt 3) ("${alpha.textContent}")`);
+
+    const beta = entries.find((e) => e.dataset.boss === 'b_beta');
+    check(beta.classList.contains('codex-unseen'), 'Phase11: ungesehener Boss ist nicht als ungesehen markiert');
+    check(beta.textContent.trim() === '???', `Phase11: ungesehener Boss zeigt mehr als "???" (Testschritt 1) ("${beta.textContent.trim()}")`);
+    check(!beta.textContent.includes('Beta-Boss'), 'Phase11: ungesehener Boss verraet seinen Namen');
+
+    // codexRevealAll zeigt den ungesehenen Boss, ohne den echten Zustand zu
+    // veraendern.
+    renderBossList(document, container, fakeTanks, testCodex, { revealAll: true });
+    const betaRevealed = [...container.querySelectorAll('.codex-entry')].find((e) => e.dataset.boss === 'b_beta');
+    check(betaRevealed.textContent.includes('Beta-Boss'), `Phase11: codexRevealAll zeigt den ungesehenen Boss nicht ("${betaRevealed.textContent}")`);
+    check(testCodex.isSeen('bosses', 'b_beta') === false, 'Phase11: codexRevealAll veraendert den echten gespeicherten Zustand');
+
+    // (c) Testschritt 4 gegen die ECHTEN Daten: 3 Bosse, keine Duplikate.
+    const realContainer = document.createElement('div');
+    const realCodex = createCodex({ tanksData, upgradesData, loadRaw: () => null, saveRaw: () => {} });
+    renderBossList(document, realContainer, tanksData, realCodex, {});
+    const realEntries = [...realContainer.querySelectorAll('.codex-entry')];
+    check(realEntries.length === 3, `Phase11: echte Boss-Liste zeigt ${realEntries.length} statt 3 Eintraege`);
+    check(new Set(realEntries.map((e) => e.dataset.boss)).size === 3, 'Phase11: doppelte Eintraege in der echten Boss-Liste');
+  } finally {
+    restore();
+  }
+}
+
 // ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------
 // Die Upgrade-Chips lagen im Hauptbereich der Raumvorschau und haben dort
 // bei vielen Karten den "Weiter"-Knopf aus dem Bild geschoben (Nutzer-

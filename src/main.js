@@ -42,8 +42,8 @@ import { createMenu } from './ui/menu.js';
 import { createSettings } from './ui/settings.js';
 import { DEBUG } from './core/debug.js';
 import { playerClassEntries, isClassUnlocked, createClassButton, fmtClassStats } from './game/classes.js';
-import { createCodex, markVisibleEnemies } from './game/codex.js';
-import { renderCodexCategories, renderPlayerTankList, renderUpgradeList, renderEnemyList } from './ui/codexscreen.js';
+import { createCodex, markVisibleEnemies, markVisibleBosses } from './game/codex.js';
+import { renderCodexCategories, renderPlayerTankList, renderUpgradeList, renderEnemyList, renderBossList } from './ui/codexscreen.js';
 import { createTutorial } from './ui/hud.js';
 import {
   getFlag,
@@ -269,6 +269,7 @@ async function init() {
     // Gegner zaehlt, der den Spieler sofort toetet (Testschritt 2, "auch
     // wenn der Spieler stirbt").
     markVisibleEnemies(codex, teleEnemies);
+    markVisibleBosses(codex, teleEnemies); // Phase 11: markSeen bei Boss-Spawn
     teleRic = st.ricochetKills;
     teleDir = st.directKills;
     teleDmgType = { ...st.damageByType };
@@ -1074,14 +1075,15 @@ async function init() {
   const codexScreen = document.getElementById('codexScreen');
   const codexCategoriesEl = document.getElementById('codexCategories');
   // Phase 8/9/10: Listenansichten "Eigene Panzer"/"Upgrades"/"Gegner". Die
-  // letzte Kategorie (Bosse) hat noch kein Ziel (Phase 11) -- onOpen()
-  // ignoriert sie bewusst.
+  // Phase 11: letzte Kategorie ("Bosse") -- damit hat jede Kategorie ihr Ziel.
   const codexPlayerTanksScreen = document.getElementById('codexPlayerTanks');
   const codexPlayerTanksListEl = document.getElementById('codexPlayerTanksList');
   const codexUpgradesScreen = document.getElementById('codexUpgrades');
   const codexUpgradesListEl = document.getElementById('codexUpgradesList');
   const codexEnemiesScreen = document.getElementById('codexEnemies');
   const codexEnemiesListEl = document.getElementById('codexEnemiesList');
+  const codexBossesScreen = document.getElementById('codexBosses');
+  const codexBossesListEl = document.getElementById('codexBossesList');
   function refreshCodexScreen() {
     renderCodexCategories(document, codexCategoriesEl, codex, {
       revealAll: DEBUG.codexRevealAll,
@@ -1102,6 +1104,11 @@ async function init() {
             revealAll: DEBUG.codexRevealAll,
           });
           menu.show('codexEnemies');
+        } else if (cat === 'bosses') {
+          renderBossList(document, codexBossesListEl, tanksData, codex, {
+            revealAll: DEBUG.codexRevealAll,
+          });
+          menu.show('codexBosses');
         }
       },
     });
@@ -1114,6 +1121,7 @@ async function init() {
   menu.register('codexPlayerTanks', codexPlayerTanksScreen, focusablesIn(codexPlayerTanksScreen));
   menu.register('codexUpgrades', codexUpgradesScreen, focusablesIn(codexUpgradesScreen));
   menu.register('codexEnemies', codexEnemiesScreen, focusablesIn(codexEnemiesScreen));
+  menu.register('codexBosses', codexBossesScreen, focusablesIn(codexBossesScreen));
   menu.root('main');
   classOpenBtn.addEventListener('click', () => menu.show('class'));
   document.getElementById('classBack').addEventListener('click', () => menu.back());
@@ -1125,6 +1133,7 @@ async function init() {
   document.getElementById('codexPlayerTanksBack').addEventListener('click', () => menu.back());
   document.getElementById('codexUpgradesBack').addEventListener('click', () => menu.back());
   document.getElementById('codexEnemiesBack').addEventListener('click', () => menu.back());
+  document.getElementById('codexBossesBack').addEventListener('click', () => menu.back());
   // Tages-Seed: fuer alle Spieler am selben Tag derselbe Run.
   document.getElementById('dailyBtn').addEventListener('click', () => {
     const d = new Date();

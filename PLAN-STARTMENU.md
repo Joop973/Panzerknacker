@@ -307,16 +307,24 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 
 ## Phase 11: Codex — Bosse
 
+> **Erledigt.** `game/codex.js: markVisibleBosses` (einfacher als
+> `markVisibleEnemies` aus Phase 10 — Bosse bekommen laut `run.js` nie
+> Elite-Affixe, „Spawn" und „Erstkontakt" fallen strukturell zusammen) +
+> `codexscreen.js: renderBossList` (gleiches Layout wie „Gegner", ohne
+> „gesperrt"/Elite-Zweig) + `#codexBosses`-Overlay. Details siehe
+> `CLAUDE.md`, Abschnitt „Phase 11 (Codex — Bosse)". Damit ist der
+> komplette Codex (Phasen 7–11) fertig.
+
 **Änderungen:**
 - `menu.js` — Boss-Ansicht
 - `markSeen` bei Boss-Spawn
 
 **Testschritte:**
-1. Ungesehene Bosse als „???"
-2. Erstkontakt markiert Boss als gesehen, auch bei Niederlage
-3. Gesehene Bosse zeigen Name, Icon, Kurzinfo zu Angriffsmustern
-4. Liste vollständig
-5. Layout konsistent mit den anderen Kategorien
+1. ✅ Ungesehene Bosse als „???"
+2. ✅ Erstkontakt markiert Boss als gesehen, auch bei Niederlage
+3. ✅ Gesehene Bosse zeigen Name, Icon, Kurzinfo zu Angriffsmustern
+4. ✅ Liste vollständig
+5. ✅ Layout konsistent mit den anderen Kategorien
 
 ---
 

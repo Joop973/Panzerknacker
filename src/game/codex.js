@@ -139,3 +139,18 @@ export function markVisibleEnemies(codex, tanks) {
     codex.markSeen('enemies', key);
   }
 }
+
+// Phase 11: markSeen bei Boss-SPAWN -- Bosse bekommen nie Elite-Affixe
+// (rollEliteAffixes laeuft nur fuer Kampf-/Eliteraeume ueber buyEnemies(),
+// der Bossraum ist eine feste Arena mit deterministisch gewuerfeltem
+// Typ, run.js), deshalb keine eliteKey-Verzweigung noetig -- einfacher als
+// markVisibleEnemies. "Spawn" und "erster simulierter Tick" fallen in
+// diesem Code strukturell zusammen (createState() erzeugt den Boss-Tank
+// synchron), also dieselbe Wiederverwendung der Pro-Tick-Abtastung.
+export function markVisibleBosses(codex, tanks) {
+  for (const t of tanks || []) {
+    const type = t?.type;
+    if (!type || !codex.categoryIds.bosses.includes(type)) continue;
+    codex.markSeen('bosses', type);
+  }
+}

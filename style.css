@@ -943,11 +943,14 @@ button.codex-entry {
   bottom: 0;
 }
 
-/* Phase 8/9: dieselbe Vorsorge fuer die Codex-Listenansichten -- "Zurueck"
-   bleibt erreichbar, ohne durch eine (bei Upgrades bis zu 246 Eintraege
-   lange) Liste zu scrollen. */
+/* Phase 8/9/10/11: dieselbe Vorsorge fuer alle Codex-Listenansichten --
+   "Zurueck" bleibt erreichbar, ohne durch eine (bei Upgrades bis zu 246
+   Eintraege lange) Liste zu scrollen, und das Layout bleibt ueber alle
+   vier Kategorien konsistent (Phase 11, Testschritt 5). */
 #codexPlayerTanksBack,
-#codexUpgradesBack {
+#codexUpgradesBack,
+#codexEnemiesBack,
+#codexBossesBack {
   position: sticky;
   bottom: 0;
 }
