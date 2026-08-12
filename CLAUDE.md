@@ -2954,12 +2954,63 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
   - Keine Code-Änderung an Kern-Mechaniken, kein Service-Worker-Bump nötig
     (nur Tests + Doku).
 
+- **Phase 6 (Einstellungen — Grafik & Fortschritt zurücksetzen) —
+  erledigt.** Ist-Abgleich vor dem Bau ergab eine echte Determinismus-Falle:
+  `state.js: spawnParticles()` verbraucht `state.rng()` — **denselben Strom
+  wie KI-Entscheidungen** (`ai_drives.js: orbitDir`). Ein Performance-Modus,
+  der die SPAWN-Anzahl ändert, würde den RNG-Verbrauch verschieben und Seeds
+  geräteabhängig machen. Deshalb bewusst **rein render-seitig** gelöst:
+  - **`effects.js: drawParticles(ctx, state, drawFraction)`** lässt nur die
+    Zeichenschleife einen Teil der Partikel auslassen (`i % step !== 0`) —
+    `state.particles` und der RNG-Verbrauch in `spawnParticles()` bleiben
+    **komplett unangetastet**. `renderOpts` wird bewusst NICHT in `effects.js`
+    importiert (zirkulärer Import, wie schon bei `drawGhosts`/Phase 7) —
+    `renderer.js` reicht `renderOpts.particleDrawFraction` als Parameter durch.
+  - **Struktur-Wächter** in der Suite: keine Datei in `src/game/*.js` darf
+    `renderOpts` referenzieren (Gegenprobe bestanden: `state.js` künstlich
+    verseucht → Test rot).
+  - **`data/options.json: performance.particleDrawFraction`** (0,3) als
+    Standardwert für den Modus, in `settings.js` gegen `getPref
+    ('performanceMode')` verdrahtet (Checkbox „Performance-Modus").
+  - **„Fortschritt zurücksetzen" zweistufig**: erster Klick zeigt nur die
+    Bestätigungszeile (`#resetConfirm`), nichts wird gelöscht; erst „Ja, alles
+    löschen" wirkt. Eigener Haken „auch Einstellungen zurücksetzen"
+    (`src/core/storage.js: resetAllPrefs()`, neu) — optional, Default aus.
+    Löscht immer Bestwerte + einen gespeicherten Zwischenstand
+    (`clearCurrentRun`), lädt danach per `location.reload()` neu (Testschritt
+    5: „lädt fehlerfrei mit frischem Save"). **Codex/Freischaltungen** aus
+    der Plan-Formulierung existieren noch nicht (kommen erst Phase 7) — bis
+    dahin ist „Fortschritt" faktisch die Bestwerte-Statistik.
+  - **Echter CSS-Bug beim Testen gefunden** (kein Testartefakt): dieses
+    Projekt hat **keine generische `.hidden`-Regel**, nur elementspezifische
+    Kombinationen (`.overlay.hidden`, `#resumeBtn.hidden`, …). Ohne eigene
+    `#resetBtn.hidden`/`.resetconfirm.hidden`-Regeln hätte `classList.add
+    ('hidden')` keinerlei optische Wirkung gehabt — `#resetConfirm` wäre von
+    Anfang an sichtbar gewesen. Per Playwright-Smoke gefunden, in `style.css`
+    behoben.
+  - **Testschritt 2 ehrlich gemessen, nicht behauptet**: bei der
+    realistischen Kappung (300 Partikel, `limits.json`) liegt der reine
+    Zeichenaufwand unter der Messschwelle (~0,1–0,2 ms; `fillRect` ist billig,
+    deckt sich mit den Phase-11b-Messungen: schlimmster Logikschritt ~1–3 ms
+    von 16,7 ms Budget). Bei 10× der Kappung zeigt sich der Mechanismus klar
+    (13,8 ms → 0,4 ms, 97 % Ersparnis, Playwright-Diagnose) — der Hebel
+    funktioniert nachweislich, ist im normalen Spiel aber ein kleiner, kein
+    dramatischer Spareffekt. Keine flaky Timing-Assertion in die Suite
+    aufgenommen (Muster: die deterministische `drawFraction`-Prüfung bewacht
+    den Mechanismus zuverlässiger als eine Zeitmessung nahe der
+    Timer-Auflösung).
+  - **Tests:** `regression.mjs` Abschnitte 8o (drawFraction mit eigenen
+    Partikelzahlen + Struktur-Wächter) und 8p (`resetAllPrefs`, löscht
+    Prefs, lässt Flags unangetastet). Drei Gegenproben rot bestätigt.
+    Browser-Smoke: Standard aus/persistiert/übersteht Reload, zweistufiger
+    Reset (Abbrechen vs. bestätigen), Bestätigungsdialog passt auf kleine
+    Viewports.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 6 (Einstellungen — Grafik &
-      Fortschritt zurücksetzen: Partikeldichte/Performance-Modus +
-      zweistufige Reset-Bestätigung, die auch Codex/Freischaltungen löscht
-      — Codex existiert aber erst ab Phase 7, „Fortschritt" ist also vorerst
-      nur die Bestwerte-Statistik).
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 7 (Codex — Grundgerüst &
+      Datenstruktur: Save-`version`-Feld, Migrationsfunktion, gebündeltes
+      Schreiben `markSeen()`/`flushCodex()`, Codex-Hauptscreen mit den vier
+      in Phase 0 festgelegten Kategorien, `codexRevealAll`-Debug-Flag).
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
       `unlocked: true`. Freischaltbedingungen definieren + `seen`/Codex in
       Phase 7 anbinden.
@@ -3084,7 +3135,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v106`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v107`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

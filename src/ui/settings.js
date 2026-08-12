@@ -21,8 +21,12 @@ export function createSettings(deps) {
     getPref,
     setPref,
     resetStats,
+    resetAllPrefs, // Phase 6: "auch Einstellungen zuruecksetzen"
+    clearCurrentRun, // Phase 6: ein "Fortschritt zuruecksetzen" darf keinen alten Run anbieten
     onStatsReset, // Callback: Bestwerte-Anzeige neu zeichnen
     viewport, // fuer die Canvasgroesse nach Vollbildwechsel
+    renderOpts, // Phase 6: Performance-Modus (render-seitig, siehe renderer.js)
+    optionsData, // liefert den Standardwert fuer particleDrawFraction
     win = window,
   } = deps;
 
@@ -76,13 +80,58 @@ export function createSettings(deps) {
     });
   }
 
-  // --- Bestwerte zuruecksetzen -------------------------------------------
+  // --- Grafik: Performance-Modus ------------------------------------------
+  // Rein render-seitig (renderOpts.particleDrawFraction, effects.js:
+  // drawParticles) -- laesst nur einen Teil der Partikel aus, die Simulation
+  // (state.js: spawnParticles) bleibt unangetastet. Siehe Kommentar dort:
+  // state.rng() ist derselbe Strom wie KI-Entscheidungen, ein Aendern der
+  // SPAWN-Anzahl wuerde Seeds geraeteabhaengig machen.
+  const perfCheckbox = doc.getElementById('optPerformance');
+  if (perfCheckbox && renderOpts) {
+    const lowFraction = optionsData?.performance?.particleDrawFraction ?? 0.3;
+    const applyPerf = (on) => {
+      renderOpts.particleDrawFraction = on ? lowFraction : 1;
+    };
+    const initial = getPref('performanceMode', false);
+    perfCheckbox.checked = initial;
+    applyPerf(initial);
+    perfCheckbox.addEventListener('change', () => {
+      setPref('performanceMode', perfCheckbox.checked);
+      applyPerf(perfCheckbox.checked);
+    });
+  }
+
+  // --- Fortschritt zuruecksetzen (zweistufig) ------------------------------
+  // Erster Klick zeigt nur die Bestaetigungszeile, loescht nichts. Erst der
+  // zweite, bewusste Klick auf "Ja, alles löschen" wirkt. "auch
+  // Einstellungen" ist ein separater Haken (Default aus) -- die Plan-Vorgabe
+  // "optional auch Einstellungen".
   const resetBtn = doc.getElementById('resetBtn');
-  resetBtn?.addEventListener('click', () => {
-    if (win.confirm('Bestwerte wirklich löschen?')) {
-      resetStats();
-      onStatsReset?.();
-    }
+  const resetConfirm = doc.getElementById('resetConfirm');
+  const resetIncludeSettings = doc.getElementById('resetIncludeSettings');
+  const resetYes = doc.getElementById('resetConfirmYes');
+  const resetNo = doc.getElementById('resetConfirmNo');
+  function showResetConfirm() {
+    resetBtn?.classList.add('hidden');
+    resetConfirm?.classList.remove('hidden');
+  }
+  function hideResetConfirm() {
+    resetConfirm?.classList.add('hidden');
+    resetBtn?.classList.remove('hidden');
+    if (resetIncludeSettings) resetIncludeSettings.checked = false;
+  }
+  resetBtn?.addEventListener('click', showResetConfirm);
+  resetNo?.addEventListener('click', hideResetConfirm);
+  resetYes?.addEventListener('click', () => {
+    resetStats();
+    clearCurrentRun?.();
+    if (resetIncludeSettings?.checked) resetAllPrefs?.();
+    onStatsReset?.();
+    // Ein voller Reload zeigt zuverlaessig den frischen Stand (Testschritt 5:
+    // "laedt fehlerfrei mit frischem Save") -- ohne ihn muessten alle
+    // Regler/Anzeigen einzeln von Hand auf ihre Defaults zurueckgesetzt
+    // werden, mit demselben Fehlerrisiko wie bei der Init-Reihenfolge selbst.
+    win.location?.reload?.();
   });
 
   // --- Spiel beenden (window.close wirkt nur auf per Skript geoeffnete

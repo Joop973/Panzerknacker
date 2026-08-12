@@ -127,8 +127,20 @@ export function drawFlashes(ctx, state) {
   }
 }
 
-export function drawParticles(ctx, state) {
-  for (const pt of state.particles) {
+// Phase 6 (Performance-Modus): `drawFraction` laesst einen Teil der
+// Partikel UNGEZEICHNET (jedes `step`-te wird gezeichnet) -- rein optisch,
+// die Simulation (state.particles, state.rng()-Verbrauch in
+// state.js: spawnParticles) bleibt UNVERAENDERT. Bewusst so: state.rng ist
+// derselbe Strom wie KI-Entscheidungen (z. B. ai_drives.js: orbitDir) --
+// wuerde der Performance-Modus die SPAWN-Anzahl aendern, verschoebe das
+// den RNG-Verbrauch und ein Seed liefe je nach Geraeteeinstellung anders.
+// `renderOpts` wird bewusst NICHT importiert (zirkulaerer Import, siehe
+// drawGhosts-Kommentar in renderer.js) -- der Aufrufer reicht den Wert durch.
+export function drawParticles(ctx, state, drawFraction = 1) {
+  const step = drawFraction >= 1 ? 1 : Math.max(1, Math.round(1 / drawFraction));
+  for (let i = 0; i < state.particles.length; i++) {
+    if (i % step !== 0) continue;
+    const pt = state.particles[i];
     ctx.globalAlpha = 1 - pt.age / pt.life;
     ctx.fillStyle = pt.color;
     ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);

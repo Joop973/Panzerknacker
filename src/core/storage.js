@@ -91,6 +91,26 @@ export function setPref(name, value) {
   }
 }
 
+// Alle gespeicherten Einstellungen loeschen (PLAN-STARTMENU Phase 6:
+// "Fortschritt zurücksetzen" -> optional auch Einstellungen). Betrifft NUR
+// panzerknacker_pref_* (Lautstaerke, Klasse, Modus, Eingabeprofil, ...) --
+// Bestwerte (KEY) und Flags laufen ueber eigene Funktionen.
+export function resetAllPrefs() {
+  for (const k of Object.keys(memPrefs)) delete memPrefs[k];
+  const ls = store();
+  if (!ls) return;
+  try {
+    const keys = [];
+    for (let i = 0; i < ls.length; i++) {
+      const k = ls.key(i);
+      if (k && k.startsWith(PREF_PREFIX)) keys.push(k);
+    }
+    for (const k of keys) ls.removeItem(k);
+  } catch {
+    /* egal */
+  }
+}
+
 export function resetStats() {
   memory = null;
   const ls = store();

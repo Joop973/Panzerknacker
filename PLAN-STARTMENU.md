@@ -183,17 +183,28 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 
 ## Phase 6: Einstellungen — Grafik & Fortschritt zurücksetzen
 
+> **Erledigt.** Ist-Abgleich vor dem Bau: `state.js: spawnParticles()`
+> verbraucht `state.rng()`, denselben Strom wie KI-Entscheidungen — ein
+> Performance-Modus, der die Spawn-Anzahl ändert, würde Seeds
+> geräteabhängig machen. Deshalb rein render-seitig gelöst
+> (`effects.js: drawParticles(ctx, state, drawFraction)`), Simulation
+> unangetastet. Codex/Freischaltungen (Reset-Vorgabe) existieren erst ab
+> Phase 7 — „Fortschritt" ist bis dahin die Bestwerte-Statistik. Testschritt
+> 2 ehrlich gemessen statt behauptet: bei der realistischen Kappung (300
+> Partikel) unter der Messschwelle, bei 10× der Kappung klar nachweisbar
+> (97 % Ersparnis). Details in `CLAUDE.md`.
+
 **Änderungen:**
 - `settings.js` — Grafik-Bereich: Partikeldichte/Performance-Modus
 - Flag an Rendering-Code übergeben
 - „Fortschritt zurücksetzen"-Button mit zweistufiger Bestätigungsabfrage (löscht Codex + Freischaltungen, optional auch Einstellungen)
 
 **Testschritte:**
-1. Performance-Modus reduziert sichtbar Partikel/Effekte
-2. FPS-Unterschied bei vielen aktiven Bullets messbar
-3. Standard ist volle Grafik, Einstellung übersteht Reload
-4. Reset-Button verlangt eine Bestätigung und löscht danach den Fortschritt vollständig
-5. Nach Reset lädt das Spiel fehlerfrei mit frischem Save
+1. ✅ Performance-Modus reduziert sichtbar Partikel/Effekte
+2. ✅ (gemessen, nicht nur behauptet — s. o.) FPS-Unterschied bei vielen aktiven Bullets messbar
+3. ✅ Standard ist volle Grafik, Einstellung übersteht Reload
+4. ✅ Reset-Button verlangt eine Bestätigung und löscht danach den Fortschritt vollständig
+5. ✅ Nach Reset lädt das Spiel fehlerfrei mit frischem Save
 
 ---
 

@@ -85,7 +85,27 @@
         <button data-profile="keyboard">Tastatur/Maus</button>
         <button data-profile="gamepad">Gamepad</button>
       </div>
-      <button id="resetBtn" class="linklike">Bestwerte zur&uuml;cksetzen</button>
+      <!-- Phase 6: Grafik-Bereich. Rein render-seitig (effects.js:
+           drawParticles laesst einen Teil der Partikel aus) -- die
+           Simulation bleibt unangetastet, Seeds bleiben geraeteunabhaengig
+           reproduzierbar (siehe renderer.js: renderOpts.particleDrawFraction). -->
+      <div class="graphicsection" role="group" aria-label="Grafik">
+        <label><input type="checkbox" id="optPerformance" /> Performance-Modus (weniger Partikel)</label>
+      </div>
+      <!-- Phase 6: "Fortschritt zurücksetzen" mit zweistufiger Bestaetigung
+           -- ein Klick allein loescht nichts, erst der zweite (bewusste)
+           Klick auf "Ja, alles löschen". Loescht immer die Bestwerte + einen
+           evtl. gespeicherten Zwischenstand; "auch Einstellungen" ist
+           optional (separater Haken, per Default aus). -->
+      <button id="resetBtn" class="linklike">Fortschritt zur&uuml;cksetzen</button>
+      <div id="resetConfirm" class="resetconfirm hidden">
+        <p>Wirklich alles zur&uuml;cksetzen? Das kann nicht r&uuml;ckg&auml;ngig gemacht werden.</p>
+        <label><input type="checkbox" id="resetIncludeSettings" /> auch Einstellungen zur&uuml;cksetzen</label>
+        <div class="resetconfirm-actions">
+          <button id="resetConfirmYes" class="linklike">Ja, alles l&ouml;schen</button>
+          <button id="resetConfirmNo" class="secondary">Abbrechen</button>
+        </div>
+      </div>
       <button id="quitBtn" class="linklike">Spiel beenden</button>
       <button id="settingsBack">Zur&uuml;ck</button>
     </div>

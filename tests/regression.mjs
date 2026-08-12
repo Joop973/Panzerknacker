@@ -1022,6 +1022,66 @@ function check(ok, msg) {
   }
 }
 
+// ---- 8o. PLAN-STARTMENU Phase 6: Performance-Modus (Partikeldichte) ----
+// drawFraction darf NUR die Zeichenschleife kuerzen -- die Simulation
+// (state.js: spawnParticles, state.rng()) bleibt unangetastet, sonst waeren
+// Seeds nicht mehr geraeteunabhaengig reproduzierbar (state.rng ist derselbe
+// Strom wie KI-Entscheidungen, z. B. ai_drives.js: orbitDir). Geprueft mit
+// EIGENEN Partikelzahlen, nicht der aktuellen limits.json-Zahl.
+{
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { drawParticles } = await import('../src/render/effects.js');
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const N = 30;
+    const mkParticles = () =>
+      Array.from({ length: N }, (_, i) => ({ x: i, y: 0, age: 0, life: 1, size: 2, color: '#fff' }));
+
+    drawParticles(ctx, { particles: mkParticles() }, 1);
+    let n = ctx.calls.filter((c) => c.fn === 'fillRect').length;
+    check(n === N, `Phase6: drawFraction 1 zeichnet nicht alle ${N} Partikel (${n})`);
+
+    ctx.calls.length = 0;
+    drawParticles(ctx, { particles: mkParticles() }, 0.5); // step = round(1/0.5) = 2
+    n = ctx.calls.filter((c) => c.fn === 'fillRect').length;
+    const expectedHalf = Math.ceil(N / 2);
+    check(n === expectedHalf, `Phase6: drawFraction 0.5 zeichnet ${n} statt ${expectedHalf} von ${N} Partikeln`);
+
+    ctx.calls.length = 0;
+    drawParticles(ctx, { particles: mkParticles() }); // ohne dritten Parameter -> Standard 1
+    n = ctx.calls.filter((c) => c.fn === 'fillRect').length;
+    check(n === N, `Phase6: drawParticles ohne drawFraction-Parameter zeichnet nicht alle Partikel (${n})`);
+  } finally {
+    restore();
+  }
+
+  // Struktur-Waechter: KEINE game/*.js-Datei importiert renderOpts -- der
+  // Performance-Modus (renderOpts) darf niemals in die Simulation sickern.
+  const gameDir = join(root, 'src', 'game');
+  const offenders = readdirSync(gameDir)
+    .filter((f) => f.endsWith('.js'))
+    .filter((f) => /renderOpts/.test(readFileSync(join(gameDir, f), 'utf8')));
+  check(offenders.length === 0, `Phase6: game/*.js importiert renderOpts (Determinismus-Risiko): ${offenders.join(', ')}`);
+}
+
+// ---- 8p. PLAN-STARTMENU Phase 6: resetAllPrefs ("auch Einstellungen") --
+{
+  const { setPref, getPref, getFlag, setFlag, resetAllPrefs } = await import('../src/core/storage.js');
+  setPref('phase6_test_volume', 42);
+  setPref('phase6_test_tank', 'c_frost');
+  setFlag('phase6_test_flag');
+  check(
+    getPref('phase6_test_volume', -1) === 42 && getPref('phase6_test_tank', '') === 'c_frost',
+    'Phase6: Testaufbau (Prefs wurden nicht gesetzt)',
+  );
+  resetAllPrefs();
+  check(getPref('phase6_test_volume', -1) === -1, `Phase6: resetAllPrefs loescht Prefs nicht (${getPref('phase6_test_volume', -1)})`);
+  check(getPref('phase6_test_tank', '') === '', `Phase6: resetAllPrefs loescht Prefs nicht (${getPref('phase6_test_tank', '')})`);
+  check(getFlag('phase6_test_flag') === true, 'Phase6: resetAllPrefs loescht faelschlich auch Flags');
+}
+
 // ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------
 // Die Upgrade-Chips lagen im Hauptbereich der Raumvorschau und haben dort
 // bei vielen Karten den "Weiter"-Knopf aus dem Bild geschoben (Nutzer-

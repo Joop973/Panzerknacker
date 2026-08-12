@@ -703,6 +703,49 @@ html, body {
   cursor: pointer;
 }
 
+/* Phase 6: Grafik-Bereich (Performance-Modus) -- gleiches Muster wie .opts. */
+.graphicsection label {
+  cursor: pointer;
+  font-family: monospace;
+  font-size: 13px;
+  color: #9aa0a8;
+}
+
+/* Phase 6: zweistufige "Fortschritt zuruecksetzen"-Bestaetigung. Es gibt in
+   diesem Projekt KEINE generische .hidden-Regel (nur elementspezifische
+   Kombinationen wie .overlay.hidden/#resumeBtn.hidden) -- ohne die beiden
+   folgenden Regeln haette classList.add('hidden') hier keinerlei optische
+   Wirkung, #resetConfirm waere von Anfang an sichtbar gewesen (per
+   Playwright-Smoke gefunden, kein Testartefakt). */
+#resetBtn.hidden {
+  display: none;
+}
+.resetconfirm.hidden {
+  display: none;
+}
+.resetconfirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #7a3030;
+  background: #241414;
+}
+.resetconfirm p {
+  margin: 0;
+  font-size: 12px;
+  color: #e8b0b0;
+}
+.resetconfirm label {
+  font-size: 12px;
+  color: #9aa0a8;
+  cursor: pointer;
+}
+.resetconfirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* P9: Lautstaerkeregler. */
 .volumelabel {
   display: flex;

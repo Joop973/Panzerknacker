@@ -38,7 +38,10 @@ function bulletSpriteKey(b) {
 // Optionen (von main.js gesetzt): reduzierte Bewegung schaltet
 // Screenshake ab; Bedrohungslinien sind optional.
 // aimLine kommt aus data/options.json (Phase 0a).
-export const renderOpts = { reduceMotion: false, threatLines: true, aimLine: true };
+// Phase 6: particleDrawFraction (0..1) laesst drawParticles() einen Teil der
+// Partikel auslassen -- 1 = alle zeichnen (Standard). Rein optisch, siehe
+// effects.js: drawParticles().
+export const renderOpts = { reduceMotion: false, threatLines: true, aimLine: true, particleDrawFraction: 1 };
 
 const COLORS = {
   floor: '#1b1b22',
@@ -1112,7 +1115,7 @@ export function createRenderer(ctx) {
       drawThreatRings(ctx, state); // Gefahrensinn (Phase 18, Welle 3)
       drawBullets(state.bullets, alpha);
       drawFlashes(ctx, state);
-      drawParticles(ctx, state);
+      drawParticles(ctx, state, renderOpts.particleDrawFraction);
       drawExplosions(ctx, state);
       drawSmoke(ctx, state);
       drawLightning(ctx, state);

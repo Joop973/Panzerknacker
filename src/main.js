@@ -50,6 +50,7 @@ import {
   getPref,
   setPref,
   resetStats,
+  resetAllPrefs,
   loadCurrentRun,
   clearCurrentRun,
 } from './core/storage.js';
@@ -934,8 +935,12 @@ async function init() {
     getPref,
     setPref,
     resetStats,
+    resetAllPrefs,
+    clearCurrentRun,
     onStatsReset: refreshBestStats,
     viewport,
+    renderOpts,
+    optionsData,
     win: window,
   });
   document.getElementById('settingsOpen').addEventListener('click', () => menu.show('settings'));
