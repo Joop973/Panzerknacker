@@ -55,6 +55,7 @@
            liess ihn im Handy-Querformat nicht mehr ohne Scrollen passen
            (gemessen: 6-7 Bedienelemente unterhalb des sichtbaren Bereichs
            bei 667x375 -- derselbe Fehlerfall wie beim "Weiter"-Knopf). -->
+      <button id="codexOpen" class="secondary">Codex &#9656;</button>
       <button id="settingsOpen" class="secondary">Einstellungen &#9656;</button>
     </div>
     <div id="settings" class="overlay hidden">
@@ -115,6 +116,14 @@
       <h1>Klasse w&auml;hlen</h1>
       <div id="classList" class="classlist"></div>
       <button id="classBack">Zur&uuml;ck</button>
+    </div>
+    <!-- Phase 7: Codex-Hauptscreen. main.js fuellt #codexCategories ueber
+         ui/codexscreen.js (vier Kategorie-Knoepfe mit "gesehen/gesamt"). Die
+         Listenansichten je Kategorie kommen in den Phasen 8-11. -->
+    <div id="codexScreen" class="overlay hidden">
+      <h1>Codex</h1>
+      <div id="codexCategories" class="codexcats"></div>
+      <button id="codexBack">Zur&uuml;ck</button>
     </div>
     <!-- Phase 4: echtes Pause-Overlay (bisher nur Canvas-Text + Tastatur
          R/M). Einstellungen sind von hier aus mit from:'pause' erreichbar --

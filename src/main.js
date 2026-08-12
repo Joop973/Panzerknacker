@@ -42,6 +42,8 @@ import { createMenu } from './ui/menu.js';
 import { createSettings } from './ui/settings.js';
 import { DEBUG } from './core/debug.js';
 import { playerClassEntries, isClassUnlocked, createClassButton } from './game/classes.js';
+import { createCodex } from './game/codex.js';
+import { renderCodexCategories } from './ui/codexscreen.js';
 import { createTutorial } from './ui/hud.js';
 import {
   getFlag,
@@ -53,6 +55,9 @@ import {
   resetAllPrefs,
   loadCurrentRun,
   clearCurrentRun,
+  loadCodexRaw,
+  saveCodexRaw,
+  clearCodex,
 } from './core/storage.js';
 import { createRenderer, renderOpts } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
@@ -192,6 +197,16 @@ async function init() {
   if (!tanksData.types[starterTank]?.player || !isClassUnlocked(tanksData.types[starterTank], classOpts))
     starterTank = 'player';
 
+  // Phase 7: Codex-Datenstruktur. markSeen()-Aufrufstellen (Klassenwahl,
+  // Upgrade-Erhalt, Gegner-/Boss-Erstkontakt) kommen erst in den Phasen
+  // 8-11 -- diese Session baut den Mechanismus + den Hauptscreen.
+  const codex = createCodex({
+    tanksData,
+    upgradesData,
+    loadRaw: loadCodexRaw,
+    saveRaw: saveCodexRaw,
+  });
+
   // ---- Telemetrie-Tracking (nur beobachtend, keine Spiellogik) ----
   let teleRoom = 0; // aktuell getimter Raum-Index
   let teleRoomStart = 0; // run.playTime beim Betreten dieses Raums
@@ -300,11 +315,13 @@ async function init() {
       teleRoom = run.roomIndex;
       teleRoomStart = run.playTime;
       resetRoomTelemetry();
+      codex.flush(); // Phase 7: gebuendeltes Schreiben, bei Raumwechsel
     }
     sampleRoomTelemetry();
     if (run.phase === 'gameover' || run.phase === 'victory') {
       // Letzten (evtl. unvollstaendigen) Raum noch mitschreiben.
       flushRoomTelemetry();
+      codex.flush(); // Phase 7: und am Run-Ende, falls seitdem etwas markiert wurde
       const st = run.state;
       telemetry.endRun({
         won: run.phase === 'victory',
@@ -937,6 +954,7 @@ async function init() {
     resetStats,
     resetAllPrefs,
     clearCurrentRun,
+    clearCodex,
     onStatsReset: refreshBestStats,
     viewport,
     renderOpts,
@@ -1030,12 +1048,31 @@ async function init() {
   }
   buildClassList();
   refreshClassBtn();
-  // Jetzt sind alle Menue-Screens bekannt -> Klassenseite anmelden und die
-  // History-Wurzel setzen (Erstanzeige Hauptmenue).
+
+  // Phase 7: Codex-Hauptscreen. Neu gerendert bei jedem Oeffnen -- ab Phase 8
+  // aendern sich die Zaehler waehrend der Sitzung (Klassenwahl/Upgrades/...).
+  // codexRevealAll (?debug=1&codexRevealAll) zeigt jede Kategorie als
+  // vollstaendig, OHNE den echten gespeicherten Zustand zu veraendern.
+  const codexScreen = document.getElementById('codexScreen');
+  const codexCategoriesEl = document.getElementById('codexCategories');
+  function refreshCodexScreen() {
+    renderCodexCategories(document, codexCategoriesEl, codex, {
+      revealAll: DEBUG.codexRevealAll,
+    });
+  }
+
+  // Jetzt sind alle Menue-Screens bekannt -> Klassen-/Codex-Seite anmelden
+  // und die History-Wurzel setzen (Erstanzeige Hauptmenue).
   menu.register('class', classScreen, focusablesIn(classScreen));
+  menu.register('codex', codexScreen, focusablesIn(codexScreen));
   menu.root('main');
   classOpenBtn.addEventListener('click', () => menu.show('class'));
   document.getElementById('classBack').addEventListener('click', () => menu.back());
+  document.getElementById('codexOpen').addEventListener('click', () => {
+    refreshCodexScreen();
+    menu.show('codex');
+  });
+  document.getElementById('codexBack').addEventListener('click', () => menu.back());
   // Tages-Seed: fuer alle Spieler am selben Tag derselbe Run.
   document.getElementById('dailyBtn').addEventListener('click', () => {
     const d = new Date();

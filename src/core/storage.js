@@ -174,3 +174,46 @@ export function clearCurrentRun() {
     /* egal */
   }
 }
+
+// --- Codex (PLAN-STARTMENU Phase 7) -------------------------------------
+//
+// Reine Persistenz-Primitiven (laden/speichern/loeschen des rohen Objekts).
+// Struktur, Migration und das gebuendelte Schreiben (markSeen/flush) leben
+// bewusst NICHT hier, sondern in src/game/codex.js -- storage.js kennt keine
+// Spiel-Domaenenlogik, genau wie bei currentRun oben.
+const CODEX_KEY = 'panzerknacker_codex';
+let memCodex = null;
+
+export function loadCodexRaw() {
+  const ls = store();
+  if (!ls) return memCodex;
+  try {
+    return JSON.parse(ls.getItem(CODEX_KEY));
+  } catch {
+    return null;
+  }
+}
+
+export function saveCodexRaw(data) {
+  memCodex = data;
+  const ls = store();
+  if (ls) {
+    try {
+      ls.setItem(CODEX_KEY, JSON.stringify(data));
+    } catch {
+      /* voll oder gesperrt -> egal */
+    }
+  }
+}
+
+export function clearCodex() {
+  memCodex = null;
+  const ls = store();
+  if (ls) {
+    try {
+      ls.removeItem(CODEX_KEY);
+    } catch {
+      /* egal */
+    }
+  }
+}

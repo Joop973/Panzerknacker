@@ -1082,6 +1082,126 @@ function check(ok, msg) {
   check(getFlag('phase6_test_flag') === true, 'Phase6: resetAllPrefs loescht faelschlich auch Flags');
 }
 
+// ---- 8q. PLAN-STARTMENU Phase 7: Codex-Grundgerüst ----------------------
+{
+  const { migrateCodex, categoryIds, createCodex, CODEX_VERSION } = await import('../src/game/codex.js');
+
+  // (a) categoryIds gegen die ECHTEN Daten -- 10 Klassen, 246 Upgrades,
+  // 11 generische Gegner, 3 Bosse (Eliten sind Laufzeit-Affixe, keine eigene
+  // Kategorie -- STARTMENU-BESTAND.md/Nutzerentscheidung). Eigene Zahlen aus
+  // Abschnitt 4 der Bestandsaufnahme, nicht aus dem Code zurueckgerechnet.
+  const ids = categoryIds(tanksData, upgradesData);
+  check(ids.playerTanks.length === 10, `Phase7: ${ids.playerTanks.length} spielbare Klassen statt 10`);
+  check(ids.upgrades.length === 246, `Phase7: ${ids.upgrades.length} Upgrades statt 246`);
+  check(ids.enemies.length === 11, `Phase7: ${ids.enemies.length} generische Gegner statt 11`);
+  check(ids.bosses.length === 3, `Phase7: ${ids.bosses.length} Bosse statt 3`);
+  check(
+    new Set([...ids.playerTanks, ...ids.enemies, ...ids.bosses]).size === 24,
+    'Phase7: Klassen/Gegner/Bosse ueberlappen sich oder fehlen (24 Typen insgesamt erwartet)',
+  );
+
+  // (b) migrateCodex: eigene, synthetische Rohdaten -- nicht die aktuelle
+  // Datenlage. null/undefined -> leere Struktur, kein Crash.
+  check(migrateCodex(null).version === CODEX_VERSION, 'Phase7: migrateCodex(null) hat keine Version');
+  check(
+    JSON.stringify(migrateCodex(null).seen) === JSON.stringify({ playerTanks: {}, upgrades: {}, enemies: {}, bosses: {} }),
+    'Phase7: migrateCodex(null) liefert keine leere Struktur',
+  );
+  // Unvollstaendiges/aelteres Objekt: vorhandene Kategorie bleibt erhalten,
+  // eine FEHLENDE Kategorie wird ergaenzt statt den ganzen Save zu verwerfen.
+  const partial = { seen: { upgrades: { sprengkraft: true, kaputt: false } } };
+  const migrated = migrateCodex(partial);
+  check(migrated.seen.upgrades.sprengkraft === true, 'Phase7: migrateCodex verliert einen echten Eintrag');
+  check(!migrated.seen.upgrades.kaputt, 'Phase7: migrateCodex macht aus false ein true');
+  check(
+    migrated.seen.playerTanks && migrated.seen.enemies && migrated.seen.bosses,
+    'Phase7: migrateCodex ergaenzt fehlende Kategorien nicht (Save wuerde verworfen statt migriert)',
+  );
+  // Kaputte einzelne Kategorie (z. B. ein String statt eines Objekts) darf
+  // die anderen drei nicht mitreissen.
+  const corrupt = { seen: { upgrades: 'kaputt', enemies: { t_grey: true } } };
+  const migratedCorrupt = migrateCodex(corrupt);
+  check(
+    JSON.stringify(migratedCorrupt.seen.upgrades) === '{}' && migratedCorrupt.seen.enemies.t_grey === true,
+    'Phase7: eine kaputte Kategorie reisst die anderen mit statt isoliert zu bleiben',
+  );
+
+  // (c) createCodex: gebuendeltes Schreiben mit einem SPY statt echtem
+  // localStorage -- markSeen() darf NICHT sofort schreiben (Testschritt 4),
+  // erst flush() darf, und auch nur, wenn seitdem wirklich etwas markiert
+  // wurde (kein Write bei einem No-op-Flush).
+  let writes = 0;
+  let lastSaved = null;
+  const codex = createCodex({
+    tanksData,
+    upgradesData,
+    loadRaw: () => null,
+    saveRaw: (data) => {
+      writes++;
+      lastSaved = data;
+    },
+  });
+  check(writes === 0, 'Phase7: createCodex schreibt schon beim Anlegen');
+  check(codex.isSeen('enemies', 't_grey') === false, 'Phase7: frischer Codex kennt t_grey schon als gesehen');
+  codex.markSeen('enemies', 't_grey');
+  check(codex.isSeen('enemies', 't_grey') === true, 'Phase7: markSeen wirkt nicht sofort im Speicher');
+  check(writes === 0, 'Phase7: markSeen schreibt sofort in den Speicher (kein gebuendeltes Schreiben)');
+  check(codex.isDirty() === true, 'Phase7: markSeen setzt das dirty-Flag nicht');
+  const flushed1 = codex.flush();
+  check(flushed1 === true && writes === 1, `Phase7: flush() nach markSeen schreibt nicht genau einmal (writes=${writes})`);
+  check(lastSaved?.seen?.enemies?.t_grey === true, 'Phase7: flush() persistiert den falschen Zustand');
+  check(codex.isDirty() === false, 'Phase7: flush() setzt dirty nicht zurueck');
+  // Ein zweiter Flush OHNE neue Markierung schreibt nicht erneut.
+  const flushed2 = codex.flush();
+  check(flushed2 === false && writes === 1, `Phase7: ein No-op-Flush schreibt trotzdem (writes=${writes})`);
+  // Erneutes Markieren eines SCHON gesehenen Eintrags ist ebenfalls ein No-op.
+  codex.markSeen('enemies', 't_grey');
+  check(codex.isDirty() === false, 'Phase7: erneutes Markieren eines bereits gesehenen Eintrags macht dirty');
+
+  // (d) progress(): mit EIGENEN, kleinen Zahlen -- eine frisch geladene
+  // Instanz mit vorbefuelltem Rohzustand (simuliert einen Reload nach einem
+  // echten Flush, Testschritt 5 "Fortschritt tatsaechlich persistiert").
+  const reloaded = createCodex({
+    tanksData,
+    upgradesData,
+    loadRaw: () => lastSaved,
+    saveRaw: () => {},
+  });
+  const prog = reloaded.progress();
+  check(prog.enemies.seen === 1 && prog.enemies.total === 11, `Phase7: Fortschritt nach "Reload" falsch (${JSON.stringify(prog.enemies)})`);
+  check(prog.playerTanks.seen === 0 && prog.playerTanks.total === 10, 'Phase7: unberuehrte Kategorie zeigt falschen Fortschritt');
+
+  // (e) renderCodexCategories (Codex-Hauptscreen, ui/codexscreen.js):
+  // vier Knoepfe mit "gesehen/gesamt"; codexRevealAll zeigt jede Kategorie
+  // als VOLLSTAENDIG, OHNE den echten codex-Zustand zu veraendern.
+  const { installDom } = await import('./domstub.mjs');
+  const restore = installDom();
+  try {
+    const { renderCodexCategories } = await import('../src/ui/codexscreen.js');
+    const container = document.createElement('div');
+    renderCodexCategories(document, container, reloaded, {});
+    const btns = container.querySelectorAll('button');
+    check(btns.length === 4, `Phase7: Codex-Hauptscreen zeigt ${btns.length} statt 4 Kategorie-Knoepfe`);
+    const enemiesBtn = [...btns].find((b) => b.dataset.category === 'enemies');
+    check(enemiesBtn?.textContent.includes('1/11'), `Phase7: Gegner-Zaehler falsch ("${enemiesBtn?.textContent}")`);
+    const tanksBtn = [...btns].find((b) => b.dataset.category === 'playerTanks');
+    check(tanksBtn?.textContent.includes('0/10'), `Phase7: Klassen-Zaehler falsch ("${tanksBtn?.textContent}")`);
+
+    renderCodexCategories(document, container, reloaded, { revealAll: true });
+    const enemiesBtnRevealed = [...container.querySelectorAll('button')].find((b) => b.dataset.category === 'enemies');
+    check(enemiesBtnRevealed?.textContent.includes('11/11'), `Phase7: codexRevealAll zeigt Gegner nicht vollstaendig ("${enemiesBtnRevealed?.textContent}")`);
+    check(reloaded.progress().enemies.seen === 1, 'Phase7: codexRevealAll veraendert den echten gespeicherten Zustand');
+
+    // Klick ruft onOpen(category) mit der richtigen Kategorie auf.
+    let clicked = null;
+    renderCodexCategories(document, container, reloaded, { onOpen: (cat) => (clicked = cat) });
+    [...container.querySelectorAll('button')].find((b) => b.dataset.category === 'bosses').click();
+    check(clicked === 'bosses', `Phase7: onOpen bekommt die falsche Kategorie ("${clicked}")`);
+  } finally {
+    restore();
+  }
+}
+
 // ---- 8g. P8: Ausruestung auf eigener Vollbild-Seite ---------------------
 // Die Upgrade-Chips lagen im Hauptbereich der Raumvorschau und haben dort
 // bei vielen Karten den "Weiter"-Knopf aus dem Bild geschoben (Nutzer-

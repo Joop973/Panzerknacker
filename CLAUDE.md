@@ -3006,14 +3006,59 @@ Plans: `claude/startmenu-phasenplan-o4n0d5`** (nicht der LP-Branch oben).
     Reset (Abbrechen vs. bestätigen), Bestätigungsdialog passt auf kleine
     Viewports.
 
+- **Phase 7 (Codex — Grundgerüst & Datenstruktur) — erledigt.**
+  - **`src/game/codex.js`** (neu): `CODEX_VERSION`, `migrateCodex(raw)`
+    (fehlende/kaputte Kategorien werden mit Defaults aufgefüllt statt den
+    Save zu verwerfen — eine einzelne kaputte Kategorie reißt die anderen
+    drei nicht mit), `categoryIds(tanksData, upgradesData)` (Listen aus den
+    ECHTEN Daten, nicht gepflegt — Boss-Erkennung über dieselben drei
+    Schalter wie `cfg.js: isBossCfg()`, hier auf den rohen Typdaten),
+    `createCodex(...)`: `markSeen`/`isSeen`/`flush`/`isDirty`/`progress`.
+  - **Gebündeltes Schreiben wie vorgegeben**: `markSeen()` setzt nur
+    In-Memory + ein `dirty`-Flag, **kein** Write. `flush()` schreibt nur,
+    wenn seit dem letzten Aufruf wirklich etwas markiert wurde (No-op-Flush
+    schreibt nicht erneut). `main.js` ruft `codex.flush()` an den zwei
+    Plan-Stellen — Raumwechsel (`updateTelemetry()`s bestehende
+    `run.roomIndex !== teleRoom`-Erkennung) und Run-Ende
+    (`gameover`/`victory`).
+  - **`src/core/storage.js`**: `loadCodexRaw`/`saveCodexRaw`/`clearCodex`
+    (reine Persistenz-Primitiven, Schlüssel `panzerknacker_codex`, Muster wie
+    `currentRun`) — Struktur/Migration bleiben bewusst in `codex.js`.
+  - **`src/ui/codexscreen.js`** (neu) + `#codexScreen`: vier Kategorie-Knöpfe
+    mit „gesehen/gesamt" (10 Klassen · 246 Upgrades · 11 Gegner · 3 Bosse —
+    Eliten bewusst keine eigene Kategorie, Entscheidung aus
+    `STARTMENU-BESTAND.md`). `codexRevealAll` wirkt NUR auf die Anzeige
+    (zeigt jede Kategorie voll), verändert den echten gespeicherten Zustand
+    nicht. Die Listenansichten je Kategorie kommen erst in Phase 8–11 — die
+    Knöpfe haben noch kein `onOpen`-Ziel.
+  - **Phase 6 nachgezogen**: „Fortschritt zurücksetzen" löscht jetzt auch den
+    Codex (`clearCodex()`, war bei Phase 6 mangels Codex noch nicht möglich).
+  - **Echter Layout-Bug beim Testen gefunden** (kein Testartefakt): der neue
+    `codexOpen`-Knopf machte den Startbildschirm eine Zeile höher — auf
+    667×375/740×360 rutschte `settingsOpen` unter den Rand (dieselbe
+    Fehlerklasse wie beim „Weiter"-Knopf früher). `@media (max-height:
+    500px)`-Kompaktmodus (aus Phase 9/P9) enger gestellt (`gap`/`padding`),
+    `tests/uilayout.mjs` wieder grün.
+  - **Tests:** `regression.mjs` Abschnitte 8q — `categoryIds` gegen die
+    echten Daten (10/246/11/3, keine Überlappung), `migrateCodex` mit
+    synthetischen Rohdaten (null, unvollständig, kaputte Einzelkategorie),
+    `createCodex` mit einem Schreib-Spy (kein sofortiges Schreiben, `flush()`
+    genau einmal, No-op-Flush schreibt nicht erneut, erneutes Markieren eines
+    gesehenen Eintrags setzt `dirty` nicht), `progress()` nach simuliertem
+    Reload, `renderCodexCategories` (Domstub: vier Knöpfe, Zähler,
+    `codexRevealAll`, `onOpen`-Callback). Vier Gegenproben rot bestätigt.
+    Browser-Smoke: Screen öffnet mit „0/N" je Kategorie, `codexRevealAll`
+    zeigt „N/N", Reset löscht den Codex-Schlüssel.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **PLAN-STARTMENU nächste Phase:** Phase 7 (Codex — Grundgerüst &
-      Datenstruktur: Save-`version`-Feld, Migrationsfunktion, gebündeltes
-      Schreiben `markSeen()`/`flushCodex()`, Codex-Hauptscreen mit den vier
-      in Phase 0 festgelegten Kategorien, `codexRevealAll`-Debug-Flag).
+- [ ] **PLAN-STARTMENU nächste Phase:** Phase 8 (Codex — Eigene Panzer:
+      Listenansicht der zehn Klassen mit Silhouetten-Lösung für ungesehene
+      Einträge — laut `STARTMENU-BESTAND.md` Einfärbung statt Sprite-Kopie,
+      da alle Klassen dasselbe `player`-Sprite teilen). Erste echte
+      `markSeen('playerTanks', ...)`-Aufrufstelle: Klassenwahl markiert die
+      gewählte Klasse als gesehen.
 - [ ] **Klassen scharfschalten (nach PLAN-STARTMENU):** aktuell alle
-      `unlocked: true`. Freischaltbedingungen definieren + `seen`/Codex in
-      Phase 7 anbinden.
+      `unlocked: true`. Freischaltbedingungen definieren.
 - [ ] **Controller-Feinschliff (optional)**: (1) Bomben-/Gadget-**Wurf** nutzt
       auf dem Gamepad nur die Turmrichtung (`secondaryAim`/`gadgetAim` werden in
       `profileGamepad` nicht gesetzt) — Richtung stimmt, aber die Wurfweite lässt
@@ -3135,7 +3180,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v107`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v108`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

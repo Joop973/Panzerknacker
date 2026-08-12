@@ -23,6 +23,7 @@ export function createSettings(deps) {
     resetStats,
     resetAllPrefs, // Phase 6: "auch Einstellungen zuruecksetzen"
     clearCurrentRun, // Phase 6: ein "Fortschritt zuruecksetzen" darf keinen alten Run anbieten
+    clearCodex, // Phase 7: "Fortschritt zuruecksetzen" loescht jetzt auch den Codex
     onStatsReset, // Callback: Bestwerte-Anzeige neu zeichnen
     viewport, // fuer die Canvasgroesse nach Vollbildwechsel
     renderOpts, // Phase 6: Performance-Modus (render-seitig, siehe renderer.js)
@@ -125,6 +126,7 @@ export function createSettings(deps) {
   resetYes?.addEventListener('click', () => {
     resetStats();
     clearCurrentRun?.();
+    clearCodex?.(); // Phase 7: "loescht Codex + Freischaltungen" (Plan-Vorgabe)
     if (resetIncludeSettings?.checked) resetAllPrefs?.();
     onStatsReset?.();
     // Ein voller Reload zeigt zuverlaessig den frischen Stand (Testschritt 5:

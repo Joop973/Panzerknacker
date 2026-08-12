@@ -210,6 +210,13 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 
 ## Phase 7: Codex — Grundgerüst & Datenstruktur
 
+> **Erledigt.** Eigenes Modul `src/game/codex.js` statt einer Erweiterung
+> des bestehenden `stats`-Saves — eigener Schlüssel `panzerknacker_codex`
+> (Muster `currentRun`). Eliten-Entscheidung: **keine eigene Kategorie**
+> (Eliten sind Laufzeit-Affixe, `STARTMENU-BESTAND.md`). Noch keine echten
+> `markSeen()`-Aufrufstellen — die kommen mit den Listenansichten in Phase
+> 8–11. Details in `CLAUDE.md`.
+
 **Änderungen:**
 - Save-System erweitern: `version`-Feld, `codex.seen = { playerTanks: {}, upgrades: {}, enemies: {}, bosses: {} }`
 - Migrationsfunktion für alte Saves
@@ -219,11 +226,11 @@ Ein `debug`-Objekt (z.B. in `data/debug.json` oder als URL-Parameter `?debug=1`)
 - Entscheidung fixieren: Eliten eigene Kategorie oder nicht
 
 **Testschritte:**
-1. Codex-Screen zeigt Kategorie-Buttons mit Fortschrittszählern
-2. Neuer Save initialisiert alle `seen`-Flags auf `false`
-3. Alter Save lädt fehlerfrei und bekommt Codex-Struktur ergänzt
-4. `markSeen` während eines Runs erzeugt keinen sofortigen localStorage-Write (in Konsole prüfbar)
-5. Nach Raumwechsel ist der Fortschritt tatsächlich persistiert (Reload-Test)
+1. ✅ Codex-Screen zeigt Kategorie-Buttons mit Fortschrittszählern
+2. ✅ Neuer Save initialisiert alle `seen`-Flags auf `false`
+3. ✅ Alter Save lädt fehlerfrei und bekommt Codex-Struktur ergänzt
+4. ✅ `markSeen` während eines Runs erzeugt keinen sofortigen localStorage-Write (in Konsole prüfbar)
+5. ✅ Nach Raumwechsel ist der Fortschritt tatsächlich persistiert (Reload-Test)
 
 ---
 
