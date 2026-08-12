@@ -16,6 +16,14 @@ const TANK_TYPES = [
   't_purple',
   't_white',
   't_black',
+  // Klassen mit eigenem Sprite (die uebrigen borgen sich 'player', s. u.)
+  'c_frost',
+  'c_flame',
+  'c_necro',
+  'c_blast',
+  // Geisterpanzer: EINE gemeinsame Grafik fuer alle Panzer, die zum Geist
+  // werden (Renderer: drawGhosts).
+  'ghost',
 ];
 
 // Geschoss-Sprite je Sorte (siehe renderer.js für die Zuordnung).
@@ -77,15 +85,12 @@ const SPRITE_ALIAS = {
   // UMBAUPLAN-LP Phase 9: die zehn Klassen teilen sich das Spieler-Sprite --
   // ihre Identitaet traegt (vorerst) die Elementfarbe/der Wert, kein eigenes
   // Asset. 'player' selbst ist die Standard-Klasse und braucht keinen Alias.
-  c_blast: 'player',
-  c_frost: 'player',
+  // c_frost/c_flame/c_necro/c_blast haben jetzt EIGENE Sprites (s. TANK_TYPES).
   c_tesla: 'player',
   c_toxic: 'player',
   c_scrap: 'player',
   c_ricochet: 'player',
-  c_necro: 'player',
   c_engineer: 'player',
-  c_flame: 'player',
 };
 
 // Einzelnes Sprite, oder null wenn (noch) nicht ladbar.

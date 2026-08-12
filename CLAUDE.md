@@ -2918,6 +2918,33 @@ Sound-**Effekte** bleiben prozedurale Synthese ohne Asset.
   lädt, Nutzergeste löst `startMusic()` aus, `fetch()` + `decodeAudioData()`
   der echten Datei laufen ohne Konsolenfehler durch.
 
+### Neue Klassen-/Geister-Sprites (Nutzergrafik) — gebaut
+Der Nutzer hat fünf gerenderte Panzergrafiken geliefert (je Wanne links,
+Turm rechts in einem Bild): **Eispanzer** (`c_frost`), **Feuerpanzer**
+(`c_flame`), **Nekromantenpanzer** (`c_necro`), **Geisterpanzer** (für ALLE
+Panzer, die zum Geist werden) und **Sprengpanzer** (`c_blast`).
+- **Verarbeitung** (einmaliges Skript, nicht eingecheckt): jedes Kombibild in
+  Wanne/Turm getrennt (Spalten-Deckungslücke), Hintergrund per **randver-
+  bundenem Flood-Fill** (scipy `label` + `binary_fill_holes`) transparent
+  gemacht — so bleiben innere dunkle Ketten (Feuer-Schwarzhintergrund) bzw.
+  helle Frost-/Schädel-Flächen (Weiß-/Schachbrett-Hintergrund) erhalten,
+  reines Schwellwert-Stanzen hätte sie zerstört. Turm auf 90°-Schritt gedreht,
+  bis **das Rohr nach rechts** zeigt (Bestandskonvention), Pivot (=Bildmitte)
+  auf das **Kuppelzentrum** gelegt (gewichteter Spalten-Schwerpunkt `cov²`
+  unterdrückt das dünne Rohr), Wanne auf 110 px Höhe skaliert. Ergebnis
+  visuell gegen die Bestandssprites geprüft.
+- **`sprites.js`**: `c_frost`/`c_flame`/`c_necro`/`c_blast` + `ghost` in
+  `TANK_TYPES` (werden jetzt geladen), ihre `SPRITE_ALIAS`-Einträge auf
+  `player` entfernt. Die anderen fünf Klassen borgen sich weiter `player`.
+- **`renderer.js: drawGhosts()`** zeichnet jetzt das gemeinsame
+  `body_ghost`/`turret_ghost`-Sprite (Front `heading + PI/2`, Rohr `turret`,
+  `globalAlpha 0.55`) statt der prozeduralen Wanne+Rohr-Form — mit Fallback
+  auf die alte Form, falls das Sprite (noch) nicht geladen ist. Bewusst
+  **nicht** an den Ursprungstyp gebunden: jeder Geist sieht gleich aus.
+- SW-Cache `v106` (10 neue PNG in `ASSETS`), `telemetry.js: GAME_VERSION`
+  mitgezogen. Regressionssuite grün (der Fake-Canvas-Renderpfad zeichnet die
+  neuen Sprites headless mit).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Controller-Feinschliff (optional)**: Der A-Knopf legt im Spiel
       weiterhin eine Bombe sofort ohne Zielen ab (`secondaryAlt`), obwohl die
@@ -2949,6 +2976,10 @@ Sound-**Effekte** bleiben prozedurale Synthese ohne Asset.
       Explosionen/Partikel, Sekundärwaffen-Overlays (Phase 6: Sperrmauer,
       Rauchwolke, Enterhaken-Linie, Deflektor-/EMP-Ringe). Bei Bedarf
       Grafiken liefern.
+- [ ] **Fünf Klassen ohne eigenes Sprite** (`c_tesla`/`c_toxic`/`c_scrap`/
+      `c_ricochet`/`c_engineer`) borgen sich weiter `player` (`SPRITE_ALIAS`).
+      Bei gelieferten Grafiken analog zu `c_frost` & Co. einhängen (in
+      `TANK_TYPES` aufnehmen + Alias entfernen).
 
 Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 
@@ -3030,7 +3061,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v105`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v106`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -3052,6 +3083,14 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   haben **keine eigenen Sprites** — `sprites.js` mappt sie über
   `SPRITE_ALIAS` auf `t_grey`/`t_teal`; ihre Identität ist das
   Panzerungs-Overlay.
+- **Klassen-Sprites (Nutzergrafik):** `c_frost`, `c_flame`, `c_necro`,
+  `c_blast` haben jetzt **eigene** `body_*/turret_*`-Sprites; die übrigen
+  fünf Klassen (`c_tesla`/`c_toxic`/`c_scrap`/`c_ricochet`/`c_engineer`)
+  borgen sich weiter `player` über `SPRITE_ALIAS`.
+- **Geisterpanzer-Sprite** `body_ghost.png`/`turret_ghost.png`: EIN
+  gemeinsames, durchscheinend gezeichnetes Sprite für **alle** Panzer, die
+  zum Geist werden (`renderer.js: drawGhosts`, `globalAlpha 0.55`), mit
+  Fallback auf die alte prozedurale Form. Nicht an einen Panzertyp gebunden.
 - Spieler-Glow, Schild-Ring, Ziellinie, Betäubungs-Ring und die
   Unsichtbarkeit des Weißen sind Renderer-Overlays (nicht im Sprite).
 
