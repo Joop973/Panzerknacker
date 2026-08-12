@@ -2944,6 +2944,15 @@ Panzer, die zum Geist werden) und **Sprengpanzer** (`c_blast`).
 - SW-Cache `v106` (10 neue PNG in `ASSETS`), `telemetry.js: GAME_VERSION`
   mitgezogen. Regressionssuite grün (der Fake-Canvas-Renderpfad zeichnet die
   neuen Sprites headless mit).
+- **Nachtrag (Loch = Turmdrehpunkt, `v107`):** die Kanone drehte anfangs um
+  die Wannenmitte, nicht um das runde Loch (den Turmring) — das Loch liegt in
+  diesen Grafiken ~5–6 px oberhalb der Wannenmitte. Der Renderer dreht Wanne
+  UND Turm um denselben Punkt (x,y) = Bildmitte, deshalb müssen Loch (Wanne)
+  und Kuppelzentrum (Turm) beide in der jeweiligen Bildmitte sitzen. Das
+  Aufbereitungsskript erkennt jetzt das Loch (grösste dunkle, zentrale Fläche,
+  Gleise am Rand ausgeschlossen) und zentriert die Wanne darauf; die vier
+  Klassen-Bodies + `body_ghost` wurden neu erzeugt (Türme unverändert). Jetzt
+  sitzt die Kanone im Loch und schwenkt darum wie bei einem echten Panzer.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Controller-Feinschliff (optional)**: Der A-Knopf legt im Spiel
@@ -3061,7 +3070,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v106`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v107`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
