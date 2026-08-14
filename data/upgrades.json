@@ -731,17 +731,6 @@
       "minRoom": 1,
       "symbol": "🧱"
     },
-    "ghost_crew": {
-      "id": "ghost_crew",
-      "name": "Geisterbesatzung",
-      "description": "Getötete Gegner kämpfen 3 s als durchscheinender Verbündeter weiter und zielen automatisch auf den nächsten Gegner — jeder Kill verlängert die Zeit",
-      "tag": "reactive",
-      "rarity": "unique",
-      "maxStacks": 1,
-      "requires": [],
-      "minRoom": 1,
-      "symbol": "👻"
-    },
     "core_damage_c": {
       "id": "core_damage_c",
       "name": "Panzerbrechend",
@@ -3329,7 +3318,7 @@
     "sig_necro_wiedergaenger": {
       "id": "sig_necro_wiedergaenger",
       "name": "Wiedergänger",
-      "description": "+10% Wiederbelebungschance und +20 LP pro Stufe",
+      "description": "+20 LP pro Stufe",
       "tag": "signature",
       "tags": ["resurrection"],
       "signatureClass": "c_necro",
@@ -3339,14 +3328,13 @@
       "minRoom": 1,
       "symbol": "💀",
       "core": {
-        "reviveChanceBonus": 0.1,
         "hpAdd": 20
       }
     },
     "sig_necro_geisterbeschwoerung": {
       "id": "sig_necro_geisterbeschwoerung",
       "name": "Geisterbeschwörung",
-      "description": "Getötete Gegner kämpfen als Geist weiter, +2 Schaden",
+      "description": "+2 Schaden",
       "tag": "signature",
       "tags": ["ghost", "swarm"],
       "signatureClass": "c_necro",
@@ -3356,7 +3344,6 @@
       "minRoom": 1,
       "symbol": "💀",
       "core": {
-        "grantGhostCrew": true,
         "damageAdd": 2
       }
     },
@@ -3395,7 +3382,7 @@
     "sig_necro_lich": {
       "id": "sig_necro_lich",
       "name": "Lich",
-      "description": "+15% Wiederbelebungschance und +40 LP",
+      "description": "+40 LP",
       "tag": "signature",
       "tags": ["resurrection"],
       "signatureClass": "c_necro",
@@ -3405,14 +3392,13 @@
       "minRoom": 1,
       "symbol": "☠",
       "core": {
-        "reviveChanceBonus": 0.15,
         "hpAdd": 40
       }
     },
     "sig_necro_geisterlegion": {
       "id": "sig_necro_geisterlegion",
       "name": "Geisterlegion",
-      "description": "Getötete Gegner kämpfen als Geist weiter und halten länger",
+      "description": "Ohne aktuellen Effekt (wird mit dem Nekromant-Neubau ersetzt)",
       "tag": "signature",
       "tags": ["ghost", "swarm", "quantity"],
       "signatureClass": "c_necro",
@@ -3421,10 +3407,7 @@
       "requires": [],
       "minRoom": 1,
       "symbol": "☠",
-      "core": {
-        "grantGhostCrew": true,
-        "ghostDurationBonus": 2.0
-      }
+      "core": {}
     },
     "sig_necro_seelenfresser": {
       "id": "sig_necro_seelenfresser",
@@ -3446,7 +3429,7 @@
     "sig_necro_unsterblich": {
       "id": "sig_necro_unsterblich",
       "name": "Unsterblich",
-      "description": "+20% Wiederbelebungschance und +8 Schaden",
+      "description": "+8 Schaden",
       "tag": "signature",
       "tags": ["resurrection"],
       "signatureClass": "c_necro",
@@ -3456,7 +3439,6 @@
       "minRoom": 1,
       "symbol": "☠",
       "core": {
-        "reviveChanceBonus": 0.2,
         "damageAdd": 8
       }
     },

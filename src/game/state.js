@@ -12,7 +12,7 @@ import { createTank, moveTank, fireBullet, layMine, useSecondary, useGadget, das
 import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
-import { createGhost, updateGhosts } from './ghost.js';
+import { updateGhosts } from './ghost.js';
 import { updateEnemy, updateCoverPerception } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
 import { applyTypeEffects } from './damagetypes.js';
@@ -475,7 +475,7 @@ export function createState(data, tiles, opts) {
       if (meta?.overTime) {
         tank.hp -= amount ?? 1;
         if (tank.hp > 0) return;
-        if (!state.tryRevive(tank)) state.killTank(tank, cause, meta);
+        state.killTank(tank, cause, meta);
         return;
       }
       // Notschild-Ladung faengt genau einen Treffer ab (raumuebergreifend,
@@ -531,28 +531,13 @@ export function createState(data, tiles, opts) {
         if (amount <= 0) return;
         tank.hp -= amount;
         if (tank.hp > 0) return;
-        if (!state.tryRevive(tank)) state.killTank(tank, cause, meta);
+        state.killTank(tank, cause, meta);
         return;
       }
       // Kein Gatter hat gegriffen -> der Treffer geht durch.
       tank.hp -= amount ?? 1;
       if (tank.hp > 0) return;
-      if (!state.tryRevive(tank)) state.killTank(tank, cause, meta);
-    },
-    // Nekromant-Passiv (UMBAUPLAN-LP Phase 9): reviveChance, einen toedlichen
-    // Treffer mit voller Gesundheit zu ueberleben. Nur der Spieler, nur mit dem
-    // Passiv (sonst returnt es VOR state.rng() -- keine RNG-Drift fuer andere
-    // Klassen). Deterministisch ueber den Seed-RNG. Gilt fuer jeden toedlichen
-    // Treffer neu (auch DOT), 25 % je Mal.
-    tryRevive(tank) {
-      if (tank !== state.player || !(tank.cfg.reviveChance > 0)) return false;
-      if (state.rng() >= tank.cfg.reviveChance) return false;
-      tank.hp = tank.cfg.maxHp;
-      tank.protect = Math.max(tank.protect || 0, 0.8);
-      state.sounds.push({ name: 'shield', x: tank.x });
-      state.spawnParticles(tank.x, tank.y, '#8ad14a', 16, 160);
-      state.texts.push({ x: tank.x, y: tank.y - 24, text: 'WIEDERBELEBT!', age: 0, life: 0.9, color: '#8ad14a' });
-      return true;
+      state.killTank(tank, cause, meta);
     },
     // Reine Todeslogik -- ab hier ist der Panzer tot, es gibt keine
     // Abwehr mehr. Bewusst weiterhin direkt aufrufbar (Tests raeumen damit
@@ -620,17 +605,11 @@ export function createState(data, tiles, opts) {
         if (pc.chainLightning) {
           explodeAt(state, tank.x, tank.y, pc.chainLightning, state.player);
         }
-        // Geisterbesatzung (Phase 7): JEDER Gegnertod erzeugt einen
-        // Geist, egal ob durch Kugel, Mine, Kamikaze oder Kettenblitz --
-        // killTank() ist der Funnel fuer alle Tode ("Kettenreaktionen sind
-        // das Ziel"). Deckel per FIFO-Verdraengung, kein Verweigern
-        // (Muster wie die Krallenfalle-Obergrenze in trap.js).
-        if (pc.ghostCrew) {
-          state.ghosts.push(createGhost(tank, state.data.balance, pc.ghostDurationBonus || 0));
-          if (state.ghosts.length > state.data.balance.ghost.maxActive) {
-            state.ghosts.shift();
-          }
-        }
+        // Upgradepool-v2 Phase 4: das alte Geisterbesatzung-System
+        // (ghost_crew-Upgrade, hier erzeugt) ist abgebaut -- der Nekromant-
+        // Neubau folgt in Phase 6/7 dieses Auftrags mit eigener Zielwahl und
+        // eigenem Spawn-Mechanismus (killTank() bleibt der richtige Funnel
+        // dafuer, s. Phase 6).
       }
     },
     // Statuseffekt auftragen (Phase 5). In dieser Phase der EINZIGE Weg,
@@ -1087,12 +1066,14 @@ export function stepState(state, cmd, dt) {
         // weiterspringen lassen. NACH dem eigentlichen Treffer, damit die
         // Kette vom bereits geschaedigten Ziel ausgeht.
         applyTypeEffects(state, t, b.damageType, schaden, trefferMeta);
-        // Geisterpanzer (Phase 7): eigener Kill-Zaehler statt Spieler-
-        // Trickshot/Ricochet -- verlaengert die eigene Restzeit
-        // (Kettenreaktionen sind das Ziel).
+        // Geisterpanzer: eigener Kill-Zaehler statt Spieler-Trickshot/Ricochet.
+        // Upgradepool-v2 Phase 4: die Timer-Verlaengerung (b.owner.timeLeft +=
+        // balance.ghost.killBonus) ist mit dem alten Geistersystem abgebaut --
+        // ghostKills bleibt als reine Telemetrie bestehen, der Neubau in
+        // Phase 7 dieses Auftrags hat ohnehin keinen Lebensdauer-Timer mehr
+        // ("kein Timer, lebt bis Tod oder Raumende").
         if (b.owner?.isGhost && t !== state.player && !t.alive) {
           state.ghostKills++;
-          b.owner.timeLeft += state.data.balance.ghost.killBonus;
         }
         // Telemetrie: Abpraller- vs. Direkt-Kills des Spielers an Gegnern.
         // Die freiwilligen Bankshots (USP-Kennzahl 3) sind mit Phase 8

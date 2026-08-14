@@ -2926,33 +2926,6 @@ function check(ok, msg) {
     check(Math.abs(z3[0].status.frost.speedMult - erwartet) < 1e-6, `Phase 9: Frost-Verlangsamung ${z3[0].status.frost.speedMult} statt ${erwartet}`);
   }
 
-  // (g) Nekromant: reviveChance ueberlebt einen toedlichen Treffer (RNG < c),
-  //     stirbt bei Fehlwurf; ohne das Passiv wird kein RNG verbraucht.
-  {
-    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
-    const p = st.player;
-    p.cfg.reviveChance = 0.25;
-    p.cfg.maxHp = 100;
-    p.hp = 10;
-    p.protect = 0;
-    p.shieldReady = false;
-    st.shieldCharges.length = 0;
-    st.rng = () => 0; // < 0.25 -> Wiederbelebung
-    st.applyDamage(p, 50, 'test', {});
-    check(p.alive && p.hp === 100, `Phase 9: Nekromant wiederbelebt nicht (alive=${p.alive}, hp=${p.hp})`);
-
-    const st2 = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
-    const p2 = st2.player;
-    p2.cfg.reviveChance = 0.25;
-    p2.hp = 10;
-    p2.protect = 0;
-    p2.shieldReady = false;
-    st2.shieldCharges.length = 0;
-    st2.rng = () => 0.9; // >= 0.25 -> stirbt
-    st2.applyDamage(p2, 50, 'test', {});
-    check(!p2.alive, 'Phase 9: Nekromant ueberlebt trotz Fehlwurf');
-  }
-
   // (h) Schrottpanzer: +5 % Schaden je 100 Schrott, pro Raum gebacken.
   {
     const cfg = resolveCfg(tanksData, 'c_scrap');
@@ -4543,17 +4516,20 @@ function check(ok, msg) {
 
 // ---- 34. UMBAUPLAN-LP Phase 26: Signaturtopf Nekromant -------------------
 // Dritter Mechanikklassen-Topf: 12 Karten (4/4/4) fuer den Nekromanten
-// (c_necro). Verstaerkt die zwei gebauten Nekromanten-Mechaniken: Wiederbelebung
-// (reviveChance) und Geisterpanzer (ghost_crew, Phase 7). Neue klassenexklusive
-// Regeln: reviveChanceBonus (additiv zum Passiv), grantGhostCrew (Geister
-// beschwoeren) und ghostDurationBonus (Geister halten laenger -- Qualitaet statt
-// Zahl, der Deckel bleibt). Mechanismus mit eigenen Zahlen geprueft; Gegenprobe
-// fuer jeden Kernpunkt bestanden.
+// (c_necro). Verstaerkte urspruenglich zwei Nekromanten-Mechaniken
+// (reviveChance-Passiv, ghost_crew-Geisterbesatzung) -- BEIDE sind mit
+// Upgradepool-v2 Phase 4 abgebaut (der Nekromant-Neubau in Phase 6/7 dieses
+// Auftrags ersetzt sie durch ein eigenes Zielsystem). Die frueheren
+// Mechanismus-Tests (c)/(d1)/(d2) fuer reviveChanceBonus/grantGhostCrew/
+// ghostDurationBonus sind deshalb ENTFERNT, nicht auskommentiert -- die
+// Faehigkeiten selbst gibt es nicht mehr. Struktur (a)/(b) und der
+// Blocker-Fix-Test (e) bleiben gueltig: die Kartenanzahl, Rarity-Verteilung
+// und Sichtbarkeit haben sich durch das Leeren dreier core-Objekte nicht
+// veraendert (nur sig_necro_geisterlegion hat jetzt core:{} -- ein
+// Uebergangszustand bis Phase 8 den ganzen Topf ersetzt, s. CLAUDE.md).
 {
-  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
   const { rollOffers } = await import('../src/game/upgradepool.js');
   const { mulberry32 } = await import('../src/core/rng.js');
-  const { createGhost } = await import('../src/game/ghost.js');
   const U = upgradesData.upgrades;
   const necro = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_necro');
 
@@ -4581,49 +4557,6 @@ function check(ok, msg) {
     };
     check(sieht('c_necro'), 'Phase 26: Nekromant sieht die eigene Signatur nicht');
     check(!sieht('player'), 'Phase 26: fremde Klasse sieht die Nekromant-Signatur (Filter greift nicht)');
-  }
-
-  // (c) Applier: reviveChanceBonus ADDITIV zum Passiv (0.25); grantGhostCrew
-  //     schaltet ghostCrew frei; ghostDurationBonus landet im cfg.
-  {
-    const base = applyUpgrades(resolveCfg(tanksData, 'c_necro'), {}, upgradesData, 'mine', null);
-    check(Math.abs((base.reviveChance || 0) - 0.25) < 1e-6, `Phase 26: Vorbedingung -- reviveChance ${base.reviveChance} statt 0.25`);
-    check(!base.ghostCrew, 'Phase 26: Vorbedingung -- ghostCrew ist ohne Karte schon aktiv');
-    const wg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_wiedergaenger: 2 }, upgradesData, 'mine', null);
-    check(Math.abs(wg.reviveChance - (0.25 + U.sig_necro_wiedergaenger.core.reviveChanceBonus * 2)) < 1e-6, `Phase 26: Wiedergänger reviveChance ${wg.reviveChance} (nicht additiv zum Passiv)`);
-    const gb = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_geisterbeschwoerung: 1 }, upgradesData, 'mine', null);
-    check(gb.ghostCrew === true, 'Phase 26: Geisterbeschwörung schaltet ghostCrew nicht frei');
-    const gl = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_geisterlegion: 1 }, upgradesData, 'mine', null);
-    check(gl.ghostCrew === true && Math.abs((gl.ghostDurationBonus || 0) - U.sig_necro_geisterlegion.core.ghostDurationBonus) < 1e-6, `Phase 26: Geisterlegion ghostDurationBonus ${gl.ghostDurationBonus} falsch`);
-  }
-
-  // (d1) MECHANISMUS Wiederbelebung: das erhoehte reviveChance macht bei einem
-  //      RNG-Wurf, der die Basis NICHT bestehen wuerde, den Unterschied.
-  //      tryRevive rollt state.rng() < cfg.reviveChance.
-  {
-    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42, 'normal', { starterTank: 'c_necro' });
-    const st = run.state;
-    st.rng = () => 0.30; // zwischen Basis (0.25) und geboostet (0.45)
-    st.player.cfg.reviveChance = 0.25;
-    st.player.hp = 1;
-    check(st.tryRevive(st.player) === false, 'Phase 26: Basis-reviveChance sollte bei 0.30 nicht wiederbeleben');
-    const boosted = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_wiedergaenger: 2 }, upgradesData, 'mine', null);
-    st.player.cfg.reviveChance = boosted.reviveChance; // 0.45
-    st.player.hp = 1;
-    check(st.tryRevive(st.player) === true, 'Phase 26: geboostetes reviveChance (0.45) belebt bei 0.30 nicht wieder');
-    check(st.player.hp === st.player.cfg.maxHp, 'Phase 26: Wiederbelebung stellt nicht die vollen LP her');
-  }
-
-  // (d2) MECHANISMUS Geisterdauer: ghostDurationBonus verlaengert die Lebensdauer
-  //      des erzeugten Geistes ueber balance.ghost.duration hinaus.
-  {
-    const base = tanksData.balance.ghost.duration;
-    const fake = { x: 0, y: 0, heading: 0, turret: 0, type: 'player', cfg: {} };
-    const ohne = createGhost(fake, tanksData.balance);
-    const mit = createGhost(fake, tanksData.balance, U.sig_necro_geisterlegion.core.ghostDurationBonus);
-    check(Math.abs(ohne.timeLeft - base) < 1e-6, `Phase 26: Geist ohne Bonus lebt ${ohne.timeLeft} statt ${base}`);
-    check(Math.abs(mit.timeLeft - (base + U.sig_necro_geisterlegion.core.ghostDurationBonus)) < 1e-6, `Phase 26: Geisterdauer-Bonus greift nicht (${mit.timeLeft})`);
-    check(mit.timeLeft > ohne.timeLeft, 'Phase 26: der Geisterdauer-Bonus verlaengert die Lebensdauer nicht');
   }
 
   // (e) Upgradepool-v2 Phase 2: mehrere Nekromant-Signaturen duerfen jetzt
@@ -5404,6 +5337,72 @@ for (const seed of SEEDS) {
     const b = play(4);
     check(a.length > 0, 'Phase 3 (Upgradepool-v2): Testaufbau -- keine einzige Upgrade-Phase erreicht');
     check(a === b, 'Phase 3 (Upgradepool-v2): gleicher Seed ergibt nicht denselben Angebotsverlauf');
+  }
+}
+
+// ---- 40. Upgradepool-v2 Phase 4: altes Geistersystem + reviveChance abgebaut
+// Vor dem Nekromant-Neubau (Phase 6/7 dieses Auftrags) muessen alle Reste des
+// alten Systems weg sein -- reine Struktur- und Verhaltensnachweise, keine
+// neue Spielmechanik.
+{
+  const { createRun, stepRun: sr, chooseUpgrade: cu, enterRoom: er, leaveWorkshop: lw, chooseEventOption: ceo } = await import('../src/game/run.js');
+  const U = upgradesData.upgrades;
+
+  // (a) Struktur: die Karte ghost_crew existiert nicht mehr; kein Kern-
+  //     Effektschluessel reviveChanceBonus/grantGhostCrew/ghostDurationBonus
+  //     kommt noch in irgendeiner Karte vor; tryRevive() existiert nicht mehr
+  //     auf state.
+  {
+    check(!U.ghost_crew, 'Phase 4 (Upgradepool-v2): Karte ghost_crew existiert noch');
+    const tote = Object.entries(U).filter(
+      ([, d]) => d.core && (d.core.reviveChanceBonus || d.core.grantGhostCrew || d.core.ghostDurationBonus),
+    );
+    check(tote.length === 0, `Phase 4 (Upgradepool-v2): ${tote.length} Karte(n) referenzieren noch abgebaute Effektschluessel (${tote.map(([id]) => id).join(', ')})`);
+    const runS = createRun(tanksData, tilesData, diffData, upgradesData, 1, 'normal', { starterTank: 'c_necro' });
+    check(typeof runS.state.tryRevive !== 'function', 'Phase 4 (Upgradepool-v2): state.tryRevive() existiert noch');
+    check(runS.state.player.cfg.reviveChance === undefined, 'Phase 4 (Upgradepool-v2): cfg.reviveChance wird noch gesetzt');
+  }
+
+  // (b) Verhalten: ein toedlicher Treffer auf den Nekromanten toetet ihn
+  //     IMMER (kein Ueberleben mehr), auch bei einem RNG-Wurf, der frueher
+  //     das alte 25%-Passiv bestanden haette (rng() === 0).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1, 'normal', { starterTank: 'c_necro' });
+    const st = run.state;
+    const p = st.player;
+    p.hp = 10;
+    p.protect = 0;
+    p.shieldReady = false;
+    st.shieldCharges.length = 0;
+    st.rng = () => 0; // waere unter dem alten 25%-Passiv IMMER eine Wiederbelebung gewesen
+    st.applyDamage(p, 50, 'test', {});
+    check(!p.alive, 'Phase 4 (Upgradepool-v2): Nekromant ueberlebt einen toedlichen Treffer noch immer');
+  }
+
+  // (c) Verhalten: ein kompletter Nekromant-Run erzeugt NIE einen Geist mehr
+  //     (state.ghosts bleibt durchgehend leer), auch wenn viele Gegner
+  //     sterben -- ersetzt den Cheat-Kill-Bot-Lauf als Absturz-/Crash-Probe
+  //     (Testschritt 5: "kompletten Run bis zum Boss spielen").
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 2, 'normal', { starterTank: 'c_necro' });
+    let guard = 200000;
+    let ghostsEverSeen = 0;
+    while (run.phase !== 'victory' && run.phase !== 'gameover' && guard-- > 0) {
+      if (run.state && run.state.ghosts.length > 0) ghostsEverSeen = Math.max(ghostsEverSeen, run.state.ghosts.length);
+      if (run.phase === 'preview') er(run);
+      else if (run.phase === 'transition') sr(run, CMD, STEP);
+      else if (run.phase === 'playing') {
+        cheatKillAll(run.state);
+        sr(run, CMD, STEP);
+      } else if (run.phase === 'upgrade') cu(run, 0);
+      else if (run.phase === 'map') pickMapNode(run);
+      else if (run.phase === 'workshop') lw(run);
+      else if (run.phase === 'event') ceo(run, 0);
+      else break;
+    }
+    check(guard > 0, 'Phase 4 (Upgradepool-v2): Nekromant-Run haengt (Iterationslimit)');
+    check(run.phase === 'victory', `Phase 4 (Upgradepool-v2): Nekromant-Run crasht/haengt in Phase "${run.phase}" statt zu gewinnen`);
+    check(ghostsEverSeen === 0, `Phase 4 (Upgradepool-v2): ${ghostsEverSeen} Geist(er) trotz abgebautem Spawn-Mechanismus gesehen`);
   }
 }
 

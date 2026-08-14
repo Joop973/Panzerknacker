@@ -1,6 +1,14 @@
-// Geisterpanzer (PLAN.md v3, Phase 7).
+// Geisterpanzer (PLAN.md v3, Phase 7) -- DERZEIT UNBENUTZT.
 //
-// Getoetete Gegner kaempfen mit dem ghost_crew-Upgrade als durchscheinender
+// Upgradepool-v2 Phase 4: der einzige Erzeuger (state.js: killTank()s
+// ghost_crew-Zweig) ist abgebaut, `createGhost()` wird also von nirgendwo
+// mehr aufgerufen. Das gesamte Modul wird von Upgradepool-v2 Phase 7
+// ERSETZT (nicht ergaenzt) durch den Nekromant-Neubau -- bis dahin bleibt
+// es als totes Vorbild stehen (state.ghosts bleibt in der Zwischenzeit
+// immer leer, updateGhosts() iteriert dann ueber nichts).
+//
+// Alte Beschreibung (nicht mehr zutreffend, nur zur Einordnung): getoetete
+// Gegner kaempften mit dem ghost_crew-Upgrade als durchscheinender
 // Verbuendeter weiter: eigenes state.ghosts-Array (kein Eintrag in
 // state.tanks) -- das erfuellt "blockieren keine Kugeln, sind nicht
 // toetbar" automatisch, weil die Geschoss-vs-Panzer-Treffer-Schleife in
@@ -20,6 +28,9 @@ let nextGhostId = 1;
 // tank = der soeben gestorbene Panzer (liefert Position/Ausrichtung/cfg).
 // durationBonus (Phase 26, Nekromant-Signatur): verlaengert die Lebensdauer
 // des Geistes ueber balance.ghost.duration hinaus ("Qualitaet statt Zahl").
+// Upgradepool-v2 Phase 4: balance.ghost.duration selbst ist mit dem alten
+// System entfernt -- der Fallback (?? 3) verhindert NaN, falls diese
+// Funktion (derzeit unbenutzt, s. Kopfkommentar) doch aufgerufen wird.
 export function createGhost(tank, balance, durationBonus = 0) {
   return {
     id: nextGhostId++,
@@ -32,7 +43,7 @@ export function createGhost(tank, balance, durationBonus = 0) {
     type: tank.type,
     cfg: tank.cfg, // dieselbe aufgeloeste cfg -- kein neuer Balance-Wert noetig
     cooldown: 0,
-    timeLeft: balance.ghost.duration + durationBonus,
+    timeLeft: (balance.ghost?.duration ?? 3) + durationBonus,
     isGhost: true,
     dead: false,
   };

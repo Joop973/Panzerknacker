@@ -251,9 +251,13 @@ gemeinsamen Tag `signature`) ist aufgelöst, ein Angebot mit drei
 Signaturkarten derselben Klasse ist jetzt möglich. **Phase 3
 (Synergiegewichtung) ist gebaut** — Karten mit passenden `tags[]` werden
 anhand der bereits gewählten Karten höher gewichtet, gedeckelt, ohne je eine
-Karte auszuschließen. **Nächste Sitzung: Phase 4 (Altes Geistersystem und
-`reviveChance` abbauen).** Verbleibend sonst nur noch manuelle/optionale
-Punkte (s. To-do-Liste unten): der
+Karte auszuschließen. **Phase 4 (Altes Geistersystem und `reviveChance`
+abbauen) ist gebaut** — die `ghost_crew`-Karte, `cfg.ghostCrew`/
+`grantGhostCrew`/`ghostDurationBonus`, `state.js: tryRevive()` und das
+Nekromant-Passiv `reviveChance` sind vollständig entfernt; `src/game/ghost.js`
+bleibt als vorerst unbenutztes Modul stehen (Neubau folgt in Phase 6/7).
+**Nächste Sitzung: Phase 5 (Zielsystem der Gegner-KI).** Verbleibend sonst
+nur noch manuelle/optionale Punkte (s. To-do-Liste unten): der
 Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur nach echtem Spielgefühl) und
 die Telemetrie-Auswertung echter Runs.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -3154,7 +3158,62 @@ zweite Hälfte von Anhang A §11.
   `tags[]`-Karte im Angebot, sonst hätte die Gegenprobe (echte
   `Math.random()` im Gewichtungspfad) nichts zu fangen gehabt.
 
+### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 4 (Altes Geistersystem und reviveChance abbauen) — gemergt
+Vor dem Nekromant-Neubau (Phase 6/7 dieses Auftrags) alle Reste des alten
+Systems entfernt, damit nie zwei Geistersysteme gleichzeitig existieren.
+- **`data/upgrades.json`**: Karte `ghost_crew` komplett entfernt. Die drei
+  Karten mit `reviveChanceBonus` (`sig_necro_wiedergaenger`, `sig_necro_lich`,
+  `sig_necro_unsterblich`) und die zwei mit `grantGhostCrew`
+  (`sig_necro_geisterbeschwoerung`, `sig_necro_geisterlegion`) behalten ihre
+  ids/Rarity/Tags — nur die abgebauten `core`-Schlüssel sind raus, die
+  Beschreibungen an die verbleibenden Effekte angepasst.
+  **`sig_necro_geisterlegion` hatte AUSSCHLIESSLICH diese beiden Schlüssel**
+  und hat jetzt `core: {}` — eine Karte ohne Wirkung, bis Phase 8 den ganzen
+  Signaturtopf ersetzt. Bewusst nicht vorzeitig gelöscht (hätte die
+  Rarity-Verteilung 4/4/1/2/1 aus Phase 1 verschoben und wäre über die
+  Auftrags-Dateiliste hinausgegangen); die Kartenbeschreibung sagt das
+  Spielern ehrlich („Ohne aktuellen Effekt").
+- **`cfg.js`**: `reviveChance` aus `resolveCfg()`, `cfg.ghostCrew`-Zuweisung
+  aus `l('ghost_crew')`, sowie `reviveChanceBonus`/`grantGhostCrew`/
+  `ghostDurationBonus` aus der generischen `core`-Schleife entfernt.
+- **`state.js`**: `tryRevive()` samt aller drei Aufrufstellen in
+  `applyDamage()` entfernt (jeder tödliche Treffer geht jetzt direkt zu
+  `killTank()`); der `pc.ghostCrew`-Erzeugungsblock in `killTank()` entfernt;
+  `state.ghostKills` bleibt als Telemetrie, verliert aber die
+  `b.owner.timeLeft += balance.ghost.killBonus`-Verlängerung.
+- **`data/balance.json`**: `ghost.duration`/`ghost.killBonus` entfernt,
+  `ghost.maxActive` bleibt stehen (Phase 6/7 definiert Limit/Lebensdauer neu).
+  `debug.js` brauchte **keine** Änderung — es liest nur `maxActive`, nie
+  `duration`/`killBonus` (verifiziert, nicht nur angenommen).
+- **`data/tanks.json`**: `c_necro.reviveChance` entfernt, `desc` auf „Ausgewogene
+  Grundwerte, aktuell ohne eigenes Passiv" geändert (ehrlich statt eine
+  entfernte Fähigkeit zu behaupten).
+- **`ghost.js` bleibt unangetastet stehen, aber derzeit unbenutzt**: sein
+  einziger Aufrufer (`killTank()`s `ghost_crew`-Zweig) ist weg, `createGhost()`
+  wird von nirgendwo mehr gerufen. Kopfkommentar entsprechend ergänzt;
+  `balance.ghost.duration` bekam trotzdem einen Fallback (`?? 3`), damit ein
+  versehentlicher künftiger Aufruf kein `NaN` erzeugt, statt sich auf
+  „wird ja eh nicht aufgerufen" zu verlassen.
+- **`tests/regression.mjs`**: die alten Mechanismus-Tests für
+  `reviveChanceBonus`/`grantGhostCrew`/`ghostDurationBonus` (Phase-26-Block
+  (c)/(d1)/(d2) sowie der Phase-9-Block „(g) Nekromant: reviveChance") sind
+  **ausgebaut, nicht auskommentiert** — die Fähigkeiten selbst gibt es nicht
+  mehr. Struktur- und Filtertests (a)/(b) sowie der Blocker-Fix-Test (e) der
+  Phase-26-Sektion blieben unverändert gültig.
+- **Neuer Abschnitt 40** (Gegenprobe für jeden Kernpunkt bestanden): Struktur
+  (`ghost_crew` weg, kein Kern-Effektschlüssel mehr referenziert, `tryRevive`
+  weg, `cfg.reviveChance` weg), Verhalten (ein tödlicher Treffer auf den
+  Nekromanten tötet immer, auch bei einem RNG-Wurf, der das alte 25 %-Passiv
+  bestanden hätte), und ein kompletter Nekromant-Run bis zum Sieg ohne
+  einen einzigen Geist und ohne Absturz (deckt Testschritt 5 „bis zum Boss
+  spielen" ab). Playwright-Smoke im echten Browser bestätigt dasselbe.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **`sig_necro_geisterlegion` ist wirkungslos (Upgradepool-v2 Phase 4)**:
+      `core: {}`, weil ihre einzigen zwei Effekte (`grantGhostCrew`,
+      `ghostDurationBonus`) mit dem alten Geistersystem abgebaut sind. Löst
+      sich automatisch mit Phase 8 (Signaturtopf Nekromant komplett ersetzt),
+      kein eigenständiger Fix nötig.
 - [ ] **`drawOne()`-Signaturkarten-Inkonsistenz (Upgradepool-v2 Phase 2)**:
       „Verbannen"/„Vierte Karte" (`run.js`) sperren beim Ersatzziehen weiterhin
       den ganzen Tag `signature` statt nur die gebannte id — banning einer von
