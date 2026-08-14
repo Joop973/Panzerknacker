@@ -12,7 +12,7 @@ import { createTank, moveTank, fireBullet, layMine, useSecondary, useGadget, das
 import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
-import { updateGhosts } from './ghost.js';
+import { createGhost, updateGhosts } from './ghost.js';
 import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
 import { applyTypeEffects } from './damagetypes.js';
@@ -556,7 +556,9 @@ export function createState(data, tiles, opts) {
       if (tank === state.player) {
         // Kamikaze: der Spieler explodiert beim Sterben.
         if (tank.cfg.kamikazeRadius) {
-          explodeAt(state, tank.x, tank.y, tank.cfg.kamikazeRadius);
+          // Kill-Zuordnung (Phase 6): tank ist an dieser Stelle noch
+          // state.player (== der gerade sterbende Spieler).
+          explodeAt(state, tank.x, tank.y, tank.cfg.kamikazeRadius, null, { killer: tank });
         }
         state.playerDeaths++;
         state.lastDeathCause = cause || 'Unbekannt';
@@ -601,15 +603,31 @@ export function createState(data, tiles, opts) {
           }
         }
         // Kettenblitz: kleine Explosion am Ort des Kills (verschont den
-        // Spieler) -> kann weitere Gegner mitreissen (Kettenkills).
+        // Spieler) -> kann weitere Gegner mitreissen (Kettenkills). Kill-
+        // Zuordnung (Phase 6): der Spieler ist der Urheber der Karte.
         if (pc.chainLightning) {
-          explodeAt(state, tank.x, tank.y, pc.chainLightning, state.player);
+          explodeAt(state, tank.x, tank.y, pc.chainLightning, state.player, { killer: state.player });
         }
-        // Upgradepool-v2 Phase 4: das alte Geisterbesatzung-System
-        // (ghost_crew-Upgrade, hier erzeugt) ist abgebaut -- der Nekromant-
-        // Neubau folgt in Phase 6/7 dieses Auftrags mit eigener Zielwahl und
-        // eigenem Spawn-Mechanismus (killTank() bleibt der richtige Funnel
-        // dafuer, s. Phase 6).
+        // Nekromant: Klassenidentitaet (Upgradepool-v2 Phase 6). Ein Kill
+        // durch den SPIELER als Nekromant hat eine Chance, den getoeteten
+        // Gegner als Geisterpanzer wiederzubeleben; ein Kill durch einen
+        // bereits vorhandenen Geist hat eine kleinere Chance (Werte in
+        // data/balance.json: ghost.spawnChance). Ueber den Seed-RNG
+        // (state.rng), nie Math.random -- der Run bleibt deterministisch.
+        // Limit OHNE Verdraengung: am Deckel passiert einfach nichts (kein
+        // Wurf, kein Verbrauch) -- dieselbe Regel wie bei der Geisterbombe
+        // (tank.js: useSecondary()). createGhost() ist weiterhin die alte,
+        // vom Ziel geerbte Fabrik (Interimswert, s. ghost.js-Kopfkommentar)
+        // -- der Nekromant-Neubau (Phase 7) ersetzt sie durch feste
+        // Basiswerte, ohne dass sich an dieser Aufrufstelle etwas aendert.
+        const killer = meta?.killer;
+        const gcfg = state.data.balance.ghost || {};
+        let spawnChance = 0;
+        if (killer === state.player && pc.necromancer) spawnChance = gcfg.spawnChance?.necro ?? 0;
+        else if (killer?.isGhost) spawnChance = gcfg.spawnChance?.ghost ?? 0;
+        if (spawnChance > 0 && state.ghosts.length < (gcfg.maxActive ?? 3) && state.rng() < spawnChance) {
+          state.ghosts.push(createGhost(tank, state.data.balance));
+        }
       }
     },
     // Statuseffekt auftragen (Phase 5). In dieser Phase der EINZIGE Weg,
@@ -776,7 +794,9 @@ export function stepState(state, cmd, dt) {
     const wasStunned = t.stunTimer > 0;
     t.stunTimer = Math.max(0, t.stunTimer - dt);
     if (sabotageR && wasStunned && t.stunTimer <= 0 && t !== state.player) {
-      explodeAt(state, t.x, t.y, sabotageR, state.player);
+      // Kill-Zuordnung (Phase 6): die Saboteur-Transformation gehoert dem
+      // Spieler, auch wenn sie zeitversetzt von der Betaeubung ausloest.
+      explodeAt(state, t.x, t.y, sabotageR, state.player, { killer: state.player });
       continue;
     }
     if (t.protect > 0) t.protect = Math.max(0, t.protect - dt);
@@ -1061,6 +1081,12 @@ export function stepState(state, cmd, dt) {
           // applyTypeEffects()/applyStatus() sie beim Auftragen kennt.
           lightningBonus: b.owner?.cfg?.lightningBonusTargets || 0,
           ownerCfg: b.owner?.cfg || null,
+          // Kill-Zuordnung (Upgradepool-v2 Phase 6): der Schuetze -- killTank()
+          // liest das fuer die Nekromant-Spawnchance. Ueber applyTypeEffects()s
+          // {...meta}-Spread erbt auch eine daraus entstehende Blitzkette
+          // (damagetypes.js) denselben killer, ohne dass diese Datei etwas
+          // davon wissen muss.
+          killer: b.owner,
         };
         state.applyDamage(t, schaden, cause, trefferMeta);
         // Upgradepool-v2 Phase 5: der Verursacher zieht das Ziel-Scoring
@@ -1140,6 +1166,7 @@ export function stepState(state, cmd, dt) {
       explodeAt(state, b.x, b.y, b.explosionRadius, undefined, {
         code: own ? 'own_bullet' : 'enemy_bullet',
         enemyType: own ? null : b.owner?.type || null,
+        killer: b.owner, // Kill-Zuordnung (Phase 6)
       }, explDmg);
       // Schrapnell: Splitterkugeln in alle Richtungen.
       const n = b.owner?.cfg?.schrapnell;

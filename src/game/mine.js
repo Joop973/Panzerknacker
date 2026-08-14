@@ -125,7 +125,13 @@ function explode(mine, state) {
   }
   // Todesursache fuer die Telemetrie: eigene vs. gegnerische Mine.
   const own = mine.owner === state.player;
-  const meta = { code: own ? 'own_mine' : 'enemy_mine', enemyType: own ? null : mine.owner?.type || null };
+  // killer (Upgradepool-v2 Phase 6): Kill-Zuordnung fuer die Nekromant-
+  // Spawnchance (state.js: killTank()) -- eine Mine kennt ihren Leger.
+  const meta = {
+    code: own ? 'own_mine' : 'enemy_mine',
+    enemyType: own ? null : mine.owner?.type || null,
+    killer: mine.owner,
+  };
   // Phase 12 (Sprengstoff-Topf): auch Minen skalieren mit explosionDamageMult
   // des Legers.
   const mineDmg =

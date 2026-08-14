@@ -1,20 +1,24 @@
-// Geisterpanzer (PLAN.md v3, Phase 7) -- DERZEIT UNBENUTZT.
+// Geisterpanzer (PLAN.md v3, Phase 7) -- seit Upgradepool-v2 Phase 6 wieder
+// AKTIV, aber weiterhin ein INTERIMSSYSTEM.
 //
-// Upgradepool-v2 Phase 4: der einzige Erzeuger (state.js: killTank()s
-// ghost_crew-Zweig) ist abgebaut, `createGhost()` wird also von nirgendwo
-// mehr aufgerufen. Das gesamte Modul wird von Upgradepool-v2 Phase 7
-// ERSETZT (nicht ergaenzt) durch den Nekromant-Neubau -- bis dahin bleibt
-// es als totes Vorbild stehen (state.ghosts bleibt in der Zwischenzeit
-// immer leer, updateGhosts() iteriert dann ueber nichts).
+// Upgradepool-v2 Phase 4 hatte den einzigen Erzeuger (killTank()s
+// ghost_crew-Zweig) abgebaut. Phase 6 haengt zwei NEUE Erzeuger ein --
+// state.js: killTank() (Spawnchance beim Kill: 50 % durch den Nekromanten,
+// 33 % durch einen Geist) und tank.js: useSecondary()s Geisterbombe (sofort,
+// kein Wurf) -- OHNE dieses Modul selbst zu aendern: createGhost() blieb seit
+// Phase 5 bereits panzerkompatibel. Anhang B (Phase 7) ERSETZT dieses ganze
+// Modul trotzdem noch durch eine eigene, feste Basiseinheit (60 LP, 8
+// Schaden, kein Stat-Erbe vom Ziel) -- die aktuelle "erbt die cfg des
+// Ursprungspanzers"-Logik unten bleibt bis dahin ein bewusster Interimswert.
 //
-// Alte Beschreibung (nicht mehr zutreffend, nur zur Einordnung): getoetete
-// Gegner kaempften mit dem ghost_crew-Upgrade als durchscheinender
-// Verbuendeter weiter: eigenes state.ghosts-Array (kein Eintrag in
-// state.tanks) -- das erfuellt "blockieren keine Kugeln, sind nicht
-// toetbar" automatisch, weil die Geschoss-vs-Panzer-Treffer-Schleife in
-// state.js nur ueber state.tanks laeuft. Ein Geist behaelt die aufgeloeste
-// cfg seines Ursprungs-Panzers (Tempo, Geschossgeschwindigkeit, Abpraller,
-// Waffenart) -- er kaempft weiter, wie er lebte.
+// Alte Beschreibung (weiterhin zutreffend fuer die MECHANIK, nicht mehr fuer
+// den Ausloeser): ein Geist kaempft als durchscheinender Verbuendeter weiter
+// -- eigenes state.ghosts-Array (kein Eintrag in state.tanks) erfuellt
+// "blockieren keine Kugeln, sind nicht toetbar (fuer den Gegner)" automatisch,
+// weil die Geschoss-vs-Panzer-Treffer-Schleife in state.js nur ueber
+// state.tanks laeuft. Ein Geist behaelt die aufgeloeste cfg seiner Vorlage
+// (Tempo, Geschossgeschwindigkeit, Abpraller, Waffenart) -- er kaempft
+// weiter, wie sie lebte.
 
 import { angleDiff, turnToward, clearLine } from './ai.js';
 import { resolveCircleWalls } from './collision.js';
