@@ -2976,6 +2976,15 @@ Panzer, die zum Geist werden) und **Sprengpanzer** (`c_blast`).
   fünftes rotes Sprite wurde auf Nutzerwunsch **weggelassen** (kein passender
   `t_red`-Typ). Nur Asset-Austausch, kein Code (`t_*` sind längst in
   `TANK_TYPES`).
+- **Nachtrag (Gegner-Sprites Rest, `v110`):** fünf weitere Grafiken ersetzen
+  `t_white`/`t_pink`/`t_purple`/`t_teal`/`t_grey` — **damit haben alle neun
+  Gegnertypen ein eigenes Sprite** (`t_armored`/`t_prism` teilen sich weiter
+  `t_grey`/`t_teal` über `SPRITE_ALIAS` + Panzerungs-Overlay). Der **weisse**
+  Panzer stand auf weissem Grund → der randverbundene Flood-Fill hätte den
+  fast weissen Body mitgefressen; deshalb pro-Sprite-Schwelle `LIGHT_THRESH`
+  (nur Min-Kanal > 250 = Hintergrund, statt 200), sodass nur Reinweiss
+  entfernt wird und `binary_fill_holes` die inneren weissen Glanzpunkte
+  schliesst. Sonst gleiche Pipeline (Loch = Turmdrehpunkt).
 
 ### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 0 (Ist-Abgleich, keine Codeänderung)
 Bericht vor Phase 1 abgeliefert und vom Nutzer freigegeben. Kernbefunde: alle
@@ -3341,7 +3350,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v109`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v110`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
