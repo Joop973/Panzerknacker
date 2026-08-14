@@ -1,4 +1,5 @@
-// Upgrade-Auswahlpool (Phase 2, erweitert in Phase 3).
+// Upgrade-Auswahlpool (Phase 2, erweitert in Phase 3 der Schrott-Waehrung UND
+// in Upgradepool-v2 Phase 3, Synergiegewichtung -- zwei verschiedene "Phase 3").
 //
 // Zieht die Angebote fuer den Upgrade-Screen aus data/upgrades.json unter
 // Beachtung des Schemas (tag/rarity/maxStacks/requires/minRoom/tags[]).
@@ -15,9 +16,14 @@
 //  - Verbannte ids (Phase 3, Schrott-Aktion) werden uebersprungen.
 //  - Reichen die gueltigen Karten nicht fuer N, wird mit stat-Fallback
 //    ("+1 Leben") aufgefuellt, statt zu crashen.
+//  - Upgradepool-v2 Phase 3: Karten mit passenden tags[] (Synergie-Tags aus
+//    Phase 2) werden anhand von opts.synergyTags (run.synergyTags) hoeher
+//    gewichtet -- gedeckelt, schliesst nie eine Karte aus, s. makeSynergyWeight().
 //
 // Determinismus: verbraucht ausschliesslich den uebergebenen rng-Strom
-// (run.genRng), damit derselbe Seed denselben Verlauf ergibt.
+// (run.genRng), damit derselbe Seed denselben Verlauf ergibt. Die Synergie-
+// gewichtung aendert NICHTS an der Anzahl der rng()-Aufrufe (weiterhin genau
+// einer je gezogener Karte in weightedPick()).
 
 const EXCLUDED_TAGS = new Set(['weapon', 'elite']);
 
@@ -43,7 +49,11 @@ const WEAPON_ALLOWLIST = new Set(['doppelrohr', 'flak']);
 // ueber die SUMME der Element-Gewichte statt der Kartenzahl, so bleibt die
 // Rarity-Verteilung (60/30/10) exakt erhalten und nur INNERHALB einer Stufe
 // erscheint das Zweitelement halb so oft. Ohne elementWeight (alle 1) ist die
-// Summe gleich der Kartenzahl -> identisch zum Phase-10-Verhalten.
+// Summe gleich der Kartenzahl -> identisch zum Phase-10-Verhalten. Upgradepool-
+// v2 Phase 3 (Synergiegewichtung) nutzt denselben Parameter fuer einen mit
+// elementWeight MULTIPLIZIERTEN Faktor (s. makeCombinedWeight) -- die
+// Tier-Normierung gilt dadurch automatisch auch fuer die Synergie, ohne dass
+// diese Funktion selbst etwas von Synergie wissen muss.
 export function weightedPick(list, rng, weights, elementWeight = () => 1) {
   const tierSum = {};
   for (const d of list) tierSum[d.rarity] = (tierSum[d.rarity] || 0) + elementWeight(d);
@@ -68,12 +78,46 @@ function makeElementWeight(opts) {
   return (d) => (d.damageType === second ? secondWeight : 1);
 }
 
+// Upgradepool-v2 Phase 3: Synergiegewichtung. opts.synergyTags ist die
+// laufende Tag-Bilanz der GEWAEHLTEN Karten (run.synergyTags, ueber tags[] --
+// die eigenstaendige zweite Achse aus Phase 2, NICHT dasselbe wie
+// run.tagCounts/die Hauptkategorie `tag`, die weiterhin nur die
+// Transformationen speist). Eine Karte mit passenden tags[] bekommt einen
+// Gewichtsbonus, der mit der Anzahl bereits gewaehlter Karten desselben Tags
+// waechst -- gedeckelt (balance.upgrades.synergyCap), damit KEINE Karte durch
+// Synergie ausgeschlossen wird (der Faktor ist immer >= 1, nie 0). Karten ohne
+// tags[] bekommen keinen Bonus (Faktor 1) -- unverändertes Verhalten wie vor
+// Phase 3.
+function makeSynergyWeight(opts) {
+  const tally = opts.synergyTags;
+  if (!tally) return () => 1;
+  const cap = opts.balance?.upgrades?.synergyCap ?? 2.0;
+  const step = opts.balance?.upgrades?.synergyStep ?? 0.5;
+  return (d) => {
+    if (!d.tags || !d.tags.length) return 1;
+    let matches = 0;
+    for (const t of d.tags) matches += tally[t] || 0;
+    return matches > 0 ? Math.min(cap, 1 + matches * step) : 1;
+  };
+}
+
+// Element- und Synergiegewicht MULTIPLIZIEREN sich zu einem einzigen Faktor
+// je Karte -- weightedPick() normiert diesen Faktor pro Seltenheitsstufe
+// (s. Kopfkommentar dort), die Rarity-Verteilung bleibt dadurch unangetastet,
+// egal wie stark Element/Synergie eine einzelne Karte gewichten.
+function makeCombinedWeight(opts) {
+  const elementWeight = makeElementWeight(opts);
+  const synergyWeight = makeSynergyWeight(opts);
+  return (d) => elementWeight(d) * synergyWeight(d);
+}
+
 function makeOffer(def, chosen) {
   return {
     id: def.id,
     name: def.name,
     description: def.description,
     tag: def.tag,
+    tags: def.tags || [],
     rarity: def.rarity,
     level: (chosen[def.id] || 0) + 1,
     maxStacks: def.maxStacks,
@@ -169,7 +213,7 @@ export function rollOffers(upgradesData, opts) {
   const weights = balance.rarity;
   const n = count || upgradesData.offersPerScreen || 3;
 
-  const elementWeight = makeElementWeight(opts);
+  const combinedWeight = makeCombinedWeight(opts);
   const offers = [];
   const usedKeys = new Set();
   let pool = buildCandidates(upgradesData, opts).slice();
@@ -178,7 +222,7 @@ export function rollOffers(upgradesData, opts) {
     // haben denselben Tag bzw. dieselbe Seltenheit).
     const eligible = ignoreTagRule ? pool : pool.filter((d) => !usedKeys.has(dedupeKey(d)));
     if (!eligible.length) break; // kein neuer Tag/keine neue Signaturkarte mehr moeglich
-    const pick = weightedPick(eligible, rng, weights, elementWeight);
+    const pick = weightedPick(eligible, rng, weights, combinedWeight);
     offers.push(makeOffer(pick, chosen));
     usedKeys.add(dedupeKey(pick));
     pool = pool.filter((d) => d.id !== pick.id);
@@ -202,5 +246,5 @@ export function drawOne(upgradesData, opts, avoidTags, avoidIds) {
     (d) => !at.has(d.tag) && !ai.has(d.id),
   );
   if (!eligible.length) return fallbackOffer(upgradesData);
-  return makeOffer(weightedPick(eligible, rng, weights, makeElementWeight(opts)), chosen);
+  return makeOffer(weightedPick(eligible, rng, weights, makeCombinedWeight(opts)), chosen);
 }

@@ -79,9 +79,11 @@
       "rerollElement": 4
     }
   },
-  "_comment_upgrades": "UMBAUPLAN-LP Phase 17: secondElementWeight ist die Gewichtung, mit der die Karten des zufaelligen Zweitelements gegenueber dem Primaerelement in den Angeboten erscheinen (0.5 = halb so oft). Universelle Karten (Kernpool, Altkarten ohne damageType) bleiben voll gewichtet.",
+  "_comment_upgrades": "UMBAUPLAN-LP Phase 17: secondElementWeight ist die Gewichtung, mit der die Karten des zufaelligen Zweitelements gegenueber dem Primaerelement in den Angeboten erscheinen (0.5 = halb so oft). Universelle Karten (Kernpool, Altkarten ohne damageType) bleiben voll gewichtet. Upgradepool-v2 Phase 3: synergyStep ist der Gewichtsaufschlag PRO bereits gewaehlter Karte mit einem passenden tags[]-Eintrag (0.5 = +50 % je Treffer, mehrere passende Tags summieren sich), synergyCap deckelt den Gesamtfaktor (2.0 = hoechstens doppelt so wahrscheinlich) -- der Faktor ist immer >= 1, schliesst also nie eine Karte aus.",
   "upgrades": {
-    "secondElementWeight": 0.5
+    "secondElementWeight": 0.5,
+    "synergyStep": 0.5,
+    "synergyCap": 2.0
   },
   "shop": {
     "cardChoices": 5
