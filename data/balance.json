@@ -88,9 +88,8 @@
   "shop": {
     "cardChoices": 5
   },
+  "_comment_ghost": "Upgradepool-v2 Phase 4: duration/killBonus (altes Geisterbesatzung-System) sind abgebaut -- maxActive bleibt vorerst stehen, der Nekromant-Neubau (Phase 6/7 dieses Auftrags) definiert Limit und Lebensdauer neu.",
   "ghost": {
-    "duration": 3,
-    "killBonus": 1,
     "maxActive": 4
   },
   "boss": {

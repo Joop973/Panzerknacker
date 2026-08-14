@@ -75,7 +75,7 @@
       "searchAngles": 8
     }
   },
-  "_comment_classes": "UMBAUPLAN-LP Phase 9: die zehn spielbaren Klassen in types (player:true). cfg.js zieht dann Magazin/Deckel/Kugeltempo aus den Player-Defaults in balance.json, statt sie wie frueher fest an type==='player' zu haengen (der Blocker der Phase). speedMult skaliert das Basistempo ('normal'), crit die Grundkritchance, damageType das Element (elementare Klassen schiessen es von Anfang an). Die Passiv-Felder (classMineRadiusMult/lightningBonusTargets/fire-|poisonDurationMult/frostSlowBonus/bonusRicochets/scrapDamagePer100/reviveChance/builtHpMult) werden in cfg.js als Whitelist durchgereicht und an genau einer Stelle ausgewertet. 'player' IST die Standard-Klasse (Default-starterTank) -- so bleiben Altpfade, die resolveCfg(data,'player') rufen, gueltig.",
+  "_comment_classes": "UMBAUPLAN-LP Phase 9: die zehn spielbaren Klassen in types (player:true). cfg.js zieht dann Magazin/Deckel/Kugeltempo aus den Player-Defaults in balance.json, statt sie wie frueher fest an type==='player' zu haengen (der Blocker der Phase). speedMult skaliert das Basistempo ('normal'), crit die Grundkritchance, damageType das Element (elementare Klassen schiessen es von Anfang an). Die Passiv-Felder (classMineRadiusMult/lightningBonusTargets/fire-|poisonDurationMult/frostSlowBonus/bonusRicochets/scrapDamagePer100/builtHpMult) werden in cfg.js als Whitelist durchgereicht und an genau einer Stelle ausgewertet. 'player' IST die Standard-Klasse (Default-starterTank) -- so bleiben Altpfade, die resolveCfg(data,'player') rufen, gueltig. Upgradepool-v2 Phase 4: das fruehere Nekromant-Passiv reviveChance ist abgebaut (Neubau folgt in Phase 6/7 dieses Auftrags).",
   "types": {
     "player": {
       "player": true,
@@ -182,7 +182,7 @@
     "c_necro": {
       "player": true,
       "label": "Nekromant",
-      "desc": "25 % Chance, einen tödlichen Treffer zu überleben (volle LP).",
+      "desc": "Ausgewogene Grundwerte, aktuell ohne eigenes Passiv.",
       "maxHp": 95,
       "damage": 8,
       "speed": "normal",
@@ -190,8 +190,7 @@
       "crit": 0.05,
       "ricochets": 1,
       "mines": 2,
-      "weapon": "bullet",
-      "reviveChance": 0.25
+      "weapon": "bullet"
     },
     "c_engineer": {
       "player": true,

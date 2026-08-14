@@ -81,7 +81,6 @@ export function resolveCfg(data, type) {
     poisonDurationMult: t.poisonDurationMult ?? 1, // Radioaktiv: Giftdauer
     frostSlowBonus: t.frostSlowBonus ?? 0, // Frostpanzer: staerkere Verlangsamung
     scrapDamagePer100: t.scrapDamagePer100 ?? 0, // Schrottpanzer: +Schaden je 100 Schrott (pro Raum gebacken)
-    reviveChance: t.reviveChance ?? 0, // Nekromant: toedlichen Treffer ueberleben (state.js: applyDamage)
     builtHpMult: t.builtHpMult ?? 1, // Ingenieur: Gebautes haelt mehr aus (tank.js: placeTrapWall)
     // Punkte, die der Spieler-Schild als Absorber auffaengt (Phase 8).
     // Konstante aus balance.json, damit createTank() die shieldHp ohne
@@ -333,8 +332,6 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   // Karte wird beim Wechsel nicht zurueckgesetzt), nur equippedGadget
   // bestimmt das aktive. null = kein Gadget ausgeruestet (Startzustand).
   cfg.gadget = equippedGadget || null;
-  // Geisterbesatzung (Phase 7): einfacher Ein/Aus-Schalter, kein Stufenwert.
-  cfg.ghostCrew = l('ghost_crew') > 0;
 
   // Kernpool (UMBAUPLAN-LP Phase 10): 30 klassenunabhaengige Stat-Karten mit
   // je einem `core`-Effektobjekt. EINE generische Schleife statt 30 Zweige --
@@ -380,14 +377,6 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     // scrapDamagePer100 -- applyScrapDamage() (nach applyUpgrades in state.js)
     // liest den erhoehten Wert und skaliert den Schaden je 100 Schrott.
     if (c.scrapDamageBonus) cfg.scrapDamagePer100 = (cfg.scrapDamagePer100 || 0) + c.scrapDamageBonus * lvl;
-    // UMBAUPLAN-LP Phase 26 (Signaturtopf Nekromant): staerkere Wiederbelebung
-    // (additiv zum Klassen-Passiv reviveChance, in state.js tryRevive gelesen);
-    // Geister beschwoeren (grantGhostCrew wie das ghost_crew-Upgrade) und laenger
-    // halten (ghostDurationBonus, in killTank an createGhost gereicht -- Qualitaet
-    // statt Zahl, der Deckel balance.ghost.maxActive bleibt).
-    if (c.reviveChanceBonus) cfg.reviveChance = (cfg.reviveChance || 0) + c.reviveChanceBonus * lvl;
-    if (c.grantGhostCrew) cfg.ghostCrew = true;
-    if (c.ghostDurationBonus) cfg.ghostDurationBonus = (cfg.ghostDurationBonus || 0) + c.ghostDurationBonus * lvl;
     // UMBAUPLAN-LP Phase 27 (Signaturtopf Ingenieur): staerkere Sperrmauer.
     // Additiv zum Klassen-Passiv builtHpMult -- tank.js: placeTrapWall() liest
     // den erhoehten Faktor und baut eine haltbarere Mauer.
