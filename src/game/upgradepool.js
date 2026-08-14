@@ -3,9 +3,12 @@
 // Zieht die Angebote fuer den Upgrade-Screen aus data/upgrades.json unter
 // Beachtung des Schemas (tag/rarity/maxStacks/requires/minRoom).
 // Regeln:
-//  - N Karten (Standard 3), NIE zwei mit demselben Tag.
-//  - Seltenheitsgewichte aus balance.json (rarity.common/rare/legendary).
-//  - Legendaries erst ab balance.legendary.minRoom (global).
+//  - N Karten (Standard 3), NIE zwei mit demselben Tag (Ausnahme: Signatur-
+//    karten untereinander, s. buildCandidates()).
+//  - Seltenheitsgewichte aus balance.json (rarity.common/rare/epic/unique/
+//    legendary, Upgradepool-v2 Phase 1: fuenf statt drei Stufen).
+//  - epic/unique/legendary zusaetzlich erst ab balance.rarityGates[stufe]
+//    .minRoom (global, ersetzt das fruehere legendary.minRoom).
 //  - Erreichte maxStacks / unerfuellte requires / zu frueher Raum -> raus.
 //  - Tags `weapon` und `elite` sind hier ausgeschlossen, bis auf die Karten
 //    in WEAPON_ALLOWLIST (Phase 18: doppelrohr, flak).
@@ -96,10 +99,13 @@ function fallbackOffer(upgradesData) {
 // Zusatz-Optionen (Phase 4, Elite-/Treasure-Belohnung):
 //   includeTag     -- nur dieser Tag (umgeht die EXCLUDED_TAGS, z. B. 'elite')
 //   onlyRarity     -- nur diese Seltenheit (z. B. 'legendary' fuer Treasure)
-//   bypassRoomGate -- minRoom + legendary.minRoom ignorieren
+//   bypassRoomGate -- minRoom + rarityGates ignorieren
 function buildCandidates(upgradesData, opts) {
   const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate, elements, starterTank } = opts;
-  const legMinRoom = balance.legendary?.minRoom ?? 0;
+  // Upgradepool-v2 Phase 1: generischer Ersatz fuer das fruehere einzelne
+  // legendary.minRoom -- jede Stufe in rarityGates bekommt ihr eigenes
+  // globales Mindestraum-Gate (common/rare haben keinen Eintrag -> kein Gate).
+  const rarityGates = balance.rarityGates || {};
   const bannedSet = banned || new Set();
   const defs = upgradesData.upgrades;
   const candidates = [];
@@ -133,7 +139,8 @@ function buildCandidates(upgradesData, opts) {
     if ((chosen[id] || 0) >= def.maxStacks) continue;
     if (!bypassRoomGate) {
       if (roomIndex < (def.minRoom || 1)) continue;
-      if (def.rarity === 'legendary' && roomIndex < legMinRoom) continue;
+      const gate = rarityGates[def.rarity]?.minRoom;
+      if (gate && roomIndex < gate) continue;
     }
     if (def.requires && def.requires.some((req) => (chosen[req] || 0) <= 0)) continue;
     candidates.push(def);

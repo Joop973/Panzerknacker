@@ -48,13 +48,18 @@
     "chainDelay": 0.15,
     "warningTime": 0.5
   },
+  "_comment_rarity": "UMBAUPLAN-Upgradepool-v2 Phase 1: fuenf statt drei Seltenheiten. Gewichte gelten NUR unter den Stufen, die im aktuellen Angebotspool ueberhaupt vertreten sind (weightedPick normiert pro Stufe, s. upgradepool.js) -- ein frueher Raum ohne freigeschaltete legendary-Karten verteilt die 5 automatisch auf common/rare/epic/unique um, keine Sonderbehandlung noetig. rarityGates loest das alte legendary.minRoom ab: common/rare haben keinen globalen Deckel (nur das per-Karte minRoom zaehlt), epic/unique/legendary zusaetzlich einen globalen Mindestraum.",
   "rarity": {
-    "common": 60,
-    "rare": 30,
-    "legendary": 10
+    "common": 45,
+    "rare": 25,
+    "epic": 15,
+    "unique": 10,
+    "legendary": 5
   },
-  "legendary": {
-    "minRoom": 5
+  "rarityGates": {
+    "epic": { "minRoom": 3 },
+    "unique": { "minRoom": 6 },
+    "legendary": { "minRoom": 9 }
   },
   "scrap": {
     "perRoom": [

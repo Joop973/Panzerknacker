@@ -6,7 +6,14 @@
 // Der Screen rendert sich nach jeder Aktion neu; erst die Kartenwahl
 // schliesst ihn.
 
-const RARITY = { common: 'Gewöhnlich', rare: 'Selten', legendary: 'Legendär' };
+// Upgradepool-v2 Phase 1: fuenf statt drei Seltenheitsstufen.
+const RARITY = {
+  common: 'Gewöhnlich',
+  rare: 'Selten',
+  epic: 'Episch',
+  unique: 'Einzigartig',
+  legendary: 'Legendär',
+};
 
 export function createUpgradeScreen() {
   const el = document.createElement('div');
