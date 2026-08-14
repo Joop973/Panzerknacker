@@ -256,10 +256,13 @@ abbauen) ist gebaut** — die `ghost_crew`-Karte, `cfg.ghostCrew`/
 `grantGhostCrew`/`ghostDurationBonus`, `state.js: tryRevive()` und das
 Nekromant-Passiv `reviveChance` sind vollständig entfernt; `src/game/ghost.js`
 bleibt als vorerst unbenutztes Modul stehen (Neubau folgt in Phase 6/7).
-**Nächste Sitzung: Phase 5 (Zielsystem der Gegner-KI).** Verbleibend sonst
-nur noch manuelle/optionale Punkte (s. To-do-Liste unten): der
-Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur nach echtem Spielgefühl) und
-die Telemetrie-Auswertung echter Runs.
+**Phase 5 (Zielsystem der Gegner-KI) ist gebaut** — Gegner werten jetzt
+periodisch aus, wen sie angreifen (Spieler oder ein Geist), statt hart auf
+`state.player` zu zielen; Details im eigenen Abschnitt unten. **Nächste
+Sitzung: Phase 6 (Nekromant: Klassenidentität — Geisterbombe, Spawnchancen,
+`meta.killer`).** Verbleibend sonst nur noch manuelle/optionale Punkte (s.
+To-do-Liste unten): der Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur
+nach echtem Spielgefühl) und die Telemetrie-Auswertung echter Runs.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -3223,6 +3226,97 @@ Systems entfernt, damit nie zwei Geistersysteme gleichzeitig existieren.
   einen einzigen Geist und ohne Absturz (deckt Testschritt 5 „bis zum Boss
   spielen" ab). Playwright-Smoke im echten Browser bestätigt dasselbe.
 
+### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 5 (Zielsystem der Gegner-KI) — gemergt
+Voraussetzung für den Nekromant-Neubau (Phase 6/7): Gegner werten jetzt
+periodisch aus, WEN sie angreifen (Spieler oder ein Geist), statt hart auf
+`state.player` zu zielen. Bewertung über eine **effektive Distanz** (kleiner
+= attraktiver, keine echte Aggro-Tabelle), Werte in `data/balance.json:
+aggro` + `boss.fixate`.
+- **`src/game/ai.js`**: `resolveTarget(tank, state)` liest nur das zuletzt
+  von `pickTarget()` gesetzte `tank.ai.target` (billig, jeden Frame lesbar);
+  `pickTarget()` bewertet neu (Naehe, `ghostThreatMult` macht Geister bei
+  gleicher Distanz unattraktiver, `damageThreatPx`/`damageThreatDecayS`
+  ziehen das Ziel nach einem Treffer kurz an, `switchHysteresisPct`
+  verhindert Zappeln zwischen fast gleich attraktiven Zielen);
+  `updateTargeting(state, dt)` throttled das auf `reevaluateHz` je Panzer
+  (eigener Timer, nicht synchron) und laesst mirrorBoss/phalanx bewusst aus.
+  `registerThreat(tank, source, state)` (aus der Treffer-Schleife in
+  `state.js`) ist ein No-op fuer den Spieler.
+- **Sichtlinien-Fallback mit Gedaechtnis (`ai.avoidTarget`)**: verliert der
+  Panzer laenger als `noTargetFallbackS` die Sichtlinie zu seinem Ziel,
+  faellt er auf den Spieler zurueck. **Ohne Gedaechtnis waere das reine
+  Zappeln**: die naechste Neubewertung haette den (weiterhin per Rohdistanz
+  naeheren, nur eben unerreichbaren) alten Kandidaten sofort wieder gewaehlt
+  — gemessen, kein hypothetischer Grenzfall. `avoidTarget` schliesst genau
+  diesen einen Kandidaten aus der Bewertung aus, bis er (per live
+  `clearLine()`-Check bei jeder Neubewertung) wieder sichtbar ist.
+- **`ai_drives.js`/`ai_turrets.js`**: `sapperDrive`/`hunterDrive`/
+  `siegerDrive`/`roleTurret`/`solveBounce` lesen jetzt `resolveTarget(tank,
+  state)` statt `state.player` direkt. `targetInSight()` (früher
+  `playerInSight`) nimmt das Ziel jetzt als Parameter. Deckungswahrnehmung
+  (`isPlayerAiming`/`updateCoverPerception`, Phase 16) bleibt bewusst
+  spielerbezogen (Auftrag: "kein Umbau ausserhalb des Zielsystems").
+- **Bosse (`bossai.js`) ueberschreiben `tank.ai.target` selbst** und sind
+  deshalb explizit von der generischen `updateTargeting()`-Schleife
+  ausgenommen. `resolveBossTarget()`/`resolvePhalanxTarget()` wechseln
+  zeitgesteuert (kein RNG, `state.time % cycle`) zwischen Fixierung auf den
+  Spieler (`onPlayerS`, ignoriert Geister) und freier Zielwahl
+  (`onGhostsS`). **Umsetzungsfund:** die freie Phase rief zunaechst nur
+  `resolveTarget()` auf — das liest aber nur den *zuletzt gesetzten* Wert
+  zurueck, ohne selbst neu zu bewerten. Da Bosse von der generischen
+  Bewertungsschleife ausgenommen sind, haette „freie Zielwahl" nie einen
+  Geist entdeckt und waere fuer immer beim initialen Spieler-Fallback
+  haengengeblieben. Fix: `pickTarget()` (jetzt exportiert) wird in der
+  freien Phase direkt aufgerufen, danach erst `resolveTarget()` gelesen.
+  **Phalanx** erzwingt zusaetzlich raeumlich `minPlayerShare` der fuenf
+  Panzer immer auf den Spieler (welche das sind wandert deterministisch
+  ueber `phalanxIndex` + Rotationstakt). Der **Reaktorkern bekommt bewusst
+  keine Sonderregel** (Geister koennen das Generator-Raetsel nicht lösen) —
+  laeuft normal ueber `updateTargeting()`, per Test bewacht.
+  `tank.fixatedOnPlayer` (neu, Renderer: pulsierendes rotes Turmgluehen)
+  spiegelt die reine **Zeitfensterlage**, nicht ob `resolveTarget()` in der
+  freien Phase zufaellig ebenfalls den Spieler waehlt — sonst waere das
+  sichtbare Signal bei fehlenden Geistern dauerhaft (und damit bedeutungslos)
+  an. `t.aimingAtPlayer` (Gefahrensinn, Phase 18 Welle 3) ist jetzt in
+  `state.js` UND `bossai.js` nur noch wahr, wenn das aufgeloeste Ziel
+  wirklich der Spieler ist.
+- **`ghost.js` wird panzerkompatibel gemacht** (ohne die Geist-Erzeugung
+  selbst wieder zu aktivieren — das bleibt Phase 6/7): `createGhost()`
+  liefert jetzt `alive`/`vx`/`vy`/`hp` statt nur `dead`, `updateGhosts()`
+  berechnet `vx`/`vy` wie `tank.js: moveTank()` (Vorhaltezielen kann einen
+  Geist damit als Ziel behandeln) und entfernt einen Geist bei `hp<=0` oder
+  Ablauf der Lebenszeit. `hp: tank.cfg.maxHp` ist ein **Interimswert** (Anhang
+  B/Phase 7 will feste, vom getoeteten Gegner unabhaengige Basiswerte).
+- **`state.js`**: neue, kleine, eigene Kollisionsschleife „Gegner-Geschosse
+  gegen Geister" (bewusst NICHT in die grosse Panzer-Trefferschleife
+  gepresst — deren Panzerungs-/Krit-/Kopfschuss-Logik ist auf echte Panzer
+  zugeschnitten). Nur gegnerische Kugeln sind gefaehrlich (Spieler-/
+  Geister-eigene Kugeln ignorieren Geister); minimal, kein `applyDamage()`/
+  `killTank()` — der Nekromant-Neubau (Phase 7) baut die echten
+  Todes-Hooks. `registerThreat(t, b.owner, state)` haengt in der
+  bestehenden Treffer-Schleife.
+- **Nebenfund (Datenort-Bug):** `aggro` wurde zunächst nach
+  `state.data.ai.aggro` verdrahtet gelesen — das ist `tanks.json`s `ai`-Block,
+  nicht `balance.json`. Die Werte aus `balance.json` wären dadurch nie
+  gelesen worden (nur die Fallback-Defaults hätten gegriffen). Fix vor dem
+  Testen entdeckt und behoben: `state.data.balance.aggro`.
+- **Neue Dauertests** (Abschnitt 41, Gegenprobe für jeden Kernpunkt
+  bestanden — inkl. des `avoidTarget`-Zappel-Fixes und des Datenort-Bugs):
+  Grundmechanismus (kein Geist → Spieler; naher Geist gewinnt),
+  `ghostThreatMult` (Geist real näher, aber effektiv weiter — bewusst KEINE
+  exakte Distanzgleichheit, die wäre über Einfüge-Reihenfolge + „echt
+  kleiner als" auch ohne Mult zufällig grün geblieben, per Gegenprobe
+  gefunden), Hysterese (knapper Vorteil bleibt, deutlicher setzt sich
+  durch), Bedrohungs-Anziehung + Abklingen, `registerThreat`-Spieler-No-op,
+  Sichtlinien-Fallback (bleibt stabil auf dem Spieler statt zu zappeln),
+  Integration (Fahr-/Turmverhalten steuert wirklich zum aufgelösten Ziel),
+  `aimingAtPlayer` über die volle `stepState()`-Pipeline, Boss-Fixierung
+  (Spiegel: Zeitfenster + echte Geist-Entdeckung in der freien Phase;
+  Phalanx: räumliche Mindestquote + Rotation; Reaktor: keine Sonderregel),
+  Geist-Objektform + Bewegung + hp-Entfernung, Geschoss-Kollision (Gegner
+  trifft, Spieler/Geist nie, tödlicher Treffer entfernt), Determinismus
+  (kein zusätzlicher `rng()`-Aufruf).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`sig_necro_geisterlegion` ist wirkungslos (Upgradepool-v2 Phase 4)**:
       `core: {}`, weil ihre einzigen zwei Effekte (`grantGhostCrew`,
@@ -3313,12 +3407,20 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   werden gezaehlt, nicht heruntergezaehlt (bildratenunabhaengig). Werte in
   `data/status.json`. Haengt bis Phase 6 an keiner Quelle — nur
   `state.applyStatus()` (Debugtasten 1/2/3 bei `?debug=1`).
-- `src/game/ghost.js` — Geisterpanzer (Phase 7): `createGhost`,
-  `updateGhosts` (eigenes `state.ghosts`-Array, kein Eintrag in `state.tanks`).
+- `src/game/ghost.js` — Geisterpanzer (Phase 7), **derzeit unbenutzt**
+  (Upgradepool-v2 Phase 4 hat den einzigen Erzeuger abgebaut, Phase 6/7
+  ersetzt das Modul): `createGhost`, `updateGhosts` (eigenes
+  `state.ghosts`-Array, kein Eintrag in `state.tanks`; panzerkompatible
+  Form seit Upgradepool-v2 Phase 5, s. dort).
+- `src/game/ai.js` — Gegner-KI-Dispatcher + Zielsystem (Upgradepool-v2
+  Phase 5): `resolveTarget`/`pickTarget`/`updateTargeting`/`registerThreat`
+  wählen zwischen Spieler und Geistern statt hart auf `state.player` zu
+  zielen (Details im eigenen Phase-5-Abschnitt oben).
 - `src/game/bossai.js` — Boss-Sonderbewegungen (Phase 14): `stepMirrorBoss`
   (Punktspiegelung der Spielerposition), `stepPhalanxBoss` (rotierende
   5er-Formation); bypassen `DRIVES`/`updateEnemy()`, Turm/Feuern bleibt
-  die normale `roleTurret()`-Logik.
+  die normale `roleTurret()`-Logik. Zielwahl (Upgradepool-v2 Phase 5):
+  zeitgesteuerter Wechsel zwischen Spieler-Fixierung und `ai.js: pickTarget`.
 - `src/game/cfg.js` — Panzer-cfg + alle ~39 Upgrade-Effekte.
 - `src/game/upgradepool.js` — Auswahl-Pool (Tag-Regel, Rarity, maxStacks,
   requires, minRoom; Phase 4: includeTag/onlyRarity/bypassRoomGate/

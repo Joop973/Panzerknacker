@@ -15,7 +15,7 @@
 // keinem Typ genutzt, Mechanik bleibt fuer spaetere Phasen/Typen bereit).
 
 import { range } from '../core/rng.js';
-import { angleDiff, turnToward, playerInSight, muzzleBlocked, clearLine } from './ai.js';
+import { angleDiff, turnToward, targetInSight, muzzleBlocked, clearLine, resolveTarget } from './ai.js';
 
 function turnSpeedFor(accuracy) {
   return 1.6 + accuracy * 2.4;
@@ -29,8 +29,10 @@ function jitterFor(accuracy) {
 // Strahlen (bis zu ricochets Abpraller) und liefert NUR eine Loesung,
 // wenn ein Ein- oder Zwei-Wand-Treffer existiert. Direkte Treffer werden
 // verworfen -- ein Panzer mit requiresBounceShot schiesst fast nie direkt.
+// Upgradepool-v2 Phase 5: rechnet gegen das aufgeloeste Ziel, nicht mehr
+// fest gegen state.player.
 function solveBounce(tank, state, cfg) {
-  const p = state.player;
+  const p = resolveTarget(tank, state);
   if (!p.alive) return null;
   const step = state.data.ai.raycastStepPx;
   const maxB = tank.cfg.ricochets;
@@ -91,7 +93,7 @@ function bounceShot(tank, state, dt) {
     }
   }
   if (ai.solution == null) {
-    const p = state.player;
+    const p = resolveTarget(tank, state);
     if (p.alive) {
       const toP = Math.atan2(p.y - tank.y, p.x - tank.x);
       tank.turret = turnToward(tank.turret, toP, cfg.turnSpeed * 0.5 * dt);
@@ -104,7 +106,10 @@ function bounceShot(tank, state, dt) {
 
 export function roleTurret(tank, state, dt) {
   const cfg = tank.cfg;
-  const p = state.player;
+  // Upgradepool-v2 Phase 5: p ist das aufgeloeste Ziel (Spieler oder Geist),
+  // nicht mehr fest state.player. Bosse ueberschreiben tank.ai.target vor
+  // diesem Aufruf selbst (bossai.js: Fixierung).
+  const p = resolveTarget(tank, state);
   if (!p.alive) return false;
 
   if (cfg.requiresBounceShot) return bounceShot(tank, state, dt);
@@ -114,7 +119,7 @@ export function roleTurret(tank, state, dt) {
   const muzzleClearPx = state.data.ai.muzzleClearPx;
 
   // Rein zufaellig schwenkender Turm (frueher t_brown: random_seek) --
-  // kein Spieler-Tracking, feuert nur bei zufaelliger freier Sicht.
+  // kein Ziel-Tracking, feuert nur bei zufaelliger freier Sicht.
   if (acc <= 0 && !cfg.leadAim) {
     const ai = tank.ai;
     if (ai.seekTimer === undefined) ai.seekTimer = 0;
@@ -124,7 +129,7 @@ export function roleTurret(tank, state, dt) {
       ai.seekTimer = range(state.rng, 0.8, 2.2);
     }
     tank.turret = turnToward(tank.turret, ai.seekTarget, turnSpeed * dt);
-    return playerInSight(tank, state);
+    return targetInSight(tank, state, p);
   }
 
   // Vorhaltezielen (frueher t_black: predict): zielt auf die

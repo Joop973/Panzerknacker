@@ -591,6 +591,17 @@ export function createRenderer(ctx) {
       ctx.stroke();
     }
 
+    // Boss-Fixierung (Upgradepool-v2 Phase 5): rotes Turmgluehen, solange
+    // der Boss den Spieler fixiert (Geister ignoriert) statt frei zu
+    // waehlen -- ohne dieses sichtbare Signal wirkte der zeitgesteuerte
+    // Wechsel wie Willkuer. Nur mirrorBoss/phalanx setzen das Feld.
+    if (t.fixatedOnPlayer) {
+      ctx.fillStyle = `rgba(255,70,50,${(0.3 + 0.25 * Math.sin(state.time * 6)).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 13, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // Powershot geladen (Phase 5): heller Punkt an der Rohrspitze, solange
     // eine Ladung wartet -- verschwindet mit dem letzten geladenen Schuss.
     if (t === state.player && t.powershotCharges > 0) {

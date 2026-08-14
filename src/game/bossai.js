@@ -8,11 +8,62 @@
 //
 // Der Reaktorkern (t_reactor) braucht KEINEN Sondercode: er nutzt die
 // bestehende Rolle "guardian" (steht fest) unveraendert -- nur seine
-// Unverwundbarkeit ist Boss-Logik (siehe state.js: killTank()).
+// Unverwundbarkeit ist Boss-Logik (siehe state.js: killTank()). Auch KEINE
+// Fixierungs-Sonderregel (Upgradepool-v2 Phase 5): Geister koennen das
+// Generator-Raetsel nicht loesen, der Kampf bleibt eine Bankshot-Aufgabe
+// fuer den Spieler -- der Reaktor laeuft normal ueber ai.js: updateTargeting.
 
 import { WIDTH, HEIGHT } from '../config.js';
 import { fireBullet } from './tank.js';
 import { roleTurret } from './ai_turrets.js';
+import { resolveTarget, pickTarget } from './ai.js';
+
+// Upgradepool-v2 Phase 5: Bosse wechseln zeitgesteuert (kein RNG) zwischen
+// Fixierung auf den Spieler (ignoriert Geister komplett) und freier
+// Zielwahl ueber resolveTarget(). state.time laeuft seit Raumstart, der
+// Zyklus ist also deterministisch UND lernbar (immer derselbe Rhythmus).
+// Gibt { target, fixated } zurueck -- `fixated` ist die reine Zeitfensterlage
+// (unabhaengig davon, ob resolveTarget() in der freien Phase zufaellig
+// ebenfalls den Spieler waehlt), damit das sichtbare Signal (renderer.js:
+// tank.fixatedOnPlayer) wirklich den Rhythmus zeigt statt nur "Ziel=Spieler".
+function resolveBossTarget(tank, state) {
+  const cfg = state.data.balance.boss?.fixate;
+  if (!cfg) return { target: resolveTarget(tank, state), fixated: false };
+  const cycle = (cfg.onPlayerS ?? 0) + (cfg.onGhostsS ?? 0);
+  const phase = cycle > 0 ? state.time % cycle : 0;
+  if (phase < (cfg.onPlayerS ?? 0)) return { target: state.player, fixated: true };
+  // Freie Phase: wie ein normaler Gegner ueber die effektive Distanz neu
+  // bewerten (ai.js: pickTarget). resolveTarget() allein wuerde hier nur
+  // den zuletzt gesetzten Wert zurueckgeben -- da Bosse bewusst von der
+  // generischen updateTargeting()-Schleife ausgenommen sind (s. dortiger
+  // Kommentar), haette "freie Zielwahl" ohne diesen Aufruf NIE einen Geist
+  // entdeckt und waere fuer immer beim Spieler-Fallback haengengeblieben.
+  pickTarget(tank, state);
+  return { target: resolveTarget(tank, state), fixated: false };
+}
+
+// Phalanx-Variante: zusaetzlich zur zeitgesteuerten Fixierung zwingt eine
+// RAEUMLICHE Regel mindestens minPlayerShare der fuenf Panzer IMMER auf den
+// Spieler (bei 0.4 also zwei von fuenf) -- welche das sind, wandert
+// deterministisch ueber phalanxIndex, damit es nicht immer dieselben zwei
+// sind. Dieselbe Zeitleiste wie resolveBossTarget treibt auch den
+// Rotations-Takt (ein Schritt pro vollem Fixierungs-/Freizyklus).
+function resolvePhalanxTarget(tank, state) {
+  const cfg = state.data.balance.boss?.fixate;
+  if (!cfg) return { target: resolveTarget(tank, state), fixated: false };
+  const cycle = (cfg.onPlayerS ?? 0) + (cfg.onGhostsS ?? 0);
+  const phase = cycle > 0 ? state.time % cycle : 0;
+  if (phase < (cfg.onPlayerS ?? 0)) return { target: state.player, fixated: true }; // globale Fixierung
+  const forcedCount = Math.ceil(5 * (cfg.minPlayerShare ?? 0));
+  const rotationOffset = cycle > 0 ? Math.floor(state.time / cycle) % 5 : 0;
+  const slot = tank.phalanxIndex || 0;
+  const forced = (slot - rotationOffset + 5) % 5 < forcedCount;
+  if (forced) return { target: state.player, fixated: true };
+  // Freie Phase (Rest der Formation): dieselbe frische Neubewertung wie
+  // beim Spiegel, s. resolveBossTarget().
+  pickTarget(tank, state);
+  return { target: resolveTarget(tank, state), fixated: false };
+}
 
 // Der Spiegel: Position + Fahrtrichtung sind die Punktspiegelung der
 // Spielerposition durch die Raummitte -- "kopiert deine Bewegungen
@@ -32,10 +83,18 @@ export function stepMirrorBoss(tank, state, dt) {
   tank.vx = dt > 0 ? (tank.x - tank.prevX) / dt : 0;
   tank.vy = dt > 0 ? (tank.y - tank.prevY) / dt : 0;
 
+  // Fixierung ueberschreibt die generische Zielwahl (ai.js: updateTargeting
+  // laesst mirrorBoss/phalanx bewusst aus, s. dort) -- roleTurret() liest
+  // ueber resolveTarget() genau dieses Feld.
+  const { target, fixated } = resolveBossTarget(tank, state);
+  tank.ai.target = target;
+  tank.fixatedOnPlayer = fixated; // sichtbares Signal (renderer.js: Turmgluehen)
   // Turm/Feuerentscheidung bleibt die normale, accuracy-gesteuerte Logik
   // (data/tanks.json: t_mirror.accuracy) -- nur die Fahrfunktion ist ersetzt.
   const fire = tank.turretStunTimer > 0 ? false : roleTurret(tank, state, dt);
-  tank.aimingAtPlayer = fire; // Gefahrensinn-Anzeige (Phase 18), wie in state.js
+  // Upgradepool-v2 Phase 5: nur noch true, wenn das Ziel wirklich der
+  // Spieler ist -- sonst warnt der Gefahrensinn vor Schuessen auf einen Geist.
+  tank.aimingAtPlayer = fire && target === state.player;
   if (fire) fireBullet(tank, state);
 }
 
@@ -63,7 +122,10 @@ export function stepPhalanxBoss(tank, state, dt) {
   tank.vx = dt > 0 ? (tank.x - tank.prevX) / dt : 0;
   tank.vy = dt > 0 ? (tank.y - tank.prevY) / dt : 0;
 
+  const { target, fixated } = resolvePhalanxTarget(tank, state);
+  tank.ai.target = target;
+  tank.fixatedOnPlayer = fixated; // sichtbares Signal (renderer.js: Turmgluehen)
   const fire = tank.turretStunTimer > 0 ? false : roleTurret(tank, state, dt);
-  tank.aimingAtPlayer = fire; // Gefahrensinn-Anzeige (Phase 18), wie in state.js
+  tank.aimingAtPlayer = fire && target === state.player;
   if (fire) fireBullet(tank, state);
 }

@@ -92,8 +92,23 @@
   "ghost": {
     "maxActive": 4
   },
+  "_comment_aggro": "Upgradepool-v2 Phase 5: Zielauflösung der Gegner-KI (ai.js: resolveTarget/updateTargeting). Bewertung ueber eine EFFEKTIVE DISTANZ (kleiner = attraktiver), keine echte Aggro-Tabelle: Naehe ist der Hauptfaktor. ghostThreatMult <1 vergroessert die effektive Distanz zu Geistern (bei gleicher echter Entfernung weniger attraktiv als der Spieler). damageThreatPx/damageThreatDecayS: zugefuegter Schaden zieht zusaetzlich an (senkt die effektive Distanz) und klingt linear ueber die Decay-Zeit ab. switchHysteresisPct: ein neues Ziel muss um diesen Anteil besser sein, sonst bleibt der Gegner beim alten (verhindert Zappeln). noTargetFallbackS: kein freier Blick aufs aktuelle Ziel fuer so lange -> erzwungener Rueckfall auf den Spieler.",
+  "aggro": {
+    "reevaluateHz": 4,
+    "ghostThreatMult": 0.7,
+    "damageThreatPx": 120,
+    "damageThreatDecayS": 3,
+    "switchHysteresisPct": 0.25,
+    "noTargetFallbackS": 3
+  },
+  "_comment_boss_fixate": "Upgradepool-v2 Phase 5: Bosse wechseln zeitgesteuert (kein RNG) zwischen Fixierung auf den Spieler (onPlayerS, ignoriert Geister komplett) und freier Zielwahl ueber resolveTarget (onGhostsS). Phalanx zusaetzlich raeumlich: minPlayerShare der fuenf Panzer zielt IMMER auf den Spieler, welche das sind wandert deterministisch (bossai.js: resolvePhalanxTarget).",
   "boss": {
     "generatorHits": 2,
+    "fixate": {
+      "onPlayerS": 4,
+      "onGhostsS": 3,
+      "minPlayerShare": 0.4
+    },
     "phalanx": {
       "radiusPx": 150,
       "rotationSpeedRad": 1
