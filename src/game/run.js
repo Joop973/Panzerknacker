@@ -264,6 +264,7 @@ export function runSnapshot(run) {
     equippedGadget: run.equippedGadget,
     banned: [...run.bannedUpgrades],
     tagCounts: { ...run.tagCounts },
+    synergyTags: { ...run.synergyTags }, // Upgradepool-v2 Phase 3
     transformations: [...run.transformations],
     endless: !!run.endless,
     playTime: run.playTime,
@@ -644,6 +645,11 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     // --- Phase 4: Raumtypen + Tuerwahl ---
     // --- Phase 5: Transformationen ---
     tagCounts: {}, // {tag: Anzahl gewaehlter Upgrades} -- Stacks zaehlen einzeln
+    // Upgradepool-v2 Phase 3: laufende Bilanz der SYNERGIE-Tags (tags[] aus
+    // Phase 2) der gewaehlten Karten -- eigenstaendig neben tagCounts (das
+    // zaehlt die Hauptkategorie `tag` fuer die Transformationen und bleibt
+    // unangetastet). Speist die Angebotsgewichtung in upgradepool.js.
+    synergyTags: {},
     transformations: new Set(), // freigeschaltete Transformations-ids
     newTransformation: null, // Phase 17: zuletzt freigeschaltete (fuer Text-Einblendung)
     roomSpec: opts.roomSpec || null, // { fixedLayout } -> Arena-Weiche
@@ -704,6 +710,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     run.equippedGadget = r.equippedGadget || null;
     run.bannedUpgrades = new Set(r.banned || []);
     run.tagCounts = { ...(r.tagCounts || {}) };
+    run.synergyTags = { ...(r.synergyTags || {}) }; // Upgradepool-v2 Phase 3
     run.transformations = new Set(r.transformations || []);
     run.endless = !!r.endless;
     run.playTime = r.playTime || 0;
@@ -911,6 +918,9 @@ function poolOpts(run) {
     secondWeight: run.data.balance.upgrades?.secondElementWeight ?? 0.5,
     // Phase 18: Signaturkarten der gewaehlten Klasse (signatureClass-Filter).
     starterTank: run.starterTank,
+    // Upgradepool-v2 Phase 3: laufende Synergie-Tag-Bilanz fuer die
+    // Angebotsgewichtung (makeSynergyWeight in upgradepool.js).
+    synergyTags: run.synergyTags,
   };
 }
 
@@ -1135,6 +1145,14 @@ function applyUpgradeChoice(run, offer) {
   if (!offer.fallback && offer.tag) {
     run.tagCounts[offer.tag] = (run.tagCounts[offer.tag] || 0) + 1;
     unlockTransformation(run, offer.tag);
+  }
+  // Upgradepool-v2 Phase 3: Synergie-Tags separat bilanzieren (tags[] aus
+  // Phase 2, eigenstaendige Achse neben der Hauptkategorie `tag` oben).
+  // Speist ausschliesslich die Angebotsgewichtung, keine Transformationen.
+  if (!offer.fallback && offer.tags && offer.tags.length) {
+    for (const t of offer.tags) {
+      run.synergyTags[t] = (run.synergyTags[t] || 0) + 1;
+    }
   }
 }
 

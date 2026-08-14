@@ -248,9 +248,12 @@ und **Phase 1 (Seltenheiten 3→5) sind gebaut** — Details im eigenen Abschnit
 unten. **Phase 2 (Kategorie + Synergie-Tags) ist gebaut** — der in Phase 0
 gefundene Blocker (Signaturkarten blockierten sich gegenseitig über den
 gemeinsamen Tag `signature`) ist aufgelöst, ein Angebot mit drei
-Signaturkarten derselben Klasse ist jetzt möglich. **Nächste Sitzung: Phase 3
-(Synergiegewichtung).** Verbleibend sonst nur noch manuelle/optionale Punkte
-(s. To-do-Liste unten): der
+Signaturkarten derselben Klasse ist jetzt möglich. **Phase 3
+(Synergiegewichtung) ist gebaut** — Karten mit passenden `tags[]` werden
+anhand der bereits gewählten Karten höher gewichtet, gedeckelt, ohne je eine
+Karte auszuschließen. **Nächste Sitzung: Phase 4 (Altes Geistersystem und
+`reviveChance` abbauen).** Verbleibend sonst nur noch manuelle/optionale
+Punkte (s. To-do-Liste unten): der
 Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur nach echtem Spielgefühl) und
 die Telemetrie-Auswertung echter Runs.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -3110,6 +3113,46 @@ die Auflösung des in Phase 0 gefundenen Blockers.
   gebannte id. Kleine Inkonsistenz zum neuen Verhalten der Erstauswahl, aber
   kein Blocker (Ersatzkarte kommt einfach aus einer anderen Kategorie) —
   bei Bedarf in einer späteren Aufräumrunde beheben.
+
+### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 3 (Synergiegewichtung) — gemergt
+Angebote erkennen jetzt den begonnenen Build, ohne ihn zu erzwingen — die
+zweite Hälfte von Anhang A §11.
+- **`run.synergyTags`** (neu, analog `tagCounts`, aber über `tags[]` statt
+  `tag`): laufende Bilanz der Synergie-Tags aller gewählten Karten, in
+  `applyUpgradeChoice()` befüllt (derselbe gemeinsame Hook wie `tagCounts`/
+  Transformationen), im `runSnapshot()` mitgeführt und beim Fortsetzen
+  restauriert — eigenständig neben `tagCounts`, das weiterhin nur die
+  Hauptkategorie für die Transformationen zählt.
+- **`upgradepool.js: makeSynergyWeight()`**: eine Karte mit passenden `tags[]`
+  bekommt einen Gewichtsfaktor `min(cap, 1 + Treffer × step)` — „Treffer"
+  ist die Summe der `run.synergyTags`-Werte über alle `tags[]` der Karte.
+  `cap`/`step` liegen in `data/balance.json: upgrades` (`synergyCap: 2.0`,
+  `synergyStep: 0.5`) — bei 4 Treffern eines Tags ist der Faktor bereits
+  gedeckelt (2×). Der Faktor ist immer ≥ 1, schließt also nie eine Karte aus.
+- **Kein Eingriff in `weightedPick()` nötig**: Element- (Phase 17) und
+  Synergiegewicht multiplizieren sich zu einem einzigen Faktor
+  (`makeCombinedWeight()`), der wie zuvor nur `elementWeight` als vierten
+  Parameter durchgereicht wird. Die Tier-Normierung (UMBAUPLAN-LP Phase 10)
+  gilt dadurch automatisch auch für die Synergie — `weightedPick()` selbst
+  weiß nichts von Synergie und musste nicht angefasst werden.
+- **Determinismus unverändert**: weiterhin genau ein `rng()`-Aufruf je
+  gezogener Karte (Testschritt, Gegenprobe mit einem absichtlich doppelten
+  Aufruf bestanden).
+- **Neue Dauertests** (Abschnitt 39, Gegenprobe für jeden Kernpunkt
+  bestanden): Mechanismus (Synergiekarte ~2× häufiger bei 4 Treffern, echte
+  `rollOffers()`-Pipeline statt einer isolierten Formel — der erste Entwurf
+  von (c) prüfte nur eine selbstbestätigende Kontrollrechnung und hätte eine
+  fehlende Kappung nie gefangen, jetzt end-to-end mit 1000 Treffern gegen-
+  geprüft), keine Karte ausgeschlossen, Kappung, Tier-Normierung bleibt
+  erhalten (deckte einen echten blinden Fleck der alten Phase-10-Tests auf:
+  deren synthetische Listen hatten nie ein echtes Gewichtsgefälle *innerhalb*
+  einer Stufe, der neue Test mit synergie-verzerrten Common-Karten schon),
+  RNG-Verbrauch, Snapshot/Fortsetzen, Determinismus über einen ganzen Run.
+  **Fallstrick beim Determinismus-Test**: mit „immer Karte 0" bleibt
+  `run.synergyTags` über viele Seeds leer (nur 5 von 246 Karten tragen
+  aktuell `tags[]`) — der Test wählt deshalb gezielt die erste
+  `tags[]`-Karte im Angebot, sonst hätte die Gegenprobe (echte
+  `Math.random()` im Gewichtungspfad) nichts zu fangen gehabt.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`drawOne()`-Signaturkarten-Inkonsistenz (Upgradepool-v2 Phase 2)**:

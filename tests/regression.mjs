@@ -5181,6 +5181,232 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 39. Upgradepool-v2 Phase 3: Synergiegewichtung ----------------------
+// weightedPick() gewichtet Karten mit passenden tags[] hoeher, wenn der
+// Spieler bereits Karten mit demselben Synergie-Tag gewaehlt hat (Anhang A
+// Paragraph 11). Alle Tests hier arbeiten mit SYNTHETISCHEN Kandidaten und
+// einer synthetischen Tag-Bilanz -- nicht dem echten Kartenbestand -- damit
+// sie den Mechanismus pruefen, nicht die aktuelle Datenlage.
+{
+  const { weightedPick, rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+
+  // (a) MECHANISMUS: eine Karte mit passendem tags[] wird bei gleicher
+  //     Seltenheit deutlich haeufiger gezogen als eine sonst identische Karte
+  //     ohne Synergie-Treffer. 4 vorherige Treffer x step 0.5 = +200 % ->
+  //     an cap 2.0 gedeckelt -> Gewichtsverhaeltnis 2:1 (66,7 %/33,3 %).
+  {
+    const list = [
+      { id: 'a', rarity: 'common', tags: ['swarm'] },
+      { id: 'b', rarity: 'common', tags: [] },
+    ];
+    const opts = { synergyTags: { swarm: 4 }, balance: { upgrades: { synergyCap: 2.0, synergyStep: 0.5 } } };
+    const synergyWeightFor = (d) => {
+      // Re-implementiert die private makeSynergyWeight()-Formel als Kontrolle,
+      // NICHT importiert -- sonst wuerde der Test nur sich selbst pruefen.
+      const cap = opts.balance.upgrades.synergyCap;
+      const step = opts.balance.upgrades.synergyStep;
+      const matches = (d.tags || []).reduce((s, t) => s + (opts.synergyTags[t] || 0), 0);
+      return matches > 0 ? Math.min(cap, 1 + matches * step) : 1;
+    };
+    check(
+      Math.abs(synergyWeightFor(list[0]) - 2.0) < 1e-9,
+      `Phase 3 (Upgradepool-v2): Kontrollformel liefert ${synergyWeightFor(list[0])} statt 2.0 (Testaufbau falsch)`,
+    );
+    // rollOffers mit count:1 zieht ueber makeCombinedWeight() -- misst also
+    // die ECHTE Implementierung, nicht die Kontrollformel.
+    const fakeData = {
+      offersPerScreen: 1,
+      fallback: { name: '+1 Leben', description: 'x', tag: 'stat', rarity: 'common' },
+      upgrades: {
+        a: { id: 'a', name: 'a', description: 'x', tag: 'swarm', tags: ['swarm'], rarity: 'common', maxStacks: 99, requires: [], minRoom: 1 },
+        b: { id: 'b', name: 'b', description: 'x', tag: 'other', tags: [], rarity: 'common', maxStacks: 99, requires: [], minRoom: 1 },
+      },
+    };
+    const balance = { rarity: { common: 100 }, upgrades: { synergyCap: 2.0, synergyStep: 0.5 } };
+    const rng = mulberry32(4242);
+    let countA = 0;
+    let countB = 0;
+    const N = 6000;
+    for (let i = 0; i < N; i++) {
+      const offers = rollOffers(fakeData, {
+        chosen: {}, roomIndex: 1, rng, balance, count: 1, banned: new Set(),
+        synergyTags: { swarm: 4 },
+      });
+      if (offers[0].id === 'a') countA++;
+      else if (offers[0].id === 'b') countB++;
+    }
+    const pctA = (100 * countA) / N;
+    check(
+      Math.abs(pctA - 66.7) < 4,
+      `Phase 3 (Upgradepool-v2): Synergiekarte ${pctA.toFixed(1)} % statt ~66,7 % der Ziehungen (Gewichtung wirkt nicht)`,
+    );
+    // (b) Keine Karte wird ausgeschlossen: die nicht passende Karte muss
+    //     trotzdem regelmaessig auftauchen (nicht 0).
+    check(countB > 0, 'Phase 3 (Upgradepool-v2): Karte ohne Synergie-Treffer taucht NIE auf (faelschlich ausgeschlossen)');
+  }
+
+  // (c) Kappung: ein extrem hoher Treffer-Wert darf den Faktor nicht ueber
+  //     den konfigurierten cap hinaus treiben (sonst koennte eine Karte eine
+  //     andere praktisch verdraengen -- widerspricht "schliesst nie aus").
+  //     End-to-end ueber die ECHTE rollOffers()-Pipeline (nicht nur eine
+  //     isolierte Formel, die sich nur selbst bestaetigen wuerde): 1000
+  //     Treffer ergeben ohne Kappung 1 + 1000*0.5 = 501 statt 2.0 -- das
+  //     Verhaeltnis muesste dann bei ~99,8 %/0,2 % statt ~66,7 %/33,3 % liegen.
+  {
+    const fakeData = {
+      offersPerScreen: 1,
+      fallback: { name: '+1 Leben', description: 'x', tag: 'stat', rarity: 'common' },
+      upgrades: {
+        a: { id: 'a', name: 'a', description: 'x', tag: 'swarm', tags: ['swarm'], rarity: 'common', maxStacks: 99, requires: [], minRoom: 1 },
+        b: { id: 'b', name: 'b', description: 'x', tag: 'other', tags: [], rarity: 'common', maxStacks: 99, requires: [], minRoom: 1 },
+      },
+    };
+    const balance = { rarity: { common: 100 }, upgrades: { synergyCap: 2.0, synergyStep: 0.5 } };
+    const rng = mulberry32(4343);
+    let countA = 0;
+    const N = 6000;
+    for (let i = 0; i < N; i++) {
+      const offers = rollOffers(fakeData, {
+        chosen: {}, roomIndex: 1, rng, balance, count: 1, banned: new Set(),
+        synergyTags: { swarm: 1000 }, // weit ueber dem Punkt, an dem der cap greift
+      });
+      if (offers[0].id === 'a') countA++;
+    }
+    const pctA = (100 * countA) / N;
+    check(
+      Math.abs(pctA - 66.7) < 4,
+      `Phase 3 (Upgradepool-v2): mit 1000 Treffern ${pctA.toFixed(1)} % statt ~66,7 % -- der cap greift nicht`,
+    );
+  }
+
+  // (d) Tier-Normierung bleibt erhalten (Fix aus UMBAUPLAN-LP Phase 10 darf
+  //     nicht wieder kaputtgehen): die Synergie darf nur INNERHALB einer
+  //     Seltenheitsstufe umverteilen, NICHT die Gesamtwahrscheinlichkeit einer
+  //     Stufe veraendern. Eine stark synergiebevorzugte common-Karte darf die
+  //     rare-Quote nicht anheben.
+  {
+    const list = [
+      { id: 'c1', rarity: 'common', tags: ['x'] }, // starker Synergie-Treffer
+      { id: 'c2', rarity: 'common', tags: [] },
+      { id: 'r1', rarity: 'rare', tags: [] },
+    ];
+    const weights = { common: 60, rare: 30 };
+    const opts = { synergyTags: { x: 10 }, balance: { upgrades: { synergyCap: 2.0, synergyStep: 0.5 } } };
+    const synergyWeightFor = (d) => {
+      const matches = (d.tags || []).reduce((s, t) => s + (opts.synergyTags[t] || 0), 0);
+      return matches > 0 ? Math.min(opts.balance.upgrades.synergyCap, 1 + matches * opts.balance.upgrades.synergyStep) : 1;
+    };
+    const rng = mulberry32(99);
+    const zieh = { common: 0, rare: 0 };
+    const N = 30000;
+    for (let i = 0; i < N; i++) {
+      const pick = weightedPick(list, rng, weights, synergyWeightFor);
+      zieh[pick.rarity]++;
+    }
+    const pctCommon = (100 * zieh.common) / N;
+    check(
+      Math.abs(pctCommon - 66.7) < 3,
+      `Phase 3 (Upgradepool-v2): common-Quote ${pctCommon.toFixed(1)} % statt ~66,7 % -- Synergie verzerrt die Seltenheitsverteilung`,
+    );
+  }
+
+  // (e) Determinismus: die Synergiegewichtung verbraucht KEINEN zusaetzlichen
+  //     rng()-Aufruf -- weiterhin genau einer je gezogener Karte.
+  {
+    let calls = 0;
+    const baseRng = mulberry32(7);
+    const countingRng = () => { calls++; return baseRng(); };
+    const fakeData = {
+      offersPerScreen: 3,
+      fallback: { name: '+1 Leben', description: 'x', tag: 'stat', rarity: 'common' },
+      upgrades: {
+        a: { id: 'a', name: 'a', description: 'x', tag: 'ta', tags: ['x'], rarity: 'common', maxStacks: 99, requires: [], minRoom: 1 },
+        b: { id: 'b', name: 'b', description: 'x', tag: 'tb', tags: [], rarity: 'common', maxStacks: 99, requires: [], minRoom: 1 },
+        c: { id: 'c', name: 'c', description: 'x', tag: 'tc', tags: [], rarity: 'common', maxStacks: 99, requires: [], minRoom: 1 },
+      },
+    };
+    const balance = { rarity: { common: 100 }, upgrades: { synergyCap: 2.0, synergyStep: 0.5 } };
+    rollOffers(fakeData, {
+      chosen: {}, roomIndex: 1, rng: countingRng, balance, count: 3, banned: new Set(),
+      synergyTags: { x: 3 },
+    });
+    check(calls === 3, `Phase 3 (Upgradepool-v2): ${calls} rng()-Aufrufe statt 3 fuer 3 gezogene Karten`);
+  }
+
+  // Treibt einen Run bis zur naechsten 'upgrade'-Phase (oder Run-Ende) --
+  // dasselbe Zustandsmuster wie die SEEDS-Sieg-Schleife oben, nur generisch
+  // wiederverwendbar. Gibt true zurueck, wenn 'upgrade' erreicht wurde.
+  function advanceToUpgrade(run) {
+    let guard = 20000;
+    while (guard-- > 0) {
+      if (run.phase === 'upgrade') return true;
+      if (run.phase === 'victory' || run.phase === 'gameover') return false;
+      if (run.phase === 'preview') enterRoom(run);
+      else if (run.phase === 'transition' || run.phase === 'playing') {
+        if (run.phase === 'playing') cheatKillAll(run.state);
+        stepRun(run, CMD, STEP);
+      } else if (run.phase === 'map') pickMapNode(run);
+      else if (run.phase === 'workshop') leaveWorkshop(run);
+      else if (run.phase === 'event') chooseEventOption(run, 0);
+      else return false;
+    }
+    return false;
+  }
+
+  // (f) Snapshot/Fortsetzen: run.synergyTags bleibt beim Fortsetzen erhalten.
+  {
+    const { createRun, runSnapshot } = await import('../src/game/run.js');
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 555);
+    check(advanceToUpgrade(run), 'Phase 3 (Upgradepool-v2): Testaufbau -- Raum 1 erreicht keine Upgrade-Phase');
+    const before = { ...run.pendingOffers[0] };
+    chooseUpgrade(run, 0);
+    check(
+      Object.keys(run.synergyTags).length > 0 || !(before.tags && before.tags.length),
+      'Phase 3 (Upgradepool-v2): run.synergyTags wird nach einer Kartenwahl mit tags[] nicht befuellt',
+    );
+    const snap = runSnapshot(run);
+    check(
+      JSON.stringify(snap.synergyTags) === JSON.stringify(run.synergyTags),
+      'Phase 3 (Upgradepool-v2): runSnapshot() nimmt synergyTags nicht mit',
+    );
+    const run2 = createRun(tanksData, tilesData, diffData, upgradesData, 555, 'normal', { resume: snap });
+    check(
+      JSON.stringify(run2.synergyTags) === JSON.stringify(run.synergyTags),
+      'Phase 3 (Upgradepool-v2): synergyTags geht beim Fortsetzen verloren',
+    );
+  }
+
+  // (g) Determinismus ueber einen ganzen Run: gleicher Seed + gleiche Wahl
+  //     -> identische Angebotsfolge. Ergaenzt die bestehende Seed-Determinismus-
+  //     Probe (Abschnitt 35) um den neuen Gewichtungspfad. Klasse c_necro
+  //     (nicht die Default-Klasse player), damit tatsaechlich tags[]-tragende
+  //     Karten (aktuell nur sig_necro_*) im Pool erreichbar sind. Die
+  //     Wahlfunktion greift bewusst gezielt zur ersten tags[]-tragenden Karte
+  //     im Angebot (sonst Index 0) -- deterministisch aus dem Angebotsinhalt
+  //     selbst abgeleitet, aber so gebaut, dass die Synergie-Bilanz moeglichst
+  //     frueh gefuellt wird und der Gewichtungspfad ueberhaupt durchlaufen wird
+  //     (bei reinem "immer Karte 0" bliebe run.synergyTags in 10 Raeumen zu oft leer).
+  {
+    const { createRun } = await import('../src/game/run.js');
+    const play = (seed) => {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, seed, 'normal', { starterTank: 'c_necro' });
+      const log = [];
+      for (let i = 0; i < 16; i++) {
+        if (!advanceToUpgrade(run)) break;
+        log.push(run.pendingOffers.map((o) => o.id).join(','));
+        const sigIdx = run.pendingOffers.findIndex((o) => o.tags && o.tags.length);
+        chooseUpgrade(run, sigIdx >= 0 ? sigIdx : 0);
+      }
+      return log.join('|');
+    };
+    const a = play(4);
+    const b = play(4);
+    check(a.length > 0, 'Phase 3 (Upgradepool-v2): Testaufbau -- keine einzige Upgrade-Phase erreicht');
+    check(a === b, 'Phase 3 (Upgradepool-v2): gleicher Seed ergibt nicht denselben Angebotsverlauf');
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);
