@@ -44,7 +44,8 @@
       "maxStacks": 3,
       "requires": [],
       "minRoom": 1,
-      "symbol": "🔗"
+      "symbol": "🔗",
+      "exclusions": ["c_necro"]
     },
     "sprengkraft": {
       "id": "sprengkraft",
@@ -56,7 +57,8 @@
       "requires": [],
       "minRoom": 1,
       "radiusMult": 1.25,
-      "symbol": "💥"
+      "symbol": "💥",
+      "exclusions": ["c_necro"]
     },
     "kettenantrieb": {
       "id": "kettenantrieb",
@@ -470,7 +472,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "symbol": "📡"
+      "symbol": "📡",
+      "exclusions": ["c_necro"]
     },
     "streumine": {
       "id": "streumine",
@@ -482,7 +485,8 @@
       "requires": [],
       "minRoom": 1,
       "sub": 4,
-      "symbol": "🌰"
+      "symbol": "🌰",
+      "exclusions": ["c_necro"]
     },
     "schockwelle": {
       "id": "schockwelle",
@@ -496,7 +500,8 @@
       "radiusPx": 80,
       "pushPx": 52,
       "stunS": 0.6,
-      "symbol": "🌊"
+      "symbol": "🌊",
+      "exclusions": ["c_necro"]
     },
     "annaeherungsmine": {
       "id": "annaeherungsmine",
@@ -509,7 +514,8 @@
       "minRoom": 1,
       "armS": 0.1,
       "triggerRadiusPx": 22,
-      "symbol": "📍"
+      "symbol": "📍",
+      "exclusions": ["c_necro"]
     },
     "kettenblitz": {
       "id": "kettenblitz",
@@ -637,7 +643,8 @@
       "minRoom": 1,
       "stickDelayS": 0.6,
       "stickRadiusPx": 42,
-      "symbol": "🩹"
+      "symbol": "🩹",
+      "exclusions": ["c_necro"]
     },
     "trophaee": {
       "id": "trophaee",

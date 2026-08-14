@@ -185,13 +185,21 @@ function buildCandidates(upgradesData, opts) {
     // includeTag/onlyRarity) faellt jede Signaturkarte durch -- so kann eine
     // fremde Klassensignatur nie in einer Belohnung auftauchen.
     if (def.signatureClass && def.signatureClass !== starterTank) continue;
+    // Upgradepool-v2 Phase 6, Anhang A §14 ("optional: exclusions"): eine
+    // Karte kann fuer bestimmte Klassen komplett gesperrt werden -- anders
+    // als signatureClass (gehoert EINER Klasse) ist das eine NEGATIVLISTE
+    // (fuer alle ANDEREN Klassen weiter normal ziehbar). Erster Nutzer: die
+    // sieben minenspezifischen Karten sind fuer den Nekromanten gesperrt,
+    // dessen Bombenslot seit Phase 6 keine Mine mehr ist (Geisterbombe,
+    // tank.js: useSecondary()) -- ohne exclusions waeren sie fuer ihn
+    // wirkungslose Angebote.
+    if (def.exclusions && def.exclusions.includes(starterTank)) continue;
     if (onlyRarity && def.rarity !== onlyRarity) continue;
     if (bannedSet.has(id)) continue;
-    // P4: Die frueher noetige Minen-Sperre (MINE_ONLY_IDS) ist entfallen.
-    // Die Bombe liegt jetzt in einem eigenen, festen Slot und ist IMMER
-    // ausgeruestet -- die sieben minenspezifischen Karten (kettenglied,
-    // sprengkraft, fernzuender, schockwelle, annaeherungsmine, klebemine,
-    // streumine) koennen deshalb nie mehr wirkungslos werden.
+    // P4: Die frueher noetige generelle Minen-Sperre (MINE_ONLY_IDS) ist
+    // entfallen -- die Bombe liegt in einem eigenen, festen Slot und ist bei
+    // JEDER anderen Klasse IMMER ausgeruestet. Nur beim Nekromanten (s.
+    // exclusions oben) ist das nicht mehr der Fall.
     // Damit loest sich zugleich Konflikt C aus PLAN-INPUT.md: der Tag
     // `control` haengt nicht mehr an der ausgeruesteten Sekundaerwaffe.
     if ((chosen[id] || 0) >= def.maxStacks) continue;

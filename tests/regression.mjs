@@ -5872,6 +5872,333 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 42. Upgradepool-v2 Phase 6: Nekromant -- Klassenidentitaet ---------
+// Die Geistermechanik ist ab Klassenwahl aktiv (kein Upgrade noetig): Kill
+// durch den Nekromanten 50 % Geist, Kill durch einen Geist 33 % --
+// deterministisch ueber state.rng. Kill-Zuordnung (meta.killer) haengt an
+// applyDamage()/killTank() und muss auch fuer Minen-, Explosions- und
+// Kettenblitz-Kills stimmen. Geisterbombe ersetzt den Bombenslot komplett.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { useSecondary } = await import('../src/game/tank.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { createMine, updateMines } = await import('../src/game/mine.js');
+  const { resolveCfg } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { hashSeed, rngFor, mulberry32 } = await import('../src/core/rng.js');
+
+  const necroRoom = (types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    st.explosions.length = 0;
+    return st;
+  };
+
+  // (a) Klassenidentitaet: c_necro traegt cfg.necromancer, andere Klassen
+  // nicht; die Klassenbeschreibung nennt die Geistermechanik (Testschritt 1).
+  {
+    check(resolveCfg(tanksData, 'c_necro').necromancer === true, 'Phase 6: c_necro hat cfg.necromancer nicht gesetzt');
+    check(resolveCfg(tanksData, 'player').necromancer === false, 'Phase 6: die Standardklasse traegt faelschlich cfg.necromancer');
+    check(/[Gg]eist/.test(tanksData.types.c_necro.desc), 'Phase 6: die Klassenbeschreibung nennt die Geistermechanik nicht');
+  }
+
+  // (b) Spawn-Wuerfel: deterministisch ueber state.rng, korrekt je
+  // Verursacher (Nekromant 50 %, Geist 33 %, alle anderen 0 %).
+  {
+    const rollKill = (starterTank, killer, rngValue) => {
+      const st = necroRoom();
+      if (starterTank !== 'c_necro') {
+        // Zweite Instanz mit Standardklasse fuer den Nicht-Nekromant-Fall.
+        const st2 = createState(tanksData, tilesData, {
+          genRng: rngFor(1, 3, 'rooms'), enemyTypes: ['t_pink'], aiSeed: hashSeed(1, 3, 'ai'),
+          playerUpgrades: {}, upgradesData, equippedSecondary: 'mine', transform: {},
+        });
+        st2.bullets.length = 0; st2.mines.length = 0; st2.ghosts.length = 0;
+        const e2 = st2.tanks.find((t) => t !== st2.player);
+        st2.rng = () => rngValue;
+        st2.killTank(e2, 'test', killer === 'player' ? { killer: st2.player } : killer === 'ghost' ? { killer: { isGhost: true, alive: true } } : {});
+        return st2.ghosts.length;
+      }
+      const e = st.tanks.find((t) => t !== st.player);
+      st.rng = () => rngValue;
+      st.killTank(e, 'test', killer === 'player' ? { killer: st.player } : killer === 'ghost' ? { killer: { isGhost: true, alive: true } } : {});
+      return st.ghosts.length;
+    };
+    check(rollKill('c_necro', 'player', 0.49) === 1, 'Phase 6: Nekromant-Kill unter der 50%-Schwelle erzeugt keinen Geist');
+    check(rollKill('c_necro', 'player', 0.51) === 0, 'Phase 6: Nekromant-Kill ueber der 50%-Schwelle erzeugt trotzdem einen Geist');
+    check(rollKill('c_necro', 'ghost', 0.32) === 1, 'Phase 6: Geist-Kill unter der 33%-Schwelle erzeugt keinen Geist');
+    check(rollKill('c_necro', 'ghost', 0.34) === 0, 'Phase 6: Geist-Kill ueber der 33%-Schwelle erzeugt trotzdem einen Geist');
+    check(rollKill('player', 'player', 0) === 0, 'Phase 6: eine Nicht-Nekromant-Klasse erzeugt trotzdem einen Geist (Chance ist 0)');
+    check(rollKill('c_necro', 'none', 0) === 0, 'Phase 6: ein Kill ohne bekannten Killer (z. B. Statuseffekt-Tick) erzeugt trotzdem einen Geist');
+  }
+
+  // (c) Geistlimit OHNE Verdraengung: am Deckel passiert nichts, auch bei
+  // einem garantierten Wurf.
+  {
+    const st = necroRoom();
+    for (let i = 0; i < 3; i++) st.ghosts.push({ isGhost: true, alive: true, id: -i - 1 });
+    const e = st.tanks.find((t) => t !== st.player);
+    st.rng = () => 0;
+    st.killTank(e, 'test', { killer: st.player });
+    check(st.ghosts.length === 3, 'Phase 6: das Geistlimit (3) wird trotz garantiertem Wurf ueberschritten');
+  }
+
+  // (d) Kill-Zuordnung ueber alle Quellen -- "auch Minen-, Explosions- und
+  // Kettenblitz-Kills muessen korrekt zugeordnet werden" (Auftragstext). Jede
+  // Pruefung nutzt rng()=>0 (garantierter Treffer) und prueft den Spawn als
+  // Beweis, dass meta.killer tatsaechlich beim Spieler ankam.
+  {
+    // (d1) Direkter Kugeltreffer.
+    {
+      const st = necroRoom();
+      const e = st.tanks.find((t) => t !== st.player);
+      e.protect = 0;
+      e.hp = 1;
+      st.rng = () => 0;
+      st.bullets.push(
+        createBullet(e.x, e.y, 0, { speed: 1, radius: 4, ricochets: 1, owner: st.player, kind: 'bullet', damage: 99999 }),
+      );
+      stepState(st, CMD, STEP);
+      check(!e.alive, 'Phase 6: Vorbedingung Kugel-Kill (Ziel nicht getroffen)');
+      check(st.ghosts.length === 1, 'Phase 6: ein direkter Kugeltreffer des Nekromanten wird nicht als Killer zugeordnet');
+    }
+    // (d2) Mine.
+    {
+      const st = necroRoom();
+      const e = st.tanks.find((t) => t !== st.player);
+      e.protect = 0;
+      e.hp = 1;
+      st.rng = () => 0;
+      const m = createMine(e.x, e.y, st.player, st.data.mine.radiusPx);
+      m.age = st.data.balance.mine.fuse; // sofort selbstzuendbereit
+      st.mines.push(m);
+      updateMines(st, 1 / 60);
+      check(!e.alive, 'Phase 6: Vorbedingung Minen-Kill (Ziel nicht getroffen)');
+      check(st.ghosts.length === 1, 'Phase 6: eine Mine des Nekromanten wird nicht als Killer zugeordnet');
+    }
+    // (d3) Sprengschuss-Explosion (state.js: markierte Geschosse explodieren
+    // beim Tod).
+    {
+      const st = necroRoom();
+      const e = st.tanks.find((t) => t !== st.player);
+      e.protect = 0;
+      e.hp = 1;
+      st.rng = () => 0;
+      const b = createBullet(e.x, e.y, 0, { speed: 0, radius: 1, ricochets: 1, owner: st.player, kind: 'bullet', damage: 1 });
+      b.dead = true;
+      b.explosive = true;
+      b.explosionRadius = 200;
+      b.detonated = false;
+      st.bullets.push(b);
+      stepState(st, CMD, STEP);
+      check(!e.alive, 'Phase 6: Vorbedingung Sprengschuss-Kill (Ziel nicht getroffen)');
+      check(st.ghosts.length === 1, 'Phase 6: eine Sprengschuss-Explosion des Nekromanten wird nicht als Killer zugeordnet');
+    }
+    // (d4) Kamikaze (Spieler stirbt, Explosion toetet einen Nachbarn).
+    {
+      const st = necroRoom();
+      const e = st.tanks.find((t) => t !== st.player);
+      e.protect = 0;
+      e.hp = 1;
+      st.player.x = e.x;
+      st.player.y = e.y;
+      st.player.cfg.kamikazeRadius = 200; // synthetischer Wert, unabhaengig von echten Karten
+      st.rng = () => 0;
+      st.killTank(st.player, 'test', {});
+      check(!e.alive, 'Phase 6: Vorbedingung Kamikaze-Kill (Nachbar stirbt nicht)');
+      check(st.ghosts.length === 1, 'Phase 6: eine Kamikaze-Explosion des sterbenden Nekromanten wird nicht als Killer zugeordnet');
+    }
+    // (d5) Kettenblitz-Upgrade (Explosion am Ort eines Kills toetet einen
+    // Nachbarn) -- die im Auftragstext ausdruecklich genannte Kategorie. Die
+    // Explosion laeuft SYNCHRON innerhalb desselben killTank(a,...)-Aufrufs
+    // -- A und B sterben also im selben Aufruf, nicht nacheinander.
+    {
+      const st = necroRoom(['t_pink', 't_pink']);
+      const [a, b] = st.tanks.filter((t) => t !== st.player);
+      a.protect = 0;
+      b.protect = 0;
+      b.hp = 1;
+      b.x = a.x + 10;
+      b.y = a.y;
+      st.player.cfg.chainLightning = 300; // synthetischer Radius
+      st.rng = () => 0;
+      st.killTank(a, 'test', { killer: st.player });
+      check(!b.alive, 'Phase 6: Vorbedingung Kettenblitz-Kill (Nachbar B stirbt nicht)');
+      check(st.ghosts.length === 2, 'Phase 6: eine Kettenblitz-Explosion des Nekromanten wird nicht als Killer zugeordnet (A und B)');
+    }
+    // (d6) Saboteur-Transformation (Explosion beim Aufwachen aus der
+    // Betaeubung toetet einen Nachbarn).
+    {
+      const st = createState(tanksData, tilesData, {
+        genRng: rngFor(1, 3, 'rooms'), enemyTypes: ['t_pink', 't_pink'], aiSeed: hashSeed(1, 3, 'ai'),
+        playerUpgrades: {}, upgradesData, equippedSecondary: 'mine', transform: { stunExplodeRadiusPx: 300 },
+        starterTank: 'c_necro',
+      });
+      st.bullets.length = 0; st.mines.length = 0; st.ghosts.length = 0;
+      const [a, b] = st.tanks.filter((t) => t !== st.player);
+      a.protect = 0; b.protect = 0;
+      a.hp = a.cfg.maxHp = 99999; // A ueberlebt seine eigene Explosion
+      b.hp = 1;
+      b.x = a.x + 10;
+      b.y = a.y;
+      a.stunTimer = 0.01; // laeuft in diesem Tick ab -> loest die Explosion aus
+      st.rng = () => 0;
+      stepState(st, CMD, STEP);
+      check(!b.alive, 'Phase 6: Vorbedingung Saboteur-Kill (Nachbar stirbt nicht)');
+      check(st.ghosts.length === 1, 'Phase 6: eine Saboteur-Explosion des Nekromanten wird nicht als Killer zugeordnet');
+    }
+    // (d7) Blitzkette (damageType lightning): erbt meta ueber {...meta} in
+    // damagetypes.js -- kein eigener Code noetig, hier nur bestaetigt.
+    {
+      const st = necroRoom(['t_pink', 't_pink']);
+      const [a, b] = st.tanks.filter((t) => t !== st.player);
+      a.protect = 0; a.hp = 1;
+      b.protect = 0; b.hp = 1;
+      b.x = a.x + 10;
+      b.y = a.y;
+      st.rng = () => 0;
+      st.bullets.push(
+        createBullet(a.x, a.y, 0, {
+          speed: 1, radius: 4, ricochets: 1, owner: st.player, kind: 'bullet', damage: 99999, damageType: 'lightning',
+        }),
+      );
+      stepState(st, CMD, STEP);
+      check(!a.alive, 'Phase 6: Vorbedingung Blitzkette (A stirbt nicht)');
+      check(!b.alive, 'Phase 6: Vorbedingung Blitzkette (B springt nicht mit)');
+      check(st.ghosts.length === 2, 'Phase 6: eine Blitzkette des Nekromanten wird nicht als Killer zugeordnet (A und B)');
+    }
+    // (d8) Statuseffekt-Tick (Phase 0 dokumentierte Untererfassung, kein
+    // Umbau von status.js): kein Killer bekannt -> kein Wurf, kein Geist.
+    // Prueft SOFORT nach dem Tod ab (Schleife bricht, sobald e stirbt) --
+    // ein Geist verfaellt sonst nach balance.ghost.maxActive-unabhaengigem
+    // Fallback (createGhost(): balance.ghost?.duration ?? 3 s), ein zu
+    // spaeter Check saehe dann IMMER 0 (verfallen statt nie erzeugt) und
+    // wuerde eine falsche Zuordnung nicht mehr fangen (per Gegenprobe
+    // gefunden: mit absichtlich injiziertem killer blieb dieser Test bei
+    // einer 4-Sekunden-Schleife trotzdem gruen).
+    {
+      const st = necroRoom();
+      const e = st.tanks.find((t) => t !== st.player);
+      e.protect = 0;
+      e.hp = 1;
+      st.rng = () => 0;
+      st.applyStatus(e, 'fire', 3);
+      let ticks = 0;
+      while (e.alive && ticks < 600) {
+        stepState(st, CMD, STEP);
+        ticks++;
+      }
+      check(!e.alive, 'Phase 6: Vorbedingung Statuseffekt-Kill (Ziel stirbt nicht)');
+      check(st.ghosts.length === 0, 'Phase 6: ein Statuseffekt-Kill (kein bekannter Killer) erzeugt trotzdem einen Geist');
+    }
+  }
+
+  // (e) Geisterbombe: ersetzt den Bombenslot komplett -- kein Wurf, keine
+  // Explosion, kein Fernzuender; am Limit passiert nichts.
+  {
+    const st = necroRoom();
+    check(useSecondary(st.player, st, null) === true, 'Phase 6: die Geisterbombe loest nicht aus');
+    check(st.ghosts.length === 1, 'Phase 6: die Geisterbombe erzeugt keinen Geist');
+    check(st.mines.length === 0, 'Phase 6: die Geisterbombe legt trotzdem eine Mine');
+    check(st.explosions.length === 0, 'Phase 6: die Geisterbombe erzeugt eine Explosion');
+
+    // Am Limit: kein Verbrauch, kein Wurf, kein Absturz.
+    useSecondary(st.player, st, null);
+    useSecondary(st.player, st, null);
+    check(st.ghosts.length === 3, 'Phase 6: Vorbedingung Geisterbomben-Limit (nicht auf 3 gekommen)');
+    check(useSecondary(st.player, st, null) === false, 'Phase 6: die Geisterbombe loest am Limit trotzdem aus');
+    check(st.ghosts.length === 3, 'Phase 6: das Geistlimit wird per Geisterbombe ueberschritten');
+
+    // Gegenprobe zur Klassenweiche: eine ANDERE Klasse legt weiterhin eine
+    // echte Mine (keine Regression durch die neue Weiche in useSecondary()).
+    const stNormal = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'), enemyTypes: ['t_pink'], aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {}, upgradesData, equippedSecondary: 'mine', transform: {},
+    });
+    stNormal.mines.length = 0;
+    check(useSecondary(stNormal.player, stNormal, null) === true, 'Phase 6: eine andere Klasse kann keine Bombe mehr legen');
+    check(stNormal.mines.length === 1, 'Phase 6: eine andere Klasse legt keine echte Mine mehr (Weiche zu breit)');
+  }
+
+  // (f) exclusions: die sieben minenspezifischen Karten erscheinen beim
+  // Nekromanten nie, bei einer anderen Klasse weiterhin normal.
+  {
+    const U = upgradesData.upgrades;
+    const excludedIds = ['kettenglied', 'sprengkraft', 'fernzuender', 'schockwelle', 'annaeherungsmine', 'klebemine', 'streumine'];
+    check(
+      excludedIds.every((id) => (U[id].exclusions || []).includes('c_necro')),
+      'Phase 6: nicht alle sieben minenspezifischen Karten tragen exclusions: ["c_necro"]',
+    );
+    const seenFor = (starterTank) => {
+      const seen = new Set();
+      const rng = mulberry32(7);
+      for (let i = 0; i < 400; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(), starterTank,
+        });
+        for (const o of offers) if (o.id) seen.add(o.id);
+      }
+      return seen;
+    };
+    const seenNecro = seenFor('c_necro');
+    const seenOther = seenFor('player');
+    check(
+      excludedIds.every((id) => !seenNecro.has(id)),
+      `Phase 6: der Nekromant sieht trotzdem eine minenspezifische Karte (${excludedIds.filter((id) => seenNecro.has(id)).join(', ')})`,
+    );
+    check(
+      excludedIds.some((id) => seenOther.has(id)),
+      'Phase 6: eine andere Klasse sieht ueberhaupt keine minenspezifische Karte mehr (exclusions zu breit)',
+    );
+  }
+
+  // (g) Determinismus: der Spawnwurf verbraucht GENAU EINEN zusaetzlichen
+  // rng()-Aufruf, wenn ueberhaupt eine Chance besteht -- bei jeder anderen
+  // Klasse (Chance 0) darf sich der RNG-Verbrauch von killTank() NICHT
+  // aendern, sonst wuerden bestehende Seeds/Regressionslaeufe anderer
+  // Klassen durch Phase 6 verschoben.
+  {
+    const mkRoom = (starterTank) => {
+      const opts = {
+        genRng: rngFor(1, 3, 'rooms'), enemyTypes: ['t_pink'], aiSeed: hashSeed(1, 3, 'ai'),
+        playerUpgrades: {}, upgradesData, equippedSecondary: 'mine', transform: {},
+      };
+      if (starterTank) opts.starterTank = starterTank;
+      const st = createState(tanksData, tilesData, opts);
+      st.bullets.length = 0; st.mines.length = 0; st.ghosts.length = 0;
+      return st;
+    };
+    const countKillRng = (st) => {
+      const e = st.tanks.find((t) => t !== st.player);
+      let calls = 0;
+      const orig = st.rng;
+      st.rng = (...a) => {
+        calls++;
+        return orig(...a);
+      };
+      st.killTank(e, 'test', { killer: st.player });
+      return calls;
+    };
+    const normalCalls = countKillRng(mkRoom());
+    const necroCalls = countKillRng(mkRoom('c_necro'));
+    check(
+      necroCalls === normalCalls + 1,
+      `Phase 6: der Spawnwurf verbraucht nicht genau einen zusaetzlichen rng()-Aufruf (${normalCalls} -> ${necroCalls})`,
+    );
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

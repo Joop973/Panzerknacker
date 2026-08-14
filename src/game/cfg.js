@@ -82,6 +82,11 @@ export function resolveCfg(data, type) {
     frostSlowBonus: t.frostSlowBonus ?? 0, // Frostpanzer: staerkere Verlangsamung
     scrapDamagePer100: t.scrapDamagePer100 ?? 0, // Schrottpanzer: +Schaden je 100 Schrott (pro Raum gebacken)
     builtHpMult: t.builtHpMult ?? 1, // Ingenieur: Gebautes haelt mehr aus (tank.js: placeTrapWall)
+    // Nekromant: Klassenidentitaet (Upgradepool-v2 Phase 6) -- ab
+    // Klassenwahl aktiv, kein Upgrade noetig. Ausgewertet an ZWEI Stellen:
+    // state.js: killTank() (Spawnchance beim Kill), tank.js: useSecondary()
+    // (Geisterbombe ersetzt den Bombenslot komplett).
+    necromancer: t.necromancer ?? false,
     // Punkte, die der Spieler-Schild als Absorber auffaengt (Phase 8).
     // Konstante aus balance.json, damit createTank() die shieldHp ohne
     // Balance-Zugriff aus dem cfg fuellen kann.

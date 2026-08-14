@@ -88,9 +88,13 @@
   "shop": {
     "cardChoices": 5
   },
-  "_comment_ghost": "Upgradepool-v2 Phase 4: duration/killBonus (altes Geisterbesatzung-System) sind abgebaut -- maxActive bleibt vorerst stehen, der Nekromant-Neubau (Phase 6/7 dieses Auftrags) definiert Limit und Lebensdauer neu.",
+  "_comment_ghost": "Upgradepool-v2 Phase 6: Geistlimit laut Festgelegte-Entscheidungen-Tabelle auf 3 gesetzt (vorher 4, Rest des alten Systems), OHNE Verdraengung -- am Limit passiert nichts (kein Verbrauch, kein Wurf). spawnChance.necro gilt fuer einen Kill DURCH DEN SPIELER als Nekromant (cfg.necromancer), spawnChance.ghost fuer einen Kill DURCH EINEN GEIST (killer.isGhost) -- state.js: killTank(). Lebensdauer bleibt kein Timer (Phase 7 baut die feste Basiseinheit).",
   "ghost": {
-    "maxActive": 4
+    "maxActive": 3,
+    "spawnChance": {
+      "necro": 0.5,
+      "ghost": 0.33
+    }
   },
   "_comment_aggro": "Upgradepool-v2 Phase 5: Zielauflösung der Gegner-KI (ai.js: resolveTarget/updateTargeting). Bewertung ueber eine EFFEKTIVE DISTANZ (kleiner = attraktiver), keine echte Aggro-Tabelle: Naehe ist der Hauptfaktor. ghostThreatMult <1 vergroessert die effektive Distanz zu Geistern (bei gleicher echter Entfernung weniger attraktiv als der Spieler). damageThreatPx/damageThreatDecayS: zugefuegter Schaden zieht zusaetzlich an (senkt die effektive Distanz) und klingt linear ueber die Decay-Zeit ab. switchHysteresisPct: ein neues Ziel muss um diesen Anteil besser sein, sonst bleibt der Gegner beim alten (verhindert Zappeln). noTargetFallbackS: kein freier Blick aufs aktuelle Ziel fuer so lange -> erzwungener Rueckfall auf den Spieler.",
   "aggro": {

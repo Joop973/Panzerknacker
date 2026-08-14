@@ -181,8 +181,9 @@
     },
     "c_necro": {
       "player": true,
+      "necromancer": true,
       "label": "Nekromant",
-      "desc": "Ausgewogene Grundwerte, aktuell ohne eigenes Passiv.",
+      "desc": "Getötete Gegner werden mit 50 % Chance zu kämpfenden Geisterpanzern (Kills durch einen Geist: 33 %). Die Bombentaste beschwört statt einer Mine sofort einen Geist.",
       "maxHp": 95,
       "damage": 8,
       "speed": "normal",

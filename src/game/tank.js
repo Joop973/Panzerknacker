@@ -8,6 +8,7 @@
 import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
 import { createMine } from './mine.js';
+import { createGhost } from './ghost.js';
 import { statusSpeedMult } from './status.js';
 import { CELL } from '../config.js';
 
@@ -464,6 +465,25 @@ export function layMine(tank, state, throwOverride, forceEmp = false) {
   return true;
 }
 
+// Nekromant: Geisterbombe (Upgradepool-v2 Phase 6) -- ersetzt den
+// Bombenslot VOLLSTAENDIG, solange cfg.necromancer gesetzt ist. Kein Wurf,
+// keine Explosion, kein Fernzuender: ein Tastendruck erzeugt SOFORT einen
+// Geisterpanzer und zaehlt gegen dasselbe Limit wie kill-ausgeloeste
+// Geister (data/balance.json: ghost.maxActive/spawnChance, s. state.js:
+// killTank()). Am Limit passiert nichts -- kein Verbrauch, keine
+// Verdraengung (Festgelegte Entscheidungen: "Geistlimit"). tank (der
+// Spieler selbst) dient als Vorlage fuer createGhost() -- es gibt keine
+// Leiche, von der geerbt werden koennte; ein Interimswert wie beim
+// Kill-Spawn (Phase 7 ersetzt das ganze Modul durch feste Basiswerte).
+function spawnGhostBomb(tank, state) {
+  const cap = state.data.balance.ghost?.maxActive ?? 3;
+  if (state.ghosts.length >= cap) return false;
+  state.ghosts.push(createGhost(tank, state.data.balance));
+  state.sounds.push({ name: 'shield', x: tank.x });
+  state.spawnParticles?.(tank.x, tank.y, '#8ecaf0', 10, 90);
+  return true;
+}
+
 // Sekundärslot (Phase 6): generischer Dispatch fuer die aktive
 // Sekundärwaffe des Spielers. mine/emp_mine laufen weiter ueber layMine()
 // (teilen sich Zuend-/Wurfmechanik); die vier neuen teilen sich stattdessen
@@ -474,6 +494,8 @@ export function useSecondary(tank, state, throwOverride) {
   // Slots (nicht ueber cfg.secondary=null geloest, weil der `|| 'mine'`-
   // Rueckfall die Sperre sonst gleich wieder aufheben wuerde).
   if (tank.cfg.secondaryDisabled) return false;
+  // Nekromant (Upgradepool-v2 Phase 6): der Bombenslot ist keine Mine mehr.
+  if (tank.cfg.necromancer) return spawnGhostBomb(tank, state);
   return layMine(tank, state, throwOverride);
 }
 

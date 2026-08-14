@@ -258,11 +258,15 @@ Nekromant-Passiv `reviveChance` sind vollständig entfernt; `src/game/ghost.js`
 bleibt als vorerst unbenutztes Modul stehen (Neubau folgt in Phase 6/7).
 **Phase 5 (Zielsystem der Gegner-KI) ist gebaut** — Gegner werten jetzt
 periodisch aus, wen sie angreifen (Spieler oder ein Geist), statt hart auf
-`state.player` zu zielen; Details im eigenen Abschnitt unten. **Nächste
-Sitzung: Phase 6 (Nekromant: Klassenidentität — Geisterbombe, Spawnchancen,
-`meta.killer`).** Verbleibend sonst nur noch manuelle/optionale Punkte (s.
-To-do-Liste unten): der Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur
-nach echtem Spielgefühl) und die Telemetrie-Auswertung echter Runs.
+`state.player` zu zielen; Details im eigenen Abschnitt unten. **Phase 6
+(Nekromant: Klassenidentität) ist gebaut** — die Geistermechanik ist ab
+Klassenwahl aktiv (Spawnchance beim Kill, Geisterbombe statt Minenslot,
+Kill-Zuordnung über `meta.killer`); Details im eigenen Abschnitt unten.
+**Nächste Sitzung: Phase 7 (Geisterpanzer neu bauen — `src/game/ghost.js`
+wird durch eine eigene, feste Basiseinheit ERSETZT, nicht ergänzt).**
+Verbleibend sonst nur noch manuelle/optionale Punkte (s. To-do-Liste unten):
+der Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur nach echtem
+Spielgefühl) und die Telemetrie-Auswertung echter Runs.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -3317,6 +3321,68 @@ aggro` + `boss.fixate`.
   trifft, Spieler/Geist nie, tödlicher Treffer entfernt), Determinismus
   (kein zusätzlicher `rng()`-Aufruf).
 
+### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 6 (Nekromant: Klassenidentität) — gemergt
+Die Geistermechanik ist ab Klassenwahl aktiv, ohne Upgrade — „die Einheit
+selbst" (Anhang B) baut erst Phase 7, dieses Modul reaktiviert nur den
+bestehenden `ghost.js`-Mechanismus aus Phase 5 über zwei neue Ausloeser.
+- **`c_necro`**: neues Datenfeld `necromancer: true` (`data/tanks.json`) →
+  `cfg.necromancer` (`cfg.js: resolveCfg()`, Muster wie alle anderen
+  Klassen-Passive). Beschreibung ersetzt („Getötete Gegner werden mit 50 %
+  Chance zu kämpfenden Geisterpanzern …").
+- **Kill-Zuordnung** (`meta.killer`): die Trefferschleife in `state.js`
+  setzt `killer: b.owner` in `trefferMeta` — über `applyTypeEffects()`s
+  `{...meta}`-Spread erbt eine daraus entstehende Blitzkette
+  (`damagetypes.js`) denselben Wert **ohne Codeänderung dort**. Ergänzt an
+  jeder weiteren Stelle, die `applyDamage`/`explodeAt` mit einem eigenen
+  `meta` aufruft: `mine.js: explode()` (`killer: mine.owner`), die
+  Sprengschuss-Detonation, Kamikaze, das Kettenblitz-Upgrade und die
+  Saboteur-Transformation (alle drei `killer: state.player` bzw. `tank` beim
+  Kamikaze). **Bewusste Lücke** (Phase 0 vorab dokumentiert): ein
+  Statuseffekt-Tick (`status.js: updateStatus()`) kennt seinen Verursacher
+  strukturell nicht — ein DOT-Kill löst deshalb nie einen Geist aus, kein
+  Umbau von `status.js`.
+- **Spawnwürfel** (`state.js: killTank()`, Werte in `data/balance.json:
+  ghost.spawnChance`): Kill durch den Spieler als Nekromant 50 %, Kill durch
+  einen Geist 33 %, alle anderen 0 % — über `state.rng()`, **nur wenn
+  überhaupt eine Chance besteht** (sonst würde sich der RNG-Verbrauch jeder
+  anderen Klasse verschieben und bestehende Seeds verschöben sich). Geistlimit
+  auf **3** gesetzt (Festgelegte-Entscheidungen-Tabelle, vorher 4 aus dem alten
+  System), **ohne Verdrängung** — am Deckel passiert nichts.
+- **Geisterbombe** (`tank.js: useSecondary()`): bei `cfg.necromancer` ersetzt
+  eine neue `spawnGhostBomb()` den kompletten `layMine()`-Aufruf — kein Wurf,
+  keine Explosion, kein Fernzünder, sofort ein Geist gegen dasselbe Limit
+  (dieselbe „am Limit passiert nichts"-Regel). Der Spieler selbst dient
+  `createGhost()` als Vorlage (kein Leichnam vorhanden) — ein weiterer
+  Interimswert, den Phase 7 durch feste Basiswerte ersetzt.
+- **`exclusions`** (Anhang A §14, `upgradepool.js: buildCandidates()`): neuer
+  Filter neben `signatureClass` — eine NEGATIVLISTE statt einer Zugehörigkeit
+  (`def.exclusions.includes(starterTank)` sperrt die Karte für genau diese
+  Klassen, alle anderen sehen sie normal weiter). Erste Nutzung: die sieben
+  minenspezifischen Karten (`kettenglied`, `sprengkraft`, `fernzuender`,
+  `schockwelle`, `annaeherungsmine`, `klebemine`, `streumine`) tragen
+  `exclusions: ["c_necro"]`, weil der Bombenslot des Nekromanten keine Mine
+  mehr ist.
+- **`ghost.js` bleibt unangetastet** (Phase 6 ändert am Modul selbst nichts,
+  nur Kopfkommentar aktualisiert) — `createGhost()` war seit Phase 5 bereits
+  panzerkompatibel, die beiden neuen Erzeuger rufen sie unverändert auf.
+- **Neue Dauertests** (Abschnitt 42, Gegenprobe für jeden Kernpunkt
+  bestanden): Klassenidentität (`cfg.necromancer`, Beschreibungstext),
+  Spawnwürfel an beiden Schwellen (49 %/51 %, 32 %/34 %), Nicht-Nekromant
+  und „kein bekannter Killer" erzeugen nie einen Geist, Geistlimit ohne
+  Verdrängung, Kill-Zuordnung über alle sieben Quellen (Kugel, Mine,
+  Sprengschuss, Kamikaze, Kettenblitz-Upgrade, Saboteur, Blitzkette) sowie
+  die akzeptierte DOT-Lücke, Geisterbombe (Spawn/kein Wurf/kein Verbrauch am
+  Limit/Regressionscheck für andere Klassen), `exclusions`-Filter (Struktur +
+  echte Poolziehung, Gegenprobe für andere Klassen), RNG-Determinismus
+  (genau ein Zusatzaufruf nur bei echter Chance). **Zwei zunächst zu
+  schwache Tests gefunden und korrigiert**: der Kettenblitz-Test nahm
+  fälschlich zwei getrennte Kill-Ereignisse an, obwohl die Explosion
+  synchron im selben `killTank()`-Aufruf läuft; der DOT-Test prüfte nach 4
+  simulierten Sekunden — ein Geist verfällt aber nach dem alten
+  `balance.ghost.duration ?? 3`-Fallback, ein absichtlich falsch
+  zugeordneter Killer wäre dadurch unbemerkt geblieben (Ghost erzeugt, dann
+  verfallen, am Ende trotzdem 0). Fix: sofort nach dem Tod prüfen.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`sig_necro_geisterlegion` ist wirkungslos (Upgradepool-v2 Phase 4)**:
       `core: {}`, weil ihre einzigen zwei Effekte (`grantGhostCrew`,
@@ -3407,11 +3473,12 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   werden gezaehlt, nicht heruntergezaehlt (bildratenunabhaengig). Werte in
   `data/status.json`. Haengt bis Phase 6 an keiner Quelle — nur
   `state.applyStatus()` (Debugtasten 1/2/3 bei `?debug=1`).
-- `src/game/ghost.js` — Geisterpanzer (Phase 7), **derzeit unbenutzt**
-  (Upgradepool-v2 Phase 4 hat den einzigen Erzeuger abgebaut, Phase 6/7
-  ersetzt das Modul): `createGhost`, `updateGhosts` (eigenes
-  `state.ghosts`-Array, kein Eintrag in `state.tanks`; panzerkompatible
-  Form seit Upgradepool-v2 Phase 5, s. dort).
+- `src/game/ghost.js` — Geisterpanzer, seit Upgradepool-v2 Phase 6 wieder
+  AKTIV (zwei Erzeuger: `state.js: killTank()`s Spawnwürfel und `tank.js:
+  useSecondary()`s Geisterbombe), aber weiterhin ein INTERIMSSYSTEM: Phase 7
+  ersetzt das ganze Modul durch eine feste Basiseinheit. `createGhost`,
+  `updateGhosts` (eigenes `state.ghosts`-Array, kein Eintrag in
+  `state.tanks`; panzerkompatible Form seit Upgradepool-v2 Phase 5).
 - `src/game/ai.js` — Gegner-KI-Dispatcher + Zielsystem (Upgradepool-v2
   Phase 5): `resolveTarget`/`pickTarget`/`updateTargeting`/`registerThreat`
   wählen zwischen Spieler und Geistern statt hart auf `state.player` zu
