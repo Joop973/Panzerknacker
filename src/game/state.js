@@ -13,7 +13,7 @@ import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
 import { updateGhosts } from './ghost.js';
-import { updateEnemy, updateCoverPerception } from './ai.js';
+import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
 import { applyTypeEffects } from './damagetypes.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
@@ -847,9 +847,15 @@ export function stepState(state, cmd, dt) {
     }
   }
 
+  // Zielauflösung (Upgradepool-v2 Phase 5): throttled (reevaluateHz) VOR der
+  // Gegner-Schleife, damit updateEnemy()/roleTurret() bereits mit dem
+  // frischen tank.ai.target dieses Ticks entscheiden. Boss-Sonderbewegungen
+  // (mirrorBoss/phalanx) ueberschreiben es weiter unten selbst.
+  updateTargeting(state, dt);
   // Deckungs-KI (Phase 16): throttled (15 Hz, Reihum-Verfahren) VOR der
   // Gegner-Schleife, damit updateEnemy() bereits mit dem frischen
-  // tank.ai.threatened dieses Ticks entscheidet.
+  // tank.ai.threatened dieses Ticks entscheidet. Bleibt bewusst
+  // spielerbezogen (Phase 5 aendert daran nichts).
   updateCoverPerception(state, dt);
   // Frame-Budget fuer den Abpraller-Rechner (ai_turrets.js: bounceShot):
   // hoechstens so viele Solver-Laeufe pro Frame, egal wie viele
@@ -876,7 +882,10 @@ export function stepState(state, cmd, dt) {
     // Nutzt die Feuerfreigabe, die die KI ohnehin schon berechnet hat --
     // kein zweiter Sichtlinien-Raycast im Renderpfad (Phase 11b nennt die
     // Sichtlinien-KI ausdruecklich als Risikopunkt fuer das Frame-Budget).
-    t.aimingAtPlayer = fire;
+    // Upgradepool-v2 Phase 5: nur noch true, wenn das aufgeloeste Ziel
+    // wirklich der Spieler ist -- sonst warnt der Gefahrensinn vor einem
+    // Schuss, der einem Geist gilt.
+    t.aimingAtPlayer = fire && resolveTarget(t, state) === state.player;
     moveTank(t, move, state, dt);
     if (fire) fireBullet(t, state);
     if (mine) layMine(t, state);
@@ -1054,6 +1063,10 @@ export function stepState(state, cmd, dt) {
           ownerCfg: b.owner?.cfg || null,
         };
         state.applyDamage(t, schaden, cause, trefferMeta);
+        // Upgradepool-v2 Phase 5: der Verursacher zieht das Ziel-Scoring
+        // kurzzeitig an (ai.js: candidateScore) -- nur relevant fuer Gegner
+        // (registerThreat() no-opt fuer den Spieler von selbst).
+        registerThreat(t, b.owner, state);
         // UMBAUPLAN-LP Phase 8: Schaden je Schadenstyp (nur der vom SPIELER an
         // Gegnern angerichtete Aufschlag) -- ersetzt die ausgemusterten
         // USP-Kennzahlen als Telemetrie-Grundlage. Bewusst nur der Trefferwert;
@@ -1083,6 +1096,27 @@ export function stepState(state, cmd, dt) {
           if (bounced) state.ricochetKills++;
           else state.directKills++;
         }
+        break;
+      }
+    }
+  }
+
+  // Gegner-Geschosse gegen Geister (Upgradepool-v2 Phase 5): eigene, kleine
+  // Schleife statt Geister in die grosse Panzer-Trefferschleife oben zu
+  // pressen -- deren Logik (Panzerung, Krit, Trickshot, Kopfschuss-Execute)
+  // ist auf echte Panzer in state.tanks zugeschnitten und wuerde fuer
+  // Geister falsche Sonderfaelle auswerten. Nur GEGNERISCHE Kugeln sind
+  // gefaehrlich (Geister kaempfen auf Spielerseite); eigene/Geister-Kugeln
+  // ignorieren einander. Bewusst minimal (kein applyDamage/killTank) -- der
+  // Nekromant-Neubau (Phase 7 dieses Auftrags) baut die echten Todes-Hooks.
+  for (const b of state.bullets) {
+    if (b.dead || b.owner === state.player || b.owner?.isGhost) continue;
+    for (const g of state.ghosts) {
+      if (!g.alive) continue;
+      if (circlesOverlap(b.x, b.y, b.radius, g.x, g.y, g.cfg.radius)) {
+        b.dead = true;
+        g.hp -= b.damage ?? 1;
+        if (g.hp <= 0) g.alive = false;
         break;
       }
     }

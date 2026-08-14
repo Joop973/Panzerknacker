@@ -45,25 +45,153 @@ export function clearLine(state, x0, y0, x1, y1) {
 }
 
 // Ray-March vom Rohrende entlang der Turmrichtung: trifft der Strahl
-// den Spieler, bevor er in einer Wand endet?
-export function playerInSight(tank, state) {
-  const p = state.player;
-  if (!p.alive) return false;
+// das Ziel, bevor er in einer Wand endet? Upgradepool-v2 Phase 5: nicht
+// mehr fest auf state.player -- der Aufrufer uebergibt das aufgeloeste
+// Ziel (resolveTarget), damit ein zufaellig schwenkender Turm (accuracy 0)
+// auch einen Geist "zufaellig" erwischen kann.
+export function targetInSight(tank, state, target) {
+  if (!target || !target.alive) return false;
   const { raycastStepPx, raycastMaxPx } = state.data.ai;
   const cos = Math.cos(tank.turret);
   const sin = Math.sin(tank.turret);
-  const hitR = p.cfg.radius + tank.cfg.bulletRadius;
+  const hitR = target.cfg.radius + tank.cfg.bulletRadius;
   let x = tank.x + cos * (tank.cfg.radius + 8);
   let y = tank.y + sin * (tank.cfg.radius + 8);
   for (let d = 0; d < raycastMaxPx; d += raycastStepPx) {
     if (state.blocksSight(x, y)) return false;
-    const dx = x - p.x;
-    const dy = y - p.y;
+    const dx = x - target.x;
+    const dy = y - target.y;
     if (dx * dx + dy * dy < hitR * hitR) return true;
     x += cos * raycastStepPx;
     y += sin * raycastStepPx;
   }
   return false;
+}
+
+// Upgradepool-v2 Phase 5: Zielauflösung der Gegner-KI. resolveTarget() ist
+// die zentrale, billige Lese-Funktion, die ai_drives.js/ai_turrets.js statt
+// eines hart verdrahteten state.player benutzen -- sie liest nur das Feld,
+// das updateTargeting() periodisch pflegt (Muster wie tank.ai.threatened aus
+// der Deckungswahrnehmung, Phase 16). Faellt auf den Spieler zurueck, wenn
+// noch keine Bewertung stattgefunden hat (z. B. direkt nach dem Spawn) oder
+// das gewaehlte Ziel inzwischen tot ist.
+export function resolveTarget(tank, state) {
+  const target = tank.ai?.target;
+  return target && target.alive ? target : state.player;
+}
+
+// Von der Treffer-Schleife (state.js) aufgerufen, wenn ein GEGNER (nicht der
+// Spieler) Schaden nimmt: merkt sich den Verursacher kurzzeitig als
+// zusaetzlichen Attraktivitaets-Bonus (s. candidateScore) -- "zugefuegter
+// Schaden zieht zusaetzlich an". Bewusst nur der JEWEILS LETZTE Verursacher
+// (keine echte Tabelle, klingt einfach wieder ab), s. Kopfkommentar Datei.
+export function registerThreat(tank, source, state) {
+  if (!tank.ai || tank === state.player || !source) return;
+  tank.ai.threatSource = source;
+  tank.ai.threatTimer = state.data.balance.aggro?.damageThreatDecayS ?? 0;
+}
+
+// Effektive Distanz zu einem Kandidaten -- KLEINER = attraktiver. Geister
+// werden ueber ghostThreatMult (<1) kuenstlich "weiter weg" gerechnet, ein
+// zuletzt zugefuegter Schaden zieht das Ziel (mit linearem Abklingen)
+// naeher heran.
+function candidateScore(tank, candidate, cfg) {
+  const dx = candidate.x - tank.x;
+  const dy = candidate.y - tank.y;
+  let dist = Math.hypot(dx, dy);
+  if (candidate.isGhost) dist /= cfg.ghostThreatMult ?? 1;
+
+
+  const ai = tank.ai;
+  if (ai.threatSource === candidate && ai.threatTimer > 0) {
+    const decayS = cfg.damageThreatDecayS || 1;
+    dist -= (cfg.damageThreatPx ?? 0) * Math.min(1, ai.threatTimer / decayS);
+  }
+
+  return Math.max(0, dist);
+}
+
+// Neu bewertet EIN Ziel fuer EINEN Panzer (aufgerufen aus updateTargeting()
+// im Reevaluate-Takt, s. u.). Hysterese: ein neues Ziel muss um
+// switchHysteresisPct GUENSTIGER sein als das alte, sonst bleibt der Panzer
+// beim bisherigen Ziel -- verhindert Zappeln zwischen zwei etwa gleich weit
+// entfernten Kandidaten. Sichtlinien-Fallback: findet der Panzer sein
+// gewaehltes Ziel laenger als noTargetFallbackS nicht (Wand im Weg), faellt
+// er auf den Spieler zurueck, statt einen unerreichbaren Geist zu verfolgen.
+// Exportiert (nicht nur intern von updateTargeting() genutzt): bossai.js
+// ruft sie in der freien Phase direkt auf, s. dortiger Kommentar.
+export function pickTarget(tank, state) {
+  const cfg = state.data.balance.aggro || {};
+  const ai = tank.ai;
+  // Ein Kandidat, den der Panzer gerade erst wegen anhaltend fehlender
+  // Sichtlinie aufgegeben hat (s. Fallback unten), bleibt ausgeschlossen,
+  // bis er wieder SICHTBAR ist -- die Rohdistanz allein wuerde ihn sonst bei
+  // der naechsten Neubewertung sofort erneut als "best" waehlen (er ist ja
+  // weiterhin naeher, nur eben unerreichbar) und der Panzer zappelt jeden
+  // Takt zwischen Fallback und Wiederaufnahme, statt wirklich aufzugeben
+  // (gemessen: genau dieses Muster, kein hypothetischer Grenzfall).
+  const candidates = [state.player, ...state.ghosts].filter((c) => {
+    if (!c || !c.alive) return false;
+    if (c === ai.avoidTarget && !clearLine(state, tank.x, tank.y, c.x, c.y)) return false;
+    return true;
+  });
+  if (!candidates.length) {
+    ai.target = null;
+    return;
+  }
+  let best = candidates[0];
+  let bestScore = candidateScore(tank, best, cfg);
+  for (let i = 1; i < candidates.length; i++) {
+    const score = candidateScore(tank, candidates[i], cfg);
+    if (score < bestScore) {
+      bestScore = score;
+      best = candidates[i];
+    }
+  }
+  let chosen = best;
+  const current = ai.target;
+  if (current && current.alive && current !== best) {
+    const currentScore = candidateScore(tank, current, cfg);
+    if (bestScore >= currentScore * (1 - (cfg.switchHysteresisPct ?? 0))) {
+      chosen = current; // neues Ziel nicht deutlich genug besser -> bleiben
+    }
+  }
+
+  // Allgemeine Sichtlinie zur ZIEL-POSITION (nicht der enge Turmkegel von
+  // targetInSight() -- hier geht es nur um "steht eine Wand dazwischen").
+  const reevalS = 1 / (cfg.reevaluateHz ?? 4);
+  if (clearLine(state, tank.x, tank.y, chosen.x, chosen.y)) {
+    ai.noSightTimer = 0;
+  } else {
+    ai.noSightTimer = (ai.noSightTimer || 0) + reevalS;
+    if (ai.noSightTimer >= (cfg.noTargetFallbackS ?? 3) && chosen !== state.player) {
+      ai.avoidTarget = chosen; // bis auf Weiteres ausgeschlossen (s. oben)
+      chosen = state.player;
+      ai.noSightTimer = 0;
+    }
+  }
+  ai.target = chosen;
+}
+
+// Treiber (einmal pro Frame aus state.js, wie updateCoverPerception): jeder
+// Gegner bewertet sein Ziel hoechstens reevaluateHz-mal pro Sekunde neu
+// (eigener Timer je Panzer, nicht synchron) -- billig genug, um ALLE Gegner
+// jeden Reevaluate-Takt zu pruefen (kein Reihum-Verfahren noetig, anders als
+// der teure Abpraller-Solver). Boss-Sonderbewegungen (mirrorBoss/phalanx)
+// ueberschreiben tank.ai.target danach selbst (bossai.js: Fixierung) --
+// werden hier deshalb bewusst ausgelassen, sonst wuerde die generische
+// Hysterese/Sichtlinien-Buchhaltung mit der Fixierung kollidieren.
+export function updateTargeting(state, dt) {
+  for (const t of state.tanks) {
+    if (t === state.player || !t.alive || t.cfg.mirrorBoss || t.cfg.phalanx) continue;
+    const ai = t.ai;
+    if (ai.threatTimer > 0) ai.threatTimer -= dt;
+    if (ai.targetTimer === undefined) ai.targetTimer = 0;
+    ai.targetTimer -= dt;
+    if (ai.targetTimer > 0) continue;
+    ai.targetTimer = 1 / (state.data.balance.aggro?.reevaluateHz ?? 4);
+    pickTarget(t, state);
+  }
 }
 
 // Liegt innerhalb von clearPx vor der Muendung eine Wand? (Verhindert

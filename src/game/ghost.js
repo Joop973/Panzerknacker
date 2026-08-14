@@ -31,6 +31,14 @@ let nextGhostId = 1;
 // Upgradepool-v2 Phase 4: balance.ghost.duration selbst ist mit dem alten
 // System entfernt -- der Fallback (?? 3) verhindert NaN, falls diese
 // Funktion (derzeit unbenutzt, s. Kopfkommentar) doch aufgerufen wird.
+// Upgradepool-v2 Phase 5: die Objektform ist jetzt panzerkompatibel (x/y/
+// prevX/prevY/vx/vy/alive/cfg.radius/hp statt nur dead) -- Gegner-KI
+// (resolveTarget), Vorhaltezielen (liest vx/vy) und die neue Geschoss-
+// Kollision (state.js) behandeln einen Geist dadurch wie einen Panzer.
+// `alive` ersetzt das bisherige `dead` (invertiert). hp = tank.cfg.maxHp ist
+// ein INTERIMSWERT -- Anhang B (Phase 7) will feste, vom getoeteten Gegner
+// UNABHAENGIGE Basiswerte; der endgueltige Wert kommt mit dem Nekromant-
+// Neubau, der dieses ganze Modul ersetzt.
 export function createGhost(tank, balance, durationBonus = 0) {
   return {
     id: nextGhostId++,
@@ -38,14 +46,17 @@ export function createGhost(tank, balance, durationBonus = 0) {
     y: tank.y,
     prevX: tank.x,
     prevY: tank.y,
+    vx: 0,
+    vy: 0,
     heading: tank.heading,
     turret: tank.turret,
     type: tank.type,
     cfg: tank.cfg, // dieselbe aufgeloeste cfg -- kein neuer Balance-Wert noetig
+    hp: tank.cfg.maxHp,
     cooldown: 0,
     timeLeft: (balance.ghost?.duration ?? 3) + durationBonus,
     isGhost: true,
-    dead: false,
+    alive: true,
   };
 }
 
@@ -66,8 +77,8 @@ function nearestEnemy(state, ghost) {
 export function updateGhosts(state, dt) {
   for (const g of state.ghosts) {
     g.timeLeft -= dt;
-    if (g.timeLeft <= 0) {
-      g.dead = true;
+    if (g.timeLeft <= 0 || g.hp <= 0) {
+      g.alive = false;
       continue;
     }
     g.prevX = g.x;
@@ -75,7 +86,11 @@ export function updateGhosts(state, dt) {
 
     const target = nearestEnemy(state, g);
     if (g.cooldown > 0) g.cooldown -= dt;
-    if (!target) continue; // kein Gegner mehr -- nur der Timer laeuft weiter
+    if (!target) {
+      g.vx = 0;
+      g.vy = 0;
+      continue; // kein Gegner mehr -- nur der Timer laeuft weiter
+    }
 
     const angleToTarget = Math.atan2(target.y - g.y, target.x - g.x);
     g.turret = turnToward(g.turret, angleToTarget, TURN_SPEED * dt);
@@ -89,6 +104,10 @@ export function updateGhosts(state, dt) {
     // Geister blockieren echte Panzer nicht und werden nicht von ihnen
     // blockiert (passend zu "blockieren keine Kugeln").
     resolveCircleWalls(g, g.cfg.radius, state.walls);
+    // vx/vy wie bei einem echten Panzer (tank.js: moveTank) -- Phase 5
+    // braucht das fuer Vorhaltezielen (t_black) gegen einen Geist.
+    g.vx = dt > 0 ? (g.x - g.prevX) / dt : 0;
+    g.vy = dt > 0 ? (g.y - g.prevY) / dt : 0;
 
     if (
       g.cooldown <= 0 &&
@@ -113,5 +132,5 @@ export function updateGhosts(state, dt) {
       state.sounds.push({ name: 'shoot', x: g.x });
     }
   }
-  state.ghosts = state.ghosts.filter((g) => !g.dead);
+  state.ghosts = state.ghosts.filter((g) => g.alive);
 }

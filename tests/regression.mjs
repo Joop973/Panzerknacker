@@ -5406,6 +5406,472 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 41. Upgradepool-v2 Phase 5: Zielsystem der Gegner-KI ----------------
+// Gegner werten jetzt periodisch aus, WEN sie angreifen (Spieler oder ein
+// Geist) statt hart auf state.player zu zielen -- Bewertung ueber eine
+// EFFEKTIVE DISTANZ (ai.js: resolveTarget/pickTarget/updateTargeting).
+// Frame-Budget des Abpraller-Solvers (der jetzt ueber resolveTarget rechnet)
+// bleibt unter Abschnitt 7c mitbewacht -- kein zweiter Budget-Test noetig.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { updateTargeting, resolveTarget, registerThreat, angleDiff, updateEnemy } = await import(
+    '../src/game/ai.js'
+  );
+  const { stepMirrorBoss, stepPhalanxBoss } = await import('../src/game/bossai.js');
+  const { createGhost, updateGhosts } = await import('../src/game/ghost.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+
+  // Isolierter, deterministischer Raum: EIN Gegner in einer garantiert
+  // wandfreien Zeile des Test-Layouts (data/arenas.json: test_arena, Zeile 1
+  // ist durchgehend Boden) -- damit haengt keine Sichtlinien-Pruefung vom
+  // zufaelligen Seed-Layout ab (Muster: Phase-5-Statuseffekt-"isoliert()").
+  const raum = (type) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: [type],
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      roomSpec: { fixedLayout: 'test_arena' },
+      arenas: tanksData.arenas,
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    const e = st.tanks.find((t) => t !== st.player);
+    e.x = 300; e.y = 48; e.prevX = 300; e.prevY = 48;
+    st.player.x = 600; st.player.y = 48; st.player.prevX = 600; st.player.prevY = 48;
+    st.player.protect = 999; // bleibt unverwundbar, egal was e in den Tests feuert
+    return { st, e };
+  };
+  // Panzerkompatibler Geist ueber die echte createGhost()-Fabrik (Phase 5) --
+  // NIE ein handgestricktes Objekt: updateGhosts() laeuft in jedem stepState-
+  // Tick und wuerde an einem unvollstaendigen cfg (fehlendes speed/weapon/...)
+  // mit NaN korrumpieren, ohne zu werfen.
+  const makeGhost = (base, x, y) =>
+    createGhost({ x, y, heading: 0, turret: 0, type: base.type, cfg: base.cfg }, tanksData.balance);
+
+  // Eigene Zahlen statt der aktuellen balance.json-Werte (CLAUDE.md-Pflicht:
+  // "den Mechanismus mit eigenen Zahlen pruefen, nicht die aktuelle
+  // Datenlage") -- sonst waeren diese Tests bei der naechsten Balance-
+  // Anpassung entweder grundlos rot oder faelschlich weiter gruen.
+  const origAggro = tanksData.balance.aggro;
+  const testAggro = {
+    reevaluateHz: 4,
+    ghostThreatMult: 0.5,
+    damageThreatPx: 250,
+    damageThreatDecayS: 2,
+    switchHysteresisPct: 0.3,
+    noTargetFallbackS: 1,
+  };
+  tanksData.balance.aggro = testAggro;
+  try {
+    // (a) Ohne Geister ist das Ziel immer der Spieler.
+    {
+      const { st, e } = raum('t_pink');
+      updateTargeting(st, 10);
+      check(resolveTarget(e, st) === st.player, 'Phase 5 (Zielsystem): ohne Geister wird nicht der Spieler gewaehlt');
+    }
+
+    // (b) Ein Geist deutlich naeher als der Spieler wird zum Ziel.
+    {
+      const { st, e } = raum('t_pink');
+      const g = makeGhost(e, e.x + 30, e.y); // 30px, Spieler 300px entfernt
+      st.ghosts.push(g);
+      updateTargeting(st, 10);
+      check(resolveTarget(e, st) === g, 'Phase 5 (Zielsystem): ein naher Geist wird nicht anvisiert');
+    }
+
+    // (c) ghostThreatMult: der Geist ist real NAEHER als der Spieler, aber
+    // die kuenstlich vergroesserte effektive Distanz laesst trotzdem den
+    // Spieler gewinnen. Bewusst KEINE exakt gleiche Distanz (das waere bei
+    // einem exakten Gleichstand ueber die Einfuege-Reihenfolge + "echt
+    // kleiner als" zufaellig auch OHNE Mult gruen -- per Gegenprobe
+    // bestaetigt, ohne den Mult bleibt es sonst unbemerkt trivial wahr).
+    {
+      const { st, e } = raum('t_pink');
+      const d = Math.hypot(st.player.x - e.x, st.player.y - e.y); // 300
+      const g = makeGhost(e, e.x + d - 50, e.y); // real 250 < 300, effektiv 500 > 300
+      st.ghosts.push(g);
+      updateTargeting(st, 10);
+      check(
+        resolveTarget(e, st) === st.player,
+        'Phase 5 (Zielsystem): ghostThreatMult wirkt nicht (real naeherer Geist gewinnt trotzdem)',
+      );
+    }
+
+    // (d) Hysterese: ein neues Ziel muss deutlich guenstiger sein, sonst
+    // bleibt der Gegner beim alten (verhindert Zappeln zwischen fast gleich
+    // attraktiven Kandidaten).
+    {
+      const { st, e } = raum('t_pink');
+      const gClose = makeGhost(e, e.x + 90, e.y); // effektiv 180
+      st.ghosts.push(gClose);
+      updateTargeting(st, 10);
+      check(resolveTarget(e, st) === gClose, 'Phase 5 (Zielsystem): Vorbedingung Hysterese-Test (Geist nicht gewaehlt)');
+
+      // 10% naeher (effektiv 164) -- unter der 30%-Schwelle, darf NICHT
+      // uebernehmen.
+      const gSlightlyCloser = makeGhost(e, e.x + 82, e.y);
+      st.ghosts.push(gSlightlyCloser);
+      e.ai.targetTimer = 0; // erzwingt sofortige Neubewertung
+      updateTargeting(st, 1);
+      check(
+        resolveTarget(e, st) === gClose,
+        'Phase 5 (Zielsystem): Hysterese verhindert Zappeln nicht (knapper Vorteil wechselt trotzdem)',
+      );
+
+      // Deutlich guenstiger (effektiv 10) -- setzt sich trotz Hysterese durch.
+      const gMuchCloser = makeGhost(e, e.x + 5, e.y);
+      st.ghosts.push(gMuchCloser);
+      e.ai.targetTimer = 0;
+      updateTargeting(st, 1);
+      check(
+        resolveTarget(e, st) === gMuchCloser,
+        'Phase 5 (Zielsystem): ein deutlich besseres Ziel setzt sich trotz Hysterese nicht durch',
+      );
+    }
+
+    // (e) Schadens-Bedrohung zieht das Ziel an und klingt linear ab.
+    {
+      const { st, e } = raum('t_pink');
+      const g = makeGhost(e, e.x + 200, e.y); // real naeher als der Spieler, aber
+      st.ghosts.push(g); // effektiv (200/0.5=400) weiter als dessen 300
+      updateTargeting(st, 10);
+      check(
+        resolveTarget(e, st) === st.player,
+        'Phase 5 (Zielsystem): Vorbedingung Bedrohungstest (Geist wird schon ohne Bedrohung gewaehlt)',
+      );
+
+      // ai.target vor dem Wurf zuruecksetzen: sonst schuetzt die Hysterese
+      // (Vorbedingung hat gerade erst den Spieler als "aktuelles" Ziel
+      // gesetzt) den Spieler zusaetzlich, und dieser Test misst dann die
+      // Hysterese statt der Bedrohung.
+      e.ai.target = null;
+      registerThreat(e, g, st); // der Geist hat gerade zugeschlagen (voller Timer)
+      e.ai.targetTimer = 0;
+      updateTargeting(st, 1);
+      check(resolveTarget(e, st) === g, 'Phase 5 (Zielsystem): frischer Schaden zieht das Ziel nicht an');
+
+      // Abklingen: eine vollstaendig abgelaufene Bedrohung wirkt nicht mehr.
+      e.ai.target = st.player;
+      e.ai.threatSource = g;
+      e.ai.threatTimer = 0;
+      e.ai.targetTimer = 0;
+      updateTargeting(st, 1);
+      check(resolveTarget(e, st) === st.player, 'Phase 5 (Zielsystem): eine abgeklungene Bedrohung wirkt noch');
+    }
+
+    // (f) registerThreat ist ein No-op fuer den Spieler.
+    {
+      const { st, e } = raum('t_pink');
+      registerThreat(st.player, e, st);
+      check(st.player.ai.threatSource === undefined, 'Phase 5 (Zielsystem): registerThreat setzt beim Spieler trotzdem ein Feld');
+    }
+
+    // (g) Sichtlinien-Fallback: ein Geist ausserhalb des Grids (fuer
+    // clearLine dauerhaft unerreichbar) wird nach noTargetFallbackS
+    // aufgegeben, der Gegner faellt auf den Spieler zurueck.
+    {
+      const { st, e } = raum('t_pink');
+      e.x = 50; e.y = 48; e.prevX = 50; e.prevY = 48;
+      st.player.x = 450; st.player.y = 48; // 400px entfernt
+      const gBlocked = makeGhost(e, -30, 48); // 80px entfernt, aber ausserhalb -> blockiert
+      st.ghosts.push(gBlocked);
+      // reevalS = 1/reevaluateHz(4) = 0.25s; noTargetFallbackS(1) -> 4 Aufrufe.
+      for (let i = 0; i < 5; i++) {
+        e.ai.targetTimer = 0;
+        updateTargeting(st, 0.25);
+      }
+      check(
+        resolveTarget(e, st) === st.player,
+        'Phase 5 (Zielsystem): Sichtlinien-Fallback greift nicht (bleibt am unerreichbaren Geist haengen)',
+      );
+    }
+
+    // (h) Integration: Fahr- UND Turmverhalten (ai_drives.js/ai_turrets.js)
+    // steuern wirklich zum aufgeloesten Ziel, nicht mehr hart zum Spieler.
+    {
+      const { st, e } = raum('t_pink');
+      e.cfg.accuracy = 1; // deterministisch: kein Zielfehler-Jitter
+      st.player.x = e.x - 200; st.player.y = e.y; // WESTEN
+      const g = makeGhost(e, e.x + 60, e.y); // OSTEN, effektiv naeher -> wird gewaehlt
+      st.ghosts.push(g);
+      updateTargeting(st, 10);
+      check(
+        resolveTarget(e, st) === g,
+        'Phase 5 (Zielsystem): Vorbedingung Integrationstest (Geist nicht als Ziel aufgeloest)',
+      );
+
+      const { move } = updateEnemy(e, st, 1 / 60);
+      const moveAngle = Math.atan2(move.y, move.x);
+      check(
+        Math.abs(angleDiff(moveAngle, 0)) < 0.05,
+        `Phase 5 (Zielsystem): Fahrverhalten steuert nicht zum aufgeloesten Ziel (Winkel ${moveAngle.toFixed(2)} statt 0)`,
+      );
+      check(
+        Math.abs(angleDiff(moveAngle, Math.PI)) > 2,
+        'Phase 5 (Zielsystem): Fahrverhalten steuert trotzdem in Richtung Spieler',
+      );
+
+      // Turm konvergiert ueber mehrere Ticks ebenfalls zum Geist.
+      for (let i = 0; i < 90; i++) updateEnemy(e, st, 1 / 60);
+      check(
+        Math.abs(angleDiff(e.turret, 0)) < 0.1,
+        `Phase 5 (Zielsystem): Turm zielt nicht auf das aufgeloeste Ziel (${e.turret.toFixed(2)})`,
+      );
+    }
+
+    // (i) Volle Pipeline (stepState): aimingAtPlayer ist nur noch wahr, wenn
+    // wirklich der SPIELER im Visier ist -- ein Schuss auf einen Geist darf
+    // den Gefahrensinn (Phase 18 Welle 3) nicht faelschlich ausloesen.
+    {
+      const { st, e } = raum('t_pink');
+      e.cfg.accuracy = 1;
+      for (let i = 0; i < 90; i++) stepState(st, CMD, STEP);
+      check(e.aimingAtPlayer === true, 'Phase 5 (Zielsystem): aimingAtPlayer wird nicht gesetzt, obwohl der Spieler im Visier ist');
+
+      // Position wieder auf einen kontrollierten Abstand setzen (der Hunter
+      // ist waehrend der ersten Schleife auf den Spieler zugefahren) und
+      // einen naeheren, sichtbaren Geist einfuegen.
+      e.x = st.player.x - 300; e.y = st.player.y; e.prevX = e.x; e.prevY = e.y;
+      const g = makeGhost(e, e.x + 40, e.y);
+      st.ghosts.push(g);
+      e.ai.targetTimer = 0;
+      for (let i = 0; i < 60; i++) stepState(st, CMD, STEP);
+      check(
+        resolveTarget(e, st) === g,
+        'Phase 5 (Zielsystem): Vorbedingung (Geist wird nicht als Ziel gewaehlt)',
+      );
+      check(
+        e.aimingAtPlayer === false,
+        'Phase 5 (Zielsystem): aimingAtPlayer bleibt wahr, obwohl auf einen Geist gezielt wird',
+      );
+    }
+
+    // (m) Determinismus: das Zielsystem verbraucht KEIN RNG -- sonst
+    // wuerde es den Seed-RNG-Strom verschieben und Fortsetzen/Replays
+    // brechen (E-Grundsatz seit Phase 0b).
+    {
+      const { st, e } = raum('t_pink');
+      const g = makeGhost(e, e.x + 20, e.y);
+      st.ghosts.push(g);
+      let calls = 0;
+      const origRng = st.rng;
+      st.rng = () => {
+        calls++;
+        return origRng();
+      };
+      for (let i = 0; i < 10; i++) {
+        e.ai.targetTimer = 0;
+        updateTargeting(st, 1);
+        registerThreat(e, g, st);
+      }
+      check(calls === 0, `Phase 5 (Zielsystem): das Zielsystem verbraucht RNG (${calls} Aufrufe) -- Seed-Wiedergabe wuerde brechen`);
+    }
+  } finally {
+    tanksData.balance.aggro = origAggro;
+  }
+
+  // (j)/(k) Boss-Fixierung: zeitgesteuerter Wechsel zwischen erzwungener
+  // Spieler-Fixierung und freier Zielwahl (bossai.js: resolveBossTarget/
+  // resolvePhalanxTarget). Eigene Testwerte statt data/balance.json.
+  const origFixate = tanksData.balance.boss.fixate;
+  const testFixate = { onPlayerS: 2, onGhostsS: 2, minPlayerShare: 0.4 }; // Zyklus 4
+  tanksData.balance.boss.fixate = testFixate;
+  try {
+    // (j) Der Spiegel: waehrend onPlayerS immer der Spieler, in der freien
+    // Phase entdeckt er einen nahen Geist wirklich (nicht nur der zuletzt
+    // gesetzte Wert -- das war der eigentliche Fund dieser Phase, s.
+    // bossai.js: resolveBossTarget()-Kommentar).
+    {
+      const st = createState(tanksData, tilesData, {
+        genRng: rngFor(1, 3, 'rooms'),
+        enemyTypes: ['t_mirror'],
+        aiSeed: hashSeed(1, 3, 'ai'),
+        playerUpgrades: {},
+        upgradesData,
+        equippedSecondary: 'mine',
+        transform: {},
+        roomSpec: { fixedLayout: 'boss_mirror' },
+        arenas: tanksData.arenas,
+      });
+      const boss = st.tanks.find((t) => t !== st.player);
+      stepMirrorBoss(boss, st, 1 / 60); // einmal, um auf die gespiegelte Position zu kommen
+      const g = makeGhost(boss, boss.x + 10, boss.y); // sehr nah
+      st.ghosts.push(g);
+
+      st.time = 0.5; // < onPlayerS(2) -> global fixiert
+      stepMirrorBoss(boss, st, 1 / 60);
+      check(boss.fixatedOnPlayer === true, 'Phase 5 (Zielsystem): Spiegel-Boss ist waehrend onPlayerS nicht fixiert');
+      check(boss.ai.target === st.player, 'Phase 5 (Zielsystem): Spiegel-Boss zielt waehrend der Fixierung nicht auf den Spieler');
+
+      st.time = 3.0; // 2 <= 3 < 4 -> freie Phase
+      stepMirrorBoss(boss, st, 1 / 60);
+      check(boss.fixatedOnPlayer === false, 'Phase 5 (Zielsystem): Spiegel-Boss bleibt in der freien Phase fixiert');
+      check(
+        boss.ai.target === g,
+        'Phase 5 (Zielsystem): Spiegel-Boss entdeckt in der freien Phase keinen naeheren Geist (resolveTarget statt pickTarget?)',
+      );
+    }
+
+    // (k) Der Reaktor: KEINE Sonderregel -- laeuft ueber die normale
+    // updateTargeting()-Schleife wie jeder andere Gegner (CLAUDE.md-Auflage
+    // "auch KEINE Fixierungs-Sonderregel").
+    {
+      const st = createState(tanksData, tilesData, {
+        genRng: rngFor(1, 3, 'rooms'),
+        enemyTypes: ['t_reactor'],
+        aiSeed: hashSeed(1, 3, 'ai'),
+        playerUpgrades: {},
+        upgradesData,
+        equippedSecondary: 'mine',
+        transform: {},
+        roomSpec: { fixedLayout: 'boss_reactor' },
+        arenas: tanksData.arenas,
+      });
+      const reactor = st.tanks.find((t) => t !== st.player);
+      check(
+        !reactor.cfg.mirrorBoss && !reactor.cfg.phalanx,
+        'Phase 5 (Zielsystem): Vorbedingung -- der Reaktor hat eine Boss-Sonderbewegung',
+      );
+      const g = makeGhost(reactor, reactor.x + 5, reactor.y);
+      st.ghosts.push(g);
+      updateTargeting(st, 10);
+      check(
+        resolveTarget(reactor, st) === g,
+        'Phase 5 (Zielsystem): der Reaktorkern nutzt die generische Zielauflösung nicht (Sonderregel gefunden)',
+      );
+    }
+
+    // (l) Die Phalanx: raeumliche Regel erzwingt IMMER mindestens
+    // minPlayerShare der fuenf Panzer auf den Spieler, unabhaengig von der
+    // Zeitfensterlage -- und die Auswahl wandert deterministisch (rotiert).
+    {
+      const st = createState(tanksData, tilesData, {
+        genRng: rngFor(1, 3, 'rooms'),
+        enemyTypes: Array(5).fill('t_phalanx'),
+        aiSeed: hashSeed(1, 3, 'ai'),
+        playerUpgrades: {},
+        upgradesData,
+        equippedSecondary: 'mine',
+        transform: {},
+        roomSpec: { fixedLayout: 'boss_phalanx' },
+        arenas: tanksData.arenas,
+      });
+      const others = st.tanks.filter((t) => t !== st.player);
+      check(others.length === 5, `Phase 5 (Zielsystem): Phalanx-Testraum hat ${others.length} statt 5 Panzer`);
+
+      st.time = 0.5; // < onPlayerS(2) -> global fixiert
+      for (const t of others) stepPhalanxBoss(t, st, 1 / 60);
+      check(
+        others.every((t) => t.fixatedOnPlayer === true && t.ai.target === st.player),
+        'Phase 5 (Zielsystem): Phalanx fixiert waehrend onPlayerS nicht alle fuenf auf den Spieler',
+      );
+
+      st.time = 3; // freie Phase (2..4)
+      for (const t of others) stepPhalanxBoss(t, st, 1 / 60);
+      const forced = others.filter((t) => t.fixatedOnPlayer === true);
+      const free = others.filter((t) => t.fixatedOnPlayer === false);
+      check(forced.length === 2, `Phase 5 (Zielsystem): Phalanx erzwingt nicht genau 2 von 5 (minPlayerShare=0.4) (${forced.length})`);
+      check(
+        forced.every((t) => t.ai.target === st.player),
+        'Phase 5 (Zielsystem): ein raeumlich erzwungener Phalanx-Panzer zielt nicht auf den Spieler',
+      );
+      check(free.length === 3, `Phase 5 (Zielsystem): falsche Anzahl freier Phalanx-Panzer (${free.length})`);
+
+      // Rotation: ein voller Zyklus weiter (gleiche Phase) wandert die
+      // erzwungene Auswahl auf andere Formationsplaetze.
+      const forcedSlotsA = new Set(forced.map((t) => t.phalanxIndex));
+      st.time = 3 + 4; // + 1 Zyklus (cycle = onPlayerS+onGhostsS = 4)
+      for (const t of others) stepPhalanxBoss(t, st, 1 / 60);
+      const forcedSlotsB = new Set(others.filter((t) => t.fixatedOnPlayer).map((t) => t.phalanxIndex));
+      check(forcedSlotsA.size === 2 && forcedSlotsB.size === 2, 'Phase 5 (Zielsystem): Vorbedingung Rotationstest');
+      check(
+        [...forcedSlotsA].some((s) => !forcedSlotsB.has(s)) || [...forcedSlotsB].some((s) => !forcedSlotsA.has(s)),
+        'Phase 5 (Zielsystem): die raeumlich erzwungene Auswahl rotiert nicht (immer dieselben Panzer)',
+      );
+    }
+  } finally {
+    tanksData.balance.boss.fixate = origFixate;
+  }
+
+  // (n) Geist-Objektform (createGhost): panzerkompatibel fuer resolveTarget/
+  // Vorhaltezielen/Kollision -- alive statt dead, vx/vy/hp/cfg.radius vorhanden.
+  {
+    const { st, e } = raum('t_pink');
+    const g = createGhost(e, tanksData.balance);
+    check(
+      g.alive === true && g.hp === e.cfg.maxHp && g.vx === 0 && g.vy === 0 && g.isGhost === true,
+      'Phase 5 (Zielsystem): createGhost erzeugt keine panzerkompatible Form (alive/hp/vx/vy/isGhost)',
+    );
+  }
+
+  // (o) updateGhosts(): bewegt sich wirklich (vx/vy wie ein echter Panzer,
+  // tank.js: moveTank-Muster) und wird bei hp<=0 entfernt.
+  {
+    const { st, e } = raum('t_pink'); // e bleibt als lebendes Ziel des Geistes stehen
+    const g = createGhost({ x: e.x - 150, y: e.y, heading: 0, turret: 0, type: e.type, cfg: e.cfg }, tanksData.balance);
+    st.ghosts.push(g);
+    updateGhosts(st, 1 / 60);
+    check(Math.hypot(g.vx, g.vy) > 0, 'Phase 5 (Zielsystem): ein Geist mit lebendem Ziel in Reichweite bewegt sich nicht (vx/vy bleiben 0)');
+    check(
+      Math.abs(g.vx - (g.x - g.prevX) / (1 / 60)) < 1e-9,
+      'Phase 5 (Zielsystem): vx entspricht nicht der tatsaechlichen Bewegung',
+    );
+
+    g.hp = 0;
+    updateGhosts(st, 1 / 60);
+    check(st.ghosts.length === 0, 'Phase 5 (Zielsystem): ein Geist bei hp<=0 wird nicht entfernt');
+  }
+
+  // (p) Gegner-Geschosse gegen Geister: schaden ihnen (state.js, eigene
+  // kleine Kollisionsschleife); Spieler-/Geister-eigene Kugeln nie.
+  {
+    const { st, e } = raum('t_pink');
+    // e bleibt als reine Schuetzen-Identitaet fuer b.owner erhalten, fliegt
+    // aber selbst nicht mehr mit (kein lebender Gegner mehr, der die
+    // Schadensmessung durch eigene Schuesse verfaelschen koennte).
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const g = createGhost({ x: 300, y: 48, heading: 0, turret: 0, type: e.type, cfg: e.cfg }, tanksData.balance);
+    st.ghosts.push(g);
+
+    const hpVor = g.hp;
+    const dmg = 17;
+    st.bullets.push(
+      createBullet(g.x, g.y, 0, { speed: 1, radius: 4, ricochets: 1, owner: e, kind: 'bullet', damage: dmg }),
+    );
+    stepState(st, CMD, STEP);
+    check(
+      g.hp === hpVor - dmg,
+      `Phase 5 (Zielsystem): eine Gegner-Kugel schadet dem Geist nicht korrekt (${hpVor} -> ${g.hp}, erwartet ${hpVor - dmg})`,
+    );
+
+    // Liegen gebliebene (unbeteiligte) Kugeln vorher raeumen -- sonst
+    // kollidiert die naechste Testkugel per normaler Kugel-gegen-Kugel-
+    // Kollision mit der vorigen (beide am selben Punkt), statt den Geist
+    // ueberhaupt zu erreichen.
+    st.bullets.length = 0;
+    const hpVor2 = g.hp;
+    st.bullets.push(
+      createBullet(g.x, g.y, 0, { speed: 1, radius: 4, ricochets: 1, owner: st.player, kind: 'bullet', damage: 999 }),
+    );
+    stepState(st, CMD, STEP);
+    check(g.hp === hpVor2, 'Phase 5 (Zielsystem): eine Spielerkugel schadet dem Geist');
+
+    st.bullets.length = 0;
+    st.bullets.push(
+      createBullet(g.x, g.y, 0, { speed: 1, radius: 4, ricochets: 1, owner: e, kind: 'bullet', damage: 99999 }),
+    );
+    stepState(st, CMD, STEP);
+    check(st.ghosts.length === 0, 'Phase 5 (Zielsystem): ein toedlicher Treffer entfernt den Geist nicht');
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);
