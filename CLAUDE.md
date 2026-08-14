@@ -2970,6 +2970,12 @@ Panzer, die zum Geist werden) und **Sprengpanzer** (`c_blast`).
   Gleise am Rand ausgeschlossen) und zentriert die Wanne darauf; die vier
   Klassen-Bodies + `body_ghost` wurden neu erzeugt (Türme unverändert). Jetzt
   sitzt die Kanone im Loch und schwenkt darum wie bei einem echten Panzer.
+- **Nachtrag (Gegner-Sprites, `v109`):** vier gelieferte Grafiken ersetzen die
+  bisherigen Gegner-Sprites `t_black`/`t_yellow`/`t_green`/`t_brown` (gleiche
+  Pipeline: Hintergrund-Flood-Fill, Turm rechts, Loch = Turmdrehpunkt). Ein
+  fünftes rotes Sprite wurde auf Nutzerwunsch **weggelassen** (kein passender
+  `t_red`-Typ). Nur Asset-Austausch, kein Code (`t_*` sind längst in
+  `TANK_TYPES`).
 
 ### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 0 (Ist-Abgleich, keine Codeänderung)
 Bericht vor Phase 1 abgeliefert und vom Nutzer freigegeben. Kernbefunde: alle
@@ -3335,7 +3341,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v108`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v109`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
