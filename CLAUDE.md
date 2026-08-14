@@ -245,8 +245,12 @@ Ersetzt `UMBAUPLAN-LP.md` Phase 9 (Nekromanten-Passiv `reviveChance`), Phase 26
 (Signaturtopf Nekromant) und `PLAN.md` Phase 7 (Geisterpanzer als 3-Sekunden-
 Verbündeter) vollständig. Neun Phasen, eine pro Sitzung, Phase 0 (Ist-Abgleich)
 und **Phase 1 (Seltenheiten 3→5) sind gebaut** — Details im eigenen Abschnitt
-unten. **Nächste Sitzung: Phase 2 (Kategorie + Synergie-Tags).** Verbleibend
-sonst nur noch manuelle/optionale Punkte (s. To-do-Liste unten): der
+unten. **Phase 2 (Kategorie + Synergie-Tags) ist gebaut** — der in Phase 0
+gefundene Blocker (Signaturkarten blockierten sich gegenseitig über den
+gemeinsamen Tag `signature`) ist aufgelöst, ein Angebot mit drei
+Signaturkarten derselben Klasse ist jetzt möglich. **Nächste Sitzung: Phase 3
+(Synergiegewichtung).** Verbleibend sonst nur noch manuelle/optionale Punkte
+(s. To-do-Liste unten): der
 Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur nach echtem Spielgefühl) und
 die Telemetrie-Auswertung echter Runs.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
@@ -3046,7 +3050,74 @@ Fünf statt drei Seltenheitsstufen (`common`/`rare`/`epic`/`unique`/
   Angebot mit einer `unique`-Karte, alle fünf `[data-rarity]`-Farben rendern
   unterscheidbar, keine Konsolenfehler.
 
+### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 2 (Kategorie + Synergie-Tags) — gemergt
+Die zweite Achse eingezogen, ohne die bestehende Tag-Logik zu brechen. `tag`
+bleibt die Hauptkategorie (`data/transformations.json`/`run.tagCounts` hängen
+unverändert daran) — neu ist ein optionales `tags: []` für Synergie-Tags plus
+die Auflösung des in Phase 0 gefundenen Blockers.
+- **Der Blocker-Fix** (`upgradepool.js: dedupeKey()`): die Angebotsregel „nie
+  zwei Karten mit demselben Tag" dedupt Signaturkarten (`signatureClass`
+  gesetzt) jetzt auf ihre eigene `id` statt auf den gemeinsamen Tag
+  `signature` — der `signatureClass`-Filter in `buildCandidates()` sorgt
+  ohnehin schon dafür, dass in einem Angebot nur Signaturkarten EINER Klasse
+  vorkommen können, dedupen auf `id` blockiert sie also nur noch gegen sich
+  selbst (was der bestehende `pool.filter(id !== pick.id)`-Schritt ohnehin
+  separat erledigt). Kernpool-Karten (kein `signatureClass`) dedupen
+  weiterhin auf den Tag — die alte Regel bleibt dort unverändert bestehen.
+  Playwright-Smoke bestätigt ein echtes Angebot mit **drei** Nekromant-
+  Signaturkarten gleichzeitig (`sig_necro_geisterlegion` +
+  `sig_necro_totenbeschwoerung` + `sig_necro_seelenernte`) — genau der in
+  Anhang A §19 geforderte Fall.
+- **`tags: []`** (neues optionales Feld, Karten ohne `tags` verhalten sich
+  exakt wie vorher): auf den fünf thematisch tragfähigen der zwölf aktuellen
+  `sig_necro_*`-Karten gesetzt, mit den im Auftrag genannten Beispielwerten —
+  `sig_necro_geisterbeschwoerung`/`sig_necro_geisterlegion` → `ghost`+`swarm`
+  (`geisterlegion` zusätzlich `quantity`, exakt das Anhang-A-Beispiel),
+  `sig_necro_wiedergaenger`/`sig_necro_lich`/`sig_necro_unsterblich` →
+  `resurrection`. Die übrigen sieben (reine Stat-Kombis ohne Geist-/
+  Wiederbelebungs-Mechanik) bleiben ohne `tags` — ein Synergie-Tag ohne
+  mechanischen Bezug wäre nur Flavour und für die Gewichtung in Phase 3
+  wertlos. Die zwölf `sig_necro_*`-Karten werden mit Phase 8 ohnehin komplett
+  ersetzt; die neuen Karten dort bekommen ihre `tags[]` frisch nach demselben
+  Schema.
+- **Neue Struktur-Validierung** (`tests/regression.mjs`, Abschnitt 38):
+  eindeutige ids (Objektschlüssel === `def.id`), gültige Kategorie (`tag` aus
+  einer **fest definierten**, von den Daten unabhängigen Liste — sonst wäre
+  der Test bei jedem neuen Tag automatisch grün und finge nie einen
+  Tippfehler), `tags[]` ist ein Array aus Strings, `signatureClass` zeigt auf
+  eine echte `player`-Klasse in `tanks.json`. Dazu ein DFS-Zyklendetektor für
+  den `requires`-Graphen (ein Zyklus A→B→A wäre für beide Karten für immer
+  unerreichbar). „`requires` zeigt auf existierende ids" war schon seit
+  Phase-18-Welle-3 als Abschnitt 6b2 abgedeckt — nicht dupliziert.
+- **Zehn bestehende Regressionstests korrigiert** (Phase-18–27-Abschnitte,
+  Teil (d)/(e)): sie behaupteten bisher „höchstens eine Signaturkarte pro
+  Angebot" — das war die alte, jetzt bewusst aufgehobene Regel. Umgestellt
+  auf `maxProAngebot >= 2` (Stichprobe 500→3000 pro Klasse, damit die
+  Zusicherung bei kleinen 6-Karten-Signaturtöpfen nicht zufällig unter der
+  Nachweisschwelle bleibt).
+- **Gegenprobe für jeden Kernpunkt bestanden**: unbekannte Kategorie,
+  künstlicher `requires`-Zyklus (`doppelrohr`↔`feuerleitzentrale`
+  temporär verdrahtet), `dedupeKey()` auf die alte Tag-Logik zurückgesetzt
+  (lässt alle zehn Signaturtopf-Tests UND den neuen Mechanismus-Test in
+  Abschnitt 38 rot werden), `dedupeKey()` auf reine `id`-Dedupe verschärft
+  (lässt die Kernpool-Gegenstück-Prüfung in Abschnitt 38 rot werden — die
+  alte Ein-Tag-Regel für Nicht-Signaturkarten bleibt bestehen).
+- **Bewusst nicht angefasst** (nicht Teil der Phase-2-Dateiliste): `drawOne()`
+  (Schrott-Aktionen „Verbannen"/„Vierte Karte" in `run.js`) baut sein
+  `avoidTags` weiterhin rein aus `o.tag` der behaltenen Karten — ein Banning
+  einer von mehreren gleichzeitig angebotenen Signaturkarten sperrt dadurch
+  weiterhin den ganzen Tag `signature` für die Ersatzkarte, statt nur die
+  gebannte id. Kleine Inkonsistenz zum neuen Verhalten der Erstauswahl, aber
+  kein Blocker (Ersatzkarte kommt einfach aus einer anderen Kategorie) —
+  bei Bedarf in einer späteren Aufräumrunde beheben.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **`drawOne()`-Signaturkarten-Inkonsistenz (Upgradepool-v2 Phase 2)**:
+      „Verbannen"/„Vierte Karte" (`run.js`) sperren beim Ersatzziehen weiterhin
+      den ganzen Tag `signature` statt nur die gebannte id — banning einer von
+      mehreren angebotenen Signaturkarten kann daher keine andere
+      Signaturkarte als Ersatz ziehen. Kein Blocker, nur eine kleine
+      Inkonsistenz zur Erstauswahl (die jetzt mehrere gleichzeitig erlaubt).
 - [ ] **Controller-Feinschliff (optional)**: Der A-Knopf legt im Spiel
       weiterhin eine Bombe sofort ohne Zielen ab (`secondaryAlt`), obwohl die
       Doktrin dafür LT vorsieht — bei Bedarf entkoppeln. Kein Blocker mehr, der

@@ -1,10 +1,10 @@
 // Upgrade-Auswahlpool (Phase 2, erweitert in Phase 3).
 //
 // Zieht die Angebote fuer den Upgrade-Screen aus data/upgrades.json unter
-// Beachtung des Schemas (tag/rarity/maxStacks/requires/minRoom).
+// Beachtung des Schemas (tag/rarity/maxStacks/requires/minRoom/tags[]).
 // Regeln:
-//  - N Karten (Standard 3), NIE zwei mit demselben Tag (Ausnahme: Signatur-
-//    karten untereinander, s. buildCandidates()).
+//  - N Karten (Standard 3), NIE zwei mit demselben Tag -- AUSSER Signatur-
+//    karten (signatureClass gesetzt) untereinander, s. dedupeKey() unten.
 //  - Seltenheitsgewichte aus balance.json (rarity.common/rare/epic/unique/
 //    legendary, Upgradepool-v2 Phase 1: fuenf statt drei Stufen).
 //  - epic/unique/legendary zusaetzlich erst ab balance.rarityGates[stufe]
@@ -79,6 +79,20 @@ function makeOffer(def, chosen) {
     maxStacks: def.maxStacks,
     fallback: false,
   };
+}
+
+// Upgradepool-v2 Phase 2: Dedupe-Schluessel fuer die "kein zweiter Tag im
+// selben Angebot"-Regel. Alle 84 Signaturkarten tragen denselben Tag
+// 'signature' (Hauptkategorie bleibt unveraendert, s. Kopfkommentar) -- die
+// reine Tag-Regel liesse deshalb nie mehr als eine Signaturkarte pro Angebot
+// zu, Anhang A Paragraph 19 verlangt aber ausdruecklich mehrere gleichzeitig
+// (der `signatureClass`-Filter in buildCandidates() sorgt ohnehin dafuer,
+// dass in einem Angebot nur Signaturkarten EINER Klasse vorkommen koennen).
+// Signaturkarten dedupen deshalb auf ihre eigene id (blockieren sich also
+// nur gegen sich selbst -- was `pool = pool.filter(id !== pick.id)` schon
+// separat erledigt), Kernpool-Karten weiterhin auf den Tag.
+function dedupeKey(d) {
+  return d.signatureClass ? `sig:${d.id}` : d.tag;
 }
 
 function fallbackOffer(upgradesData) {
@@ -157,16 +171,16 @@ export function rollOffers(upgradesData, opts) {
 
   const elementWeight = makeElementWeight(opts);
   const offers = [];
-  const usedTags = new Set();
+  const usedKeys = new Set();
   let pool = buildCandidates(upgradesData, opts).slice();
   while (offers.length < n && pool.length) {
     // Elite-/Treasure-Belohnungen ignorieren die Tag-Regel (alle Karten
     // haben denselben Tag bzw. dieselbe Seltenheit).
-    const eligible = ignoreTagRule ? pool : pool.filter((d) => !usedTags.has(d.tag));
-    if (!eligible.length) break; // kein neuer Tag mehr moeglich
+    const eligible = ignoreTagRule ? pool : pool.filter((d) => !usedKeys.has(dedupeKey(d)));
+    if (!eligible.length) break; // kein neuer Tag/keine neue Signaturkarte mehr moeglich
     const pick = weightedPick(eligible, rng, weights, elementWeight);
     offers.push(makeOffer(pick, chosen));
-    usedTags.add(pick.tag);
+    usedKeys.add(dedupeKey(pick));
     pool = pool.filter((d) => d.id !== pick.id);
   }
 
