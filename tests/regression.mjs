@@ -3922,12 +3922,14 @@ function check(ok, msg) {
     check(g1.damage === base.damage + gard.damageAdd && g1.magazine === base.magazine + gard.magAdd && g1.maxHp === base.maxHp + gard.hpAdd, 'Phase 18: Gardist-Kombiwerte falsch');
   }
 
-  // (d) Der gemeinsame Tag `signature` bedeutet: hoechstens EINE Signaturkarte
-  //     pro Angebot (dieselbe Slot-Regel wie ein Element-Topf).
+  // (d) Upgradepool-v2 Phase 2: der Blocker-Fix aus Phase 0 -- mehrere
+  //     Signaturkarten DERSELBEN Klasse duerfen jetzt gemeinsam im selben
+  //     Angebot erscheinen (Anhang A Paragraph 19). Sie dedupen ueber ihre
+  //     eigene id statt ueber den gemeinsamen Tag 'signature'.
   {
     const rng = mulberry32(77);
     let maxProAngebot = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 3000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
         starterTank: 'player',
@@ -3935,7 +3937,10 @@ function check(ok, msg) {
       const n = offers.filter((o) => String(o.id || '').startsWith('sig_std_')).length;
       if (n > maxProAngebot) maxProAngebot = n;
     }
-    check(maxProAngebot === 1, `Phase 18: bis zu ${maxProAngebot} Signaturkarten pro Angebot (Tag-Regel greift nicht)`);
+    check(
+      maxProAngebot >= 2,
+      `Phase 18 (Upgradepool-v2 Phase 2): nie mehr als {maxProAngebot} Signaturkarte(n) derselben Klasse gleichzeitig im Angebot -- der Blocker-Fix wirkt nicht`,
+    );
   }
 }
 
@@ -3999,11 +4004,13 @@ function check(ok, msg) {
     check(Math.abs((ar.explosionDamageMult || 1) - U.sig_blast_arsenal.core.explosionDamageMult) < 1e-6, `Phase 19: Arsenal Explosionsschaden-Faktor falsch (${ar.explosionDamageMult})`);
   }
 
-  // (d) Gemeinsamer Tag signature -> hoechstens eine Sprengsignatur pro Angebot.
+  // (d) Upgradepool-v2 Phase 2: mehrere Sprengsignaturen duerfen jetzt
+  //     gemeinsam im selben Angebot erscheinen (dedupen ueber die eigene id
+  //     statt ueber den gemeinsamen Tag 'signature', s. Phase 18 Abschnitt d).
   {
     const rng = mulberry32(83);
     let maxProAngebot = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 3000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
         starterTank: 'c_blast',
@@ -4011,7 +4018,10 @@ function check(ok, msg) {
       const n = offers.filter((o) => String(o.id || '').startsWith('sig_blast_')).length;
       if (n > maxProAngebot) maxProAngebot = n;
     }
-    check(maxProAngebot === 1, `Phase 19: bis zu ${maxProAngebot} Sprengsignaturen pro Angebot (Tag-Regel greift nicht)`);
+    check(
+      maxProAngebot >= 2,
+      `Phase 19 (Upgradepool-v2 Phase 2): nie mehr als {maxProAngebot} Signaturkarte(n) derselben Klasse gleichzeitig im Angebot -- der Blocker-Fix wirkt nicht`,
+    );
   }
 }
 
@@ -4072,11 +4082,13 @@ function check(ok, msg) {
     check(np.frostFreezeReduction === U.sig_frost_nullpunkt.core.frostFreezeReduction, `Phase 20: Nullpunkt frostFreezeReduction ${np.frostFreezeReduction} falsch`);
   }
 
-  // (d) Gemeinsamer Tag signature -> hoechstens eine Frost-Signatur pro Angebot.
+  // (d) Upgradepool-v2 Phase 2: mehrere Frost-Signaturen duerfen jetzt
+  //     gemeinsam im selben Angebot erscheinen (dedupen ueber die eigene id
+  //     statt ueber den gemeinsamen Tag 'signature', s. Phase 18 Abschnitt d).
   {
     const rng = mulberry32(91);
     let maxProAngebot = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 3000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
         starterTank: 'c_frost',
@@ -4084,7 +4096,10 @@ function check(ok, msg) {
       const n = offers.filter((o) => String(o.id || '').startsWith('sig_frost_')).length;
       if (n > maxProAngebot) maxProAngebot = n;
     }
-    check(maxProAngebot === 1, `Phase 20: bis zu ${maxProAngebot} Frost-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+    check(
+      maxProAngebot >= 2,
+      `Phase 20 (Upgradepool-v2 Phase 2): nie mehr als {maxProAngebot} Signaturkarte(n) derselben Klasse gleichzeitig im Angebot -- der Blocker-Fix wirkt nicht`,
+    );
   }
 }
 
@@ -4142,11 +4157,13 @@ function check(ok, msg) {
     check(us.damage === base.damage + U.sig_tesla_supraleiter.core.damageAdd, `Phase 21: Supraleiter Schaden ${us.damage} falsch`);
   }
 
-  // (d) Gemeinsamer Tag signature -> hoechstens eine Tesla-Signatur pro Angebot.
+  // (d) Upgradepool-v2 Phase 2: mehrere Tesla-Signaturen duerfen jetzt
+  //     gemeinsam im selben Angebot erscheinen (dedupen ueber die eigene id
+  //     statt ueber den gemeinsamen Tag 'signature', s. Phase 18 Abschnitt d).
   {
     const rng = mulberry32(97);
     let maxProAngebot = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 3000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
         starterTank: 'c_tesla',
@@ -4154,7 +4171,10 @@ function check(ok, msg) {
       const n = offers.filter((o) => String(o.id || '').startsWith('sig_tesla_')).length;
       if (n > maxProAngebot) maxProAngebot = n;
     }
-    check(maxProAngebot === 1, `Phase 21: bis zu ${maxProAngebot} Tesla-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+    check(
+      maxProAngebot >= 2,
+      `Phase 21 (Upgradepool-v2 Phase 2): nie mehr als {maxProAngebot} Signaturkarte(n) derselben Klasse gleichzeitig im Angebot -- der Blocker-Fix wirkt nicht`,
+    );
   }
 }
 
@@ -4213,11 +4233,13 @@ function check(ok, msg) {
     check(se.poisonSpreadRadius === U.sig_toxic_seuche.core.poisonSpreadRadius, `Phase 22: Seuche poisonSpreadRadius ${se.poisonSpreadRadius} falsch`);
   }
 
-  // (d) Gemeinsamer Tag signature -> hoechstens eine Gift-Signatur pro Angebot.
+  // (d) Upgradepool-v2 Phase 2: mehrere Gift-Signaturen duerfen jetzt
+  //     gemeinsam im selben Angebot erscheinen (dedupen ueber die eigene id
+  //     statt ueber den gemeinsamen Tag 'signature', s. Phase 18 Abschnitt d).
   {
     const rng = mulberry32(101);
     let maxProAngebot = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 3000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
         starterTank: 'c_toxic',
@@ -4225,7 +4247,10 @@ function check(ok, msg) {
       const n = offers.filter((o) => String(o.id || '').startsWith('sig_toxic_')).length;
       if (n > maxProAngebot) maxProAngebot = n;
     }
-    check(maxProAngebot === 1, `Phase 22: bis zu ${maxProAngebot} Gift-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+    check(
+      maxProAngebot >= 2,
+      `Phase 22 (Upgradepool-v2 Phase 2): nie mehr als {maxProAngebot} Signaturkarte(n) derselben Klasse gleichzeitig im Angebot -- der Blocker-Fix wirkt nicht`,
+    );
   }
 }
 
@@ -4287,11 +4312,13 @@ function check(ok, msg) {
     check(bh.fireSpreadRadius === U.sig_flame_brandherd.core.fireSpreadRadius, `Phase 23: Brandherd fireSpreadRadius ${bh.fireSpreadRadius} falsch`);
   }
 
-  // (d) Gemeinsamer Tag signature -> hoechstens eine Feuer-Signatur pro Angebot.
+  // (d) Upgradepool-v2 Phase 2: mehrere Feuer-Signaturen duerfen jetzt
+  //     gemeinsam im selben Angebot erscheinen (dedupen ueber die eigene id
+  //     statt ueber den gemeinsamen Tag 'signature', s. Phase 18 Abschnitt d).
   {
     const rng = mulberry32(103);
     let maxProAngebot = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 3000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
         starterTank: 'c_flame',
@@ -4299,7 +4326,10 @@ function check(ok, msg) {
       const n = offers.filter((o) => String(o.id || '').startsWith('sig_flame_')).length;
       if (n > maxProAngebot) maxProAngebot = n;
     }
-    check(maxProAngebot === 1, `Phase 23: bis zu ${maxProAngebot} Feuer-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+    check(
+      maxProAngebot >= 2,
+      `Phase 23 (Upgradepool-v2 Phase 2): nie mehr als {maxProAngebot} Signaturkarte(n) derselben Klasse gleichzeitig im Angebot -- der Blocker-Fix wirkt nicht`,
+    );
   }
 }
 
@@ -4395,11 +4425,13 @@ function check(ok, msg) {
     check(mit2 > mit1 && mit1 > ohne, 'Phase 24: die Rampe waechst nicht mit der Abprallzahl');
   }
 
-  // (e) Gemeinsamer Tag signature -> hoechstens eine Abprall-Signatur pro Angebot.
+  // (e) Upgradepool-v2 Phase 2: mehrere Abprall-Signaturen duerfen jetzt
+  //     gemeinsam im selben Angebot erscheinen (dedupen ueber die eigene id
+  //     statt ueber den gemeinsamen Tag 'signature', s. Phase 18 Abschnitt d).
   {
     const rng = mulberry32(107);
     let maxProAngebot = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 3000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
         starterTank: 'c_ricochet',
@@ -4407,7 +4439,10 @@ function check(ok, msg) {
       const n = offers.filter((o) => String(o.id || '').startsWith('sig_ric_')).length;
       if (n > maxProAngebot) maxProAngebot = n;
     }
-    check(maxProAngebot === 1, `Phase 24: bis zu ${maxProAngebot} Abprall-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+    check(
+      maxProAngebot >= 2,
+      `Phase 24 (Upgradepool-v2 Phase 2): nie mehr als {maxProAngebot} Signaturkarte(n) derselben Klasse gleichzeitig im Angebot -- der Blocker-Fix wirkt nicht`,
+    );
   }
 }
 
@@ -4485,11 +4520,13 @@ function check(ok, msg) {
     check(cfg0.damage === roh, `Phase 25: Schrottschaden skaliert schon bei 0 Schrott (${cfg0.damage} statt ${roh})`);
   }
 
-  // (e) Gemeinsamer Tag signature -> hoechstens eine Schrott-Signatur pro Angebot.
+  // (e) Upgradepool-v2 Phase 2: mehrere Schrott-Signaturen duerfen jetzt
+  //     gemeinsam im selben Angebot erscheinen (dedupen ueber die eigene id
+  //     statt ueber den gemeinsamen Tag 'signature', s. Phase 18 Abschnitt d).
   {
     const rng = mulberry32(109);
     let maxProAngebot = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 3000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
         starterTank: 'c_scrap',
@@ -4497,7 +4534,10 @@ function check(ok, msg) {
       const n = offers.filter((o) => String(o.id || '').startsWith('sig_scrap_')).length;
       if (n > maxProAngebot) maxProAngebot = n;
     }
-    check(maxProAngebot === 1, `Phase 25: bis zu ${maxProAngebot} Schrott-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+    check(
+      maxProAngebot >= 2,
+      `Phase 25 (Upgradepool-v2 Phase 2): nie mehr als {maxProAngebot} Signaturkarte(n) derselben Klasse gleichzeitig im Angebot -- der Blocker-Fix wirkt nicht`,
+    );
   }
 }
 
@@ -4586,11 +4626,13 @@ function check(ok, msg) {
     check(mit.timeLeft > ohne.timeLeft, 'Phase 26: der Geisterdauer-Bonus verlaengert die Lebensdauer nicht');
   }
 
-  // (e) Gemeinsamer Tag signature -> hoechstens eine Nekromant-Signatur pro Angebot.
+  // (e) Upgradepool-v2 Phase 2: mehrere Nekromant-Signaturen duerfen jetzt
+  //     gemeinsam im selben Angebot erscheinen (dedupen ueber die eigene id
+  //     statt ueber den gemeinsamen Tag 'signature', s. Phase 18 Abschnitt d).
   {
     const rng = mulberry32(113);
     let maxProAngebot = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 3000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
         starterTank: 'c_necro',
@@ -4598,7 +4640,10 @@ function check(ok, msg) {
       const n = offers.filter((o) => String(o.id || '').startsWith('sig_necro_')).length;
       if (n > maxProAngebot) maxProAngebot = n;
     }
-    check(maxProAngebot === 1, `Phase 26: bis zu ${maxProAngebot} Nekromant-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+    check(
+      maxProAngebot >= 2,
+      `Phase 26 (Upgradepool-v2 Phase 2): nie mehr als {maxProAngebot} Signaturkarte(n) derselben Klasse gleichzeitig im Angebot -- der Blocker-Fix wirkt nicht`,
+    );
   }
 }
 
@@ -4685,11 +4730,13 @@ function check(ok, msg) {
     check(stark > grund, 'Phase 27: der builtHpBonus macht die Sperrmauer nicht haltbarer');
   }
 
-  // (e) Gemeinsamer Tag signature -> hoechstens eine Ingenieur-Signatur pro Angebot.
+  // (e) Upgradepool-v2 Phase 2: mehrere Ingenieur-Signaturen duerfen jetzt
+  //     gemeinsam im selben Angebot erscheinen (dedupen ueber die eigene id
+  //     statt ueber den gemeinsamen Tag 'signature', s. Phase 18 Abschnitt d).
   {
     const rng = mulberry32(127);
     let maxProAngebot = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 3000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
         starterTank: 'c_engineer',
@@ -4697,7 +4744,10 @@ function check(ok, msg) {
       const n = offers.filter((o) => String(o.id || '').startsWith('sig_eng_')).length;
       if (n > maxProAngebot) maxProAngebot = n;
     }
-    check(maxProAngebot === 1, `Phase 27: bis zu ${maxProAngebot} Ingenieur-Signaturen pro Angebot (Tag-Regel greift nicht)`);
+    check(
+      maxProAngebot >= 2,
+      `Phase 27 (Upgradepool-v2 Phase 2): nie mehr als {maxProAngebot} Signaturkarte(n) derselben Klasse gleichzeitig im Angebot -- der Blocker-Fix wirkt nicht`,
+    );
   }
 }
 
@@ -5006,6 +5056,128 @@ for (const seed of SEEDS) {
       chosen: {}, roomIndex: 5, rng: mulberry32(1), balance, count: 1, banned: new Set(),
     });
     check(after[0].id === 'gated_card', 'Phase 1 (Upgradepool-v2): rarityGate haelt die Karte auch AB ihrem Mindestraum noch zurueck');
+  }
+}
+
+// ---- 38. Upgradepool-v2 Phase 2: Kategorie + Synergie-Tags ---------------
+// `tag` bleibt die Hauptkategorie (transformations.json/run.tagCounts haengen
+// unveraendert daran). Neu: optionales `tags: []` fuer Synergiegewichtung
+// (Phase 3) UND der Blocker-Fix aus Phase 0 -- Signaturkarten duerfen sich
+// im selben Angebot nicht mehr gegenseitig ueber den gemeinsamen Tag
+// 'signature' blockieren.
+{
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+
+  // (a) Struktur: eindeutige ids (Objektschluessel === def.id), gueltige
+  //     Kategorie (Tag aus einer FEST definierten, von den Daten unabhaengigen
+  //     Liste -- sonst waere der Test bei jedem neuen Tag automatisch gruen
+  //     und faengt nie einen Tippfehler), tags[] (falls gesetzt) ist ein Array
+  //     aus Strings, signatureClass (falls gesetzt) zeigt auf eine echte
+  //     player-Klasse in tanks.json.
+  {
+    const KNOWN_TAGS = new Set([
+      'stat', 'mobility', 'terrain', 'reactive', 'control', 'weapon', 'scaling',
+      'information', 'resource', 'synergy', 'defense', 'elite', 'gadget',
+      'damage', 'reload', 'speed', 'health', 'magazine', 'ricochet', 'crit',
+      'scavenge', 'mines', 'dodge', 'physical', 'explosive', 'fire', 'frost',
+      'poison', 'lightning', 'signature',
+    ]);
+    const playerClasses = new Set(
+      Object.entries(tanksData.types).filter(([, t]) => t.player).map(([id]) => id),
+    );
+    let badId = 0;
+    let badTag = 0;
+    let badTags = 0;
+    let badSigClass = 0;
+    for (const key in U) {
+      const d = U[key];
+      if (d.id !== key) badId++;
+      if (!KNOWN_TAGS.has(d.tag)) badTag++;
+      if (d.tags !== undefined && (!Array.isArray(d.tags) || d.tags.some((t) => typeof t !== 'string'))) badTags++;
+      if (d.signatureClass && !playerClasses.has(d.signatureClass)) badSigClass++;
+    }
+    check(badId === 0, `Phase 2 (Upgradepool-v2): ${badId} Karte(n), deren id vom Objektschluessel abweicht`);
+    check(badTag === 0, `Phase 2 (Upgradepool-v2): ${badTag} Karte(n) mit unbekannter Kategorie (tag)`);
+    check(badTags === 0, `Phase 2 (Upgradepool-v2): ${badTags} Karte(n) mit ungueltigem tags[]-Feld`);
+    check(badSigClass === 0, `Phase 2 (Upgradepool-v2): ${badSigClass} Karte(n), deren signatureClass keine echte Klasse ist`);
+  }
+
+  // (b) requires-Graph ist zyklenfrei (DFS mit Besucht-/Im-Stapel-Markierung).
+  //     Ein Zyklus (A requires B, B requires A) waere fuer BEIDE Karten fuer
+  //     immer unerreichbar, weil chosen[x] nie > 0 wird.
+  {
+    const WHITE = 0, GRAY = 1, BLACK = 2;
+    const color = {};
+    let cyclic = null;
+    const visit = (id) => {
+      if (cyclic || !U[id]) return;
+      color[id] = GRAY;
+      for (const r of U[id].requires || []) {
+        if (color[r] === GRAY) { cyclic = `${id} -> ${r}`; return; }
+        if (!color[r]) visit(r);
+        if (cyclic) return;
+      }
+      color[id] = BLACK;
+    };
+    for (const id in U) {
+      if (!color[id]) visit(id);
+      if (cyclic) break;
+    }
+    check(cyclic === null, `Phase 2 (Upgradepool-v2): Zyklus im requires-Graphen (${cyclic})`);
+  }
+
+  // (c) MECHANISMUS des Blocker-Fixes: mit einem SYNTHETISCHEN Drei-Karten-Pool
+  //     (nicht dem echten sig_necro-Bestand, der sich mit Phase 8 ohnehin
+  //     aendert) -- drei Signaturkarten DERSELBEN Klasse, alle mit
+  //     tag:'signature', muessen gemeinsam in einem Angebot erscheinen
+  //     koennen (Anhang A Paragraph 19). ignoreTagRule bleibt aus, damit die
+  //     Tag-Regel wirklich getestet wird, nicht nur umgangen.
+  {
+    const fakeSig = (id) => ({
+      id, name: id, description: 'x', tag: 'signature', signatureClass: 'c_necro',
+      rarity: 'common', maxStacks: 1, requires: [], minRoom: 1,
+    });
+    const fakeData = {
+      offersPerScreen: 3,
+      fallback: { name: '+1 Leben', description: 'x', tag: 'stat', rarity: 'common' },
+      upgrades: { sig_a: fakeSig('sig_a'), sig_b: fakeSig('sig_b'), sig_c: fakeSig('sig_c') },
+    };
+    const balance = { rarity: { common: 100 } };
+    const offers = rollOffers(fakeData, {
+      chosen: {}, roomIndex: 1, rng: mulberry32(7), balance, count: 3, banned: new Set(),
+      starterTank: 'c_necro',
+    });
+    const ids = offers.map((o) => o.id).sort();
+    check(
+      JSON.stringify(ids) === JSON.stringify(['sig_a', 'sig_b', 'sig_c']),
+      `Phase 2 (Upgradepool-v2): drei Signaturkarten derselben Klasse landen nicht gemeinsam im Angebot (${JSON.stringify(ids)})`,
+    );
+  }
+
+  // (d) Gegenstueck: der Kernpool behaelt die alte Regel -- zwei Karten mit
+  //     demselben Tag OHNE signatureClass duerfen weiterhin nicht gemeinsam
+  //     im selben Angebot erscheinen.
+  {
+    const fakeCore = (id) => ({
+      id, name: id, description: 'x', tag: 'damage', rarity: 'common', maxStacks: 1,
+      requires: [], minRoom: 1,
+    });
+    const fakeData = {
+      offersPerScreen: 2,
+      fallback: { name: '+1 Leben', description: 'x', tag: 'stat', rarity: 'common' },
+      upgrades: { core_a: fakeCore('core_a'), core_b: fakeCore('core_b') },
+    };
+    const balance = { rarity: { common: 100 } };
+    const offers = rollOffers(fakeData, {
+      chosen: {}, roomIndex: 1, rng: mulberry32(7), balance, count: 2, banned: new Set(),
+    });
+    const real = offers.filter((o) => !o.fallback);
+    check(
+      real.length === 1,
+      `Phase 2 (Upgradepool-v2): zwei Kernpool-Karten mit demselben Tag landen faelschlich gemeinsam im Angebot (${real.length} statt 1)`,
+    );
   }
 }
 
