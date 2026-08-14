@@ -2995,19 +2995,23 @@ function check(ok, msg) {
   //     Tags (sonst begrenzt die Tag-Regel den Kern auf 1 Karte pro Angebot).
   {
     check(core.length === 30, `Phase 10: ${core.length} Kernkarten statt 30`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of core) rar[d.rarity]++;
-    check(rar.common === 10 && rar.rare === 10 && rar.legendary === 10, `Phase 10: Seltenheitsverteilung ${JSON.stringify(rar)} statt 10/10/10`);
+    check(rar.common === 10 && rar.rare === 10 && rar.epic === 9 && rar.unique === 1 && rar.legendary === 0, `Phase 10: Seltenheitsverteilung ${JSON.stringify(rar)} statt 10/10/9/1/0`);
     const tags = new Set(core.map(([, d]) => d.tag));
     check(tags.size === 10, `Phase 10: ${tags.size} Kern-Tags statt 10 (Tag-Regel wuerde den Kern sonst zusammenfalten)`);
   }
 
   // (b) Der eigentliche Fix: weightedPick zieht die SELTENHEIT mit dem
-  //     konfigurierten Gewicht (60/30/10), egal wie viele Karten je Seltenheit
-  //     ziehbar sind. Bewusst mit einer UNGLEICHEN Liste geprueft -- genau da
-  //     lag der Bug. Gegenprobe: die alte Pro-Karte-Summierung ergaebe ~88/11/1.
+  //     konfigurierten Gewicht, egal wie viele Karten je Seltenheit ziehbar
+  //     sind. Bewusst mit einer UNGLEICHEN Liste geprueft -- genau da lag der
+  //     Bug. Gegenprobe: die alte Pro-Karte-Summierung ergaebe ~88/11/1.
+  //     Eigene synthetische Gewichte (60/30/10) statt tanksData.balance.rarity
+  //     zu lesen -- Upgradepool-v2 Phase 1 hat die echten Gewichte auf fuenf
+  //     Stufen umgestellt; der Mechanismus-Test soll unabhaengig von der
+  //     aktuellen Datenlage bleiben (CLAUDE.md-Grundregel).
   {
-    const weights = tanksData.balance.rarity; // 60/30/10
+    const weights = { common: 60, rare: 30, legendary: 10 };
     const liste = [];
     for (let i = 0; i < 20; i++) liste.push({ rarity: 'common' });
     for (let i = 0; i < 5; i++) liste.push({ rarity: 'rare' });
@@ -3080,9 +3084,9 @@ function check(ok, msg) {
   // (a) Struktur: 12 physische Karten, 4/4/4, alle Tag+damageType 'physical'.
   {
     check(phys.length === 12, `Phase 11: ${phys.length} physische Karten statt 12`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of phys) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 11: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(rar.common === 4 && rar.rare === 4 && rar.epic === 0 && rar.unique === 3 && rar.legendary === 1, `Phase 11: Verteilung ${JSON.stringify(rar)} statt 4/4/0/3/1`);
     check(phys.every(([, d]) => d.tag === 'physical'), 'Phase 11: nicht alle physischen Karten tragen Tag physical');
   }
 
@@ -3199,9 +3203,9 @@ function check(ok, msg) {
   // (a) Struktur: 12 explosive Karten, 4/4/4, Tag+damageType explosive.
   {
     check(expl.length === 12, `Phase 12: ${expl.length} explosive Karten statt 12`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of expl) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 12: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(rar.common === 4 && rar.rare === 4 && rar.epic === 0 && rar.unique === 3 && rar.legendary === 1, `Phase 12: Verteilung ${JSON.stringify(rar)} statt 4/4/0/3/1`);
     check(expl.every(([, d]) => d.tag === 'explosive'), 'Phase 12: nicht alle explosiven Karten tragen Tag explosive');
   }
 
@@ -3289,9 +3293,9 @@ function check(ok, msg) {
   // (a) Struktur: 12 Feuerkarten, 4/4/4, Tag+damageType fire.
   {
     check(fire.length === 12, `Phase 13: ${fire.length} Feuerkarten statt 12`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of fire) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 13: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(rar.common === 4 && rar.rare === 4 && rar.epic === 0 && rar.unique === 3 && rar.legendary === 1, `Phase 13: Verteilung ${JSON.stringify(rar)} statt 4/4/0/3/1`);
     check(fire.every(([, d]) => d.tag === 'fire'), 'Phase 13: nicht alle Feuerkarten tragen Tag fire');
   }
 
@@ -3411,9 +3415,9 @@ function check(ok, msg) {
   // (a) Struktur: 12 Frostkarten, 4/4/4, Tag+damageType frost.
   {
     check(frost.length === 12, `Phase 14: ${frost.length} Frostkarten statt 12`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of frost) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 14: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(rar.common === 4 && rar.rare === 4 && rar.epic === 0 && rar.unique === 3 && rar.legendary === 1, `Phase 14: Verteilung ${JSON.stringify(rar)} statt 4/4/0/3/1`);
     check(frost.every(([, d]) => d.tag === 'frost'), 'Phase 14: nicht alle Frostkarten tragen Tag frost');
   }
 
@@ -3539,9 +3543,9 @@ function check(ok, msg) {
   // (a) Struktur: 12 Giftkarten, 4/4/4, Tag+damageType poison.
   {
     check(poison.length === 12, `Phase 15: ${poison.length} Giftkarten statt 12`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of poison) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 15: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(rar.common === 4 && rar.rare === 4 && rar.epic === 0 && rar.unique === 3 && rar.legendary === 1, `Phase 15: Verteilung ${JSON.stringify(rar)} statt 4/4/0/3/1`);
     check(poison.every(([, d]) => d.tag === 'poison'), 'Phase 15: nicht alle Giftkarten tragen Tag poison');
   }
 
@@ -3647,9 +3651,9 @@ function check(ok, msg) {
   // (a) Struktur: 12 Blitzkarten, 4/4/4, Tag+damageType lightning.
   {
     check(light.length === 12, `Phase 16: ${light.length} Blitzkarten statt 12`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of light) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 16: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(rar.common === 4 && rar.rare === 4 && rar.epic === 0 && rar.unique === 3 && rar.legendary === 1, `Phase 16: Verteilung ${JSON.stringify(rar)} statt 4/4/0/3/1`);
     check(light.every(([, d]) => d.tag === 'lightning'), 'Phase 16: nicht alle Blitzkarten tragen Tag lightning');
   }
 
@@ -3862,9 +3866,9 @@ function check(ok, msg) {
   // (a) Struktur: 6 Standardsignaturen, 2/2/2, Tag+signatureClass gesetzt.
   {
     check(std.length === 6, `Phase 18: ${std.length} Standardsignaturen statt 6`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of std) rar[d.rarity]++;
-    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 18: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(rar.common === 2 && rar.rare === 2 && rar.epic === 1 && rar.unique === 0 && rar.legendary === 1, `Phase 18: Verteilung ${JSON.stringify(rar)} statt 2/2/1/0/1`);
     check(std.every(([, d]) => d.tag === 'signature'), 'Phase 18: nicht alle Standardsignaturen tragen Tag signature');
     check(std.every(([, d]) => d.core), 'Phase 18: eine Standardsignatur ohne core-Effekt');
   }
@@ -3949,9 +3953,9 @@ function check(ok, msg) {
   // (a) Struktur: 6 Sprengpanzer-Signaturen, 2/2/2, Tag signature.
   {
     check(blast.length === 6, `Phase 19: ${blast.length} Sprengpanzer-Signaturen statt 6`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of blast) rar[d.rarity]++;
-    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 19: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(rar.common === 2 && rar.rare === 2 && rar.epic === 0 && rar.unique === 1 && rar.legendary === 1, `Phase 19: Verteilung ${JSON.stringify(rar)} statt 2/2/0/1/1`);
     check(blast.every(([, d]) => d.tag === 'signature' && d.core), 'Phase 19: Signatur ohne Tag signature oder ohne core');
     // Signaturen sind klassen-, nicht elementgebunden: kein damageType, sonst
     // wuerde der Element-Filter sie zusaetzlich (unnoetig) einschraenken.
@@ -4026,9 +4030,9 @@ function check(ok, msg) {
   //     (klassen-, nicht elementgebunden).
   {
     check(frost.length === 6, `Phase 20: ${frost.length} Frost-Signaturen statt 6`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of frost) rar[d.rarity]++;
-    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 20: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(rar.common === 2 && rar.rare === 2 && rar.epic === 0 && rar.unique === 1 && rar.legendary === 1, `Phase 20: Verteilung ${JSON.stringify(rar)} statt 2/2/0/1/1`);
     check(frost.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 20: Signatur ohne Tag/core oder mit damageType');
   }
 
@@ -4098,9 +4102,9 @@ function check(ok, msg) {
   // (a) Struktur: 6 Tesla-Signaturen, 2/2/2, Tag signature, kein damageType.
   {
     check(tesla.length === 6, `Phase 21: ${tesla.length} Tesla-Signaturen statt 6`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of tesla) rar[d.rarity]++;
-    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 21: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(rar.common === 2 && rar.rare === 2 && rar.epic === 0 && rar.unique === 1 && rar.legendary === 1, `Phase 21: Verteilung ${JSON.stringify(rar)} statt 2/2/0/1/1`);
     check(tesla.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 21: Signatur ohne Tag/core oder mit damageType');
   }
 
@@ -4168,9 +4172,9 @@ function check(ok, msg) {
   // (a) Struktur: 6 Gift-Signaturen, 2/2/2, Tag signature, kein damageType.
   {
     check(toxic.length === 6, `Phase 22: ${toxic.length} Gift-Signaturen statt 6`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of toxic) rar[d.rarity]++;
-    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 22: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(rar.common === 2 && rar.rare === 2 && rar.epic === 0 && rar.unique === 1 && rar.legendary === 1, `Phase 22: Verteilung ${JSON.stringify(rar)} statt 2/2/0/1/1`);
     check(toxic.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 22: Signatur ohne Tag/core oder mit damageType');
   }
 
@@ -4241,9 +4245,9 @@ function check(ok, msg) {
   // (a) Struktur: 6 Feuer-Signaturen, 2/2/2, Tag signature, kein damageType.
   {
     check(flame.length === 6, `Phase 23: ${flame.length} Feuer-Signaturen statt 6`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of flame) rar[d.rarity]++;
-    check(rar.common === 2 && rar.rare === 2 && rar.legendary === 2, `Phase 23: Verteilung ${JSON.stringify(rar)} statt 2/2/2`);
+    check(rar.common === 2 && rar.rare === 2 && rar.epic === 0 && rar.unique === 1 && rar.legendary === 1, `Phase 23: Verteilung ${JSON.stringify(rar)} statt 2/2/0/1/1`);
     check(flame.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 23: Signatur ohne Tag/core oder mit damageType');
   }
 
@@ -4318,9 +4322,9 @@ function check(ok, msg) {
   // (a) Struktur: 12 Abprall-Signaturen, 4/4/4, Tag signature, kein damageType.
   {
     check(ric.length === 12, `Phase 24: ${ric.length} Abprall-Signaturen statt 12`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of ric) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 24: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(rar.common === 4 && rar.rare === 4 && rar.epic === 1 && rar.unique === 2 && rar.legendary === 1, `Phase 24: Verteilung ${JSON.stringify(rar)} statt 4/4/1/2/1`);
     check(ric.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 24: Signatur ohne Tag/core oder mit damageType');
   }
 
@@ -4423,9 +4427,9 @@ function check(ok, msg) {
   // (a) Struktur: 12 Schrott-Signaturen, 4/4/4, Tag signature, kein damageType.
   {
     check(scrap.length === 12, `Phase 25: ${scrap.length} Schrott-Signaturen statt 12`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of scrap) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 25: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(rar.common === 4 && rar.rare === 4 && rar.epic === 1 && rar.unique === 2 && rar.legendary === 1, `Phase 25: Verteilung ${JSON.stringify(rar)} statt 4/4/1/2/1`);
     check(scrap.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 25: Signatur ohne Tag/core oder mit damageType');
   }
 
@@ -4516,9 +4520,9 @@ function check(ok, msg) {
   // (a) Struktur: 12 Nekromant-Signaturen, 4/4/4, Tag signature, kein damageType.
   {
     check(necro.length === 12, `Phase 26: ${necro.length} Nekromant-Signaturen statt 12`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of necro) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 26: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(rar.common === 4 && rar.rare === 4 && rar.epic === 1 && rar.unique === 2 && rar.legendary === 1, `Phase 26: Verteilung ${JSON.stringify(rar)} statt 4/4/1/2/1`);
     check(necro.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 26: Signatur ohne Tag/core oder mit damageType');
   }
 
@@ -4616,9 +4620,9 @@ function check(ok, msg) {
   // (a) Struktur: 12 Ingenieur-Signaturen, 4/4/4, Tag signature, kein damageType.
   {
     check(eng.length === 12, `Phase 27: ${eng.length} Ingenieur-Signaturen statt 12`);
-    const rar = { common: 0, rare: 0, legendary: 0 };
+    const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of eng) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.legendary === 4, `Phase 27: Verteilung ${JSON.stringify(rar)} statt 4/4/4`);
+    check(rar.common === 4 && rar.rare === 4 && rar.epic === 1 && rar.unique === 2 && rar.legendary === 1, `Phase 27: Verteilung ${JSON.stringify(rar)} statt 4/4/1/2/1`);
     check(eng.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 27: Signatur ohne Tag/core oder mit damageType');
   }
 
@@ -4836,10 +4840,12 @@ for (const seed of SEEDS) {
   //     tatsaechlich angebotenen Karten. Das prueft weightedPick + Element-/
   //     Signatur-Filter im Zusammenspiel, nicht nur eine synthetische Liste.
   {
-    const weights = tanksData.balance.rarity; // 60/30/10
+    const weights = tanksData.balance.rarity; // Upgradepool-v2 Phase 1: 5 Stufen
     const rng = mulberry32(20260728);
-    const zieh = { common: 0, rare: 0, legendary: 0 };
+    const zieh = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     let n = 0;
+    // Raum 10: erfuellt alle rarityGates (epic 3, unique 6, legendary 9) --
+    // alle fuenf Stufen sind hier ziehbar.
     for (let i = 0; i < 2000; i++) {
       const offers = rollOffers(upgradesData, {
         chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
@@ -4852,7 +4858,7 @@ for (const seed of SEEDS) {
       }
     }
     const pct = (k) => (100 * zieh[k]) / n;
-    for (const k of ['common', 'rare', 'legendary']) {
+    for (const k of ['common', 'rare', 'epic', 'unique', 'legendary']) {
       check(
         Math.abs(pct(k) - weights[k]) <= 5,
         `Phase 28: gezogene Verteilung ${k} ${pct(k).toFixed(1)} % weicht > 5 pp von ${weights[k]} % ab`,
@@ -4872,7 +4878,7 @@ for (const seed of SEEDS) {
     for (const klass of klassen) {
       const el = tanksData.types[klass].damageType || 'physical';
       const rng = mulberry32(5);
-      const tiers = { common: 0, rare: 0, legendary: 0 };
+      const tiers = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
       // Viele Angebote ziehen, damit jede vorhandene Stufe mindestens einmal
       // auftaucht (die Tag-Regel begrenzt EIN Angebot, nicht den Pool).
       for (let i = 0; i < 300; i++) {
@@ -4882,7 +4888,7 @@ for (const seed of SEEDS) {
         });
         for (const o of offers) if (!o.fallback) tiers[o.rarity]++;
       }
-      for (const t of ['common', 'rare', 'legendary']) {
+      for (const t of ['common', 'rare', 'epic', 'unique', 'legendary']) {
         check(tiers[t] > 0, `Phase 28: Klasse ${klass} hat im Raum 10 keine ziehbare ${t}-Karte (leere Stufe)`);
       }
     }
@@ -4943,6 +4949,63 @@ for (const seed of SEEDS) {
     console.log(`Phase 28 Raumdauer: schlimmster Raum >=10 = ${worst.toFixed(1)} s Mindest-Räumzeit (Budget ${BUDGET} s) -- ${worstInfo}`);
     check(worst > 0, 'Phase 28: kein Kampfraum >=10 gemessen (Test-Setup)');
     check(worst <= BUDGET, `Phase 28: Raum >=10 braucht mindestens ${worst.toFixed(1)} s (Budget ${BUDGET} s) -- ${worstInfo}`);
+  }
+}
+
+// ---- 37. Upgradepool-v2 Phase 1: fuenf Seltenheitsstufen -----------------
+// Sprung von drei (common/rare/legendary) auf fuenf Stufen (common/rare/
+// epic/unique/legendary). Common/rare bleiben unveraendert, die alten 71
+// legendary-Karten sind auf epic/unique/legendary umgestuft (Umstufungs-
+// tabelle im PR). Diese Sektion prueft die neuen Strukturregeln, die
+// vorherigen Abschnitte (10, 11-16, 18-27, 36) pruefen bereits, dass die
+// gezogene Verteilung je Pool und ueber den echten Pool stimmt.
+{
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const VALID_RARITIES = new Set(['common', 'rare', 'epic', 'unique', 'legendary']);
+
+  // (a) Struktur: jede Karte hat eine der fuenf gueltigen Stufen; unique/
+  //     legendary erzwingen maxStacks 1 (sonst waere eine "einzigartige"
+  //     Karte mehrfach stapelbar -- Widerspruch zur Definition).
+  {
+    const U = upgradesData.upgrades;
+    let badRarity = 0;
+    let badMaxStacks = 0;
+    for (const id in U) {
+      const d = U[id];
+      if (!VALID_RARITIES.has(d.rarity)) badRarity++;
+      if ((d.rarity === 'unique' || d.rarity === 'legendary') && d.maxStacks !== 1) badMaxStacks++;
+    }
+    check(badRarity === 0, `Phase 1 (Upgradepool-v2): ${badRarity} Karte(n) mit ungueltiger rarity`);
+    check(badMaxStacks === 0, `Phase 1 (Upgradepool-v2): ${badMaxStacks} unique/legendary-Karte(n) mit maxStacks != 1`);
+  }
+
+  // (b) MECHANISMUS der Raum-Gates (rarityGates): mit einem SYNTHETISCHEN
+  //     Gate-Wert (5), nicht dem echten balance.json-Wert -- sonst waere der
+  //     Test bei der naechsten Balance-Anpassung grundlos rot oder faelschlich
+  //     gruen. Ein einzelner Kandidat + count:1 macht das Ergebnis
+  //     deterministisch: vor dem Gate bleibt nur der Fallback uebrig, ab dem
+  //     Gate erscheint die echte Karte.
+  {
+    const { mulberry32 } = await import('../src/core/rng.js');
+    const fakeData = {
+      offersPerScreen: 1,
+      fallback: { name: '+1 Leben', description: 'x', tag: 'stat', rarity: 'common' },
+      upgrades: {
+        gated_card: {
+          id: 'gated_card', name: 'Testkarte', description: 'x', tag: 'testtag',
+          rarity: 'unique', maxStacks: 1, requires: [], minRoom: 1,
+        },
+      },
+    };
+    const balance = { rarity: { unique: 100 }, rarityGates: { unique: { minRoom: 5 } } };
+    const before = rollOffers(fakeData, {
+      chosen: {}, roomIndex: 4, rng: mulberry32(1), balance, count: 1, banned: new Set(),
+    });
+    check(before[0].fallback === true, 'Phase 1 (Upgradepool-v2): rarityGate laesst die Karte VOR ihrem Mindestraum durch');
+    const after = rollOffers(fakeData, {
+      chosen: {}, roomIndex: 5, rng: mulberry32(1), balance, count: 1, banned: new Set(),
+    });
+    check(after[0].id === 'gated_card', 'Phase 1 (Upgradepool-v2): rarityGate haelt die Karte auch AB ihrem Mindestraum noch zurueck');
   }
 }
 

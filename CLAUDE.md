@@ -239,10 +239,16 @@ Zusicherung gegen leere Seltenheitsstufen und eine deterministische
 Raumdauer-Schranke. **Damit ist der komplette `UMBAUPLAN-LP.md` (Phasen 1–28)
 abgearbeitet — das Spiel läuft vollständig auf Lebenspunkte, zehn Klassen und
 sechs Schadenstypen.**
-**Nächste Sitzung: kein Pflichtthema mehr offen.** Verbleibend nur noch
-manuelle/optionale Punkte (s. To-do-Liste unten): der Bankshot-Faktor-Kalttest
-(2,0 → ggf. 2,5/3,0, nur nach echtem Spielgefühl) und die Telemetrie-Auswertung
-echter Runs. Neue Wünsche des Nutzers abwarten.
+**Neu eingegangen: „Upgrade-/Klassenpool-System v2 + Nekromant"** (eigener
+Auftrag mit Anhang A: Upgrade-/Klassenpool-Spec, Anhang B: Geisterpanzer-Spec).
+Ersetzt `UMBAUPLAN-LP.md` Phase 9 (Nekromanten-Passiv `reviveChance`), Phase 26
+(Signaturtopf Nekromant) und `PLAN.md` Phase 7 (Geisterpanzer als 3-Sekunden-
+Verbündeter) vollständig. Neun Phasen, eine pro Sitzung, Phase 0 (Ist-Abgleich)
+und **Phase 1 (Seltenheiten 3→5) sind gebaut** — Details im eigenen Abschnitt
+unten. **Nächste Sitzung: Phase 2 (Kategorie + Synergie-Tags).** Verbleibend
+sonst nur noch manuelle/optionale Punkte (s. To-do-Liste unten): der
+Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur nach echtem Spielgefühl) und
+die Telemetrie-Auswertung echter Runs.
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -2954,6 +2960,92 @@ Panzer, die zum Geist werden) und **Sprengpanzer** (`c_blast`).
   Klassen-Bodies + `body_ghost` wurden neu erzeugt (Türme unverändert). Jetzt
   sitzt die Kanone im Loch und schwenkt darum wie bei einem echten Panzer.
 
+### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 0 (Ist-Abgleich, keine Codeänderung)
+Bericht vor Phase 1 abgeliefert und vom Nutzer freigegeben. Kernbefunde: alle
+neun im Auftrag genannten Ist-Annahmen bestätigt (`upgradepool.js` hat schon
+`rarity`/`maxStacks`/`requires`/`minRoom`/`signatureClass`/`damageType`-Filter/
+Bannliste/tier-normierte `weightedPick`/Fallback; 246 Karten, 79/96/71 nach
+Rarity; `ghost.js` erbt `cfg` per Referenz mit 3-s-Timer; `c_necro.reviveChance`
+einziger Nutzer ist `state.js: tryRevive()`; `killTank()` kennt keinen
+Verursacher; 11 harte `state.player`-Fundstellen in der Gegner-KI; kein Boss
+fährt auf ein Ziel zu). **Blocker bestätigt**: alle 84 Signaturkarten tragen
+`tag: "signature"` — die „nie zwei gleiche Tags"-Regel lässt deshalb nur eine
+Signaturkarte pro Angebot zu, Anhang A §19 verlangt aber drei gleichzeitig
+(Auflösung in Phase 2 vorgesehen: Dedupe-Schlüssel für Signaturkarten auf `id`
+statt `tag` umstellen). **Kill-Zuordnung** lässt sich ohne zweiten Todes-
+Trichter lösen: die drei `applyDamage()`-Aufrufer außerhalb der Kugel-Treffer-
+Schleife (`damagetypes.js` Kettenblitz, `mine.js` Explosion) kennen bereits die
+verursachende Einheit, nur `status.js`s DOT-Tick kennt sie strukturell nicht
+(dokumentierte Untererfassung für Phase 6, kein Umbau von `status.js`).
+**Ergänzender Fund**: `bossai.js` setzt `tank.aimingAtPlayer = fire`
+unabhängig vom tatsächlichen Ziel — der im Auftrag für Phase 5 verlangte
+Lesbarkeits-Fix ist damit als echter Bug bestätigt, nicht nur vermutet.
+
+### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 1 (Seltenheiten 3→5) — gemergt
+Fünf statt drei Seltenheitsstufen (`common`/`rare`/`epic`/`unique`/
+`legendary`), reiner Struktur- und Einstufungsumbau ohne neue Mechanik.
+- **`data/balance.json`**: `rarity` jetzt mit fünf Gewichten
+  (`45/25/15/10/5`); das frühere einzelne `legendary.minRoom` ist durch
+  `rarityGates: {epic:{minRoom:3}, unique:{minRoom:6}, legendary:{minRoom:9}}`
+  ersetzt — common/rare haben weiterhin keinen globalen Deckel (nur das
+  per-Karte `minRoom` zählt, das bei allen 246 Karten explizit gesetzt ist).
+- **`upgradepool.js: buildCandidates()`** generalisiert: statt eines fest
+  verdrahteten `rarity==='legendary'`-Sonderfalls liest sie jetzt
+  `rarityGates[def.rarity]?.minRoom` für beliebig viele Stufen — `weightedPick`
+  brauchte keine Änderung (war bereits generisch über `weights[d.rarity]`).
+- **Alle 246 Bestandskarten neu eingestuft** — `common` (79) und `rare` (96)
+  bleiben unverändert (ihre Definitionen entsprachen bereits §18: Statboost
+  bzw. „erste Synergie"); die 71 bisherigen `legendary`-Karten sind nach dem
+  Muster jedes Kartentopfs neu verteilt: Karten, die mehrere Mechaniken zu
+  einer Endform kombinieren (durchweg die „Arsenal"-benannten Karten je Topf,
+  plus `glaskanone`/`sig_std_gardist` u. Ä.) bleiben `legendary`; Karten, die
+  EINE Mechanik extrem ausprägen oder eine neue Mechanik freischalten (z. B.
+  `phys_railgun`, `core_dodge_l`, `schild`, `sig_ric_trickmeister`,
+  `sig_ric_kettenbank`) wurden zu `unique`; reine „größere Zahl ohne neue
+  Interaktion"-Karten (die neun `core_*_l`-Statkapstones, `turbo`,
+  `ueberladung`, `uebermacht`, `sig_ric_querschlaeger`) wurden zu `epic` —
+  exakt die im Auftrag
+  zitierte CLAUDE.md-eigene Leitplanke „Bestehende Legendaries, die nur
+  größere Zahlen liefern, gehören meist nach epic oder rare". Ergebnis:
+  common 79 / rare 96 / epic 18 / unique 36 / legendary 17 (Summe weiterhin
+  246). Vollständige Umstufungstabelle im PR-Diff (`data/upgrades.json`).
+  **Eine Karte mit bestehendem `maxStacks: 2`** (`sig_std_alleskoenner`)
+  wurde bewusst auf `epic` statt `unique`/`legendary` eingestuft, weil die
+  neue Validierung `unique`/`legendary` auf `maxStacks: 1` zwingt — ein
+  Umbau ihres Stapel-Designs war nicht verlangt.
+- **`upgradescreen.js: RARITY`** und **`style.css`** (beide `[data-rarity]`-
+  Blöcke, Karten UND Shopkarten) um zwei neue Stufen erweitert: `epic` lila
+  (`#a35fd8`), `unique` orange mit leichtem Glow (`#d8763a`), `legendary`
+  unverändert Gold+Glow.
+- **`run.js`**: die Treasure-/Verflucht-Belohnung (`onlyRarity: 'legendary'`,
+  `bypassRoomGate: true`) bleibt unverändert funktionsfähig — sie filtert
+  direkt auf die Rarity-Zeichenkette, unabhängig von der Stufenzahl.
+- **17 bestehende Pool-Struktur-Tests** (`tests/regression.mjs`, Abschnitte
+  10, 11–16, 18–27) auf die neue 5-Werte-Verteilung je Topf umgestellt (z. B.
+  Kernpool jetzt `10/10/9/1/0`, jeder Element-Topf `4/4/0/3/1`, die kleinen
+  Signaturtöpfe `2/2/1/0/1` bzw. `2/2/0/1/1`, die vier Mechanikklassen-Töpfe
+  `4/4/1/2/1`). Der Phase-10(b)-Mechanismustest liest jetzt eigene
+  synthetische Gewichte (60/30/10) statt `tanksData.balance.rarity` — sonst
+  wäre er an die aktuelle Datenlage gekoppelt (CLAUDE.md-Grundregel). Die
+  beiden Phase-28-Tests (Abschnitt 36, echte Poolziehung + Leere-Stufen-Check)
+  auf alle fünf Stufen erweitert.
+- **Neuer Abschnitt 37** (`tests/regression.mjs`): (a) jede Karte hat eine
+  gültige Rarity aus den fünf Stufen, jede `unique`/`legendary`-Karte hat
+  `maxStacks: 1`; (b) der `rarityGates`-Mechanismus selbst, geprüft mit einer
+  SYNTHETISCHEN Ein-Karten-Pool + Gate-Wert (5) statt der echten
+  `balance.json`-Zahlen (3/6/9) — deterministisch über `count: 1`: vor dem
+  Gate bleibt nur der Fallback übrig, ab dem Gate erscheint die echte Karte.
+  Gegenprobe für alle drei Kernpunkte bestanden (je einzeln absichtlich rot
+  gemacht: ungültige Rarity, `maxStacks: 2` bei einer `legendary`-Karte,
+  Gate-Check stillgelegt) — dabei ein Fallstrick gefunden: `git checkout --`
+  auf `data/upgrades.json` während einer Gegenprobe verwirft nicht nur die
+  Testverfälschung, sondern auch die noch uncommittete Reklassifizierung
+  selbst; ab der zweiten Gegenprobe stattdessen gezielt per Skript
+  zurückgesetzt.
+- Playwright-Smoke bestätigt: `rollOffers()` liefert im echten Browser ein
+  Angebot mit einer `unique`-Karte, alle fünf `[data-rarity]`-Farben rendern
+  unterscheidbar, keine Konsolenfehler.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Controller-Feinschliff (optional)**: Der A-Knopf legt im Spiel
       weiterhin eine Bombe sofort ohne Zielen ab (`secondaryAlt`), obwohl die
@@ -3070,7 +3162,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v107`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v108`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
