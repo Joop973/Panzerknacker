@@ -624,7 +624,11 @@ export function createState(data, tiles, opts) {
         let spawnChance = 0;
         if (killer === state.player && pc.necromancer) spawnChance = gcfg.spawnChance?.necro ?? 0;
         else if (killer?.isGhost) spawnChance = gcfg.spawnChance?.ghost ?? 0;
-        if (spawnChance > 0 && state.ghosts.length < (gcfg.maxActive ?? 3) && state.rng() < spawnChance) {
+        // Seelenruf/Geisterlegion/Armee der Toten (Upgradepool-v2 Phase 8):
+        // ghostMaxAdd erhoeht das Basislimit additiv -- eine Zahl aus
+        // state.player.cfg statt eines zweiten Deckel-Felds.
+        const ghostCap = (gcfg.maxActive ?? 3) + (pc.ghostMaxAdd || 0);
+        if (spawnChance > 0 && state.ghosts.length < ghostCap && state.rng() < spawnChance) {
           state.ghosts.push(createGhost(state, tank.x, tank.y, tank.heading));
         }
       }
@@ -1112,6 +1116,23 @@ export function stepState(state, cmd, dt) {
         // ("kein Timer, lebt bis Tod oder Raumende").
         if (b.owner?.isGhost && t !== state.player && !t.alive) {
           state.ghostKills++;
+          // Seelensog (Upgradepool-v2 Phase 8): heilt den Nekromanten um
+          // einen Anteil des Kill-Schadens -- an genau dieser einen Stelle
+          // ausgewertet, kein zweites Heilsystem noetig.
+          const lifestealPct = state.player?.cfg?.ghostLifestealPct;
+          if (lifestealPct && state.player.alive) {
+            const heal = Math.round(schaden * lifestealPct);
+            if (heal > 0) {
+              state.player.hp = Math.min(state.player.cfg.maxHp, state.player.hp + heal);
+            }
+          }
+        }
+        // Seelenketten (Upgradepool-v2 Phase 8): JEDER Treffer eines
+        // Geisterpanzers betaeubt das Ziel kurz (nur die Bewegung -- eigenes
+        // Feld, unabhaengig vom Turm-Stun der EMP-Mine).
+        if (b.owner?.isGhost && t !== state.player) {
+          const stunS = state.player?.cfg?.ghostStunOnHit;
+          if (stunS) t.stunTimer = Math.max(t.stunTimer || 0, stunS);
         }
         // Telemetrie: Abpraller- vs. Direkt-Kills des Spielers an Gegnern.
         // Die freiwilligen Bankshots (USP-Kennzahl 3) sind mit Phase 8
@@ -1142,7 +1163,7 @@ export function stepState(state, cmd, dt) {
       if (circlesOverlap(b.x, b.y, b.radius, g.x, g.y, g.cfg.radius)) {
         b.dead = true;
         g.hp -= b.damage ?? 1;
-        if (g.hp <= 0) killGhost(g);
+        if (g.hp <= 0) killGhost(state, g);
         break;
       }
     }

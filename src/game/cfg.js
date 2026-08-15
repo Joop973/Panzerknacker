@@ -365,6 +365,17 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   let sDurMult = 1;
   let sTickMult = 1;
   let fireDurMult = 1;
+  // Upgradepool-v2 Phase 8 (Signaturtopf Nekromant): multiplikative
+  // Geisterpanzer-Effekte werden wie alle anderen multiplikativen Schluessel
+  // gesammelt und erst nach der Schleife angewandt. Die additiven/booleschen
+  // ghost*-Felder landen dagegen direkt auf cfg (Muster wie builtHpBonus/
+  // scrapDamageBonus) -- ghost.js: resolveGhostCfg() liest sie aus dem
+  // aufgeloesten Spieler-cfg, NICHT aus einem zweiten Effektsystem (Anhang A
+  // S16/Anhang B S19: "keine Parallelsysteme").
+  let ghostSpdMult = 1;
+  let ghostFireCdMult = 1;
+  let ghostDmgMult = 1;
+  let ghostHpMultAcc = 1;
   for (const id in U) {
     const c = U[id].core;
     const lvl = l(id);
@@ -438,6 +449,38 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.lightningRangeBonus) cfg.lightningRangeBonus = (cfg.lightningRangeBonus || 0) + c.lightningRangeBonus * lvl;
     if (c.lightningFalloffBonus) cfg.lightningFalloffBonus = (cfg.lightningFalloffBonus || 0) + c.lightningFalloffBonus * lvl;
     if (c.lightningStun) cfg.lightningStun = Math.max(cfg.lightningStun || 0, c.lightningStun);
+    // Upgradepool-v2 Phase 8 (Signaturtopf Nekromant): wirken NICHT auf den
+    // Spieler selbst, sondern auf die Geistereinheit -- ghost.js:
+    // resolveGhostCfg() liest diese Felder aus state.player.cfg.
+    if (c.ghostHpAdd) cfg.ghostHpAdd = (cfg.ghostHpAdd || 0) + c.ghostHpAdd * lvl;
+    if (c.ghostDamageAdd) cfg.ghostDamageAdd = (cfg.ghostDamageAdd || 0) + c.ghostDamageAdd * lvl;
+    if (c.ghostSpeedMult) ghostSpdMult *= Math.pow(c.ghostSpeedMult, lvl);
+    if (c.ghostFireMult) ghostFireCdMult *= Math.pow(c.ghostFireMult, lvl);
+    if (c.ghostMaxAdd) cfg.ghostMaxAdd = (cfg.ghostMaxAdd || 0) + c.ghostMaxAdd * lvl;
+    // Rudelgeist/Armee der Toten: additiv, mehrere Quellen summieren sich.
+    if (c.ghostPackDamagePerAlly) {
+      cfg.ghostPackDamagePerAlly = (cfg.ghostPackDamagePerAlly || 0) + c.ghostPackDamagePerAlly * lvl;
+    }
+    if (c.ghostLifestealPct) cfg.ghostLifestealPct = (cfg.ghostLifestealPct || 0) + c.ghostLifestealPct * lvl;
+    if (c.ghostStunOnHit) cfg.ghostStunOnHit = (cfg.ghostStunOnHit || 0) + c.ghostStunOnHit * lvl;
+    if (c.ghostDamageMult) ghostDmgMult *= Math.pow(c.ghostDamageMult, lvl);
+    if (c.ghostHpMult) ghostHpMultAcc *= Math.pow(c.ghostHpMult, lvl);
+    if (c.ghostDeathZoneRadius) {
+      cfg.ghostDeathZoneRadius = (cfg.ghostDeathZoneRadius || 0) + c.ghostDeathZoneRadius * lvl;
+    }
+    if (c.ghostDeathZoneDamage) {
+      cfg.ghostDeathZoneDamage = (cfg.ghostDeathZoneDamage || 0) + c.ghostDeathZoneDamage * lvl;
+    }
+    if (c.ghostReviveChance) cfg.ghostReviveChance = (cfg.ghostReviveChance || 0) + c.ghostReviveChance * lvl;
+    if (c.ghostCommander) cfg.ghostCommander = true;
+    if (c.ghostCommanderShield) cfg.ghostCommanderShield = true;
+    // Unsterbliche Seele/Lich-Panzer: einzelne Karten mit maxStacks 1, ein
+    // schlichter Max reicht (kein zweiter Kartenquellen-Fall vorgesehen).
+    if (c.ghostReviveMaxUses) cfg.ghostReviveMaxUses = Math.max(cfg.ghostReviveMaxUses || 1, c.ghostReviveMaxUses);
+    if (c.ghostCommanderMultBonus) {
+      cfg.ghostCommanderMultBonus = (cfg.ghostCommanderMultBonus || 0) + c.ghostCommanderMultBonus * lvl;
+    }
+    if (c.ghostReviveGrowth) cfg.ghostReviveGrowth = (cfg.ghostReviveGrowth || 0) + c.ghostReviveGrowth * lvl;
   }
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;
@@ -461,6 +504,11 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   if (sDurMult !== 1) cfg.statusDurationMult = (cfg.statusDurationMult || 1) * sDurMult;
   if (sTickMult !== 1) cfg.statusTickMult = (cfg.statusTickMult || 1) * sTickMult;
   if (fireDurMult !== 1) cfg.fireDurationMult = (cfg.fireDurationMult || 1) * fireDurMult;
+  // Upgradepool-v2 Phase 8: gesammelte Geisterpanzer-Multiplikatoren.
+  if (ghostSpdMult !== 1) cfg.ghostSpeedMult = (cfg.ghostSpeedMult || 1) * ghostSpdMult;
+  if (ghostFireCdMult !== 1) cfg.ghostFireMult = (cfg.ghostFireMult || 1) * ghostFireCdMult;
+  if (ghostDmgMult !== 1) cfg.ghostDamageMult = (cfg.ghostDamageMult || 1) * ghostDmgMult;
+  if (ghostHpMultAcc !== 1) cfg.ghostHpMult = (cfg.ghostHpMult || 1) * ghostHpMultAcc;
   // Ausweichen-Kernkarten schalten den Dash frei (unabhaengig von der alten
   // dash-Karte) und verkuerzen die Abklingzeit. Reusen dieselbe dash-Definition.
   if (coreDashGrant) {

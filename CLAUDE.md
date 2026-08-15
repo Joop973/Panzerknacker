@@ -265,10 +265,14 @@ Kill-Zuordnung über `meta.killer`); Details im eigenen Abschnitt unten.
 **Phase 7 (Geisterpanzer neu bauen) ist gebaut** — `src/game/ghost.js` ist
 komplett ersetzt: ein eigener, fester Basiseinheiten-Typ `ghost_tank` statt
 der geerbten cfg des getöteten Panzers; Details im eigenen Abschnitt unten.
-**Nächste Sitzung: Phase 8 (Signaturpool Nekromant — die zwölf alten
-`sig_necro_*`-Karten werden durch den 18-Karten-Pool aus Anhang A ersetzt,
-neue `core`-Schlüssel für die Geistereinheit wie `ghostHpAdd`/`ghostDamageAdd`/
-`ghostFireMult`/`ghostReviveChance`/`ghostCommander`).**
+**Phase 8 (Signaturpool Nekromant) ist gebaut** — die zwölf alten
+`sig_necro_*`-Karten sind durch den 18-Karten-Pool aus Anhang A ersetzt, neue
+`ghost*`-`core`-Schlüssel wirken auf die Geistereinheit statt auf den Spieler;
+Details im eigenen Abschnitt unten. **Nächste Sitzung: Phase 9 (Abnahme —
+Schlussabnahme des ganzen Nekromant-Auftrags: Geisterpanzer-Kernregeln,
+Zielsystem, ein Bosskampf-Korridor-Test mit festem Seed gegen Trivialisierung
+UND Wertlosigkeit der Geister, Pipeline-Isolation, `sw.js`-Cache-Bump). Letzte
+Phase des Auftrags.**
 Verbleibend sonst nur noch manuelle/optionale Punkte (s. To-do-Liste unten):
 der Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur nach echtem
 Spielgefühl) und die Telemetrie-Auswertung echter Runs.
@@ -3468,6 +3472,113 @@ als Interimswert dokumentiert).
   keine Konsolenfehler) + ein separater Fake-Canvas-Renderlauf mit einem
   angeschlagenen Geist (Lebensleiste zeichnet, kein Absturz) bestanden.
 
+### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 8 (Signaturpool Nekromant) — gemergt
+Die zwölf alten `sig_necro_*`-Karten (Phase 26, spielerseitige Statboni) sind
+durch den **18-Karten-Pool aus Anhang A/B** ersetzt: Geisterkern,
+Seelenkanone, Unruhige Seelen, Rastlose Geister, Seelenruf, Rudelgeist,
+Seelensog, Seelenketten, Seelenkonzentration, Letzter Wille, Wiederkehr
+(common/rare, 5/6), Geisterlegion, Geisterkommandant (epic, 2), Phylakterium,
+Unsterbliche Seele, Lich-Panzer (unique, 3), Ewige Wiederkehr, Armee der
+Toten (legendary, 2) — Verteilung 5/6/2/3/2 statt der alten 4/4/1/2/1.
+**Der entscheidende Unterschied zur alten Generation**: keine der 18 Karten
+gibt dem SPIELER Statwerte — jede wirkt über neue `ghost*`-`core`-Schlüssel
+auf die Geistereinheit (Anhang A §14 „effect/effectValues" sind bewusst NICHT
+eingeführt, das bestehende `core`-Objekt ist bereits die geforderte
+datengetriebene Effektschicht, ein zweites Effektsystem wäre genau die in
+§16 verbotene Parallelstruktur).
+- **`cfg.js: applyUpgrades()`** bekommt 16 neue `core`-Schlüssel im
+  generischen Loop (additiv: `ghostHpAdd`/`ghostDamageAdd`/`ghostMaxAdd`/
+  `ghostPackDamagePerAlly`/`ghostLifestealPct`/`ghostStunOnHit`/
+  `ghostDeathZoneRadius`/`ghostDeathZoneDamage`/`ghostReviveChance`/
+  `ghostCommanderMultBonus`/`ghostReviveGrowth`; multiplikativ, gesammelt und
+  nach der Schleife angewandt wie `damageMult`/`bulletSpeedMult`:
+  `ghostSpeedMult`/`ghostFireMult`/`ghostDamageMult`/`ghostHpMult`; Max:
+  `ghostReviveMaxUses`; Booleans: `ghostCommander`/`ghostCommanderShield`) —
+  landen alle auf dem SPIELER-cfg, nicht auf einem zweiten Geister-cfg.
+- **`ghost.js: resolveGhostCfg(data, playerCfg)`** liest diese Felder vom
+  aufgelösten Nekromanten-cfg und legt sie additiv/multiplikativ auf die
+  festen Anhang-B-Basiswerte (60 LP/8 Schaden/2,0 s/70 %/80 %/65 %) drauf —
+  reine Erweiterung der Phase-7-Funktion, kein zweites Stat-System.
+- **Deckel-Erhöhung an BEIDEN Erzeugern**: `ghostMaxAdd` muss sowohl in
+  `state.js: killTank()`s Kill-Spawnwürfel als auch in `tank.js:
+  spawnGhostBomb()` addiert werden (`(gcfg.maxActive ?? 3) +
+  (pc.ghostMaxAdd || 0)`) — zwei getrennte Aufrufstellen seit Phase 6/7,
+  beide vergessen hätten Seelenruf/Geisterlegion/Armee der Toten an einer
+  Hälfte wirkungslos gemacht.
+- **Rudelgeist/Armee der Toten (`ghostPackDamagePerAlly`) wird NICHT in die
+  cfg gebacken**, sondern in `ghost.js: updateGhosts()` bei JEDEM Schuss neu
+  aus der aktuellen Anzahl lebender Geister berechnet (`packMult`) — die
+  Anzahl ändert sich laufend (Tod, neue Spawns), ein einmalig berechneter
+  Wert wäre sofort veraltet.
+- **Seelensog (Lebensraub) und Seelenketten (Betäubung) sitzen in `state.js`**,
+  nicht in `ghost.js`: beide hängen an der bestehenden Geschoss-Trefferschleife
+  (`b.owner?.isGhost`-Zweig, der schon `ghostKills` zählt) — Lebensraub nur
+  beim KILL (Heilung = `ghostLifestealPct` × Kill-Schaden, gedeckelt auf
+  `cfg.maxHp`), Betäubung bei JEDEM Treffer (`t.stunTimer = Math.max(...)`,
+  eigenes Feld, unabhängig vom EMP-Minen-Turm-Stun).
+- **`killGhost()` ist jetzt der zentrale Ort für alle drei Todes-Mechaniken**
+  (genau wie in Phase 7 als Anschlusspunkt vorgesehen), in dieser Reihenfolge:
+  Phylakterium (Kommandant übersteht EINEN tödlichen Treffer pro Raum, kein
+  Wiederbelebungs-Verbrauch) → Wiederkehr-Familie (`tryReviveGhost()`) →
+  erst wenn beides nicht greift: `alive = false` + Letzter Wille
+  (`spawnDeathZone()`, reine Wiederverwendung von `mine.js: explodeAt()` mit
+  `spare: state.player` — der eigene Nekromant bleibt von seiner eigenen
+  Todeszone verschont, keine neue Explosionslogik nötig).
+- **`tryReviveGhost()`**: `reviveUsesLeft` wird beim ERSTEN Tod aus
+  `ghostReviveMaxUses` (Standard 1, Unsterbliche Seele erhöht ihn) initialisiert
+  und zählt danach unabhängig vom cfg weiter. Ewige Wiederkehr skaliert
+  **linear vom ursprünglichen Basiswert** (`reviveBaseMaxHp`/`reviveBaseDamage`,
+  einmalig gemerkt), nicht kumulativ vom letzten Stand — sonst wäre es
+  exponentielles statt lineares Wachstum je Wiedergeburt.
+- **Geisterkommandant**: die Zuweisung passiert bei der ERZEUGUNG
+  (`createGhost()`), nicht nachträglich — `!state.ghosts.some(g => g.alive &&
+  g.isCommander)` garantiert genau einen gleichzeitig, ohne einen
+  Verdrängungsmechanismus zu brauchen (der zweite Aufruf sieht den ersten
+  Geist schon im Array, weil beide Erzeuger `push()` sofort nach `createGhost()`
+  aufrufen). Die Multiplikatoren (`commanderHpMult`/`commanderDamageMult`,
+  Vorschlagswerte 2,5×/2×ohne Anhang-B-Zahlen, `_comment_ghost` markiert) plus
+  Lich-Panzers `ghostCommanderMultBonus` (additiv zum Basismultiplikator)
+  wirken einmalig bei der Erzeugung, nicht laufend.
+- **Sichtbares Gegenstück für den Kommandanten** (Auftrag-Testschritt 3
+  „muss erkennbar sein"): ein goldener Ring (`renderer.js: drawGhosts()`,
+  dieselbe Farbe wie legendäre Karten) um den einen Kommandanten — kein neues
+  Sprite nötig. Per Fake-Canvas-Renderlauf verifiziert: genau ein
+  zusätzlicher `stroke()`-Aufruf mit vs. ohne Kommandant.
+- **`_todo: balance`** (wörtliche Auftragsvorgabe) auf jeder Karte, deren
+  Zahlenwert nicht in Anhang A/B steht (13 der 18 — nur Seelenkanones „+2
+  Schaden", Seelenrufs „+1"/Basis-3-Beispiel und Geisterlegions „+2" sind
+  direkte Anhang-B/A-Zitate und bleiben unmarkiert).
+- **Abschnitt 34 (ehemals „UMBAUPLAN-LP Phase 26") umgestellt** statt neu
+  angelegt: Struktur/Filter/Mehrfachangebot-Tests gelten weiter, nur die
+  Zahlen (18 statt 12, 5/6/2/3/2 statt 4/4/1/2/1) sind aktualisiert. Neuer
+  Abschnitt 44 prüft ausschließlich die NEUEN Mechanismen.
+- **Ein echter Testinfrastruktur-Fund**: der bestehende „jede Karte ist
+  ziehbar"-Test (Abschnitt 6b2) zog Signaturklassen bisher nur OHNE erfüllte
+  `requires` und erfüllte `requires` nur OHNE `starterTank` — die Nekromant-
+  Karten sind die ERSTEN Signaturkarten mit `requires` auf eine andere Karte
+  derselben Klasse (Geisterlegion→Seelenruf, Phylakterium/Lich-Panzer→
+  Geisterkommandant, Unsterbliche Seele/Ewige Wiederkehr→Wiederkehr) und
+  wären mit der alten Testlogik als „tot" durchgefallen. Fix: ein dritter Zug
+  `drawAll(reqTargets, klass)` pro Signaturklasse.
+- **Neue Dauertests** (Abschnitt 44, Gegenprobe für jeden Kernpunkt bestanden,
+  mehrere davon kaskadieren korrekt über mehrere Tests hinweg, weil spätere
+  Mechaniken auf früheren aufbauen — z. B. bricht das Abschalten der
+  Kommandant-Zuweisung auch die Phylakterium- und Lich-Panzer-Tests):
+  Applier-Arithmetik für alle 16 Schlüssel, `resolveGhostCfg()`-Mechanismus
+  (vier Basis-Boosts wirklich multiplikativ/additiv, nicht nur im cfg
+  vorhanden), `ghostMaxAdd` an beiden Erzeugern, Rudelbonus am echten
+  abgeschossenen Geschoss gemessen, Seelensog nur bei echtem Kill, Seelenketten
+  bei jedem Treffer, Letzter Wille verschont den eigenen Nekromanten,
+  Wiederkehr-Grenzwertprobe (49 %/51 %), Unsterbliche-Seele-Deckel,
+  Ewige-Wiederkehr-Linearität, Geisterkommandant-Einzigartigkeit +
+  Multiplikator (gegen einen baugleichen Kontroll-Geist ohne Kommandant
+  gemessen), Phylakterium einmal pro Raum, Lich-Panzer-Zusatzbonus,
+  Lich-Panzer-`requires`-Gating (Testschritt 4 wörtlich), NaN/Infinity-Check
+  über alle 18 Karten (das „Fertig, wenn"-Kriterium des Auftrags). Playwright-
+  Smoke (Nekromant wählen, Run starten, keine Konsolenfehler) + zwei
+  Fake-Canvas-Renderläufe (Kommandant-Ring-Differenz, Kommandant-Renderpfad
+  crashfrei) bestanden.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`sig_necro_geisterlegion` ist wirkungslos (Upgradepool-v2 Phase 4)**:
       `core: {}`, weil ihre einzigen zwei Effekte (`grantGhostCrew`,
@@ -3567,7 +3678,11 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Erzeuger reichen nur noch Position/Ausrichtung durch: `state.js:
   killTank()`s Spawnwürfel und `tank.js: useSecondary()`s Geisterbombe.
   Eigenes `state.ghosts`-Array, kein Eintrag in `state.tanks` (blockiert
-  keine Kugeln, zählt nicht gegen `limits.enemiesAlive`).
+  keine Kugeln, zählt nicht gegen `limits.enemiesAlive`). Seit Phase 8:
+  `resolveGhostCfg(data, playerCfg)` legt 16 neue `ghost*`-`core`-Schlüssel
+  (aus den `sig_necro_*`-Signaturkarten, `cfg.js` sammelt sie auf dem
+  Spieler-cfg) additiv/multiplikativ auf die Basiswerte; `killGhost(state, g)`
+  ist der zentrale Ort für Phylakterium/Wiederkehr-Familie/Letzter Wille.
 - `src/game/ai.js` — Gegner-KI-Dispatcher + Zielsystem (Upgradepool-v2
   Phase 5): `resolveTarget`/`pickTarget`/`updateTargeting`/`registerThreat`
   wählen zwischen Spieler und Geistern statt hart auf `state.player` zu

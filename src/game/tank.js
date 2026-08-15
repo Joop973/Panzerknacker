@@ -475,7 +475,10 @@ export function layMine(tank, state, throwOverride, forceEmp = false) {
 // liefert tank (der Spieler selbst) nur noch Position/Blickrichtung des
 // Spawnpunkts -- createGhost() baut den festen Basistyp, keine Vorlage mehr.
 function spawnGhostBomb(tank, state) {
-  const cap = state.data.balance.ghost?.maxActive ?? 3;
+  // Seelenruf/Geisterlegion/Armee der Toten (Upgradepool-v2 Phase 8):
+  // ghostMaxAdd erhoeht das Basislimit additiv -- dieselbe Formel wie beim
+  // kill-ausgeloesten Spawnwuerfel in state.js: killTank().
+  const cap = (state.data.balance.ghost?.maxActive ?? 3) + (tank.cfg.ghostMaxAdd || 0);
   if (state.ghosts.length >= cap) return false;
   state.ghosts.push(createGhost(state, tank.x, tank.y, tank.turret));
   state.sounds.push({ name: 'shield', x: tank.x });

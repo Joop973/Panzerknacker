@@ -981,6 +981,18 @@ export function createRenderer(ctx) {
       }
       ctx.globalAlpha = 1;
 
+      // Geisterkommandant (Upgradepool-v2 Phase 8, Anhang A "Eliteeinheit,
+      // muss erkennbar sein"): ein goldener Ring um den einen Kommandanten --
+      // dieselbe Farbe wie die legendaeren Karten (style.css), damit "das ist
+      // etwas Besonderes" sofort assoziiert wird, ohne ein neues Sprite.
+      if (g.isCommander) {
+        ctx.strokeStyle = '#e8b44a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
       // Lebensleiste (Anhang B: "durchscheinender Look PLUS sichtbare LP" --
       // sonst ist die neue Sterblichkeit unlesbar, seit Geister ab Phase 7
       // echte, sichtbar sinkende LP haben). Anders als bei normalen Gegnern
