@@ -810,6 +810,7 @@ export function stepState(state, cmd, dt) {
     // vier neuen Sekundärwaffen, Enterhaken-Zug, Deflektor-Fenster).
     if (t.turretStunTimer > 0) t.turretStunTimer = Math.max(0, t.turretStunTimer - dt);
     if (t.gadgetCooldown > 0) t.gadgetCooldown = Math.max(0, t.gadgetCooldown - dt);
+    if (t.ghostBombCooldown > 0) t.ghostBombCooldown = Math.max(0, t.ghostBombCooldown - dt);
     if (t.deflectorTimer > 0) {
       t.deflectorTimer = Math.max(0, t.deflectorTimer - dt);
       if (t.deflectorTimer <= 0) t.deflectorCharges = 0;

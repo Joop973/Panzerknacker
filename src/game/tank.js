@@ -58,6 +58,7 @@ export function createTank(type, cfg, x, y) {
     powershotCharges: (cfg && cfg.powershotPerRoom) || 0,
     // Sekundärslot (Phase 6): frisch pro Raum, aus demselben Grund.
     gadgetCooldown: 0, // P4: Abklingzeit des Gadgetslots (EMP/Haken/…)
+    ghostBombCooldown: 0, // Nekromant: Abklingzeit der Geisterbombe (Nutzerwunsch)
     hookTimer: 0, // > 0: wird gerade zur Wand gezogen (Enterhaken)
     hookTarget: null,
     deflectorTimer: 0, // Restzeit des aktiven Deflektor-Fensters
@@ -206,13 +207,16 @@ function magazineOf(tank) {
 // Doppelrohr-Upgrade: zwei Kugeln im Spreizwinkel (jede zaehlt gegen
 // das Magazin). Sprengschuss-Upgrade: jeder N-te Abzug traegt eine
 // Sprengladung. Gibt true zurueck, wenn tatsaechlich gefeuert wurde.
-// Rueckmeldung fuer einen Schuss, den das volle Magazin blockiert
-// (PLAN-INPUT.md P1 / SPEC.md Abschnitt 9, Konflikt D): Bei Autofire ist die
-// Sperre unsichtbar und richtig so, bei manuellem Feuern wirkt ein
-// wirkungsloser Tastendruck wie ein Fehler. Deshalb ein kurzes Klicken plus
-// sichtbaren Marker am Rohr -- aber nur bei einem FRISCHEN Abzug und
+// Rueckmeldung fuer eine blockierte Aktion (PLAN-INPUT.md P1 / SPEC.md
+// Abschnitt 9, Konflikt D): Bei Autofire ist die Sperre unsichtbar und
+// richtig so, bei manuellem Ausloesen wirkt ein wirkungsloser Tastendruck wie
+// ein Fehler. Deshalb ein kurzes Klicken plus sichtbaren Marker am Rohr --
 // hoechstens alle blockedShotCooldownS, sonst rattert es im Dauerfeuer.
-function signalBlockedShot(tank, state) {
+// Urspruenglich nur fuer den vollen-Magazin-Fall (daher der Name der
+// Konstante), inzwischen auch von der Geisterbombe waehrend ihrer
+// Abklingzeit genutzt -- ein Timer statt zwei, sonst koennten beide
+// gleichzeitig blockierten Aktionen im selben Frame doppelt Laerm machen.
+function signalBlockedAction(tank, state) {
   if (tank !== state.player) return;
   const cd = state.data.input?.feedback?.blockedShotCooldownS ?? 0.35;
   if (state.blockedShotTimer > 0) return;
@@ -235,7 +239,7 @@ export function fireBullet(tank, state, pressed) {
   if (tank.cooldown > 1e-9) return false;
   const mag = magazineOf(tank);
   if (liveBulletsOf(state, tank) >= mag) {
-    if (pressed) signalBlockedShot(tank, state);
+    if (pressed) signalBlockedAction(tank, state);
     return false;
   }
 
@@ -474,13 +478,25 @@ export function layMine(tank, state, throwOverride, forceEmp = false) {
 // Verdraengung (Festgelegte Entscheidungen: "Geistlimit"). Seit Phase 7
 // liefert tank (der Spieler selbst) nur noch Position/Blickrichtung des
 // Spawnpunkts -- createGhost() baut den festen Basistyp, keine Vorlage mehr.
+// Nutzerwunsch: eigene Abklingzeit (ghost.bombCooldownS, Standard 10 s) --
+// unabhaengig vom Geistlimit, das weiterhin ohne Verdraengung UND ohne
+// eigenen Verbrauch bleibt (ein Versuch am vollen Limit startet KEINE
+// Abklingzeit, genau wie er bisher schon nichts "verbraucht" hat).
 function spawnGhostBomb(tank, state) {
+  // Epsilon wie bei fireBullet(): der Cooldown ist als Summe von
+  // 1/60-Schritten nicht exakt darstellbar, ohne Toleranz bleibt die Bombe
+  // einen Tick zu lang gesperrt.
+  if (tank.ghostBombCooldown > 1e-9) {
+    signalBlockedAction(tank, state); // dieselbe Rueckmeldung wie beim gesperrten Schuss (P1)
+    return false;
+  }
   // Seelenruf/Geisterlegion/Armee der Toten (Upgradepool-v2 Phase 8):
   // ghostMaxAdd erhoeht das Basislimit additiv -- dieselbe Formel wie beim
   // kill-ausgeloesten Spawnwuerfel in state.js: killTank().
   const cap = (state.data.balance.ghost?.maxActive ?? 3) + (tank.cfg.ghostMaxAdd || 0);
   if (state.ghosts.length >= cap) return false;
   state.ghosts.push(createGhost(state, tank.x, tank.y, tank.turret));
+  tank.ghostBombCooldown = state.data.balance.ghost?.bombCooldownS ?? 10;
   state.sounds.push({ name: 'shield', x: tank.x });
   state.spawnParticles?.(tank.x, tank.y, '#8ecaf0', 10, 90);
   return true;

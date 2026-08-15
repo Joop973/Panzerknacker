@@ -34,7 +34,16 @@ export function createHud(ctx) {
     const liveMines = st.mines.filter((m) => m.owner === p && !m.dead).length;
     ctx.font = '11px monospace';
     ctx.fillStyle = '#9aa0a8';
-    let ammoLine = `Kugeln ${p.cfg.magazine - liveBullets}/${p.cfg.magazine}  Minen ${p.cfg.mines - liveMines}/${p.cfg.mines}`;
+    let ammoLine = `Kugeln ${p.cfg.magazine - liveBullets}/${p.cfg.magazine}`;
+    // Nekromant: der Bombenslot ist keine Mine mehr, sondern die Geisterbombe
+    // mit eigener Abklingzeit -- "Minen X/Y" waere hier eine tote Zahl aus
+    // tanks.json (cfg.mines wird fuer ihn nie gelesen) und irrefuehrend.
+    if (p.cfg.necromancer) {
+      const bcd = p.ghostBombCooldown || 0;
+      ammoLine += bcd > 0 ? `  Geisterbombe ${bcd.toFixed(1)}s` : '  Geisterbombe ✓';
+    } else {
+      ammoLine += `  Minen ${p.cfg.mines - liveMines}/${p.cfg.mines}`;
+    }
     // Gadgetslot (P4): zweiter Slot mit eigener Abklingzeit. Bereit =
     // Kuerzel hell, sonst die Restsekunden -- ohne das waere der einzige
     // Hinweis auf einen noch kalten Slot, dass der Knopf nichts tut.
