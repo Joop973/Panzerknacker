@@ -276,6 +276,9 @@ Bossschüsse, der Spieler bleibt bei 60 %), den Pipeline-Invarianten und dem
 Verbleibend sonst nur noch manuelle/optionale Punkte (s. To-do-Liste unten):
 der Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur nach echtem
 Spielgefühl) und die Telemetrie-Auswertung echter Runs.
+**Nutzerwunsch danach: Nekromant-Feinschliff** (eigener Abschnitt unten) —
+Geisterbombe hat jetzt eine 10-s-Abklingzeit, der Gadget-Slot ist für den
+Nekromanten komplett entfernt (Karten UND Shop-Kauf gesperrt).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
@@ -3649,6 +3652,54 @@ im Kopfkommentar von Abschnitt 45).
   neue Abschnitt kostet ~0,6 s. Die teuerste neue Messung (3.000 Kills je
   Quote) läuft bewusst in EINEM Raum mit wiederbelebtem Gegner statt mit 3.000
   `createState()`-Aufrufen.
+
+### Nekromant-Feinschliff (Nutzerwunsch) — gemergt
+Drei Praezisierungen nach Abschluss des Nekromant-Auftrags: Bomben-Cooldown,
+Bestaetigung der Unaustauschbarkeit, Gadget-Ausschluss.
+- **Geisterbombe hat jetzt eine eigene Abklingzeit** (`data/balance.json:
+  ghost.bombCooldownS`, 10 s) — vorher konnte sie beliebig oft hintereinander
+  ausgeloest werden (nur das Geistlimit bremste). Neues Feld
+  `tank.ghostBombCooldown`, tickt im selben Panzer-Loop wie `gadgetCooldown`
+  (`state.js`). Ein Wurf am vollen Geistlimit startet bewusst KEINE
+  Abklingzeit — passend zur bestehenden Regel „am Limit passiert nichts,
+  kein Verbrauch". Rueckmeldung bei einem blockierten Wurf: derselbe Ton +
+  gedimmter Blitz wie beim gesperrten Schuss/Enterhaken-Fehlschuss
+  (`tank.js: signalBlockedShot` → umbenannt in `signalBlockedAction`, jetzt
+  ein gemeinsamer Helfer statt eines rein schuss-spezifischen). HUD zeigt
+  fuer den Nekromanten „Geisterbombe X.Xs"/„✓" statt der vorher toten
+  „Minen X/Y"-Zeile (`cfg.mines` wird fuer ihn nie gelesen, war seit Phase 6
+  eine irrefuehrende Anzeige).
+- **Der Bombenslot ist bereits seit P4 architektonisch permanent** —
+  `run.equippedSecondary` ist immer die Konstante `'mine'`, kein Upgrade
+  traegt noch `tag: "secondary"`, und `useSecondary()` leitet beim
+  Nekromanten unbedingt auf die Geisterbombe um. Kein Codeaenderung noetig,
+  nur ein neuer Regressionstest, der das strukturell absichert (Karte mit
+  `tag: "secondary"` verboten + ein echter `applyUpgradeChoice()`-Aufruf
+  aendert `equippedSecondary` nicht).
+- **Alle fuenf Gadget-Karten schliessen den Nekromanten aus**
+  (`emp_mine`/`hook`/`deflector`/`smoke`/`trap_wall` bekommen `"exclusions":
+  ["c_necro"]`) — der Nekromant hat dadurch gar keinen zweiten Slot mehr.
+  **Fund dabei:** der Shop-Kauf (`run.js: buyShopSecondary()`) ist ein
+  zweiter, von `exclusions` unabhaengiger Codepfad (er liest nur
+  `data/secondaries.json`, nicht den `exclusions`-gefilterten Upgrade-Pool)
+  — ohne eigene Sperre haette der Nekromant ein Gadget einfach mit Schrott
+  kaufen koennen. Jetzt zusaetzlich in `buyShopSecondary()` gesperrt, und
+  die ganze Sektion „Gadget tauschen" bleibt in `roomscreens.js` fuer ihn
+  unsichtbar (`ctx.necromancer`, aus `main.js` durchgereicht) statt nur
+  ausgegraut.
+- **Neue Dauertests** (Abschnitt 46, Gegenprobe fuer jeden Kernpunkt
+  bestanden): Cooldown-Mechanismus mit synthetischem Wert (nicht dem echten
+  10s-Wert) inkl. Epsilon-Fix fuer Fliesskomma-Drift ueber 180 Tick-Schritte
+  (dasselbe Muster wie `fireBullet()`s Cooldown), kein Cooldown-Start am
+  Limit, Ton+Blitz-Rueckmeldung, `exclusions` auf allen fuenf Gadget-Karten,
+  Pool-Ziehung ueber 800 Angebote sieht nie eine Gadget-Karte, Shop-Sperre
+  mit Kontrolle gegen eine andere Klasse, HUD-Zeile, Struktur-Nachweis zum
+  permanenten Bombenslot, und ein DOM-Test (`domstub.mjs`) fuer die
+  unsichtbare Shop-Sektion. **Ein Testfund unterwegs:** die erste Fassung
+  der DOM-Pruefung las `el.innerHTML`, das im Stub nur ein gespeicherter
+  String ist und von `appendChild()` nie aktualisiert wird (immer leer nach
+  dem initialen `el.innerHTML = ''`) — auf `el.textContent` umgestellt, das
+  rekursiv aus den echten Kindknoten liest.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`drawOne()`-Signaturkarten-Inkonsistenz (Upgradepool-v2 Phase 2)**:

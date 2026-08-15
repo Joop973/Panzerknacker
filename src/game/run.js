@@ -1083,6 +1083,12 @@ export function buyShopCard(run, index) {
 // Sekundaerslot.
 export function buyShopSecondary(run, id) {
   if (run.phase !== 'workshop') return false;
+  // Nutzerwunsch: der Nekromant hat gar keinen zweiten (Gadget-)Slot mehr --
+  // die Geisterbombe ist seine einzige, unaustauschbare Sekundaerfunktion.
+  // Die Kartenwahl sperrt Gadget-Karten bereits ueber exclusions
+  // (upgradepool.js: buildCandidates()); dieser Shop-Kauf ist ein zweiter,
+  // davon unabhaengiger Codepfad und braucht deshalb dieselbe Sperre hier.
+  if (run.data.types[run.starterTank]?.necromancer) return false;
   const scfg = run.data.secondaries?.[id];
   if (!scfg || scfg.category !== 'gadget') return false;
   if (id === run.equippedGadget) return false; // schon ausgeruestet

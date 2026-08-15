@@ -140,6 +140,10 @@ export function createShopScreen() {
   function renderSecondaries(scrap) {
     // P4: der Shop tauscht das GADGET -- die Bombe liegt im festen Slot und
     // steht nicht zum Tausch. Deshalb nur Eintraege mit category 'gadget'.
+    // Nutzerwunsch: der Nekromant hat gar keinen Gadget-Slot -- die ganze
+    // Sektion bleibt fuer ihn unsichtbar statt nur ausgegraut (der Kauf
+    // waere ueber buyShopSecondary() ohnehin wirkungslos, s. run.js).
+    if (ctx.necromancer) return;
     const equipped = ctx.getEquippedSecondary();
     const others = Object.keys(ctx.secondariesData).filter(
       (id) => ctx.secondariesData[id]?.category === 'gadget' && id !== equipped,

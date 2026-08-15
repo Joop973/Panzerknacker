@@ -707,6 +707,10 @@ async function init() {
         getUpgrades: () => run.upgrades,
         getOffers: () => run.shopOffers,
         getEquippedSecondary: () => run.equippedGadget, // P4: der Shop tauscht Gadgets
+        // Nutzerwunsch: der Nekromant hat keinen Gadget-Slot -- die Sektion
+        // "Gadget tauschen" soll fuer ihn erst gar nicht angezeigt werden
+        // (buyShopSecondary() sperrt den Kauf zusaetzlich serverseitig).
+        necromancer: !!tanksData.types[run.starterTank]?.necromancer,
         lifeBought: () => run.shopLifeBought,
         onBuyCard: (idx) => {
           const offer = run.shopOffers[idx];

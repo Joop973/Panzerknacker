@@ -692,7 +692,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "symbol": "🔵"
+      "symbol": "🔵",
+      "exclusions": ["c_necro"]
     },
     "hook": {
       "id": "hook",
@@ -703,7 +704,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "symbol": "🪝"
+      "symbol": "🪝",
+      "exclusions": ["c_necro"]
     },
     "deflector": {
       "id": "deflector",
@@ -714,7 +716,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "symbol": "🪞"
+      "symbol": "🪞",
+      "exclusions": ["c_necro"]
     },
     "smoke": {
       "id": "smoke",
@@ -725,7 +728,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "symbol": "🌫️"
+      "symbol": "🌫️",
+      "exclusions": ["c_necro"]
     },
     "trap_wall": {
       "id": "trap_wall",
@@ -736,7 +740,8 @@
       "maxStacks": 1,
       "requires": [],
       "minRoom": 1,
-      "symbol": "🧱"
+      "symbol": "🧱",
+      "exclusions": ["c_necro"]
     },
     "core_damage_c": {
       "id": "core_damage_c",

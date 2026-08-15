@@ -88,9 +88,10 @@
   "shop": {
     "cardChoices": 5
   },
-  "_comment_ghost": "Upgradepool-v2 Phase 6: Geistlimit laut Festgelegte-Entscheidungen-Tabelle auf 3 gesetzt (vorher 4, Rest des alten Systems), OHNE Verdraengung -- am Limit passiert nichts (kein Verbrauch, kein Wurf). spawnChance.necro gilt fuer einen Kill DURCH DEN SPIELER als Nekromant (cfg.necromancer), spawnChance.ghost fuer einen Kill DURCH EINEN GEIST (killer.isGhost) -- state.js: killTank(). Lebensdauer bleibt kein Timer (Phase 7 baut die feste Basiseinheit). commanderHpMult/commanderDamageMult/commanderShieldHealFraction/reviveHealFraction sind Phase-8-Vorschlaege (Signaturkarten Geisterkommandant/Phylakterium/Wiederkehr) -- Anhang B nennt dafuer keine Zahlen, noch nicht am echten Spielgefuehl geprueft.",
+  "_comment_ghost": "Upgradepool-v2 Phase 6: Geistlimit laut Festgelegte-Entscheidungen-Tabelle auf 3 gesetzt (vorher 4, Rest des alten Systems), OHNE Verdraengung -- am Limit passiert nichts (kein Verbrauch, kein Wurf). spawnChance.necro gilt fuer einen Kill DURCH DEN SPIELER als Nekromant (cfg.necromancer), spawnChance.ghost fuer einen Kill DURCH EINEN GEIST (killer.isGhost) -- state.js: killTank(). Lebensdauer bleibt kein Timer (Phase 7 baut die feste Basiseinheit). commanderHpMult/commanderDamageMult/commanderShieldHealFraction/reviveHealFraction sind Phase-8-Vorschlaege (Signaturkarten Geisterkommandant/Phylakterium/Wiederkehr) -- Anhang B nennt dafuer keine Zahlen, noch nicht am echten Spielgefuehl geprueft. bombCooldownS (Nutzerwunsch): eigene Abklingzeit der Geisterbombe (tank.js: spawnGhostBomb), unabhaengig vom Geistlimit UND vom kill-ausgeloesten Spawnwuerfel -- letzterer bleibt ungedeckelt.",
   "ghost": {
     "maxActive": 3,
+    "bombCooldownS": 10,
     "spawnChance": {
       "necro": 0.5,
       "ghost": 0.33

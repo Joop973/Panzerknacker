@@ -6130,10 +6130,16 @@ for (const seed of SEEDS) {
     check(st.mines.length === 0, 'Phase 6: die Geisterbombe legt trotzdem eine Mine');
     check(st.explosions.length === 0, 'Phase 6: die Geisterbombe erzeugt eine Explosion');
 
-    // Am Limit: kein Verbrauch, kein Wurf, kein Absturz.
+    // Am Limit: kein Verbrauch, kein Wurf, kein Absturz. Zwischen den
+    // Aufrufen die neue Bomben-Abklingzeit (Nutzerwunsch) zuruecksetzen --
+    // dieser Test prueft das GEISTLIMIT, nicht den Cooldown (eigener Test
+    // weiter unten).
+    st.player.ghostBombCooldown = 0;
     useSecondary(st.player, st, null);
+    st.player.ghostBombCooldown = 0;
     useSecondary(st.player, st, null);
     check(st.ghosts.length === 3, 'Phase 6: Vorbedingung Geisterbomben-Limit (nicht auf 3 gekommen)');
+    st.player.ghostBombCooldown = 0;
     check(useSecondary(st.player, st, null) === false, 'Phase 6: die Geisterbombe loest am Limit trotzdem aus');
     check(st.ghosts.length === 3, 'Phase 6: das Geistlimit wird per Geisterbombe ueberschritten');
 
@@ -6604,8 +6610,11 @@ for (const seed of SEEDS) {
 
     const st2 = necroRoom([]);
     st2.player.cfg.ghostMaxAdd = 1; // Basis 3 + 1 = 4
-    for (let i = 0; i < 4; i++) useSecondary(st2.player, st2, null);
+    // Bomben-Abklingzeit (Nutzerwunsch) zwischen den Wuerfen zuruecksetzen --
+    // dieser Test prueft das LIMIT, nicht den Cooldown.
+    for (let i = 0; i < 4; i++) { st2.player.ghostBombCooldown = 0; useSecondary(st2.player, st2, null); }
     check(st2.ghosts.length === 4, `Phase 8: Geisterbombe-Deckel ignoriert ghostMaxAdd (${st2.ghosts.length} statt 4)`);
+    st2.player.ghostBombCooldown = 0;
     useSecondary(st2.player, st2, null); // 5. Wurf -- am (erhoehten) Deckel
     check(st2.ghosts.length === 4, 'Phase 8: Geisterbombe erzeugt trotz erreichtem, erhoehtem Deckel einen weiteren Geist');
   }
@@ -7300,6 +7309,239 @@ for (const seed of SEEDS) {
     }
     check(geprueft === Object.keys(U).length, `Phase 9: nur ${geprueft} von ${Object.keys(U).length} Karten geprueft`);
     check(schlecht === 0, `Phase 9 (Punkt 24): ${schlecht} cfg-Verletzung(en) durch Karten`);
+  }
+}
+
+// ---- 46. Nekromant: Bomben-Cooldown + fester, gadgetloser Slot (Nutzerwunsch) --
+// Drei Nutzer-Anforderungen: (1) die Geisterbombe darf hoechstens alle
+// ghost.bombCooldownS (10 s) ausloesen, (2) der Bombenslot bleibt weiterhin
+// permanent unaustauschbar (war schon architektonisch garantiert -- kein
+// Code noetig, hier nur strukturell nachgewiesen), (3) alle Gadget-Karten
+// (der zweite, sonst tauschbare Slot) sind fuer den Nekromanten
+// ausgeschlossen -- sowohl beim Kartenangebot als auch im Shop-Kauf, der
+// exclusions bisher nicht kannte.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { useSecondary, useGadget } = await import('../src/game/tank.js');
+  const { buyShopSecondary } = await import('../src/game/run.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32, hashSeed, rngFor } = await import('../src/core/rng.js');
+  const { createHud } = await import('../src/ui/hud.js');
+  const U = upgradesData.upgrades;
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  const necroRoom = (types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    return st;
+  };
+
+  // (a) Mechanismus statt Datenlage: die Abklingzeit kommt aus
+  // balance.json (nicht hartkodiert 10) -- mit einem SYNTHETISCHEN Wert
+  // geprueft, der vom echten Wert abweicht. Ein blockierter zweiter Wurf
+  // erzeugt keinen zweiten Geist; nach Ablauf der Zeit ist die Bombe
+  // wieder scharf.
+  {
+    const orig = tanksData.balance.ghost.bombCooldownS;
+    tanksData.balance.ghost.bombCooldownS = 3;
+    try {
+      const st = necroRoom();
+      check(useSecondary(st.player, st, null) === true, 'Nekromant-Bombe: erster Wurf schlaegt fehl');
+      check(st.ghosts.length === 1, 'Nekromant-Bombe: erster Wurf erzeugt keinen Geist');
+      check(
+        Math.abs(st.player.ghostBombCooldown - 3) < 1e-9,
+        `Nekromant-Bombe: Abklingzeit ${st.player.ghostBombCooldown} statt 3 (synthetischer Wert)`,
+      );
+      check(useSecondary(st.player, st, null) === false, 'Nekromant-Bombe: zweiter Wurf trotz Abklingzeit erfolgreich');
+      check(st.ghosts.length === 1, 'Nekromant-Bombe: ein blockierter Wurf erzeugt trotzdem einen Geist');
+      for (let i = 0; i < 179; i++) stepState(st, CMD0, 1 / 60); // knapp unter 3 s
+      check(useSecondary(st.player, st, null) === false, 'Nekromant-Bombe: loest kurz VOR Ablauf schon wieder aus');
+      stepState(st, CMD0, 1 / 60); // ueber die 3-s-Schwelle
+      check(useSecondary(st.player, st, null) === true, 'Nekromant-Bombe: bleibt nach Ablauf der Abklingzeit gesperrt');
+      check(st.ghosts.length === 2, 'Nekromant-Bombe: nach Ablauf entsteht kein zweiter Geist');
+    } finally {
+      tanksData.balance.ghost.bombCooldownS = orig;
+    }
+  }
+
+  // (b) Ein Wurf am vollen Geistlimit startet KEINE Abklingzeit -- passend
+  // zur bestehenden Regel "am Limit passiert nichts" (kein Verbrauch).
+  {
+    const st = necroRoom(['t_pink', 't_pink', 't_pink']);
+    st.rng = () => 0;
+    for (const e of st.tanks.filter((t) => t !== st.player)) {
+      e.protect = 0;
+      st.killTank(e, 'test', { killer: st.player });
+    }
+    check(st.ghosts.length === 3, 'Nekromant-Bombe: Vorbedingung -- Limit nicht erreicht');
+    st.player.ghostBombCooldown = 0;
+    check(useSecondary(st.player, st, null) === false, 'Nekromant-Bombe: loest am vollen Limit trotzdem aus');
+    check(st.player.ghostBombCooldown === 0, 'Nekromant-Bombe: ein Wurf am Limit startet trotzdem eine Abklingzeit');
+  }
+
+  // (c) Rueckmeldung waehrend der Abklingzeit: derselbe Ton + gedimmte
+  // Blitz wie beim gesperrten Schuss/Enterhaken-Fehlschuss (Muster P1).
+  {
+    const st = necroRoom();
+    useSecondary(st.player, st, null); // startet die Abklingzeit
+    st.blockedShotTimer = 0; // Debounce-Rest aus dem ersten Wurf loeschen
+    st.sounds.length = 0;
+    st.flashes.length = 0;
+    const nochmal = useSecondary(st.player, st, null);
+    check(nochmal === false, 'Nekromant-Bombe: Vorbedingung -- zweiter Wurf war nicht blockiert');
+    check(
+      st.sounds.some((s) => (s?.name || s) === 'empty'),
+      'Nekromant-Bombe: waehrend der Abklingzeit gibt es keinen Ton',
+    );
+    check(st.flashes.some((f) => f.dim), 'Nekromant-Bombe: waehrend der Abklingzeit gibt es keinen gedimmten Blitz');
+  }
+
+  // (d) Struktur: alle fuenf Gadget-Karten schliessen c_necro aus.
+  {
+    for (const id of ['emp_mine', 'hook', 'deflector', 'smoke', 'trap_wall']) {
+      check(
+        !!U[id]?.exclusions?.includes('c_necro'),
+        `Gadget-Karte "${id}" schliesst den Nekromanten nicht aus (exclusions fehlt)`,
+      );
+    }
+  }
+
+  // (e) Pool: der Nekromant sieht ueber viele echte Ziehungen NIE eine
+  // Gadget-Karte im Angebot; eine andere Klasse weiterhin schon
+  // (Gegen-Kontrolle gegen einen falschen Testaufbau).
+  {
+    const sieht = (klass) => {
+      const rng = mulberry32(555);
+      for (let i = 0; i < 800; i++) {
+        const offers = rollOffers(upgradesData, {
+          chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3,
+          banned: new Set(), starterTank: klass,
+        });
+        if (offers.some((o) => o.tag === 'gadget')) return true;
+      }
+      return false;
+    };
+    check(!sieht('c_necro'), 'Nekromant sieht trotz exclusions eine Gadget-Karte im Angebot');
+    check(sieht('player'), 'Kontrolle: die Standardklasse sieht nie eine Gadget-Karte (Testaufbau falsch)');
+  }
+
+  // (f) Shop: buyShopSecondary() sperrt den Gadget-Kauf fuer den
+  // Nekromanten (zweiter Codepfad, den exclusions nicht abdeckt) --
+  // andere Klassen bleiben unveraendert kaufberechtigt.
+  {
+    const runNecro = createRun(tanksData, tilesData, diffData, upgradesData, 1, 'normal', { starterTank: 'c_necro' });
+    runNecro.phase = 'workshop';
+    runNecro.scrap = 999;
+    check(buyShopSecondary(runNecro, 'hook') === false, 'Shop: der Nekromant kann ein Gadget kaufen');
+    check(runNecro.equippedGadget === null, 'Shop: equippedGadget wurde trotz Sperre gesetzt');
+    check(runNecro.scrap === 999, 'Shop: der gesperrte Kauf hat trotzdem Schrott gekostet');
+
+    const runAndere = createRun(tanksData, tilesData, diffData, upgradesData, 1, 'normal', { starterTank: 'player' });
+    runAndere.phase = 'workshop';
+    runAndere.scrap = 999;
+    check(buyShopSecondary(runAndere, 'hook') === true, 'Kontrolle: eine andere Klasse kann kein Gadget mehr kaufen');
+    check(runAndere.equippedGadget === 'hook', 'Kontrolle: das gekaufte Gadget kommt nicht an');
+  }
+
+  // (g) HUD: zeigt fuer den Nekromanten die Geisterbomben-Abklingzeit statt
+  // der toten "Minen X/Y"-Zahl (cfg.mines wird fuer ihn nie gelesen).
+  {
+    const texts = [];
+    const fakeCtx = new Proxy(
+      { canvas: { width: 768, height: 512 }, measureText: () => ({ width: 40 }) },
+      {
+        get: (t, k) => {
+          if (k in t) return t[k];
+          if (k === 'fillText') return (s) => texts.push(String(s));
+          return () => {};
+        },
+        set: () => true,
+      },
+    );
+    const hud = createHud(fakeCtx);
+    const runNecro = createRun(tanksData, tilesData, diffData, upgradesData, 1, 'normal', { starterTank: 'c_necro' });
+    runNecro.phase = 'playing';
+    runNecro.state.player.ghostBombCooldown = 4.2;
+    texts.length = 0;
+    hud.render(runNecro, {});
+    const zeile = texts.join('\n');
+    check(zeile.includes('Geisterbombe'), 'HUD: zeigt beim Nekromanten keine Geisterbombe-Zeile');
+    check(zeile.includes('4.2'), `HUD: zeigt nicht die laufende Abklingzeit (${zeile})`);
+    check(!zeile.includes('Minen'), 'HUD: zeigt beim Nekromanten trotzdem die tote Minen-Zahl');
+  }
+
+  // (h) Strukturnachweis zu Punkt 2 des Nutzerwunschs ("permanente,
+  // unaustauschbare Funktion"): der Bombenslot ist architektonisch fest --
+  // kein Upgrade traegt noch tag 'secondary' (die einzige Art, wie eine
+  // Karte den Slot je haette tauschen koennen), und ueber eine echte
+  // Kartenwahl (applyUpgradeChoice(), der einzige Schreibpfad ausser der
+  // Erzeugung) bleibt run.equippedSecondary unveraendert 'mine'.
+  {
+    check(
+      Object.values(U).every((d) => d.tag !== 'secondary'),
+      'Punkt 2: es gibt wieder eine Karte mit tag "secondary" -- der Bombenslot waere tauschbar',
+    );
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 2, 'normal', { starterTank: 'c_necro' });
+    check(run.equippedSecondary === 'mine', `Punkt 2: equippedSecondary startet als "${run.equippedSecondary}" statt "mine"`);
+    run.phase = 'upgrade';
+    run.pendingOffers = [U.core_damage_c];
+    chooseUpgrade(run, 0);
+    check(
+      run.equippedSecondary === 'mine',
+      `Punkt 2: equippedSecondary wechselt nach einer Kartenwahl auf "${run.equippedSecondary}"`,
+    );
+  }
+
+  // (i) Shop-UI: die Sektion "Gadget tauschen" ist beim Nekromanten
+  // komplett unsichtbar (nicht nur ausgegraut) -- ueber den echten DOM-Pfad
+  // von createShopScreen() geprueft, nicht nur ueber buyShopSecondary().
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { createShopScreen } = await import('../src/ui/roomscreens.js');
+      const baseCtx = {
+        upgradesData,
+        secondariesData: tanksData.secondaries,
+        costs: tanksData.balance.scrap.cost,
+        dropRefund: tanksData.balance.scrap.dropRefund,
+        getScrap: () => 999,
+        getUpgrades: () => ({}),
+        getOffers: () => [],
+        getEquippedSecondary: () => null,
+        lifeBought: () => false,
+        onBuyCard: () => false,
+        onBuyShield: () => false,
+        onBuySecondary: () => false,
+        onBuyLife: () => false,
+        onDrop: () => false,
+        onLeave: () => {},
+      };
+      const screen = createShopScreen();
+      screen.show({ ...baseCtx, necromancer: true });
+      // domstub: innerHTML ist nur ein gespeicherter String (kein Live-Baum),
+      // appendChild() aktualisiert ihn nicht -- textContent liest dagegen
+      // rekursiv aus den echten Kindknoten (tests/domstub.mjs).
+      const necroText = document.getElementById('workshop').textContent;
+      check(!necroText.includes('Gadget tauschen'), 'Shop-UI: zeigt dem Nekromanten trotzdem "Gadget tauschen" an');
+
+      screen.show({ ...baseCtx, necromancer: false, getEquippedSecondary: () => 'hook' });
+      const andereText = document.getElementById('workshop').textContent;
+      check(andereText.includes('Gadget tauschen'), 'Kontrolle: eine andere Klasse sieht "Gadget tauschen" nicht mehr');
+    } finally {
+      restore();
+    }
   }
 }
 
