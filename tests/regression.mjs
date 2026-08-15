@@ -1691,9 +1691,11 @@ function check(ok, msg) {
   // Boss 50" -- das ist die Design-Zusage, nicht die einzelne Zahl.
   {
     // Spielbare Klassen (player:true, Phase 9) sind KEINE Gegner und fallen
-    // aus der Gegnerhaerte-Pruefung heraus.
+    // aus der Gegnerhaerte-Pruefung heraus. ghost_tank (Anhang B, Phase 7)
+    // ebenso: kein purchasable Gegner (fehlt in diffData.danger), eigene,
+    // von der Gegnerhaerte-Tabelle unabhaengige Basiswerte (60 LP, Anhang B S7).
     for (const [id, t] of Object.entries(T)) {
-      if (t.player || BOSSE.includes(id)) continue;
+      if (t.player || BOSSE.includes(id) || id === 'ghost_tank') continue;
       const treffer = Math.ceil(t.maxHp / dmg);
       check(
         treffer >= 2 && treffer <= 5,
@@ -1702,7 +1704,9 @@ function check(ok, msg) {
     }
     // Elite verdoppelt -> hoechstens 10 Treffer.
     const haertester = Math.max(
-      ...Object.entries(T).filter(([id, t]) => !t.player && !BOSSE.includes(id)).map(([, t]) => t.maxHp),
+      ...Object.entries(T)
+        .filter(([id, t]) => !t.player && !BOSSE.includes(id) && id !== 'ghost_tank')
+        .map(([, t]) => t.maxHp),
     );
     check(
       Math.ceil((haertester * diffData.elite.hpMult) / dmg) === 10,
@@ -1780,7 +1784,9 @@ function check(ok, msg) {
   {
     const expl = tanksData.balance.damage.explosion;
     const schwaechster = Math.min(
-      ...Object.entries(T).filter(([id]) => id !== 'player' && !BOSSE.includes(id)).map(([, t]) => t.maxHp),
+      ...Object.entries(T)
+        .filter(([id, t]) => !t.player && !BOSSE.includes(id) && id !== 'ghost_tank')
+        .map(([, t]) => t.maxHp),
     );
     check(
       expl >= schwaechster,
@@ -5451,8 +5457,12 @@ for (const seed of SEEDS) {
   // NIE ein handgestricktes Objekt: updateGhosts() laeuft in jedem stepState-
   // Tick und wuerde an einem unvollstaendigen cfg (fehlendes speed/weapon/...)
   // mit NaN korrumpieren, ohne zu werfen.
-  const makeGhost = (base, x, y) =>
-    createGhost({ x, y, heading: 0, turret: 0, type: base.type, cfg: base.cfg }, tanksData.balance);
+  // Upgradepool-v2 Phase 7: createGhost(state, x, y) baut jetzt den festen
+  // Basistyp -- der erste Parameter braucht keine cfg mehr, nur noch das
+  // Raum-state fuer resolveGhostCfg(). makeGhost() bleibt als duenner
+  // Wrapper, damit die bestehenden Aufrufstellen unten unveraendert lesbar
+  // bleiben (erstes Argument war/ist immer das aktuelle st).
+  const makeGhost = (st, x, y) => createGhost(st, x, y);
 
   // Eigene Zahlen statt der aktuellen balance.json-Werte (CLAUDE.md-Pflicht:
   // "den Mechanismus mit eigenen Zahlen pruefen, nicht die aktuelle
@@ -5479,7 +5489,7 @@ for (const seed of SEEDS) {
     // (b) Ein Geist deutlich naeher als der Spieler wird zum Ziel.
     {
       const { st, e } = raum('t_pink');
-      const g = makeGhost(e, e.x + 30, e.y); // 30px, Spieler 300px entfernt
+      const g = makeGhost(st, e.x + 30, e.y); // 30px, Spieler 300px entfernt
       st.ghosts.push(g);
       updateTargeting(st, 10);
       check(resolveTarget(e, st) === g, 'Phase 5 (Zielsystem): ein naher Geist wird nicht anvisiert');
@@ -5494,7 +5504,7 @@ for (const seed of SEEDS) {
     {
       const { st, e } = raum('t_pink');
       const d = Math.hypot(st.player.x - e.x, st.player.y - e.y); // 300
-      const g = makeGhost(e, e.x + d - 50, e.y); // real 250 < 300, effektiv 500 > 300
+      const g = makeGhost(st, e.x + d - 50, e.y); // real 250 < 300, effektiv 500 > 300
       st.ghosts.push(g);
       updateTargeting(st, 10);
       check(
@@ -5508,14 +5518,14 @@ for (const seed of SEEDS) {
     // attraktiven Kandidaten).
     {
       const { st, e } = raum('t_pink');
-      const gClose = makeGhost(e, e.x + 90, e.y); // effektiv 180
+      const gClose = makeGhost(st, e.x + 90, e.y); // effektiv 180
       st.ghosts.push(gClose);
       updateTargeting(st, 10);
       check(resolveTarget(e, st) === gClose, 'Phase 5 (Zielsystem): Vorbedingung Hysterese-Test (Geist nicht gewaehlt)');
 
       // 10% naeher (effektiv 164) -- unter der 30%-Schwelle, darf NICHT
       // uebernehmen.
-      const gSlightlyCloser = makeGhost(e, e.x + 82, e.y);
+      const gSlightlyCloser = makeGhost(st, e.x + 82, e.y);
       st.ghosts.push(gSlightlyCloser);
       e.ai.targetTimer = 0; // erzwingt sofortige Neubewertung
       updateTargeting(st, 1);
@@ -5525,7 +5535,7 @@ for (const seed of SEEDS) {
       );
 
       // Deutlich guenstiger (effektiv 10) -- setzt sich trotz Hysterese durch.
-      const gMuchCloser = makeGhost(e, e.x + 5, e.y);
+      const gMuchCloser = makeGhost(st, e.x + 5, e.y);
       st.ghosts.push(gMuchCloser);
       e.ai.targetTimer = 0;
       updateTargeting(st, 1);
@@ -5538,7 +5548,7 @@ for (const seed of SEEDS) {
     // (e) Schadens-Bedrohung zieht das Ziel an und klingt linear ab.
     {
       const { st, e } = raum('t_pink');
-      const g = makeGhost(e, e.x + 200, e.y); // real naeher als der Spieler, aber
+      const g = makeGhost(st, e.x + 200, e.y); // real naeher als der Spieler, aber
       st.ghosts.push(g); // effektiv (200/0.5=400) weiter als dessen 300
       updateTargeting(st, 10);
       check(
@@ -5579,7 +5589,7 @@ for (const seed of SEEDS) {
       const { st, e } = raum('t_pink');
       e.x = 50; e.y = 48; e.prevX = 50; e.prevY = 48;
       st.player.x = 450; st.player.y = 48; // 400px entfernt
-      const gBlocked = makeGhost(e, -30, 48); // 80px entfernt, aber ausserhalb -> blockiert
+      const gBlocked = makeGhost(st, -30, 48); // 80px entfernt, aber ausserhalb -> blockiert
       st.ghosts.push(gBlocked);
       // reevalS = 1/reevaluateHz(4) = 0.25s; noTargetFallbackS(1) -> 4 Aufrufe.
       for (let i = 0; i < 5; i++) {
@@ -5598,7 +5608,7 @@ for (const seed of SEEDS) {
       const { st, e } = raum('t_pink');
       e.cfg.accuracy = 1; // deterministisch: kein Zielfehler-Jitter
       st.player.x = e.x - 200; st.player.y = e.y; // WESTEN
-      const g = makeGhost(e, e.x + 60, e.y); // OSTEN, effektiv naeher -> wird gewaehlt
+      const g = makeGhost(st, e.x + 60, e.y); // OSTEN, effektiv naeher -> wird gewaehlt
       st.ghosts.push(g);
       updateTargeting(st, 10);
       check(
@@ -5638,7 +5648,7 @@ for (const seed of SEEDS) {
       // ist waehrend der ersten Schleife auf den Spieler zugefahren) und
       // einen naeheren, sichtbaren Geist einfuegen.
       e.x = st.player.x - 300; e.y = st.player.y; e.prevX = e.x; e.prevY = e.y;
-      const g = makeGhost(e, e.x + 40, e.y);
+      const g = makeGhost(st, e.x + 40, e.y);
       st.ghosts.push(g);
       e.ai.targetTimer = 0;
       for (let i = 0; i < 60; i++) stepState(st, CMD, STEP);
@@ -5657,7 +5667,7 @@ for (const seed of SEEDS) {
     // brechen (E-Grundsatz seit Phase 0b).
     {
       const { st, e } = raum('t_pink');
-      const g = makeGhost(e, e.x + 20, e.y);
+      const g = makeGhost(st, e.x + 20, e.y);
       st.ghosts.push(g);
       let calls = 0;
       const origRng = st.rng;
@@ -5701,7 +5711,7 @@ for (const seed of SEEDS) {
       });
       const boss = st.tanks.find((t) => t !== st.player);
       stepMirrorBoss(boss, st, 1 / 60); // einmal, um auf die gespiegelte Position zu kommen
-      const g = makeGhost(boss, boss.x + 10, boss.y); // sehr nah
+      const g = makeGhost(st, boss.x + 10, boss.y); // sehr nah
       st.ghosts.push(g);
 
       st.time = 0.5; // < onPlayerS(2) -> global fixiert
@@ -5738,7 +5748,7 @@ for (const seed of SEEDS) {
         !reactor.cfg.mirrorBoss && !reactor.cfg.phalanx,
         'Phase 5 (Zielsystem): Vorbedingung -- der Reaktor hat eine Boss-Sonderbewegung',
       );
-      const g = makeGhost(reactor, reactor.x + 5, reactor.y);
+      const g = makeGhost(st, reactor.x + 5, reactor.y);
       st.ghosts.push(g);
       updateTargeting(st, 10);
       check(
@@ -5803,9 +5813,9 @@ for (const seed of SEEDS) {
   // Vorhaltezielen/Kollision -- alive statt dead, vx/vy/hp/cfg.radius vorhanden.
   {
     const { st, e } = raum('t_pink');
-    const g = createGhost(e, tanksData.balance);
+    const g = createGhost(st, e.x, e.y);
     check(
-      g.alive === true && g.hp === e.cfg.maxHp && g.vx === 0 && g.vy === 0 && g.isGhost === true,
+      g.alive === true && g.hp === g.cfg.maxHp && g.vx === 0 && g.vy === 0 && g.isGhost === true,
       'Phase 5 (Zielsystem): createGhost erzeugt keine panzerkompatible Form (alive/hp/vx/vy/isGhost)',
     );
   }
@@ -5814,7 +5824,7 @@ for (const seed of SEEDS) {
   // tank.js: moveTank-Muster) und wird bei hp<=0 entfernt.
   {
     const { st, e } = raum('t_pink'); // e bleibt als lebendes Ziel des Geistes stehen
-    const g = createGhost({ x: e.x - 150, y: e.y, heading: 0, turret: 0, type: e.type, cfg: e.cfg }, tanksData.balance);
+    const g = createGhost(st, e.x - 150, e.y);
     st.ghosts.push(g);
     updateGhosts(st, 1 / 60);
     check(Math.hypot(g.vx, g.vy) > 0, 'Phase 5 (Zielsystem): ein Geist mit lebendem Ziel in Reichweite bewegt sich nicht (vx/vy bleiben 0)');
@@ -5837,7 +5847,7 @@ for (const seed of SEEDS) {
     // Schadensmessung durch eigene Schuesse verfaelschen koennte).
     st.tanks.length = 0;
     st.tanks.push(st.player);
-    const g = createGhost({ x: 300, y: 48, heading: 0, turret: 0, type: e.type, cfg: e.cfg }, tanksData.balance);
+    const g = createGhost(st, 300, 48);
     st.ghosts.push(g);
 
     const hpVor = g.hp;
@@ -6081,12 +6091,14 @@ for (const seed of SEEDS) {
     // (d8) Statuseffekt-Tick (Phase 0 dokumentierte Untererfassung, kein
     // Umbau von status.js): kein Killer bekannt -> kein Wurf, kein Geist.
     // Prueft SOFORT nach dem Tod ab (Schleife bricht, sobald e stirbt) --
-    // ein Geist verfaellt sonst nach balance.ghost.maxActive-unabhaengigem
-    // Fallback (createGhost(): balance.ghost?.duration ?? 3 s), ein zu
-    // spaeter Check saehe dann IMMER 0 (verfallen statt nie erzeugt) und
-    // wuerde eine falsche Zuordnung nicht mehr fangen (per Gegenprobe
-    // gefunden: mit absichtlich injiziertem killer blieb dieser Test bei
-    // einer 4-Sekunden-Schleife trotzdem gruen).
+    // zur Zeit dieses Tests (vor Phase 7) verfiel ein faelschlich erzeugter
+    // Geist nach dem alten Lebensdauer-Fallback (createGhost(): balance
+    // .ghost?.duration ?? 3 s), ein zu spaeter Check saehe dann IMMER 0
+    // (verfallen statt nie erzeugt) und wuerde eine falsche Zuordnung nicht
+    // mehr fangen (per Gegenprobe gefunden: mit absichtlich injiziertem
+    // killer blieb dieser Test bei einer 4-Sekunden-Schleife trotzdem gruen).
+    // Seit Phase 7 gibt es gar keinen Lebensdauer-Timer mehr (Anhang B S6) --
+    // das fruehe Abbrechen bleibt trotzdem die richtige, robuste Praxis.
     {
       const st = necroRoom();
       const e = st.tanks.find((t) => t !== st.player);
@@ -6195,6 +6207,258 @@ for (const seed of SEEDS) {
     check(
       necroCalls === normalCalls + 1,
       `Phase 6: der Spawnwurf verbraucht nicht genau einen zusaetzlichen rng()-Aufruf (${normalCalls} -> ${necroCalls})`,
+    );
+  }
+}
+
+// ---- 43. Upgradepool-v2 Phase 7: Geisterpanzer neu gebaut ----------------
+// Anhang B S18/S20: eigener, fester Basiseinheiten-Typ `ghost_tank`. Ersetzt
+// ghost.js komplett -- ab hier haben ALLE Geister exakt dieselben, vom
+// getoeteten Gegner UNABHAENGIGEN Basiswerte (S8), keinen Lebensdauer-Timer
+// mehr (S6) und schiessen erst innerhalb einer Feuer-Schwelle (S7).
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createGhost, updateGhosts, killGhost } = await import('../src/game/ghost.js');
+  const { useSecondary } = await import('../src/game/tank.js');
+  const { resolveCfg } = await import('../src/game/cfg.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+
+  const necroRoom = (types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    // KEIN st.ghosts.length = 0 hier (anders als bullets/mines) -- Test (i)
+    // soll pruefen, dass createState() selbst ein frisches Array liefert,
+    // nicht dass dieser Testhelfer eins erzwingt (sonst waere die Aussage
+    // "Raumwechsel entfernt alle Geister" trivial wahr durch den Helfer,
+    // nicht durch die produktive Logik -- per Gegenprobe gefunden).
+    return st;
+  };
+
+  // (a) Einheitlicher Unit-Typ: JEDER Erzeugungsweg (Kill-Wuerfel UND
+  // Geisterbombe) liefert denselben 'ghost_tank' (Anhang B Kernregel 4).
+  {
+    const st = necroRoom();
+    const e = st.tanks.find((t) => t !== st.player);
+    e.protect = 0;
+    st.rng = () => 0; // garantierter Spawnwurf
+    st.killTank(e, 'test', { killer: st.player });
+    check(st.ghosts[0]?.type === 'ghost_tank', `Phase 7: Kill-Spawn erzeugt Typ ${st.ghosts[0]?.type} statt ghost_tank`);
+
+    useSecondary(st.player, st, null); // Geisterbombe (2. Slot, Kappe noch nicht erreicht)
+    check(st.ghosts[1]?.type === 'ghost_tank', `Phase 7: Geisterbombe erzeugt Typ ${st.ghosts[1]?.type} statt ghost_tank`);
+  }
+
+  // (b) Feste Basiswerte gegen die Anhang-B-Zahlen (S7): 60 LP, 8 Schaden,
+  // 2,0 s Schussintervall, 0 Abpraller, keine Ruestung. Tempo/Kugeltempo/
+  // Reichweite als Prozentsatz der STANDARDKLASSE player (nicht des
+  // Nekromanten) -- ausdruecklich gegen resolveCfg(tanksData,'player')
+  // nachgerechnet, nicht gegen einen zweiten hartkodierten Wert.
+  {
+    const st = necroRoom();
+    const g = createGhost(st, 0, 0);
+    const p = resolveCfg(tanksData, 'player');
+    check(g.cfg.maxHp === 60, `Phase 7: Geist-LP ${g.cfg.maxHp} statt 60`);
+    check(g.cfg.damage === 8, `Phase 7: Geist-Schaden ${g.cfg.damage} statt 8`);
+    check(g.cfg.fireCooldown === 2.0, `Phase 7: Geist-Schussintervall ${g.cfg.fireCooldown} statt 2,0 s`);
+    check(g.cfg.ricochets === 0, `Phase 7: Geist hat Abpraller (${g.cfg.ricochets})`);
+    check(g.cfg.armor === null, 'Phase 7: Geist hat eine Panzerung');
+    check(
+      Math.abs(g.cfg.speed - p.speed * 0.7) < 1e-9,
+      `Phase 7: Geist-Tempo ${g.cfg.speed} statt 70 % von ${p.speed} (Standardklasse player)`,
+    );
+    check(
+      Math.abs(g.cfg.bulletSpeed - p.bulletSpeed * 0.8) < 1e-9,
+      `Phase 7: Geist-Kugeltempo ${g.cfg.bulletSpeed} statt 80 % von ${p.bulletSpeed}`,
+    );
+    check(
+      Math.abs(g.cfg.fireRangePx - tanksData.balance.bullet.maxDistance * 0.65) < 1e-9,
+      `Phase 7: Geist-Feuerschwelle ${g.cfg.fireRangePx} statt 65 % von balance.bullet.maxDistance`,
+    );
+  }
+
+  // (c) Mechanismus statt Datenlage: die drei Prozentsaetze wirklich MULTI-
+  // PLIKATIV gegen die player-Baseline, nicht hartkodiert -- mit einem
+  // synthetischen Wert veraendert, der von den echten 0.7/0.8/0.65 abweicht.
+  {
+    const orig = { ...tanksData.types.ghost_tank };
+    tanksData.types.ghost_tank.speedPct = 0.4;
+    tanksData.types.ghost_tank.bulletSpeedPct = 0.3;
+    tanksData.types.ghost_tank.rangePct = 0.2;
+    try {
+      const st = necroRoom();
+      const g = createGhost(st, 0, 0);
+      const p = resolveCfg(tanksData, 'player');
+      check(Math.abs(g.cfg.speed - p.speed * 0.4) < 1e-9, 'Phase 7: speedPct wirkt nicht multiplikativ');
+      check(Math.abs(g.cfg.bulletSpeed - p.bulletSpeed * 0.3) < 1e-9, 'Phase 7: bulletSpeedPct wirkt nicht multiplikativ');
+      check(
+        Math.abs(g.cfg.fireRangePx - tanksData.balance.bullet.maxDistance * 0.2) < 1e-9,
+        'Phase 7: rangePct wirkt nicht multiplikativ',
+      );
+    } finally {
+      Object.assign(tanksData.types.ghost_tank, orig);
+    }
+  }
+
+  // (d) KEIN Stat-Erbe vom getoeteten Gegner (Anhang B Kernregel 5, S8):
+  // ein sehr schwacher UND ein kuenstlich sehr starker Gegner erzeugen
+  // IDENTISCHE Geister.
+  {
+    const leicht = necroRoom(['t_pink']);
+    const eLeicht = leicht.tanks.find((t) => t !== leicht.player);
+    eLeicht.protect = 0;
+    eLeicht.cfg.maxHp = 5; // synthetisch sehr schwach
+    leicht.rng = () => 0;
+    leicht.killTank(eLeicht, 'test', { killer: leicht.player });
+
+    const schwer = necroRoom(['t_pink']);
+    const eSchwer = schwer.tanks.find((t) => t !== schwer.player);
+    eSchwer.protect = 0;
+    eSchwer.cfg.maxHp = 99999; // synthetisch "Boss"-stark
+    schwer.rng = () => 0;
+    schwer.killTank(eSchwer, 'test', { killer: schwer.player });
+
+    const gL = leicht.ghosts[0];
+    const gS = schwer.ghosts[0];
+    check(!!gL && !!gS, 'Phase 7: Vorbedingung -- nicht beide Kills haben einen Geist erzeugt');
+    check(
+      gL.cfg.maxHp === gS.cfg.maxHp && gL.cfg.damage === gS.cfg.damage && gL.cfg.speed === gS.cfg.speed,
+      `Phase 7: Geister aus unterschiedlich starken Gegnern unterscheiden sich (leicht: ${gL.cfg.maxHp} LP, schwer: ${gS.cfg.maxHp} LP)`,
+    );
+  }
+
+  // (e) KEIN Lebensdauer-Timer (Anhang B S6): ein Geist ohne Ziel bleibt
+  // ueber eine lange simulierte Zeit hinweg am Leben. Im alten System (vor
+  // Phase 7) waere er nach balance.ghost.duration (Fallback 3 s) verfallen.
+  {
+    const st = necroRoom([]);
+    st.tanks.length = 1; // nur der Spieler -- kein Ziel fuer den Geist
+    const g = createGhost(st, 300, 300);
+    st.ghosts.push(g);
+    for (let i = 0; i < 60 * 20; i++) updateGhosts(st, 1 / 60); // 20 simulierte Sekunden
+    check(st.ghosts.length === 1 && g.alive, 'Phase 7: ein Geist ohne Ziel verfaellt trotzdem nach einiger Zeit');
+  }
+
+  // (f) Feuer-Schwelle: ausserhalb von fireRangePx wird trotz freier Sicht
+  // und exakter Ausrichtung NICHT geschossen, das Verfolgen (Bewegung)
+  // bleibt aber unbegrenzt aktiv (Anhang B S7: "das Verfolgen bleibt
+  // unbegrenzt"). Eigene, kuenstlich verkleinerte rangePct statt der echten
+  // 780 px -- die Arena (768x512) laesst innerhalb einer Zeile keine 780 px
+  // Abstand zu, ausserdem misst das so den MECHANISMUS statt der aktuellen
+  // Datenlage (CLAUDE.md-Pflicht).
+  {
+    const origRangePct = tanksData.types.ghost_tank.rangePct;
+    tanksData.types.ghost_tank.rangePct = 0.05; // fireRangePx = 0.05 * 1200 = 60
+    try {
+      const st = createState(tanksData, tilesData, {
+        genRng: rngFor(1, 3, 'rooms'),
+        enemyTypes: ['t_pink'],
+        aiSeed: hashSeed(1, 3, 'ai'),
+        playerUpgrades: {},
+        upgradesData,
+        equippedSecondary: 'mine',
+        transform: {},
+        starterTank: 'c_necro',
+        roomSpec: { fixedLayout: 'test_arena' },
+        arenas: tanksData.arenas,
+      });
+      st.bullets.length = 0;
+      st.mines.length = 0;
+      st.ghosts.length = 0;
+      const e = st.tanks.find((t) => t !== st.player);
+      e.x = 400;
+      e.y = 48; // offene Testzeile
+      const g = createGhost(st, 100, 48); // Abstand 300 > fireRangePx (60)
+      check(g.cfg.fireRangePx === 60, `Phase 7: Vorbedingung -- fireRangePx ist ${g.cfg.fireRangePx} statt 60`);
+      check(
+        Math.hypot(e.x - g.x, e.y - g.y) > g.cfg.fireRangePx,
+        'Phase 7: Vorbedingung -- das Ziel liegt bereits innerhalb der Feuer-Schwelle',
+      );
+      st.ghosts.push(g);
+      const xVor = g.x;
+      for (let i = 0; i < 90; i++) updateGhosts(st, 1 / 60);
+      check(st.bullets.length === 0, 'Phase 7: der Geist schiesst trotz Ziel ausserhalb der Feuer-Schwelle');
+      check(g.x > xVor, 'Phase 7: der Geist bewegt sich nicht auf ein zu weit entferntes Ziel zu (Verfolgen ist nicht unbegrenzt)');
+
+      // Jetzt nah genug heranholen -- derselbe Geist schiesst jetzt.
+      g.x = e.x - 50;
+      g.y = e.y;
+      g.turret = 0; // schon ausgerichtet, damit der Schuss nicht am Winkel scheitert
+      updateGhosts(st, 1 / 60);
+      check(st.bullets.length === 1, 'Phase 7: der Geist schiesst innerhalb der Feuer-Schwelle trotzdem nicht');
+    } finally {
+      tanksData.types.ghost_tank.rangePct = origRangePct;
+    }
+  }
+
+  // (g) killGhost(): der Basistod hat KEINEN Zusatzeffekt (Anhang B S13/S17)
+  // -- nur alive wird false, sonst nichts; idempotent bei doppeltem Aufruf.
+  {
+    const st = necroRoom();
+    const g = createGhost(st, 10, 20);
+    const vorher = { ...g };
+    killGhost(g);
+    check(g.alive === false, 'Phase 7: killGhost() setzt alive nicht auf false');
+    for (const k of Object.keys(vorher)) {
+      if (k === 'alive') continue;
+      check(g[k] === vorher[k], `Phase 7: killGhost() veraendert Feld "${k}" (Basistod haette keinen Zusatzeffekt)`);
+    }
+    killGhost(g); // zweiter Aufruf darf nicht werfen oder etwas doppelt tun
+    check(g.alive === false, 'Phase 7: ein zweiter killGhost()-Aufruf ist nicht idempotent');
+  }
+
+  // (h) Nach dem Tod eines Geistes entsteht bei einem neuen qualifizierten
+  // Kill wieder ein Geist (kein dauerhaftes Blockieren durch den alten).
+  {
+    const st = necroRoom(['t_pink', 't_pink']);
+    const [e1, e2] = st.tanks.filter((t) => t !== st.player);
+    e1.protect = 0;
+    e2.protect = 0;
+    st.rng = () => 0;
+    st.killTank(e1, 'test', { killer: st.player });
+    check(st.ghosts.length === 1, 'Phase 7: Vorbedingung -- der erste Kill erzeugt keinen Geist');
+    killGhost(st.ghosts[0]);
+    st.ghosts = st.ghosts.filter((g) => g.alive);
+    check(st.ghosts.length === 0, 'Phase 7: Vorbedingung -- der Geist ist nach killGhost() noch da');
+    st.killTank(e2, 'test', { killer: st.player });
+    check(st.ghosts.length === 1, 'Phase 7: nach dem Tod des ersten Geistes entsteht kein neuer mehr');
+  }
+
+  // (i) Raumwechsel entfernt alle Geister (Anhang B S15, Testschritt 4) --
+  // ueber die echte createState()-Frischzelle, nicht nur behauptet.
+  {
+    const st1 = necroRoom();
+    const e = st1.tanks.find((t) => t !== st1.player);
+    e.protect = 0;
+    st1.rng = () => 0;
+    st1.killTank(e, 'test', { killer: st1.player });
+    check(st1.ghosts.length === 1, 'Phase 7: Vorbedingung -- kein Geist im ersten Raum');
+    const st2 = necroRoom(); // simuliert den naechsten Raum (frisches createState)
+    check(st2.ghosts.length === 0, 'Phase 7: Geister ueberleben einen Raumwechsel');
+  }
+
+  // (j) Regressionsschutz: ghost_tank ist keine purchasable Gegnerkarte
+  // (fehlt in difficulty.json: danger) und zaehlt nicht gegen den
+  // enemiesAlive-Deckel (Geister stehen nie in state.tanks).
+  {
+    check(!diffData.danger?.ghost_tank, 'Phase 7: ghost_tank ist als purchasable Gegner in difficulty.json gelistet');
+    const st = necroRoom();
+    const e = st.tanks.find((t) => t !== st.player);
+    e.protect = 0;
+    st.rng = () => 0;
+    st.killTank(e, 'test', { killer: st.player });
+    check(
+      !st.tanks.includes(st.ghosts[0]),
+      'Phase 7: ein Geist steckt in state.tanks (wuerde gegen limits.enemiesAlive zaehlen)',
     );
   }
 }

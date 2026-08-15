@@ -75,7 +75,8 @@
       "searchAngles": 8
     }
   },
-  "_comment_classes": "UMBAUPLAN-LP Phase 9: die zehn spielbaren Klassen in types (player:true). cfg.js zieht dann Magazin/Deckel/Kugeltempo aus den Player-Defaults in balance.json, statt sie wie frueher fest an type==='player' zu haengen (der Blocker der Phase). speedMult skaliert das Basistempo ('normal'), crit die Grundkritchance, damageType das Element (elementare Klassen schiessen es von Anfang an). Die Passiv-Felder (classMineRadiusMult/lightningBonusTargets/fire-|poisonDurationMult/frostSlowBonus/bonusRicochets/scrapDamagePer100/builtHpMult) werden in cfg.js als Whitelist durchgereicht und an genau einer Stelle ausgewertet. 'player' IST die Standard-Klasse (Default-starterTank) -- so bleiben Altpfade, die resolveCfg(data,'player') rufen, gueltig. Upgradepool-v2 Phase 4: das fruehere Nekromant-Passiv reviveChance ist abgebaut (Neubau folgt in Phase 6/7 dieses Auftrags).",
+  "_comment_classes": "UMBAUPLAN-LP Phase 9: die zehn spielbaren Klassen in types (player:true). cfg.js zieht dann Magazin/Deckel/Kugeltempo aus den Player-Defaults in balance.json, statt sie wie frueher fest an type==='player' zu haengen (der Blocker der Phase). speedMult skaliert das Basistempo ('normal'), crit die Grundkritchance, damageType das Element (elementare Klassen schiessen es von Anfang an). Die Passiv-Felder (classMineRadiusMult/lightningBonusTargets/fire-|poisonDurationMult/frostSlowBonus/bonusRicochets/scrapDamagePer100/builtHpMult) werden in cfg.js als Whitelist durchgereicht und an genau einer Stelle ausgewertet. 'player' IST die Standard-Klasse (Default-starterTank) -- so bleiben Altpfade, die resolveCfg(data,'player') rufen, gueltig. Upgradepool-v2 Phase 4: das fruehere Nekromant-Passiv reviveChance ist abgebaut, Phase 6 hat cfg.necromancer + die Geistermechanik dafuer eingehaengt (s. _comment_ghost_tank).",
+  "_comment_ghost_tank": "Anhang B (Upgradepool-v2 Phase 7): fester Basistyp aller Geisterpanzer, unabhaengig vom getoeteten Gegner. Weder purchasable Gegner (fehlt bewusst in data/difficulty.json: danger) noch waehlbare Klasse (kein player:true, erscheint dadurch automatisch nicht im Klassen-Screen). speedPct/bulletSpeedPct/rangePct sind Prozentsaetze der STANDARDKLASSE player, keine eigenen Absolutwerte -- src/game/ghost.js: resolveGhostCfg() rechnet sie live gegen resolveCfg(data,'player').",
   "types": {
     "player": {
       "player": true,
@@ -465,6 +466,18 @@
       "maxHp": 100,
       "damage": 34,
       "desc": "Fünf Panzer rotieren gemeinsam um die Raummitte. Nur der kurze Lücken-Moment beim Rotieren lässt einen Treffer durch."
+    },
+    "ghost_tank": {
+      "label": "Geisterpanzer",
+      "maxHp": 60,
+      "damage": 8,
+      "fireRate": 2.0,
+      "speedPct": 0.7,
+      "bulletSpeedPct": 0.8,
+      "rangePct": 0.65,
+      "ricochets": 0,
+      "weapon": "bullet",
+      "damageType": "physical"
     }
   }
 }
