@@ -267,6 +267,15 @@ function check(ok, msg) {
   const reachable = new Set([...drawAll({}), ...drawAll(reqTargets)]);
   for (const klass of sigClasses) {
     for (const id of drawAll({}, klass)) reachable.add(id);
+    // Upgradepool-v2 Phase 8: Nekromant-Signaturkarten sind die ersten mit
+    // einem `requires` auf eine ANDERE Signaturkarte derselben Klasse
+    // (Geisterlegion -> Seelenruf, Phylakterium/Lich-Panzer ->
+    // Geisterkommandant, Unsterbliche Seele/Ewige Wiederkehr -> Wiederkehr).
+    // Ohne diesen dritten Zug waeren sie unerreichbar: drawAll({}, klass)
+    // hat die Voraussetzung nie erfuellt, drawAll(reqTargets) sieht die
+    // Klasse nie (kein starterTank) -- beide Bedingungen zusammen braucht
+    // genau diese Kombination.
+    for (const id of drawAll(reqTargets, klass)) reachable.add(id);
   }
   for (const id in defs) {
     if (defs[id].tag === 'elite') continue; // nur ueber Elite-Belohnung
@@ -4520,32 +4529,28 @@ function check(ok, msg) {
   }
 }
 
-// ---- 34. UMBAUPLAN-LP Phase 26: Signaturtopf Nekromant -------------------
-// Dritter Mechanikklassen-Topf: 12 Karten (4/4/4) fuer den Nekromanten
-// (c_necro). Verstaerkte urspruenglich zwei Nekromanten-Mechaniken
-// (reviveChance-Passiv, ghost_crew-Geisterbesatzung) -- BEIDE sind mit
-// Upgradepool-v2 Phase 4 abgebaut (der Nekromant-Neubau in Phase 6/7 dieses
-// Auftrags ersetzt sie durch ein eigenes Zielsystem). Die frueheren
-// Mechanismus-Tests (c)/(d1)/(d2) fuer reviveChanceBonus/grantGhostCrew/
-// ghostDurationBonus sind deshalb ENTFERNT, nicht auskommentiert -- die
-// Faehigkeiten selbst gibt es nicht mehr. Struktur (a)/(b) und der
-// Blocker-Fix-Test (e) bleiben gueltig: die Kartenanzahl, Rarity-Verteilung
-// und Sichtbarkeit haben sich durch das Leeren dreier core-Objekte nicht
-// veraendert (nur sig_necro_geisterlegion hat jetzt core:{} -- ein
-// Uebergangszustand bis Phase 8 den ganzen Topf ersetzt, s. CLAUDE.md).
+// ---- 34. Signaturtopf Nekromant (Struktur/Filter/Mehrfachangebot) --------
+// Ehemals UMBAUPLAN-LP Phase 26 (12 Karten, 4/4/4): der Topf ist mit
+// Upgradepool-v2 Phase 8 KOMPLETT ersetzt (18 Karten aus Anhang A/B statt
+// der alten 12) -- Struktur (a), Filter (b) und der Blocker-Fix-Test (e)
+// bleiben als Abschnitt gueltig und werden auf die neuen Zahlen umgestellt.
+// Die eigentlichen NEUEN Mechanismen (Geisterwerte-Boosts, Rudelbonus,
+// Wiederkehr-Familie, Geisterkommandant/Phylakterium, Letzter Wille) haben
+// einen eigenen Abschnitt weiter unten (Upgradepool-v2 Phase 8).
 {
   const { rollOffers } = await import('../src/game/upgradepool.js');
   const { mulberry32 } = await import('../src/core/rng.js');
   const U = upgradesData.upgrades;
   const necro = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_necro');
 
-  // (a) Struktur: 12 Nekromant-Signaturen, 4/4/4, Tag signature, kein damageType.
+  // (a) Struktur: 18 Nekromant-Signaturen, 5/6/2/3/2, Tag signature, kein damageType.
   {
-    check(necro.length === 12, `Phase 26: ${necro.length} Nekromant-Signaturen statt 12`);
+    check(necro.length === 18, `Phase 26: ${necro.length} Nekromant-Signaturen statt 18`);
     const rar = { common: 0, rare: 0, epic: 0, unique: 0, legendary: 0 };
     for (const [, d] of necro) rar[d.rarity]++;
-    check(rar.common === 4 && rar.rare === 4 && rar.epic === 1 && rar.unique === 2 && rar.legendary === 1, `Phase 26: Verteilung ${JSON.stringify(rar)} statt 4/4/1/2/1`);
+    check(rar.common === 5 && rar.rare === 6 && rar.epic === 2 && rar.unique === 3 && rar.legendary === 2, `Phase 26: Verteilung ${JSON.stringify(rar)} statt 5/6/2/3/2`);
     check(necro.every(([, d]) => d.tag === 'signature' && d.core && !d.damageType), 'Phase 26: Signatur ohne Tag/core oder mit damageType');
+    check(necro.every(([, d]) => Object.keys(d.core).length > 0), 'Phase 26: eine Nekromant-Signatur hat ein leeres core-Objekt (wirkungslos)');
   }
 
   // (b) Filter: der Nekromant sieht sie, eine andere Klasse (player) NIE.
@@ -6406,13 +6411,13 @@ for (const seed of SEEDS) {
     const st = necroRoom();
     const g = createGhost(st, 10, 20);
     const vorher = { ...g };
-    killGhost(g);
+    killGhost(st, g);
     check(g.alive === false, 'Phase 7: killGhost() setzt alive nicht auf false');
     for (const k of Object.keys(vorher)) {
       if (k === 'alive') continue;
       check(g[k] === vorher[k], `Phase 7: killGhost() veraendert Feld "${k}" (Basistod haette keinen Zusatzeffekt)`);
     }
-    killGhost(g); // zweiter Aufruf darf nicht werfen oder etwas doppelt tun
+    killGhost(st, g); // zweiter Aufruf darf nicht werfen oder etwas doppelt tun
     check(g.alive === false, 'Phase 7: ein zweiter killGhost()-Aufruf ist nicht idempotent');
   }
 
@@ -6426,7 +6431,7 @@ for (const seed of SEEDS) {
     st.rng = () => 0;
     st.killTank(e1, 'test', { killer: st.player });
     check(st.ghosts.length === 1, 'Phase 7: Vorbedingung -- der erste Kill erzeugt keinen Geist');
-    killGhost(st.ghosts[0]);
+    killGhost(st, st.ghosts[0]);
     st.ghosts = st.ghosts.filter((g) => g.alive);
     check(st.ghosts.length === 0, 'Phase 7: Vorbedingung -- der Geist ist nach killGhost() noch da');
     st.killTank(e2, 'test', { killer: st.player });
@@ -6460,6 +6465,399 @@ for (const seed of SEEDS) {
       !st.tanks.includes(st.ghosts[0]),
       'Phase 7: ein Geist steckt in state.tanks (wuerde gegen limits.enemiesAlive zaehlen)',
     );
+  }
+}
+
+// ---- 44. Upgradepool-v2 Phase 8: Signaturtopf Nekromant (18 Karten) ------
+// Anhang A/B: die 18 neuen sig_necro_*-Karten wirken NICHT auf den Spieler
+// selbst, sondern ueber neue ghost*-core-Schluessel auf die Geistereinheit
+// (cfg.js: applyUpgrades(), ghost.js: resolveGhostCfg()/killGhost()). Struktur
+// (18 Karten, 5/6/2/3/2), Filter und Mehrfachangebot stehen in Abschnitt 34
+// (umgestellt von der alten Phase-26-Struktur). Dieser Abschnitt prueft die
+// NEUEN Mechanismen mit eigenen Zahlen -- Gegenprobe fuer jeden Kernpunkt
+// bestanden. Deckt zugleich alle fuenf offiziellen Testschritte aus dem
+// Auftrag ab: Geisterkern (a/b), Seelenruf (c), Geisterkommandant (k),
+// Lich-Panzer-Gating (n), Wiederkehr (h).
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createGhost, updateGhosts, killGhost } = await import('../src/game/ghost.js');
+  const { useSecondary } = await import('../src/game/tank.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  const necroRoom = (types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    return st;
+  };
+
+  // Feste Testarena mit offener Zeile (Muster wie Abschnitt 43f) -- fuer
+  // Mechanismen, die eine echte stepState()-Runde brauchen.
+  const arenaRoom = (types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+      roomSpec: { fixedLayout: 'test_arena' },
+      arenas: tanksData.arenas,
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    return st;
+  };
+
+  // (a) Applier: jeder neue ghost*-core-Schluessel landet additiv/
+  // multiplikativ im aufgeloesten c_necro-cfg -- Muster wie Phase 24 (c).
+  {
+    const base = applyUpgrades(resolveCfg(tanksData, 'c_necro'), {}, upgradesData, 'mine', null);
+    check(!base.ghostHpAdd && !base.ghostCommander, 'Phase 8: Vorbedingung -- Basis-cfg ohne Nekromant-Signaturen ist nicht leer');
+
+    const gk = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_geisterkern: 2 }, upgradesData, 'mine', null);
+    check(Math.abs((gk.ghostHpAdd || 0) - U.sig_necro_geisterkern.core.ghostHpAdd * 2) < 1e-9, `Phase 8: Geisterkern ghostHpAdd ${gk.ghostHpAdd} falsch`);
+    const sk = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_seelenkanone: 3 }, upgradesData, 'mine', null);
+    check(Math.abs((sk.ghostDamageAdd || 0) - U.sig_necro_seelenkanone.core.ghostDamageAdd * 3) < 1e-9, `Phase 8: Seelenkanone ghostDamageAdd ${sk.ghostDamageAdd} falsch`);
+    const us = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_unruhigeseelen: 2 }, upgradesData, 'mine', null);
+    check(Math.abs((us.ghostSpeedMult || 1) - Math.pow(U.sig_necro_unruhigeseelen.core.ghostSpeedMult, 2)) < 1e-9, `Phase 8: Unruhige Seelen ghostSpeedMult ${us.ghostSpeedMult} falsch`);
+    const rg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_rastlosegeister: 1 }, upgradesData, 'mine', null);
+    check(Math.abs((rg.ghostFireMult || 1) - U.sig_necro_rastlosegeister.core.ghostFireMult) < 1e-9, `Phase 8: Rastlose Geister ghostFireMult ${rg.ghostFireMult} falsch`);
+    const sr = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_seelenruf: 2 }, upgradesData, 'mine', null);
+    check(Math.abs((sr.ghostMaxAdd || 0) - U.sig_necro_seelenruf.core.ghostMaxAdd * 2) < 1e-9, `Phase 8: Seelenruf ghostMaxAdd ${sr.ghostMaxAdd} falsch`);
+    const rud = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_rudelgeist: 2 }, upgradesData, 'mine', null);
+    check(Math.abs((rud.ghostPackDamagePerAlly || 0) - U.sig_necro_rudelgeist.core.ghostPackDamagePerAlly * 2) < 1e-9, `Phase 8: Rudelgeist ghostPackDamagePerAlly ${rud.ghostPackDamagePerAlly} falsch`);
+    const sog = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_seelensog: 1 }, upgradesData, 'mine', null);
+    check(Math.abs((sog.ghostLifestealPct || 0) - U.sig_necro_seelensog.core.ghostLifestealPct) < 1e-9, `Phase 8: Seelensog ghostLifestealPct ${sog.ghostLifestealPct} falsch`);
+    const kett = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_seelenketten: 2 }, upgradesData, 'mine', null);
+    check(Math.abs((kett.ghostStunOnHit || 0) - U.sig_necro_seelenketten.core.ghostStunOnHit * 2) < 1e-9, `Phase 8: Seelenketten ghostStunOnHit ${kett.ghostStunOnHit} falsch`);
+    const konz = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_seelenkonzentration: 2 }, upgradesData, 'mine', null);
+    check(Math.abs((konz.ghostDamageMult || 1) - Math.pow(U.sig_necro_seelenkonzentration.core.ghostDamageMult, 2)) < 1e-9, `Phase 8: Seelenkonzentration ghostDamageMult ${konz.ghostDamageMult} falsch`);
+    check(Math.abs((konz.ghostHpMult || 1) - Math.pow(U.sig_necro_seelenkonzentration.core.ghostHpMult, 2)) < 1e-9, `Phase 8: Seelenkonzentration ghostHpMult ${konz.ghostHpMult} falsch`);
+    const lw = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_letzterwille: 2 }, upgradesData, 'mine', null);
+    check(Math.abs((lw.ghostDeathZoneRadius || 0) - U.sig_necro_letzterwille.core.ghostDeathZoneRadius * 2) < 1e-9, `Phase 8: Letzter Wille ghostDeathZoneRadius ${lw.ghostDeathZoneRadius} falsch`);
+    const wk = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_wiederkehr: 2 }, upgradesData, 'mine', null);
+    check(Math.abs((wk.ghostReviveChance || 0) - U.sig_necro_wiederkehr.core.ghostReviveChance * 2) < 1e-9, `Phase 8: Wiederkehr ghostReviveChance ${wk.ghostReviveChance} falsch`);
+    const gl = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_geisterlegion: 1 }, upgradesData, 'mine', null);
+    check(gl.ghostMaxAdd === U.sig_necro_geisterlegion.core.ghostMaxAdd, `Phase 8: Geisterlegion ghostMaxAdd ${gl.ghostMaxAdd} falsch`);
+    const gko = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_geisterkommandant: 1 }, upgradesData, 'mine', null);
+    check(gko.ghostCommander === true, 'Phase 8: Geisterkommandant setzt ghostCommander nicht');
+    const phy = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_phylakterium: 1 }, upgradesData, 'mine', null);
+    check(phy.ghostCommanderShield === true, 'Phase 8: Phylakterium setzt ghostCommanderShield nicht');
+    const us2 = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_unsterblicheseele: 1 }, upgradesData, 'mine', null);
+    check(us2.ghostReviveMaxUses === U.sig_necro_unsterblicheseele.core.ghostReviveMaxUses, `Phase 8: Unsterbliche Seele ghostReviveMaxUses ${us2.ghostReviveMaxUses} falsch`);
+    const lp = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_lichpanzer: 1 }, upgradesData, 'mine', null);
+    check(Math.abs((lp.ghostCommanderMultBonus || 0) - U.sig_necro_lichpanzer.core.ghostCommanderMultBonus) < 1e-9, `Phase 8: Lich-Panzer ghostCommanderMultBonus ${lp.ghostCommanderMultBonus} falsch`);
+    const ew = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_ewigewiederkehr: 1 }, upgradesData, 'mine', null);
+    check(Math.abs((ew.ghostReviveGrowth || 0) - U.sig_necro_ewigewiederkehr.core.ghostReviveGrowth) < 1e-9, `Phase 8: Ewige Wiederkehr ghostReviveGrowth ${ew.ghostReviveGrowth} falsch`);
+    const adt = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { sig_necro_armeedertoten: 1 }, upgradesData, 'mine', null);
+    check(adt.ghostMaxAdd === U.sig_necro_armeedertoten.core.ghostMaxAdd, `Phase 8: Armee der Toten ghostMaxAdd ${adt.ghostMaxAdd} falsch`);
+    check(Math.abs((adt.ghostPackDamagePerAlly || 0) - U.sig_necro_armeedertoten.core.ghostPackDamagePerAlly) < 1e-9, `Phase 8: Armee der Toten ghostPackDamagePerAlly ${adt.ghostPackDamagePerAlly} falsch`);
+  }
+
+  // (b) resolveGhostCfg() liest die vier Basis-Boosts wirklich aus dem
+  // Spieler-cfg -- Testschritt 1 (Geisterkern) + Mechanismus fuer Tempo/
+  // Nachladen/Schaden.
+  {
+    const st = necroRoom();
+    st.player.cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), {
+      sig_necro_geisterkern: 2, sig_necro_seelenkanone: 1, sig_necro_unruhigeseelen: 1, sig_necro_rastlosegeister: 1,
+    }, upgradesData, 'mine', null);
+    const g = createGhost(st, 0, 0);
+    const p = resolveCfg(tanksData, 'player');
+    check(g.cfg.maxHp === 60 + U.sig_necro_geisterkern.core.ghostHpAdd * 2, `Phase 8: resolveGhostCfg ignoriert ghostHpAdd (${g.cfg.maxHp})`);
+    check(g.cfg.damage === 8 + U.sig_necro_seelenkanone.core.ghostDamageAdd, `Phase 8: resolveGhostCfg ignoriert ghostDamageAdd (${g.cfg.damage})`);
+    check(Math.abs(g.cfg.speed - p.speed * 0.7 * U.sig_necro_unruhigeseelen.core.ghostSpeedMult) < 1e-6, `Phase 8: resolveGhostCfg ignoriert ghostSpeedMult (${g.cfg.speed})`);
+    check(Math.abs(g.cfg.fireCooldown - 2.0 * U.sig_necro_rastlosegeister.core.ghostFireMult) < 1e-6, `Phase 8: resolveGhostCfg ignoriert ghostFireMult (${g.cfg.fireCooldown})`);
+  }
+
+  // (c) ghostMaxAdd erhoeht den effektiven Geisterdeckel -- Testschritt 2
+  // (Seelenruf), an BEIDEN Erzeugern (Kill-Wuerfel UND Geisterbombe).
+  {
+    const st = necroRoom(['t_pink', 't_pink', 't_pink', 't_pink', 't_pink']);
+    st.player.cfg.ghostMaxAdd = 2; // synthetisch, wie zweifacher Seelenruf
+    st.rng = () => 0; // garantierter Spawnwurf
+    for (const e of st.tanks.filter((t) => t !== st.player)) {
+      e.protect = 0;
+      st.killTank(e, 'test', { killer: st.player });
+    }
+    check(st.ghosts.length === 5, `Phase 8: ghostMaxAdd erhoeht den Kill-Spawn-Deckel nicht (${st.ghosts.length} statt 5)`);
+
+    const st2 = necroRoom([]);
+    st2.player.cfg.ghostMaxAdd = 1; // Basis 3 + 1 = 4
+    for (let i = 0; i < 4; i++) useSecondary(st2.player, st2, null);
+    check(st2.ghosts.length === 4, `Phase 8: Geisterbombe-Deckel ignoriert ghostMaxAdd (${st2.ghosts.length} statt 4)`);
+    useSecondary(st2.player, st2, null); // 5. Wurf -- am (erhoehten) Deckel
+    check(st2.ghosts.length === 4, 'Phase 8: Geisterbombe erzeugt trotz erreichtem, erhoehtem Deckel einen weiteren Geist');
+  }
+
+  // (d) Rudelgeist/Armee der Toten: Schaden skaliert mit der Anzahl lebender
+  // Geister -- am echten abgeschossenen Geschoss gemessen (updateGhosts()).
+  {
+    const st = arenaRoom(['t_pink']);
+    st.player.cfg.ghostPackDamagePerAlly = 0.1;
+    const e = st.tanks.find((t) => t !== st.player);
+    e.x = 400; e.y = 48;
+    const g1 = createGhost(st, 350, 48);
+    g1.turret = 0; // schon ausgerichtet
+    const g2 = createGhost(st, 200, 200); // zwei weitere lebende Geister, feuern nicht
+    const g3 = createGhost(st, 200, 300);
+    st.ghosts.push(g1, g2, g3);
+    updateGhosts(st, 1 / 60);
+    check(st.bullets.length === 1, `Phase 8: Vorbedingung -- kein Schuss ausgeloest (${st.bullets.length} Kugeln)`);
+    const erwartet = Math.round(g1.cfg.damage * (1 + 0.1 * 2)); // 2 WEITERE lebende Geister
+    check(st.bullets[0].damage === erwartet, `Phase 8: Rudelbonus-Schaden ${st.bullets[0].damage} statt ${erwartet}`);
+  }
+
+  // (e) Seelensog: heilt den Nekromanten um einen Anteil des Kill-Schadens,
+  // NUR wenn der toetende Schuss von einem Geist stammt.
+  {
+    const st = arenaRoom(['t_pink']);
+    st.player.cfg.ghostLifestealPct = 0.5;
+    st.player.hp = 10;
+    st.player.cfg.maxHp = 100;
+    const e = st.tanks.find((t) => t !== st.player);
+    e.hp = 1; e.cfg.maxHp = 999; e.protect = 0; e.cfg.armor = null; e.cfg.requiresRicochet = false;
+    const g = createGhost(st, e.x, e.y);
+    st.ghosts.push(g);
+    const b = createBullet(e.x, e.y, 0, { speed: 1, radius: 3, ricochets: 0, owner: g, kind: 'bullet', damage: g.cfg.damage, damageType: 'physical' });
+    b.age = 5;
+    st.bullets.length = 0;
+    st.bullets.push(b);
+    const vorHp = st.player.hp;
+    stepState(st, CMD0, 1 / 60);
+    check(!e.alive, 'Phase 8: Vorbedingung -- der Geist-Schuss toetet das Ziel nicht');
+    const erwartet = Math.round(g.cfg.damage * 0.5);
+    check(st.player.hp === Math.min(100, vorHp + erwartet), `Phase 8: Seelensog heilt ${st.player.hp - vorHp} statt ${erwartet}`);
+  }
+
+  // (f) Seelenketten: JEDER Treffer eines Geisterpanzers betaeubt das Ziel
+  // kurz -- auch ohne Kill.
+  {
+    const st = arenaRoom(['t_pink']);
+    st.player.cfg.ghostStunOnHit = 0.6;
+    const e = st.tanks.find((t) => t !== st.player);
+    e.hp = 999999; e.cfg.maxHp = 999999; e.protect = 0; e.cfg.armor = null; e.cfg.requiresRicochet = false;
+    e.stunTimer = 0;
+    const g = createGhost(st, e.x, e.y);
+    st.ghosts.push(g);
+    const b = createBullet(e.x, e.y, 0, { speed: 1, radius: 3, ricochets: 0, owner: g, kind: 'bullet', damage: 1, damageType: 'physical' });
+    b.age = 5;
+    st.bullets.length = 0;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+    check(Math.abs(e.stunTimer - 0.6) < 1e-9, `Phase 8: Seelenketten stunTimer ${e.stunTimer} statt 0.6`);
+  }
+
+  // (g) Letzter Wille: ein sterbender Geist reisst Gegner in seiner Naehe
+  // mit -- der eigene Nekromant bleibt ueber `spare: state.player` verschont.
+  {
+    const st = necroRoom();
+    st.player.cfg.ghostDeathZoneRadius = 100;
+    st.player.cfg.ghostDeathZoneDamage = 30;
+    const e = st.tanks.find((t) => t !== st.player);
+    e.x = st.player.x + 20; e.y = st.player.y;
+    e.hp = 100; e.cfg.maxHp = 100; e.protect = 0;
+    const g = createGhost(st, e.x - 10, e.y);
+    st.ghosts.push(g);
+    g.hp = 0;
+    const vorHp = e.hp;
+    const vorPlayerHp = st.player.hp;
+    killGhost(st, g);
+    check(g.alive === false, 'Phase 8: Vorbedingung -- der Geist ist nach killGhost() noch am Leben');
+    check(e.hp === vorHp - 30, `Phase 8: Letzter Wille Schaden ${vorHp - e.hp} statt 30`);
+    check(st.player.hp === vorPlayerHp, 'Phase 8: Letzter Wille verletzt den eigenen Nekromanten');
+  }
+
+  // (h) Wiederkehr: Wiederbelebungs-Chance -- Testschritt 5. Grenzwert-Probe
+  // (49 %/51 %-Muster wie Phase 6), volle LP nach Wiederbelebung.
+  {
+    const st = necroRoom();
+    st.player.cfg.ghostReviveChance = 0.5;
+    const g1 = createGhost(st, 0, 0);
+    g1.hp = 0;
+    st.rng = () => 0.49; // < chance -> Wiederbelebung
+    killGhost(st, g1);
+    check(g1.alive === true, 'Phase 8: Wiederkehr belebt trotz Erfolgswurf nicht wieder');
+    check(g1.hp === g1.cfg.maxHp, `Phase 8: Wiederbelebter Geist hat ${g1.hp} statt volle LP (${g1.cfg.maxHp})`);
+
+    const g2 = createGhost(st, 0, 0);
+    g2.hp = 0;
+    st.rng = () => 0.51; // >= chance -> kein Erfolg
+    killGhost(st, g2);
+    check(g2.alive === false, 'Phase 8: Wiederkehr belebt trotz Fehlwurf wieder');
+  }
+
+  // (i) Unsterbliche Seele: ghostReviveMaxUses begrenzt die Wiederbelebungen
+  // PRO GEIST -- die dritte fatale Wunde bleibt endgueltig.
+  {
+    const st = necroRoom();
+    st.player.cfg.ghostReviveChance = 1; // intern auf 0.9 gedeckelt, reicht mit rng=0
+    st.player.cfg.ghostReviveMaxUses = 2;
+    st.rng = () => 0;
+    const g = createGhost(st, 0, 0);
+    st.ghosts.push(g);
+    g.hp = 0;
+    killGhost(st, g);
+    check(g.alive === true, 'Phase 8: Vorbedingung -- erste Wiederbelebung schlaegt fehl');
+    g.hp = 0;
+    killGhost(st, g);
+    check(g.alive === true, 'Phase 8: Vorbedingung -- zweite Wiederbelebung schlaegt fehl');
+    g.hp = 0;
+    killGhost(st, g); // dritter Tod -- keine Ladung mehr uebrig
+    check(g.alive === false, 'Phase 8: Unsterbliche Seele erlaubt mehr Wiederbelebungen als ghostReviveMaxUses');
+  }
+
+  // (j) Ewige Wiederkehr: jede Wiedergeburt macht DENSELBEN Geist dauerhaft
+  // staerker, linear vom Basiswert aus (nicht kumulativ vom letzten Stand).
+  {
+    const st = necroRoom();
+    st.player.cfg.ghostReviveChance = 1;
+    st.player.cfg.ghostReviveMaxUses = 3;
+    st.player.cfg.ghostReviveGrowth = 0.2;
+    st.rng = () => 0;
+    const g = createGhost(st, 0, 0);
+    st.ghosts.push(g);
+    const baseHp = g.cfg.maxHp;
+    const baseDmg = g.cfg.damage;
+    g.hp = 0;
+    killGhost(st, g);
+    check(
+      g.cfg.maxHp === Math.round(baseHp * 1.2) && g.cfg.damage === Math.round(baseDmg * 1.2),
+      `Phase 8: Ewige Wiederkehr skaliert nach 1 Wiedergeburt falsch (${g.cfg.maxHp}/${g.cfg.damage})`,
+    );
+    g.hp = 0;
+    killGhost(st, g);
+    check(
+      g.cfg.maxHp === Math.round(baseHp * 1.4) && g.cfg.damage === Math.round(baseDmg * 1.4),
+      `Phase 8: Ewige Wiederkehr skaliert nach 2 Wiedergeburten falsch (${g.cfg.maxHp}/${g.cfg.damage})`,
+    );
+  }
+
+  // (k) Geisterkommandant: IMMER genau ein lebender Geist ist der
+  // Kommandant, mit deutlich hoeheren Basiswerten -- Testschritt 3.
+  {
+    const bal = tanksData.balance.ghost;
+    const st = necroRoom();
+    st.player.cfg.ghostCommander = true;
+    const g1 = createGhost(st, 0, 0);
+    st.ghosts.push(g1);
+    const g2 = createGhost(st, 0, 0);
+    st.ghosts.push(g2);
+    check(g1.isCommander === true, 'Phase 8: der erste Geist ist nicht der Kommandant');
+    check(g2.isCommander === false, 'Phase 8: es entsteht ein zweiter Kommandant gleichzeitig');
+
+    const stPlain = necroRoom();
+    const gPlain = createGhost(stPlain, 0, 0);
+    check(
+      g1.cfg.maxHp === Math.round(gPlain.cfg.maxHp * (bal.commanderHpMult ?? 2.5)),
+      `Phase 8: Kommandant-LP ${g1.cfg.maxHp} falsch (Basis ${gPlain.cfg.maxHp})`,
+    );
+    check(
+      g1.cfg.damage === Math.round(gPlain.cfg.damage * (bal.commanderDamageMult ?? 2)),
+      `Phase 8: Kommandant-Schaden ${g1.cfg.damage} falsch (Basis ${gPlain.cfg.damage})`,
+    );
+  }
+
+  // (l) Phylakterium: der Kommandant uebersteht GENAU EINEN toedlichen
+  // Treffer pro Raum, danach greift der Schutz nicht mehr.
+  {
+    const st = necroRoom();
+    st.player.cfg.ghostCommander = true;
+    st.player.cfg.ghostCommanderShield = true;
+    const g = createGhost(st, 0, 0);
+    st.ghosts.push(g);
+    check(g.isCommander === true, 'Phase 8: Vorbedingung -- kein Kommandant erzeugt');
+    g.hp = 0;
+    killGhost(st, g);
+    check(g.alive === true, 'Phase 8: Phylakterium blockt den ersten toedlichen Treffer nicht');
+    check(g.commanderShieldUsed === true, 'Phase 8: Phylakterium-Ladung wird nicht verbraucht');
+    check(g.hp > 0, `Phase 8: Phylakterium heilt nicht (${g.hp} LP)`);
+    g.hp = 0;
+    killGhost(st, g);
+    check(g.alive === false, 'Phase 8: Phylakterium blockt einen zweiten toedlichen Treffer im selben Raum');
+  }
+
+  // (m) Lich-Panzer: erhoeht den Kommandant-Multiplikator zusaetzlich.
+  {
+    const bal = tanksData.balance.ghost;
+    const st = necroRoom();
+    st.player.cfg.ghostCommander = true;
+    st.player.cfg.ghostCommanderMultBonus = 1.0; // synthetisch, groesser als die Kartenzahl
+    const g = createGhost(st, 0, 0);
+
+    const stPlain = necroRoom();
+    const gPlain = createGhost(stPlain, 0, 0);
+    check(
+      g.cfg.maxHp === Math.round(gPlain.cfg.maxHp * ((bal.commanderHpMult ?? 2.5) + 1.0)),
+      `Phase 8: Lich-Panzer-Bonus wirkt nicht auf die LP (${g.cfg.maxHp})`,
+    );
+    check(
+      g.cfg.damage === Math.round(gPlain.cfg.damage * ((bal.commanderDamageMult ?? 2) + 1.0)),
+      `Phase 8: Lich-Panzer-Bonus wirkt nicht auf den Schaden (${g.cfg.damage})`,
+    );
+  }
+
+  // (n) Testschritt 4: Lich-Panzer ist ohne Geisterkommandant nicht ziehbar,
+  // MIT Geisterkommandant schon -- requires-Gating greift wirklich.
+  {
+    const rng = mulberry32(999);
+    let sawLich = false;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 10, rng, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_necro',
+      });
+      if (offers.some((o) => o.id === 'sig_necro_lichpanzer')) sawLich = true;
+    }
+    check(!sawLich, 'Phase 8: Lich-Panzer wird ohne Geisterkommandant angeboten (requires greift nicht)');
+
+    const rng2 = mulberry32(999);
+    let sawLichMitVoraussetzung = false;
+    for (let i = 0; i < 500; i++) {
+      const offers = rollOffers(upgradesData, {
+        chosen: { sig_necro_geisterkommandant: 1 }, roomIndex: 10, rng: rng2, balance: tanksData.balance, count: 3, banned: new Set(),
+        starterTank: 'c_necro',
+      });
+      if (offers.some((o) => o.id === 'sig_necro_lichpanzer')) sawLichMitVoraussetzung = true;
+    }
+    check(sawLichMitVoraussetzung, 'Phase 8: Lich-Panzer erscheint auch MIT Geisterkommandant nie im Angebot');
+  }
+
+  // (o) "Fertig, wenn"-Kriterium des Auftrags: jede der 18 Karten (samt
+  // erfuellter Voraussetzung) loest sich ohne NaN/Infinity in ein cfg auf.
+  {
+    const necroDefs = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_necro');
+    for (const [id, def] of necroDefs) {
+      const chosen = { [id]: def.maxStacks };
+      for (const r of def.requires || []) chosen[r] = U[r].maxStacks;
+      const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), chosen, upgradesData, 'mine', null);
+      for (const k in cfg) {
+        const v = cfg[k];
+        if (typeof v === 'number') {
+          check(Number.isFinite(v), `Phase 8: Karte "${id}" macht cfg.${k} zu ${v} (kein NaN/Infinity erlaubt)`);
+        }
+      }
+    }
   }
 }
 

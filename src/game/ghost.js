@@ -8,11 +8,22 @@
 // (state.js: killTank()s Spawnwuerfel, tank.js: useSecondary()s
 // Geisterbombe) reichen deshalb nur noch Position/Ausrichtung durch, nicht
 // mehr die cfg des Ausloesers -- s. dortige Aufrufstellen.
+//
+// Upgradepool-v2 Phase 8 (Signaturtopf Nekromant): die 18 sig_necro_*-Karten
+// wirken NICHT auf den Spieler selbst, sondern ueber neue ghost*-core-
+// Schluessel (cfg.js) auf die Geistereinheit -- resolveGhostCfg() liest sie
+// aus dem aufgeloesten Spieler-cfg. killGhost() ist seit Phase 7 als
+// einziger Tod-Trichter angelegt und haengt jetzt Phylakterium (Kommandant-
+// Schutz), Wiederkehr/Unsterbliche-Seele/Ewige-Wiederkehr (Wiederbelebung)
+// und Letzter Wille (Todeszone) dort ein -- Anhang B S13: "der Basistod hat
+// keinen Zusatzeffekt", die Erweiterungen kommen ausschliesslich ueber
+// Karten.
 
 import { angleDiff, turnToward, clearLine } from './ai.js';
 import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
 import { resolveCfg } from './cfg.js';
+import { explodeAt } from './mine.js';
 
 const TURN_SPEED = 4; // rad/s -- Drehen von Rumpf UND Turm Richtung Ziel
 const FIRE_CONE = 0.15; // rad -- muss so genau ausgerichtet sein, um zu feuern
@@ -27,19 +38,25 @@ let nextGhostId = 1;
 // liefert genau diese ungeupgradete Baseline und wird wiederverwendet statt
 // dupliziert (Anhang A S16 "keine Parallelsysteme": ein zweites,
 // eigenstaendiges Stat-Aufloesungssystem nur fuer Geister waere genau das).
-// Reine Konstantenrechnung (data mutiert nie) -- bewusst nicht gecacht, bei
-// hoechstens 3-4 Geistern und seltenen Spawns lohnt sich das nicht.
-function resolveGhostCfg(data) {
+// `playerCfg` (Phase 8, optional) ist das AUFGELOESTE cfg des spielenden
+// Nekromanten -- dessen ghostHpAdd/ghostDamageAdd/ghostSpeedMult/
+// ghostFireMult-Felder (aus den Signaturkarten) werden hier additiv/
+// multiplikativ oben draufgelegt. Reine Konstantenrechnung -- bewusst nicht
+// gecacht, bei hoechstens 3-6 Geistern und seltenen Spawns lohnt sich das
+// nicht.
+function resolveGhostCfg(data, playerCfg) {
   const g = data.types.ghost_tank || {};
   const p = resolveCfg(data, 'player'); // Standardklasse, OHNE Nekromant-Werte
+  const maxHp = (g.maxHp ?? 60) + (playerCfg?.ghostHpAdd || 0);
+  const damage = (g.damage ?? 8) + (playerCfg?.ghostDamageAdd || 0);
   return {
     radius: data.physics.tankRadius,
     bulletRadius: data.physics.bulletRadius,
-    maxHp: g.maxHp ?? 60,
-    damage: g.damage ?? 8,
+    maxHp,
+    damage,
     damageType: g.damageType ?? 'physical',
-    fireCooldown: g.fireRate ?? 2.0,
-    speed: p.speed * (g.speedPct ?? 0.7),
+    fireCooldown: (g.fireRate ?? 2.0) * (playerCfg?.ghostFireMult || 1),
+    speed: p.speed * (g.speedPct ?? 0.7) * (playerCfg?.ghostSpeedMult || 1),
     bulletSpeed: p.bulletSpeed * (g.bulletSpeedPct ?? 0.8),
     // Feuer-SCHWELLE, nicht die Geschossreichweite selbst (die bleibt der
     // normale Wegbudget-Wert aus balance.bullet.maxDistance) -- ein Geist
@@ -56,8 +73,22 @@ function resolveGhostCfg(data) {
 // Gegners bzw. Position/Blickrichtung des Nekromanten bei der
 // Geisterbombe). KEIN tank-Parameter mehr fuer die cfg -- die kommt
 // ausschliesslich aus resolveGhostCfg(), s. Kopfkommentar.
+//
+// Geisterkommandant (Phase 8): IMMER genau EIN lebender Geist ist der
+// Kommandant -- die Zuweisung passiert hier bei der Erzeugung (nicht
+// nachtraeglich), gedeckelt ueber die state.ghosts-Pruefung. Lich-Panzer
+// erhoeht denselben Multiplikator additiv (ghostCommanderMultBonus).
 export function createGhost(state, x, y, heading = 0) {
-  const cfg = resolveGhostCfg(state.data);
+  const playerCfg = state.player?.cfg;
+  const cfg = resolveGhostCfg(state.data, playerCfg);
+  const isCommander =
+    !!playerCfg?.ghostCommander && !state.ghosts.some((g) => g.alive && g.isCommander);
+  if (isCommander) {
+    const bal = state.data.balance?.ghost || {};
+    const bonus = playerCfg.ghostCommanderMultBonus || 0;
+    cfg.maxHp = Math.round(cfg.maxHp * ((bal.commanderHpMult ?? 2.5) + bonus));
+    cfg.damage = Math.round(cfg.damage * ((bal.commanderDamageMult ?? 2) + bonus));
+  }
   return {
     id: nextGhostId++,
     x,
@@ -74,19 +105,85 @@ export function createGhost(state, x, y, heading = 0) {
     cooldown: 0,
     isGhost: true,
     alive: true,
+    isCommander, // Phase 8: Geisterkommandant
+    commanderShieldUsed: false, // Phase 8: Phylakterium (einmal pro Raum)
+    reviveUsesLeft: null, // Phase 8: Wiederkehr/Unsterbliche Seele (lazy init)
+    reviveGrowthStacks: 0, // Phase 8: Ewige Wiederkehr
   };
 }
 
+// Wiederkehr/Unsterbliche Seele/Ewige Wiederkehr (Phase 8): Wiederbelebungs-
+// Chance beim Tod. reviveUsesLeft wird beim ERSTEN Tod aus dem aktuellen cfg
+// gelesen (Unsterbliche Seele erhoeht ghostReviveMaxUses ueber 1) -- danach
+// zaehlt es unabhaengig vom cfg weiter, ein spaeter verlorenes Upgrade kann
+// eine schon laufende Wiederbelebungskette nicht mehr aendern (es gibt keinen
+// Weg, ein Upgrade zu verlieren, aber die Reihenfolge ist damit robust).
+// Ewige Wiederkehr macht den WIEDERBELEBTEN Geist dauerhaft staerker --
+// skaliert vom urspruenglichen Basiswert, nicht kumulativ vom letzten Stand,
+// sonst waere es exponentielles statt lineares Wachstum je Wiedergeburt.
+function tryReviveGhost(state, g) {
+  const cfg = state.player?.cfg;
+  if (!cfg?.ghostReviveChance) return false;
+  if (g.reviveUsesLeft == null) g.reviveUsesLeft = cfg.ghostReviveMaxUses ?? 1;
+  if (g.reviveUsesLeft <= 0) return false;
+  const chance = Math.min(0.9, cfg.ghostReviveChance);
+  if (state.rng() >= chance) return false;
+  g.reviveUsesLeft--;
+  if (cfg.ghostReviveGrowth) {
+    if (g.reviveBaseMaxHp == null) {
+      g.reviveBaseMaxHp = g.cfg.maxHp;
+      g.reviveBaseDamage = g.cfg.damage;
+    }
+    g.reviveGrowthStacks++;
+    const mult = 1 + cfg.ghostReviveGrowth * g.reviveGrowthStacks;
+    g.cfg.maxHp = Math.round(g.reviveBaseMaxHp * mult);
+    g.cfg.damage = Math.round(g.reviveBaseDamage * mult);
+  }
+  g.hp = g.cfg.maxHp;
+  return true;
+}
+
+// Letzter Wille (Phase 8): ein sterbender Geist reisst Gegner in seiner Naehe
+// mit -- reine Wiederverwendung von mine.js: explodeAt() (dieselbe Explosion
+// wie eine Mine/ein Sprengschuss), `spare: state.player` haelt den
+// Nekromanten selbst aus seiner eigenen Todeszone heraus.
+function spawnDeathZone(state, g) {
+  const cfg = state.player?.cfg;
+  if (!cfg?.ghostDeathZoneRadius) return;
+  explodeAt(
+    state,
+    g.x,
+    g.y,
+    cfg.ghostDeathZoneRadius,
+    state.player,
+    { code: 'ghost_death_zone', killer: state.player },
+    cfg.ghostDeathZoneDamage || 0,
+    'explosive',
+  );
+}
+
 // Einziger Tod-Trichter (Anhang B S13/S17): "der Basistod besitzt keinen
-// zusaetzlichen Spezialeffekt" -- die Funktion existiert trotzdem als fester
-// Anschlusspunkt, damit Phase 8 (Signaturkarten wie Letzter-Wille/Wiederkehr)
-// an GENAU EINER Stelle andocken kann, statt den Tod an den zwei
-// Aufrufstellen (Zeitablauf hier in updateGhosts(), Geschoss-Kollision in
+// zusaetzlichen Spezialeffekt" -- der reine Basistod bleibt ein simpler
+// alive=false-Setter, Phase 8 haengt die drei Signatur-Todes-Mechaniken
+// (Phylakterium, Wiederkehr-Familie, Letzter Wille) genau hier ein, statt
+// sie an den beiden Aufrufstellen (Zeitablauf hier, Geschoss-Kollision in
 // state.js) getrennt zu behandeln. Idempotent wie killTank() (Doppeltod im
 // selben Frame moeglich: Kettenreaktionen, gleichzeitige Treffer).
-export function killGhost(g) {
+export function killGhost(state, g) {
   if (!g.alive) return;
+  const cfg = state.player?.cfg;
+  // Phylakterium: der Kommandant uebersteht EINMAL pro Raum einen toedlichen
+  // Treffer -- eigener, von Wiederkehr unabhaengiger Schutz (verbraucht
+  // keine Wiederbelebungs-Ladung).
+  if (g.isCommander && cfg?.ghostCommanderShield && !g.commanderShieldUsed) {
+    g.commanderShieldUsed = true;
+    const frac = state.data.balance?.ghost?.commanderShieldHealFraction ?? 0.5;
+    g.hp = Math.max(1, Math.round(g.cfg.maxHp * frac));
+    return;
+  }
+  if (tryReviveGhost(state, g)) return;
   g.alive = false;
+  spawnDeathZone(state, g);
 }
 
 // Naechster gueltiger Gegner (Anhang B S9/S10: "Basissystem: Primaerziel =
@@ -107,17 +204,23 @@ function nearestEnemy(state, ghost) {
 }
 
 export function updateGhosts(state, dt) {
+  const playerCfg = state.player?.cfg;
+  // Rudelgeist/Armee der Toten (Phase 8): dynamischer Rudelbonus -- haengt
+  // von der AKTUELLEN Anzahl lebender Geister ab, wird deshalb NICHT in die
+  // cfg gebacken (die aendert sich sonst nie nach der Erzeugung), sondern
+  // je Schuss neu berechnet.
+  const aliveCount = state.ghosts.reduce((n, x) => n + (x.alive ? 1 : 0), 0);
+  const packMult = 1 + (playerCfg?.ghostPackDamagePerAlly || 0) * Math.max(0, aliveCount - 1);
   for (const g of state.ghosts) {
     // Anhang B S6: KEIN Lebensdauer-Timer -- ein Geist lebt bis zum Tod oder
     // bis der Raum endet (state.ghosts wird bei jedem neuen Raum ohnehin
     // frisch mit [] angelegt, s. state.js: createState()). Nur noch die
-    // hp<=0-Pruefung bleibt (Kollisionstreffer setzen alive direkt ueber
-    // killGhost(), diese Zeile faengt den seltenen Fall ab, dass ein
-    // Statuseffekt-Tick o. ae. die hp zwischen zwei Kollisionsschleifen
-    // unter 0 gedrueckt hat).
+    // hp<=0-Pruefung bleibt (Kollisionstreffer rufen killGhost() direkt,
+    // diese Zeile faengt den seltenen Fall ab, dass ein Statuseffekt-Tick
+    // o. ae. die hp zwischen zwei Kollisionsschleifen unter 0 gedrueckt hat).
     if (!g.alive) continue;
     if (g.hp <= 0) {
-      killGhost(g);
+      killGhost(state, g);
       continue;
     }
     g.prevX = g.x;
@@ -165,7 +268,7 @@ export function updateGhosts(state, dt) {
           ricochets: g.cfg.ricochets,
           owner: g,
           kind: g.cfg.weapon,
-          damage: g.cfg.damage,
+          damage: Math.round(g.cfg.damage * packMult),
           damageType: g.cfg.damageType,
         }),
       );

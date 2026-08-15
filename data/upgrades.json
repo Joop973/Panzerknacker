@@ -3258,11 +3258,29 @@
         "scrapDamageBonus": 0.08
       }
     },
-    "sig_necro_totenbeschwoerung": {
-      "id": "sig_necro_totenbeschwoerung",
-      "name": "Totenbeschwörung",
-      "description": "+2 Schaden und +8% Fahrtempo pro Stufe",
+    "sig_necro_geisterkern": {
+      "id": "sig_necro_geisterkern",
+      "name": "Geisterkern",
+      "description": "+15 LP pro Geisterpanzer pro Stufe",
       "tag": "signature",
+      "tags": ["ghost"],
+      "signatureClass": "c_necro",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostHpAdd": 15
+      }
+    },
+    "sig_necro_seelenkanone": {
+      "id": "sig_necro_seelenkanone",
+      "name": "Seelenkanone",
+      "description": "+2 Schaden pro Geisterpanzer pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost"],
       "signatureClass": "c_necro",
       "rarity": "common",
       "maxStacks": 3,
@@ -3270,175 +3288,185 @@
       "minRoom": 1,
       "symbol": "💀",
       "core": {
-        "damageAdd": 2,
-        "speedMult": 1.08
+        "ghostDamageAdd": 2
       }
     },
-    "sig_necro_lebenskraft": {
-      "id": "sig_necro_lebenskraft",
-      "name": "Lebenskraft",
-      "description": "+20 LP und +2 Schaden pro Stufe",
+    "sig_necro_unruhigeseelen": {
+      "id": "sig_necro_unruhigeseelen",
+      "name": "Unruhige Seelen",
+      "description": "+10% Fahrtempo der Geisterpanzer pro Stufe",
       "tag": "signature",
+      "tags": ["ghost"],
       "signatureClass": "c_necro",
       "rarity": "common",
       "maxStacks": 3,
       "requires": [],
       "minRoom": 1,
       "symbol": "💀",
+      "_todo": "balance",
       "core": {
-        "hpAdd": 20,
-        "damageAdd": 2
+        "ghostSpeedMult": 1.1
       }
     },
-    "sig_necro_seelenernte": {
-      "id": "sig_necro_seelenernte",
-      "name": "Seelenernte",
-      "description": "+5% Kritchance und +8% Geschosstempo pro Stufe",
+    "sig_necro_rastlosegeister": {
+      "id": "sig_necro_rastlosegeister",
+      "name": "Rastlose Geister",
+      "description": "-10% Nachladezeit der Geisterpanzer pro Stufe",
       "tag": "signature",
+      "tags": ["ghost"],
       "signatureClass": "c_necro",
       "rarity": "common",
       "maxStacks": 3,
       "requires": [],
       "minRoom": 1,
       "symbol": "💀",
+      "_todo": "balance",
       "core": {
-        "critAdd": 0.05,
-        "bulletSpeedMult": 1.08
+        "ghostFireMult": 0.9
       }
     },
-    "sig_necro_verwesung": {
-      "id": "sig_necro_verwesung",
-      "name": "Verwesung",
-      "description": "+1 Magazin und -6% Nachladen pro Stufe",
+    "sig_necro_seelenruf": {
+      "id": "sig_necro_seelenruf",
+      "name": "Seelenruf",
+      "description": "+1 maximal aktiver Geisterpanzer pro Stufe",
       "tag": "signature",
+      "tags": ["ghost", "swarm", "quantity"],
       "signatureClass": "c_necro",
       "rarity": "common",
-      "maxStacks": 3,
-      "requires": [],
-      "minRoom": 1,
-      "symbol": "💀",
-      "core": {
-        "magAdd": 1,
-        "reloadMult": 0.94
-      }
-    },
-    "sig_necro_wiedergaenger": {
-      "id": "sig_necro_wiedergaenger",
-      "name": "Wiedergänger",
-      "description": "+20 LP pro Stufe",
-      "tag": "signature",
-      "tags": ["resurrection"],
-      "signatureClass": "c_necro",
-      "rarity": "rare",
       "maxStacks": 2,
       "requires": [],
       "minRoom": 1,
       "symbol": "💀",
       "core": {
-        "hpAdd": 20
+        "ghostMaxAdd": 1
       }
     },
-    "sig_necro_geisterbeschwoerung": {
-      "id": "sig_necro_geisterbeschwoerung",
-      "name": "Geisterbeschwörung",
-      "description": "+2 Schaden",
+    "sig_necro_rudelgeist": {
+      "id": "sig_necro_rudelgeist",
+      "name": "Rudelgeist",
+      "description": "+8% Schaden je weiterem lebenden Geisterpanzer pro Stufe",
       "tag": "signature",
       "tags": ["ghost", "swarm"],
       "signatureClass": "c_necro",
       "rarity": "rare",
-      "maxStacks": 1,
+      "maxStacks": 2,
       "requires": [],
       "minRoom": 1,
       "symbol": "💀",
+      "_todo": "balance",
       "core": {
-        "damageAdd": 2
+        "ghostPackDamagePerAlly": 0.08
       }
     },
-    "sig_necro_knochenpanzer": {
-      "id": "sig_necro_knochenpanzer",
-      "name": "Knochenpanzer",
-      "description": "+30 LP und +4 Schaden pro Stufe",
+    "sig_necro_seelensog": {
+      "id": "sig_necro_seelensog",
+      "name": "Seelensog",
+      "description": "Heilt 10% des Kill-Schadens eines Geisterpanzers als eigene LP pro Stufe",
       "tag": "signature",
+      "tags": ["ghost", "sustain", "kill"],
       "signatureClass": "c_necro",
       "rarity": "rare",
       "maxStacks": 2,
       "requires": [],
       "minRoom": 1,
       "symbol": "💀",
+      "_todo": "balance",
       "core": {
-        "hpAdd": 30,
-        "damageAdd": 4
+        "ghostLifestealPct": 0.1
       }
     },
-    "sig_necro_todesmal": {
-      "id": "sig_necro_todesmal",
-      "name": "Todesmal",
-      "description": "+0,5× Kritfaktor und +4 Schaden pro Stufe",
+    "sig_necro_seelenketten": {
+      "id": "sig_necro_seelenketten",
+      "name": "Seelenketten",
+      "description": "Jeder Treffer eines Geisterpanzers betäubt kurz — +0,3 s pro Stufe",
       "tag": "signature",
+      "tags": ["ghost", "control"],
       "signatureClass": "c_necro",
       "rarity": "rare",
       "maxStacks": 2,
       "requires": [],
       "minRoom": 1,
       "symbol": "💀",
+      "_todo": "balance",
       "core": {
-        "critMultBonus": 0.5,
-        "damageAdd": 4
+        "ghostStunOnHit": 0.3
       }
     },
-    "sig_necro_lich": {
-      "id": "sig_necro_lich",
-      "name": "Lich",
-      "description": "+40 LP",
+    "sig_necro_seelenkonzentration": {
+      "id": "sig_necro_seelenkonzentration",
+      "name": "Seelenkonzentration",
+      "description": "+15% Schaden und +15% LP der Geisterpanzer pro Stufe",
       "tag": "signature",
-      "tags": ["resurrection"],
+      "tags": ["ghost", "elite"],
       "signatureClass": "c_necro",
-      "rarity": "unique",
-      "maxStacks": 1,
+      "rarity": "rare",
+      "maxStacks": 2,
       "requires": [],
       "minRoom": 1,
-      "symbol": "☠",
+      "symbol": "💀",
+      "_todo": "balance",
       "core": {
-        "hpAdd": 40
+        "ghostDamageMult": 1.15,
+        "ghostHpMult": 1.15
+      }
+    },
+    "sig_necro_letzterwille": {
+      "id": "sig_necro_letzterwille",
+      "name": "Letzter Wille",
+      "description": "Ein sterbender Geisterpanzer reißt Gegner in seiner Nähe mit — Radius und Schaden pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost", "resurrection", "death"],
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostDeathZoneRadius": 60,
+        "ghostDeathZoneDamage": 15
+      }
+    },
+    "sig_necro_wiederkehr": {
+      "id": "sig_necro_wiederkehr",
+      "name": "Wiederkehr",
+      "description": "Ein sterbender Geisterpanzer hat eine Chance, sofort mit vollen LP zurückzukehren — +25% pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost", "resurrection", "death"],
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostReviveChance": 0.25
       }
     },
     "sig_necro_geisterlegion": {
       "id": "sig_necro_geisterlegion",
       "name": "Geisterlegion",
-      "description": "Ohne aktuellen Effekt (wird mit dem Nekromant-Neubau ersetzt)",
+      "description": "+2 maximal aktive Geisterpanzer",
       "tag": "signature",
       "tags": ["ghost", "swarm", "quantity"],
       "signatureClass": "c_necro",
-      "rarity": "unique",
+      "rarity": "epic",
       "maxStacks": 1,
-      "requires": [],
-      "minRoom": 1,
-      "symbol": "☠",
-      "core": {}
-    },
-    "sig_necro_seelenfresser": {
-      "id": "sig_necro_seelenfresser",
-      "name": "Seelenfresser",
-      "description": "+8 Schaden, +2 Magazin und +5% Kritchance",
-      "tag": "signature",
-      "signatureClass": "c_necro",
-      "rarity": "legendary",
-      "maxStacks": 1,
-      "requires": [],
+      "requires": ["sig_necro_seelenruf"],
       "minRoom": 1,
       "symbol": "☠",
       "core": {
-        "damageAdd": 8,
-        "magAdd": 2,
-        "critAdd": 0.05
+        "ghostMaxAdd": 2
       }
     },
-    "sig_necro_unsterblich": {
-      "id": "sig_necro_unsterblich",
-      "name": "Unsterblich",
-      "description": "+8 Schaden",
+    "sig_necro_geisterkommandant": {
+      "id": "sig_necro_geisterkommandant",
+      "name": "Geisterkommandant",
+      "description": "Immer genau ein Geisterpanzer ist ein weit stärkerer Kommandant",
       "tag": "signature",
-      "tags": ["resurrection"],
+      "tags": ["ghost", "elite", "single_unit"],
       "signatureClass": "c_necro",
       "rarity": "epic",
       "maxStacks": 1,
@@ -3446,7 +3474,92 @@
       "minRoom": 1,
       "symbol": "☠",
       "core": {
-        "damageAdd": 8
+        "ghostCommander": true
+      }
+    },
+    "sig_necro_phylakterium": {
+      "id": "sig_necro_phylakterium",
+      "name": "Phylakterium",
+      "description": "Der Geisterkommandant übersteht einmal pro Raum einen tödlichen Treffer",
+      "tag": "signature",
+      "tags": ["ghost", "elite"],
+      "signatureClass": "c_necro",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": ["sig_necro_geisterkommandant"],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "ghostCommanderShield": true
+      }
+    },
+    "sig_necro_unsterblicheseele": {
+      "id": "sig_necro_unsterblicheseele",
+      "name": "Unsterbliche Seele",
+      "description": "Wiederkehr kann pro Geisterpanzer bis zu dreimal statt einmal auslösen",
+      "tag": "signature",
+      "tags": ["ghost", "resurrection"],
+      "signatureClass": "c_necro",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": ["sig_necro_wiederkehr"],
+      "minRoom": 1,
+      "symbol": "☠",
+      "_todo": "balance",
+      "core": {
+        "ghostReviveMaxUses": 3
+      }
+    },
+    "sig_necro_lichpanzer": {
+      "id": "sig_necro_lichpanzer",
+      "name": "Lich-Panzer",
+      "description": "Der Geisterkommandant wird noch einmal deutlich stärker",
+      "tag": "signature",
+      "tags": ["ghost", "elite", "single_unit"],
+      "signatureClass": "c_necro",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": ["sig_necro_geisterkommandant"],
+      "minRoom": 1,
+      "symbol": "☠",
+      "_todo": "balance",
+      "core": {
+        "ghostCommanderMultBonus": 0.75
+      }
+    },
+    "sig_necro_ewigewiederkehr": {
+      "id": "sig_necro_ewigewiederkehr",
+      "name": "Ewige Wiederkehr",
+      "description": "Jede Wiederkehr desselben Geisterpanzers macht ihn dauerhaft stärker — +20% LP und Schaden je Wiedergeburt",
+      "tag": "signature",
+      "tags": ["ghost", "resurrection"],
+      "signatureClass": "c_necro",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": ["sig_necro_wiederkehr"],
+      "minRoom": 1,
+      "symbol": "☠",
+      "_todo": "balance",
+      "core": {
+        "ghostReviveGrowth": 0.2
+      }
+    },
+    "sig_necro_armeedertoten": {
+      "id": "sig_necro_armeedertoten",
+      "name": "Armee der Toten",
+      "description": "+2 maximal aktive Geisterpanzer und +5% Schaden je weiterem lebenden Geisterpanzer",
+      "tag": "signature",
+      "tags": ["ghost", "swarm", "quantity"],
+      "signatureClass": "c_necro",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "_todo": "balance",
+      "core": {
+        "ghostMaxAdd": 2,
+        "ghostPackDamagePerAlly": 0.05
       }
     },
     "sig_eng_werkzeugkasten": {
