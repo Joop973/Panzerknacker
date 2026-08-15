@@ -6861,6 +6861,448 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 45. Upgradepool-v2 Phase 9: Schlussabnahme -------------------------
+// Die Abnahme des ganzen Nekromant-Auftrags. Bewusst NUR die Punkte, die in
+// den Abschnitten 34/37-44 noch NICHT abgedeckt sind -- die uebrigen sind
+// dort mit eigener Gegenprobe gebaut und werden hier nicht dupliziert:
+//   Punkt 1  -> 42(a)      Punkt 5  -> 42(e)/44(c)   Punkt 6  -> 43(i)
+//   Punkt 8  -> 43(c)(d)   Punkt 14 -> 41(l)         Punkt 16 -> 41(g)
+//   Punkt 17 -> 41(i)      Punkt 18 -> je Signaturtopf (b)
+//   Punkt 22 -> 39         Punkt 23 -> 36(b)         Punkt 25 -> Abschnitt 4
+// Neu sind hier: die statistische Spawnquote (2), der Boss-Kill (3), das
+// Limit mit ID-Vergleich (4), Wiederbelebung nur mit Upgrade (7), das
+// Zielsystem end-to-end (9-11), der BOSSKAMPF-KORRIDOR (12/13/15) und die
+// vier Pipeline-Invarianten (19/20/21/24).
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createGhost, updateGhosts, killGhost } = await import('../src/game/ghost.js');
+  const { stepMirrorBoss } = await import('../src/game/bossai.js');
+  const { updateTargeting, resolveTarget } = await import('../src/game/ai.js');
+  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { hashSeed, rngFor, mulberry32 } = await import('../src/core/rng.js');
+  const U = upgradesData.upgrades;
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  const necroRoom = (types = ['t_pink'], extra = {}) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(3, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(3, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+      ...extra,
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    return st;
+  };
+  const arenaRoom = (types, layout) =>
+    necroRoom(types, { roomSpec: { fixedLayout: layout }, arenas: tanksData.arenas });
+
+  // === GEISTERPANZER ====================================================
+
+  // (a) Punkt 2: die Spawnquoten sind nicht nur an der Schwelle richtig
+  // (das prueft 42(b) mit gestelltem rng), sondern auch STATISTISCH ueber
+  // viele Kills mit einem echten geseedeten Strom. Bewusst gegen die
+  // balance.json-Sollwerte gemessen -- der Auftrag nennt sie ausdruecklich
+  // ("50 % / 33 % Spawnchance, mit festem Seed ueber viele Kills gemessen"),
+  // eine Balance-Aenderung SOLL diesen Test also mitziehen.
+  {
+    const N = 3000;
+    const TOLERANZ = 0.04; // 4 Prozentpunkte -- deckt die Streuung bei N=3000
+    const quote = (killerArt) => {
+      const rng = mulberry32(4711); // fester Seed
+      // EIN Raum, der Gegner wird je Durchgang wiederbelebt -- 3000 volle
+      // createState()-Aufrufe wuerden die Suite um Sekunden verlaengern,
+      // ohne der Messung etwas hinzuzufuegen (gemessen wird der Wurf in
+      // killTank(), nicht der Raumbau).
+      const st = necroRoom();
+      st.rng = rng;
+      const e = st.tanks.find((t) => t !== st.player);
+      const killer = killerArt === 'necro' ? st.player : { isGhost: true, alive: true };
+      let spawns = 0;
+      for (let i = 0; i < N; i++) {
+        st.ghosts.length = 0; // Limit darf die Messung nie deckeln
+        e.alive = true;
+        e.hp = e.cfg.maxHp;
+        e.protect = 0;
+        st.killTank(e, 'test', { killer });
+        if (st.ghosts.length > 0) spawns++;
+      }
+      return spawns / N;
+    };
+    const soll = tanksData.balance.ghost.spawnChance;
+    const qn = quote('necro');
+    const qg = quote('ghost');
+    check(
+      Math.abs(qn - soll.necro) <= TOLERANZ,
+      `Phase 9: Nekromant-Spawnquote ${(qn * 100).toFixed(1)} % statt ${(soll.necro * 100).toFixed(0)} % (${N} Kills)`,
+    );
+    check(
+      Math.abs(qg - soll.ghost) <= TOLERANZ,
+      `Phase 9: Geist-Spawnquote ${(qg * 100).toFixed(1)} % statt ${(soll.ghost * 100).toFixed(0)} % (${N} Kills)`,
+    );
+  }
+
+  // (b) Punkt 3: auch ein BOSS-Kill erzeugt denselben Basistyp mit denselben
+  // Werten -- Anhang B S8 nennt den Boss ausdruecklich ("Boss ->
+  // Geisterpanzer"). 43(d) prueft das nur mit synthetisch aufgeblasenen
+  // Gegnern, hier mit einem echten Boss aus tanks.json.
+  {
+    const st = arenaRoom(['t_mirror'], 'boss_mirror');
+    const boss = st.tanks.find((t) => t !== st.player);
+    check(boss.cfg.maxHp >= 500, `Phase 9: Vorbedingung -- Boss hat nur ${boss.cfg.maxHp} LP`);
+    boss.protect = 0;
+    st.rng = () => 0; // garantierter Spawnwurf
+    st.killTank(boss, 'test', { killer: st.player });
+    const g = st.ghosts[0];
+    check(!!g && g.type === 'ghost_tank', `Phase 9: Boss-Kill erzeugt Typ ${g?.type} statt ghost_tank`);
+    // Gegenprobe zum Erben: der Geist darf NICHTS vom Boss uebernehmen.
+    const vergleich = createGhost(necroRoom(), 0, 0);
+    check(
+      g.cfg.maxHp === vergleich.cfg.maxHp && g.cfg.damage === vergleich.cfg.damage,
+      `Phase 9: Boss-Geist (${g.cfg.maxHp} LP / ${g.cfg.damage} Schaden) weicht vom Basistyp ab`,
+    );
+  }
+
+  // (c) Punkt 4: am Limit wird NICHTS verdraengt -- die Geist-IDs vor und
+  // nach einem weiteren garantierten Kill sind identisch. 42(c) prueft nur
+  // die ANZAHL (die bliebe auch bei einer FIFO-Verdraengung gleich!), was
+  // genau den Fehler durchlassen wuerde, den Anhang B S5 verbietet.
+  {
+    const st = necroRoom(['t_pink', 't_pink', 't_pink', 't_pink']);
+    st.rng = () => 0; // garantierter Wurf
+    const gegner = st.tanks.filter((t) => t !== st.player);
+    for (const e of gegner) e.protect = 0;
+    for (let i = 0; i < 3; i++) st.killTank(gegner[i], 'test', { killer: st.player });
+    check(st.ghosts.length === 3, `Phase 9: Vorbedingung -- ${st.ghosts.length} statt 3 Geister am Limit`);
+    const idsVorher = st.ghosts.map((g) => g.id);
+    st.killTank(gegner[3], 'test', { killer: st.player }); // 4. Kill am Limit
+    const idsNachher = st.ghosts.map((g) => g.id);
+    check(st.ghosts.length === 3, `Phase 9: das Geistlimit wird ueberschritten (${st.ghosts.length})`);
+    check(
+      idsVorher.join(',') === idsNachher.join(','),
+      `Phase 9: am Limit wurde ein Geist verdraengt (vorher ${idsVorher}, nachher ${idsNachher})`,
+    );
+  }
+
+  // (d) Punkt 7: die Wiederbelebung greift NUR mit aktivem Upgrade. 44(h)
+  // prueft den Erfolgsfall MIT Karte -- ohne diesen Gegenpart waere eine
+  // versehentlich immer aktive Wiederbelebung unbemerkt geblieben (Anhang B
+  // S12/S17: "eine Wiederbelebung kann nur stattfinden, wenn ein
+  // entsprechendes Upgrade vorhanden ist").
+  {
+    const st = necroRoom();
+    st.rng = () => 0; // ein Wurf, der MIT Karte immer gelingen wuerde
+    const ohne = createGhost(st, 0, 0);
+    st.ghosts.push(ohne);
+    ohne.hp = 0;
+    killGhost(st, ohne);
+    check(ohne.alive === false, 'Phase 9: ein Geist wird OHNE Wiederkehr-Karte wiederbelebt');
+
+    // Kontrolle: mit der echten Karte (statt eines gesetzten cfg-Feldes)
+    // gelingt derselbe Wurf -- sonst waere der Test oben trivial wahr.
+    const st2 = necroRoom();
+    st2.player.cfg = applyUpgrades(
+      resolveCfg(tanksData, 'c_necro'),
+      { sig_necro_wiederkehr: 1 },
+      upgradesData, 'mine', null,
+    );
+    st2.rng = () => 0;
+    const mit = createGhost(st2, 0, 0);
+    st2.ghosts.push(mit);
+    mit.hp = 0;
+    killGhost(st2, mit);
+    check(mit.alive === true, 'Phase 9: Kontrolle -- die Wiederkehr-Karte belebt nicht wieder');
+  }
+
+  // === ZIELSYSTEM =======================================================
+
+  // (e) Punkt 9: ein Gegner mit freier Sicht auf einen Geist waehlt ihn und
+  // TRIFFT ihn auch -- end-to-end ueber die volle stepState()-Pipeline
+  // (Zielwahl -> Turm -> Schuss -> Kollision), nicht nur resolveTarget().
+  {
+    const st = arenaRoom(['t_pink'], 'test_arena');
+    const e = st.tanks.find((t) => t !== st.player);
+    e.x = 400; e.y = 48; e.prevX = 400; e.prevY = 48;
+    e.cfg.accuracy = 1; // deterministisch: kein Zielfehler-Jitter
+    st.player.x = 120; st.player.y = 240; st.player.prevX = 120; st.player.prevY = 240;
+    const g = createGhost(st, 250, 48); // nah + freie Sicht in derselben Zeile
+    g.cfg.maxHp = 99999;
+    g.hp = 99999;
+    st.ghosts.push(g);
+    const vorHp = g.hp;
+    for (let i = 0; i < 60 * 6; i++) stepState(st, CMD0, 1 / 60);
+    check(resolveTarget(e, st) === g, 'Phase 9: der Gegner waehlt den nahen, frei sichtbaren Geist nicht');
+    check(g.hp < vorHp, `Phase 9: der Gegner trifft den gewaehlten Geist nie (${g.hp} von ${vorHp} LP)`);
+  }
+
+  // (f) Punkt 10: ein Geist stirbt bei 0 LP und zaehlt danach NICHT mehr
+  // gegen das Limit -- der volle Kreis aus (c): am Limit passiert nichts,
+  // nach einem Tod aber wieder.
+  {
+    const st = necroRoom(['t_pink', 't_pink', 't_pink', 't_pink']);
+    st.rng = () => 0;
+    const gegner = st.tanks.filter((t) => t !== st.player);
+    for (const e of gegner) e.protect = 0;
+    for (let i = 0; i < 3; i++) st.killTank(gegner[i], 'test', { killer: st.player });
+    check(st.ghosts.length === 3, 'Phase 9: Vorbedingung -- Limit nicht erreicht');
+    // Einen Geist auf 0 LP bringen und die Aufraeumrunde laufen lassen.
+    st.ghosts[0].hp = 0;
+    updateGhosts(st, 1 / 60);
+    check(st.ghosts.length === 2, `Phase 9: ein Geist mit 0 LP bleibt aktiv (${st.ghosts.length})`);
+    st.killTank(gegner[3], 'test', { killer: st.player });
+    check(st.ghosts.length === 3, 'Phase 9: nach dem Tod eines Geistes zaehlt der Platz nicht wieder frei');
+  }
+
+  // (g) Punkt 11: Geister zaehlen NICHT in die Raum-geraeumt-Pruefung.
+  // Sonst waere jeder Nekromanten-Raum unbeendbar -- die Pruefung in
+  // run.js zaehlt state.tanks, Geister leben in state.ghosts. Ueber den
+  // ECHTEN stepRun()-Pfad geprueft, nicht ueber die Datenstruktur.
+  {
+    // 6. Parameter ist modeKey, opts erst der 7. -- ein `{starterTank}` an
+    // 6. Stelle landet still im modeKey und die Klasse bleibt 'player'
+    // (beim Schreiben dieses Tests genau so passiert; der Test war dadurch
+    // gruen, ohne je einen Nekromanten-Run gebaut zu haben).
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42, 'normal', { starterTank: 'c_necro' });
+    check(run.starterTank === 'c_necro', `Phase 9: Vorbedingung -- Run laeuft als ${run.starterTank} statt c_necro`);
+    run.phase = 'playing';
+    const st = run.state;
+    for (const t of st.tanks) if (t !== st.player) t.alive = false;
+    st.pendingWave = null;
+    for (let i = 0; i < 3; i++) st.ghosts.push(createGhost(st, 100 + i * 20, 100));
+    check(st.ghosts.length === 3, 'Phase 9: Vorbedingung -- keine Geister im Raum');
+    const vorher = run.roomsCleared;
+    stepRun(run, CMD0, 1 / 60);
+    check(
+      run.roomsCleared === vorher + 1,
+      `Phase 9: der Raum gilt trotz toter Gegner nicht als geraeumt (Geister blockieren ihn), roomsCleared ${run.roomsCleared}`,
+    );
+  }
+
+  // === BOSSKAMPF-KORRIDOR ===============================================
+  // Der eigentliche Balance-Test (Auftrag Punkte 12/13): ein Bosskampf mit
+  // drei lebenden Geistern, Bossschuesse nach Ziel gezaehlt. Zwei Schranken
+  // in BEIDE Richtungen -- "ein Test, der nur nach oben absichert, erzeugt
+  // genau den Fehler, an dem Beschwoererklassen in anderen Spielen
+  // scheitern".
+  {
+    // Misst die Verteilung der Bossschuesse bei einem gegebenen
+    // Fixierungsfenster. Geschosse werden nach dem Zaehlen entfernt und die
+    // Geister auf volle LP gesetzt: gemessen wird die ZIELVERTEILUNG ueber
+    // die Zeit, nicht wer den Kampf gewinnt -- ein sterbender Geist wuerde
+    // die Stichprobe sonst mitten im Lauf verkuerzen.
+    const messen = (fixate) => {
+      const orig = tanksData.balance.boss.fixate;
+      tanksData.balance.boss.fixate = fixate;
+      try {
+        const st = arenaRoom(['t_mirror'], 'boss_mirror');
+        const boss = st.tanks.find((t) => t !== st.player);
+        for (let i = 0; i < 3; i++) {
+          const g = createGhost(st, boss.x - 60 + i * 30, boss.y + 60);
+          g.cfg.maxHp = 99999;
+          g.hp = 99999;
+          st.ghosts.push(g);
+        }
+        let aufSpieler = 0;
+        let aufGeist = 0;
+        const dt = 1 / 60;
+        for (let i = 0; i < 60 * 60; i++) { // 60 simulierte Sekunden
+          st.time += dt;
+          boss.cooldown = Math.max(0, boss.cooldown - dt);
+          const vor = st.bullets.length;
+          stepMirrorBoss(boss, st, dt);
+          if (st.bullets.length > vor) {
+            if (boss.ai.target === st.player) aufSpieler++;
+            else aufGeist++;
+          }
+          st.bullets.length = 0;
+          for (const g of st.ghosts) g.hp = 99999;
+        }
+        return { aufSpieler, aufGeist, total: aufSpieler + aufGeist };
+      } finally {
+        tanksData.balance.boss.fixate = orig;
+      }
+    };
+
+    // (h) Punkt 12, Mechanismus mit EIGENEN Zahlen: das Fixierungsfenster
+    // treibt den Spieleranteil. Zwei synthetische Fenster (75 % / 25 %
+    // erzwungen) muessen sich in der Messung deutlich unterscheiden und
+    // jeweils mindestens ihren eigenen erzwungenen Anteil erreichen --
+    // die aktuellen balance.json-Werte gegen sich selbst zu pruefen waere
+    // trivial wahr.
+    {
+      const hoch = messen({ onPlayerS: 6, onGhostsS: 2, minPlayerShare: 0.4 });
+      const niedrig = messen({ onPlayerS: 2, onGhostsS: 6, minPlayerShare: 0.4 });
+      check(hoch.total > 100 && niedrig.total > 100, `Phase 9: zu kleine Stichprobe (${hoch.total}/${niedrig.total} Schuesse)`);
+      const aHoch = hoch.aufSpieler / hoch.total;
+      const aNiedrig = niedrig.aufSpieler / niedrig.total;
+      // Untergrenze je Fenster: der erzwungene Anteil ist ein Minimum (in
+      // der freien Phase KANN der Boss den Spieler zusaetzlich waehlen).
+      check(aHoch >= 6 / 8 - 0.05, `Phase 9: 75-%-Fenster liefert nur ${(aHoch * 100).toFixed(1)} % Spielerschuesse`);
+      check(aNiedrig >= 2 / 8 - 0.05, `Phase 9: 25-%-Fenster liefert nur ${(aNiedrig * 100).toFixed(1)} % Spielerschuesse`);
+      check(
+        aHoch - aNiedrig > 0.3,
+        `Phase 9: das Fixierungsfenster steuert den Spieleranteil nicht (${(aHoch * 100).toFixed(1)} % vs. ${(aNiedrig * 100).toFixed(1)} %)`,
+      );
+    }
+
+    // (i) Punkte 12+13 an der ECHTEN Konfiguration -- die beiden
+    // Korridorgrenzen des Auftrags:
+    //   Untergrenze gegen Trivialisierung: deutlich ueber die Haelfte der
+    //     Bossschuesse gilt weiterhin dem Spieler.
+    //   Obergrenze gegen Wertlosigkeit: die Geister fangen einen messbaren
+    //     Anteil ab.
+    // Beide Schranken sind ABSICHTLICH gegen feste Zahlen (0.55/0.10)
+    // gesetzt und nicht aus balance.json abgeleitet: sie sind die
+    // Design-Zusage, an der eine kuenftige Balance-Aenderung gemessen
+    // werden SOLL.
+    {
+      const echt = messen(tanksData.balance.boss.fixate);
+      check(echt.total > 100, `Phase 9: zu kleine Stichprobe im echten Bosskampf (${echt.total})`);
+      const anteilSpieler = echt.aufSpieler / echt.total;
+      const anteilGeist = echt.aufGeist / echt.total;
+      check(
+        anteilSpieler > 0.55,
+        `Phase 9 (Untergrenze/Trivialisierung): nur ${(anteilSpieler * 100).toFixed(1)} % der Bossschuesse gelten dem Spieler`,
+      );
+      check(
+        anteilGeist >= 0.1,
+        `Phase 9 (Obergrenze/Wertlosigkeit): die Geister ziehen nur ${(anteilGeist * 100).toFixed(1)} % der Bossschuesse -- sie sind im Bosskampf wertlos`,
+      );
+    }
+  }
+
+  // (j) Punkt 15: kein Zielflackern. Ein Geist oszilliert dicht um die
+  // effektive Gleichstandsgrenze zum Spieler; die Hysterese muss die
+  // Zielwechsel praktisch auf null druecken. Gegen ein Szenario geprueft,
+  // das OHNE Hysterese nachweislich flackert -- sonst waere der Test
+  // trivial wahr (ein statisches Szenario flackert auch ohne Hysterese nie).
+  {
+    const flackern = (hyst) => {
+      const orig = tanksData.balance.aggro.switchHysteresisPct;
+      tanksData.balance.aggro.switchHysteresisPct = hyst;
+      try {
+        const st = arenaRoom(['t_pink'], 'test_arena');
+        const e = st.tanks.find((t) => t !== st.player);
+        e.x = 400; e.y = 48; e.prevX = 400; e.prevY = 48;
+        st.player.x = 200; st.player.y = 48; st.player.prevX = 200; st.player.prevY = 48;
+        // Spieler 200 px entfernt; ghostThreatMult 0.7 -> ein Geist gewinnt
+        // ab < 140 px. Genau um diese Grenze pendeln lassen.
+        const g = createGhost(st, 400 - 140, 48);
+        g.cfg.maxHp = 9999;
+        g.hp = 9999;
+        st.ghosts.push(g);
+        let wechsel = 0;
+        let letztes = null;
+        const dt = 1 / 60;
+        const SEK = 30;
+        for (let i = 0; i < 60 * SEK; i++) {
+          const t = i * dt;
+          g.x = 400 - 140 + Math.sin(t * 5) * 25;
+          g.prevX = g.x;
+          st.time += dt;
+          updateTargeting(st, dt);
+          const ziel = resolveTarget(e, st);
+          if (letztes !== null && ziel !== letztes) wechsel++;
+          letztes = ziel;
+        }
+        return wechsel / SEK;
+      } finally {
+        tanksData.balance.aggro.switchHysteresisPct = orig;
+      }
+    };
+    const mit = flackern(tanksData.balance.aggro.switchHysteresisPct);
+    const ohne = flackern(0);
+    check(ohne > 1, `Phase 9: Testaufbau -- das Szenario flackert auch ohne Hysterese kaum (${ohne.toFixed(2)}/s)`);
+    check(mit <= 0.2, `Phase 9: Zielflackern ${mit.toFixed(2)} Wechsel/s trotz Hysterese`);
+  }
+
+  // === PIPELINE =========================================================
+  // Punkte 19/20/21: die drei Angebots-Invarianten ueber viele echte
+  // Angebotsrunden. Bewusst als DURCHGESPIELTE Runs (gewaehlte Karten
+  // sammeln sich in `chosen`/`synergyTags` an), nicht als Einzelabfragen --
+  // maxStacks und requires koennen ihre Wirkung erst zeigen, wenn ein Run
+  // ueberhaupt Karten besitzt.
+  {
+    let vMax = 0;
+    let vReq = 0;
+    let vDup = 0;
+    let runden = 0;
+    let gezogen = 0;
+    for (const klass of ['c_necro', 'player', 'c_flame', 'c_ricochet']) {
+      for (let seed = 1; seed <= 40; seed++) {
+        const rng = mulberry32(seed * 977);
+        const chosen = {};
+        const synergyTags = {};
+        for (let raum = 1; raum <= 16; raum++) {
+          const offers = rollOffers(upgradesData, {
+            chosen, roomIndex: raum, rng, balance: tanksData.balance, count: 3,
+            banned: new Set(), starterTank: klass, synergyTags,
+          });
+          runden++;
+          const ids = offers.filter((o) => !o.fallback).map((o) => o.id);
+          if (new Set(ids).size !== ids.length) vDup++;
+          for (const o of offers) {
+            if (o.fallback) continue;
+            gezogen++;
+            const d = U[o.id];
+            if ((chosen[o.id] || 0) >= d.maxStacks) vMax++;
+            for (const r of d.requires || []) if (!(chosen[r] > 0)) vReq++;
+          }
+          const pick = offers.find((o) => !o.fallback);
+          if (pick) {
+            chosen[pick.id] = (chosen[pick.id] || 0) + 1;
+            for (const t of U[pick.id].tags || []) synergyTags[t] = (synergyTags[t] || 0) + 1;
+          }
+        }
+      }
+    }
+    check(runden > 2000 && gezogen > 5000, `Phase 9: zu kleine Pipeline-Stichprobe (${runden} Runden, ${gezogen} Karten)`);
+    check(vMax === 0, `Phase 9 (Punkt 19): ${vMax}x eine Karte angeboten, deren maxStacks schon erreicht war`);
+    check(vReq === 0, `Phase 9 (Punkt 20): ${vReq}x eine Karte mit unerfuelltem requires angeboten`);
+    check(vDup === 0, `Phase 9 (Punkt 21): ${vDup}x dieselbe Karte mehrfach im selben Angebot`);
+  }
+
+  // (k) Punkt 24: JEDE Karte des Pools (nicht nur die 18 neuen aus 44(o))
+  // loest sich sauber in ein Spieler-cfg auf. Gegen die UPGRADE-LOSE Basis
+  // derselben Klasse verglichen: `role`/`miner` sind bei jeder Spielerklasse
+  // von Haus aus undefined -- ein pauschaler undefined-Test waere dadurch
+  // dauerhaft rot und haette gar nichts geprueft.
+  {
+    const basisCache = {};
+    const basis = (k) => (basisCache[k] ||= applyUpgrades(resolveCfg(tanksData, k), {}, upgradesData, 'mine', null));
+    let schlecht = 0;
+    let geprueft = 0;
+    for (const id in U) {
+      const def = U[id];
+      const chosen = { [id]: def.maxStacks };
+      for (const r of def.requires || []) chosen[r] = U[r].maxStacks;
+      const klass = def.signatureClass || 'player';
+      const b = basis(klass);
+      const cfg = applyUpgrades(resolveCfg(tanksData, klass), chosen, upgradesData, 'mine', null);
+      geprueft++;
+      for (const k in cfg) {
+        const v = cfg[k];
+        if (typeof v === 'number' && !Number.isFinite(v)) {
+          check(false, `Phase 9: Karte "${id}" macht cfg.${k} zu ${v}`);
+          schlecht++;
+        } else if (v === undefined && b[k] !== undefined) {
+          check(false, `Phase 9: Karte "${id}" loescht cfg.${k} (undefined)`);
+          schlecht++;
+        }
+      }
+    }
+    check(geprueft === Object.keys(U).length, `Phase 9: nur ${geprueft} von ${Object.keys(U).length} Karten geprueft`);
+    check(schlecht === 0, `Phase 9 (Punkt 24): ${schlecht} cfg-Verletzung(en) durch Karten`);
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);
