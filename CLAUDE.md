@@ -268,11 +268,11 @@ der geerbten cfg des getöteten Panzers; Details im eigenen Abschnitt unten.
 **Phase 8 (Signaturpool Nekromant) ist gebaut** — die zwölf alten
 `sig_necro_*`-Karten sind durch den 18-Karten-Pool aus Anhang A ersetzt, neue
 `ghost*`-`core`-Schlüssel wirken auf die Geistereinheit statt auf den Spieler;
-Details im eigenen Abschnitt unten. **Nächste Sitzung: Phase 9 (Abnahme —
-Schlussabnahme des ganzen Nekromant-Auftrags: Geisterpanzer-Kernregeln,
-Zielsystem, ein Bosskampf-Korridor-Test mit festem Seed gegen Trivialisierung
-UND Wertlosigkeit der Geister, Pipeline-Isolation, `sw.js`-Cache-Bump). Letzte
-Phase des Auftrags.**
+Details im eigenen Abschnitt unten. **Phase 9 (Abnahme) ist gebaut** — die
+Schlussabnahme mit dem Bosskampf-Korridor (Geister ziehen 40 % der
+Bossschüsse, der Spieler bleibt bei 60 %), den Pipeline-Invarianten und dem
+`sw.js`-Bump auf `v111`. **Damit ist der komplette Auftrag
+„Upgrade-/Klassenpool-System v2 + Nekromant" (Phasen 0–9) abgearbeitet.**
 Verbleibend sonst nur noch manuelle/optionale Punkte (s. To-do-Liste unten):
 der Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur nach echtem
 Spielgefühl) und die Telemetrie-Auswertung echter Runs.
@@ -3579,12 +3579,78 @@ datengetriebene Effektschicht, ein zweites Effektsystem wäre genau die in
   Fake-Canvas-Renderläufe (Kommandant-Ring-Differenz, Kommandant-Renderpfad
   crashfrei) bestanden.
 
+### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 9 (Abnahme) — gemergt
+Die Schlussabnahme des ganzen Auftrags. **Keine Balance-Werte geändert** — alle
+25 Abnahmepunkte sind am aktuellen Stand grün. Neuer Abschnitt 45 in
+`tests/regression.mjs` deckt bewusst **nur die 13 noch offenen** Punkte ab;
+die übrigen 12 sind in den Abschnitten 34/36/39/41–44 schon mit eigener
+Gegenprobe gebaut und werden nicht dupliziert (die Zuordnung steht als Tabelle
+im Kopfkommentar von Abschnitt 45).
+- **Der Bosskampf-Korridor ist der eigentliche Ertrag** (Auftragspunkte
+  12/13): ein 60-Sekunden-Bosskampf mit drei lebenden Geistern, die
+  Bossschüsse nach Ziel gezählt. Zwei Schranken in BEIDE Richtungen —
+  Untergrenze gegen Trivialisierung (**> 55 % der Schüsse gelten weiterhin
+  dem Spieler**, gemessen 59,8 %) und Obergrenze gegen Wertlosigkeit (**die
+  Geister ziehen ≥ 10 %**, gemessen 40,2 %). Das Fixierungsfenster wird
+  zusätzlich mit **eigenen Zahlen** nachgerechnet (synthetische Fenster 6/2
+  und 2/6 → gemessen 76,8 % vs. 25,6 %), statt die aktuellen
+  `balance.json`-Werte gegen sich selbst zu prüfen.
+  **Die Gegenprobe war hier besonders aussagekräftig**: eine reine
+  Balance-Verschiebung (`boss.fixate` 4/3 → 1/6) bei völlig intaktem
+  Mechanismus lässt die **gesamte übrige Suite grün** und wird ausschließlich
+  von diesem Test gefangen (14,2 % statt > 55 %).
+- **Ein echter Fund in einem Bestandsmechanismus** (Auftragspunkt 4): der
+  Phase-6-Test prüfte am Geistlimit nur die **Anzahl** — eine FIFO-Verdrängung
+  hält die Anzahl aber ebenfalls bei 3 und wäre unbemerkt durchgerutscht
+  (Anhang B §5 verbietet sie ausdrücklich). Der neue Test vergleicht die
+  **Geist-IDs** vor und nach einem weiteren Kill am Limit; per Gegenprobe
+  bestätigt, dass eine eingebaute FIFO-Verdrängung nur von ihm rot gemacht wird.
+- **Ein Fehler im eigenen neuen Test, vor dem Merge gefunden**: `createRun()`
+  nimmt `modeKey` als 6. und `opts` erst als 7. Parameter — ein
+  `{ starterTank: 'c_necro' }` an 6. Stelle landet still im `modeKey`, die
+  Klasse bleibt `player`. Der Raum-geräumt-Test lief dadurch grün, **ohne je
+  einen Nekromanten-Run gebaut zu haben**. Jetzt mit `'normal'` als 6.
+  Argument und einer expliziten Vorbedingungs-Prüfung auf `run.starterTank`.
+- **Weitere neue Tests** (alle mit bestandener Gegenprobe): statistische
+  Spawnquote über 3.000 Kills mit festem Seed (49,3 % / 33,3 % gegen die
+  Sollwerte 50 % / 33 %), Boss-Kill erzeugt denselben Basistyp ohne Stat-Erbe,
+  Wiederbelebung **nur** mit aktivem Upgrade (44(h) prüfte nur den
+  Erfolgsfall), Gegner wählt einen frei sichtbaren Geist **und trifft ihn**
+  end-to-end über `stepState()`, ein Geist mit 0 LP gibt seinen Platz am Limit
+  wieder frei, Geister blockieren die Raum-geräumt-Prüfung nicht (sonst wäre
+  jeder Nekromanten-Raum unbeendbar), kein Zielflackern (0,00 Wechsel/s gegen
+  1,60/s ohne Hysterese — in einem Szenario gemessen, das ohne Hysterese
+  nachweislich flackert), und vier Pipeline-Invarianten über 2.560 echte
+  Angebotsrunden mit 7.680 gezogenen Karten (`maxStacks` nie überschritten,
+  kein unerfülltes `requires`, nie zwei gleiche Karten im selben Angebot,
+  alle 251 Karten lösen sich ohne `NaN`/`undefined` auf).
+- **Ein Testfallstrick beim NaN-Check**: `role` und `miner` sind bei **jeder**
+  Spielerklasse von Haus aus `undefined` — ein pauschaler `undefined`-Test wäre
+  dauerhaft rot gewesen und hätte nichts geprüft. Verglichen wird deshalb gegen
+  die **upgradelose Basis derselben Klasse**: eine Karte darf kein Feld
+  `undefined` machen, das die Basis noch hatte.
+- **Die Spawnquoten-Messung ist bewusst an `balance.json` gekoppelt** (der
+  Auftrag nennt „50 % / 33 %" ausdrücklich als Abnahmekriterium) — eine
+  Balance-Änderung SOLL sie mitziehen. Die Gegenprobe musste deshalb den
+  **Mechanismus** brechen (fester Wert im Code statt aus der JSON), nicht die
+  Datenlage.
+- **`sw.js` auf `v111` gebumpt** (+ `telemetry.js: GAME_VERSION`); die
+  `ASSETS`-Liste wurde gegen den echten Dateibestand geprüft (keine fehlende,
+  keine tote Datei).
+- **Alle fünf Testschritte des Auftrags im echten Browser bestanden**:
+  kompletter Nekromanten-Run bis zum Boss (Sieg nach 11 Räumen, bis zu 3
+  gleichzeitige Geister), derselbe Seed mit der Standardklasse (Sieg, **0**
+  Geister — „nichts fühlt sich anders an als vorher"), Abbrechen und
+  Fortsetzen (Klasse, Karten, Tag-Bilanz und Schrott stimmen), Offline-Neuladen
+  (`panzerknacker-v111` mit 101 Einträgen im Cache, App startet offline
+  vollständig). Keine Konsolenfehler.
+- **Laufzeit**: die Suite braucht jetzt ~7 s (nicht mehr ~1 s wie früher in
+  dieser Datei angegeben) — davon lagen ~6,5 s schon vor dieser Phase an, der
+  neue Abschnitt kostet ~0,6 s. Die teuerste neue Messung (3.000 Kills je
+  Quote) läuft bewusst in EINEM Raum mit wiederbelebtem Gegner statt mit 3.000
+  `createState()`-Aufrufen.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **`sig_necro_geisterlegion` ist wirkungslos (Upgradepool-v2 Phase 4)**:
-      `core: {}`, weil ihre einzigen zwei Effekte (`grantGhostCrew`,
-      `ghostDurationBonus`) mit dem alten Geistersystem abgebaut sind. Löst
-      sich automatisch mit Phase 8 (Signaturtopf Nekromant komplett ersetzt),
-      kein eigenständiger Fix nötig.
 - [ ] **`drawOne()`-Signaturkarten-Inkonsistenz (Upgradepool-v2 Phase 2)**:
       „Verbannen"/„Vierte Karte" (`run.js`) sperren beim Ersatzziehen weiterhin
       den ganzen Tag `signature` statt nur die gebannte id — banning einer von
@@ -3692,10 +3758,44 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   5er-Formation); bypassen `DRIVES`/`updateEnemy()`, Turm/Feuern bleibt
   die normale `roleTurret()`-Logik. Zielwahl (Upgradepool-v2 Phase 5):
   zeitgesteuerter Wechsel zwischen Spieler-Fixierung und `ai.js: pickTarget`.
-- `src/game/cfg.js` — Panzer-cfg + alle ~39 Upgrade-Effekte.
-- `src/game/upgradepool.js` — Auswahl-Pool (Tag-Regel, Rarity, maxStacks,
-  requires, minRoom; Phase 4: includeTag/onlyRarity/bypassRoomGate/
-  ignoreTagRule für Elite-/Treasure-Belohnungen); von `run.js` genutzt.
+- `src/game/cfg.js` — Panzer-cfg + alle Upgrade-Effekte. Der Kern ist seit
+  UMBAUPLAN-LP Phase 10 EINE generische `core`-Schleife (eine neue Karte
+  braucht keine Codezeile, nur ihren `core`-Eintrag in `upgrades.json`);
+  Upgradepool-v2 Phase 8 hat sie um 16 `ghost*`-Schlüssel erweitert, die
+  nicht auf den Spieler, sondern über `ghost.js: resolveGhostCfg()` auf die
+  Geistereinheit wirken (`ghostHpAdd`/`ghostDamageAdd`/`ghostSpeedMult`/
+  `ghostFireMult`/`ghostMaxAdd`/`ghostPackDamagePerAlly`/`ghostLifestealPct`/
+  `ghostStunOnHit`/`ghostDamageMult`/`ghostHpMult`/`ghostDeathZoneRadius`/
+  `ghostDeathZoneDamage`/`ghostReviveChance`/`ghostReviveMaxUses`/
+  `ghostReviveGrowth`/`ghostCommander`+`ghostCommanderShield`+
+  `ghostCommanderMultBonus`).
+- `src/game/upgradepool.js` — Auswahl-Pool. Filter in `buildCandidates()`:
+  `rarity` (fünf Stufen + `rarityGates`, Upgradepool-v2 Phase 1), `maxStacks`,
+  `requires`, `minRoom`, Bannliste, `damageType` (Element der Klasse,
+  LP-Phase 11), `signatureClass` (Klassenzugehörigkeit, LP-Phase 18),
+  `exclusions` (Negativliste, Upgradepool-v2 Phase 6). Gewichtung:
+  tier-normiertes `weightedPick` × Zweitelement × Synergie (`tags[]` gegen
+  `run.synergyTags`, Phase 3). `dedupeKey()` dedupt Signaturkarten auf die
+  eigene `id` statt auf den gemeinsamen Tag `signature` (Phase 2) — deshalb
+  dürfen mehrere Signaturkarten derselben Klasse gleichzeitig im Angebot
+  stehen. Elite-/Treasure-Belohnungen umgehen Teile davon über
+  `includeTag`/`onlyRarity`/`bypassRoomGate`/`ignoreTagRule`.
+- **Upgrade-Felder in `data/upgrades.json`** (Stand nach Upgradepool-v2):
+  `id`, `name`, `description`, `tag` (Hauptkategorie, treibt die
+  Transformationen über `run.tagCounts`), `tags[]` (Synergie-Tags, treiben die
+  Angebotsgewichtung über `run.synergyTags`), `rarity` (common/rare/epic/
+  unique/legendary), `maxStacks`, `requires[]`, `minRoom`, `symbol`,
+  `core{}` (Effekte), optional `signatureClass`, `damageType`, `exclusions[]`
+  und `_todo: "balance"` (Zahlenwert ohne Spec-Beleg, noch nicht am
+  Spielgefühl geprüft).
+- **Gestrichene Mechaniken** (nicht wiederbeleben): die Karte `ghost_crew`
+  samt `cfg.ghostCrew`/`grantGhostCrew`/`ghostDurationBonus`, das
+  Nekromant-Passiv `reviveChance` und `state.js: tryRevive()` sind mit
+  Upgradepool-v2 Phase 4 vollständig entfernt. Damit sind auch
+  **`UMBAUPLAN-LP.md` Phase 9 (Nekromanten-Passiv), Phase 26 (alter
+  Signaturtopf Nekromant) und `PLAN.md` Phase 7 (Geisterpanzer als
+  3-Sekunden-Verbündeter) überholt** — maßgeblich ist der Nekromant-Auftrag
+  (Anhang A/B).
 - `src/ui/roomscreens.js` — Event- und Shop-Overlay (`createShopScreen`,
   Phase 13: Kartenregal, Schild, Sekundärtausch, Leben, Ablegen).
 - `src/ui/mapscreen.js` — Kartenscreen (Phase 12): zeigt den ganzen
@@ -3723,7 +3823,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v110`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v111`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -3777,16 +3877,20 @@ node tests/fogperf.mjs              # Additive Lichtmaske: Korrektheit + Renderz
 ```
 Playwright-Browser liegt unter `/opt/pw-browsers/chromium`
 (`executablePath` setzen; NICHT `playwright install`).
-Regressions-Standard: `tests/regression.mjs` muss grün sein (~1 s). Enthält:
+Regressions-Standard: `tests/regression.mjs` muss grün sein (~7 s). Enthält:
 5 Seeds über 16 Räume deterministisch bis zum Sieg, Ziellinien-Trace
 crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
 Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
-`tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3) sowie die
+`tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3), die
 LP-Umbau-Abschnitte 9–36 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
 Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
 Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
 Phase-18–27-Signaturtöpfe (alle zehn Klassen) + `signatureClass`-Filter,
 Phase-28-Schlussabnahme (gezogene Verteilung über den echten Pool, keine leere
-Seltenheitsstufe, Raumdauer als HP/DPS-Schranke)). Die frühere
-USP-Bankshot-Quote ist mit Phase 8 entfallen.
+Seltenheitsstufe, Raumdauer als HP/DPS-Schranke)) sowie die
+**Upgradepool-v2-Abschnitte 37–45** (fünf Seltenheiten, Synergie-Tags +
+-gewichtung, Zielsystem der Gegner-KI, Nekromant-Klassenidentität,
+Geisterpanzer-Basiseinheit, 18-Karten-Signaturpool und die Phase-9-Abnahme mit
+dem **Bosskampf-Korridor**). Die frühere USP-Bankshot-Quote ist mit
+LP-Phase 8 entfallen.
