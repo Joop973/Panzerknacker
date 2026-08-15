@@ -12,7 +12,7 @@ import { createTank, moveTank, fireBullet, layMine, useSecondary, useGadget, das
 import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
-import { createGhost, updateGhosts } from './ghost.js';
+import { createGhost, updateGhosts, killGhost } from './ghost.js';
 import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
 import { applyTypeEffects } from './damagetypes.js';
@@ -616,17 +616,16 @@ export function createState(data, tiles, opts) {
         // (state.rng), nie Math.random -- der Run bleibt deterministisch.
         // Limit OHNE Verdraengung: am Deckel passiert einfach nichts (kein
         // Wurf, kein Verbrauch) -- dieselbe Regel wie bei der Geisterbombe
-        // (tank.js: useSecondary()). createGhost() ist weiterhin die alte,
-        // vom Ziel geerbte Fabrik (Interimswert, s. ghost.js-Kopfkommentar)
-        // -- der Nekromant-Neubau (Phase 7) ersetzt sie durch feste
-        // Basiswerte, ohne dass sich an dieser Aufrufstelle etwas aendert.
+        // (tank.js: useSecondary()). createGhost() baut seit Phase 7 den
+        // FESTEN Basistyp (Anhang B S8) -- tank liefert nur noch Position/
+        // Ausrichtung des Spawnpunkts, keine cfg mehr.
         const killer = meta?.killer;
         const gcfg = state.data.balance.ghost || {};
         let spawnChance = 0;
         if (killer === state.player && pc.necromancer) spawnChance = gcfg.spawnChance?.necro ?? 0;
         else if (killer?.isGhost) spawnChance = gcfg.spawnChance?.ghost ?? 0;
         if (spawnChance > 0 && state.ghosts.length < (gcfg.maxActive ?? 3) && state.rng() < spawnChance) {
-          state.ghosts.push(createGhost(tank, state.data.balance));
+          state.ghosts.push(createGhost(state, tank.x, tank.y, tank.heading));
         }
       }
     },
@@ -1133,8 +1132,9 @@ export function stepState(state, cmd, dt) {
   // ist auf echte Panzer in state.tanks zugeschnitten und wuerde fuer
   // Geister falsche Sonderfaelle auswerten. Nur GEGNERISCHE Kugeln sind
   // gefaehrlich (Geister kaempfen auf Spielerseite); eigene/Geister-Kugeln
-  // ignorieren einander. Bewusst minimal (kein applyDamage/killTank) -- der
-  // Nekromant-Neubau (Phase 7 dieses Auftrags) baut die echten Todes-Hooks.
+  // ignorieren einander. killGhost() (Phase 7) ist der einzige Tod-Trichter
+  // -- Phase 8 haengt spaetere Todes-Hooks (Letzter Wille, Wiederkehr) dort
+  // ein, nicht hier.
   for (const b of state.bullets) {
     if (b.dead || b.owner === state.player || b.owner?.isGhost) continue;
     for (const g of state.ghosts) {
@@ -1142,7 +1142,7 @@ export function stepState(state, cmd, dt) {
       if (circlesOverlap(b.x, b.y, b.radius, g.x, g.y, g.cfg.radius)) {
         b.dead = true;
         g.hp -= b.damage ?? 1;
-        if (g.hp <= 0) g.alive = false;
+        if (g.hp <= 0) killGhost(g);
         break;
       }
     }

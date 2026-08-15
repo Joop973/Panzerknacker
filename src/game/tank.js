@@ -471,14 +471,13 @@ export function layMine(tank, state, throwOverride, forceEmp = false) {
 // Geisterpanzer und zaehlt gegen dasselbe Limit wie kill-ausgeloeste
 // Geister (data/balance.json: ghost.maxActive/spawnChance, s. state.js:
 // killTank()). Am Limit passiert nichts -- kein Verbrauch, keine
-// Verdraengung (Festgelegte Entscheidungen: "Geistlimit"). tank (der
-// Spieler selbst) dient als Vorlage fuer createGhost() -- es gibt keine
-// Leiche, von der geerbt werden koennte; ein Interimswert wie beim
-// Kill-Spawn (Phase 7 ersetzt das ganze Modul durch feste Basiswerte).
+// Verdraengung (Festgelegte Entscheidungen: "Geistlimit"). Seit Phase 7
+// liefert tank (der Spieler selbst) nur noch Position/Blickrichtung des
+// Spawnpunkts -- createGhost() baut den festen Basistyp, keine Vorlage mehr.
 function spawnGhostBomb(tank, state) {
   const cap = state.data.balance.ghost?.maxActive ?? 3;
   if (state.ghosts.length >= cap) return false;
-  state.ghosts.push(createGhost(tank, state.data.balance));
+  state.ghosts.push(createGhost(state, tank.x, tank.y, tank.turret));
   state.sounds.push({ name: 'shield', x: tank.x });
   state.spawnParticles?.(tank.x, tank.y, '#8ecaf0', 10, 90);
   return true;

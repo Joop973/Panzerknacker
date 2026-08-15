@@ -262,8 +262,13 @@ periodisch aus, wen sie angreifen (Spieler oder ein Geist), statt hart auf
 (Nekromant: Klassenidentität) ist gebaut** — die Geistermechanik ist ab
 Klassenwahl aktiv (Spawnchance beim Kill, Geisterbombe statt Minenslot,
 Kill-Zuordnung über `meta.killer`); Details im eigenen Abschnitt unten.
-**Nächste Sitzung: Phase 7 (Geisterpanzer neu bauen — `src/game/ghost.js`
-wird durch eine eigene, feste Basiseinheit ERSETZT, nicht ergänzt).**
+**Phase 7 (Geisterpanzer neu bauen) ist gebaut** — `src/game/ghost.js` ist
+komplett ersetzt: ein eigener, fester Basiseinheiten-Typ `ghost_tank` statt
+der geerbten cfg des getöteten Panzers; Details im eigenen Abschnitt unten.
+**Nächste Sitzung: Phase 8 (Signaturpool Nekromant — die zwölf alten
+`sig_necro_*`-Karten werden durch den 18-Karten-Pool aus Anhang A ersetzt,
+neue `core`-Schlüssel für die Geistereinheit wie `ghostHpAdd`/`ghostDamageAdd`/
+`ghostFireMult`/`ghostReviveChance`/`ghostCommander`).**
 Verbleibend sonst nur noch manuelle/optionale Punkte (s. To-do-Liste unten):
 der Bankshot-Faktor-Kalttest (2,0 → ggf. 2,5/3,0, nur nach echtem
 Spielgefühl) und die Telemetrie-Auswertung echter Runs.
@@ -3383,6 +3388,86 @@ bestehenden `ghost.js`-Mechanismus aus Phase 5 über zwei neue Ausloeser.
   zugeordneter Killer wäre dadurch unbemerkt geblieben (Ghost erzeugt, dann
   verfallen, am Ende trotzdem 0). Fix: sofort nach dem Tod prüfen.
 
+### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 7 (Geisterpanzer neu gebaut) — gemergt
+`src/game/ghost.js` ist **komplett ersetzt**, nicht ergänzt (Anhang B): ab
+jetzt haben ALLE Geister exakt dieselben, vom getöteten Panzer UNABHÄNGIGEN
+Basiswerte statt der bisher geerbten cfg (Phase 5/6 hatten das ausdrücklich
+als Interimswert dokumentiert).
+- **Eigener, fester Unit-Typ `ghost_tank`** (`data/tanks.json: types`, ohne
+  `player: true` und ohne Eintrag in `difficulty.json: danger` — sonst
+  erschiene er im Klassen-Auswahlbildschirm bzw. wäre als Raum-Gegner
+  kaufbar; beides per Gegenprobe als echter Absturz bestätigt, nicht nur
+  behauptet). Feste Werte: 60 LP, 8 Schaden, 2,0 s Schussintervall, 0
+  Abpraller, keine Rüstung. Drei **Prozentwerte** (`speedPct 0.7`,
+  `bulletSpeedPct 0.8`, `rangePct 0.65`) beziehen sich ausdrücklich auf die
+  **Standardklasse `player`**, nicht auf den aktuell gespielten Nekromanten.
+- **`resolveGhostCfg(data)`** (neu, in `ghost.js` — bewusst NICHT in
+  `cfg.js`): ruft die bestehende `resolveCfg(data, 'player')` als reine
+  Baseline auf und multipliziert die drei Prozentfelder darauf. Das erfüllt
+  „keine Parallelsysteme" (Anhang A §16), ohne `cfg.js` anzufassen oder
+  `ghost_tank` fälschlich als Spielerklasse zu markieren.
+- **`fireRangePx`** ist eine reine **Feuer-Schwelle** (65 % von
+  `balance.bullet.maxDistance`), keine Bewegungsgrenze — das Verfolgen
+  bleibt laut Anhang B ausdrücklich unbegrenzt. `updateGhosts()` bewegt sich
+  immer auf das Ziel zu, feuert aber nur innerhalb der Schwelle (+ Feuerkegel
+  + freie Sichtlinie).
+- **Kein Lebensdauer-Timer mehr** (Anhang B §6, hartes Muss): die Felder
+  `timeLeft`/`duration` sind aus `ghost.js` vollständig entfernt. Ein Geist
+  lebt bis zum Tod (LP ≤ 0) oder bis der Raum endet — `state.ghosts` wird bei
+  jedem `createState()`-Aufruf ohnehin frisch mit `[]` anglegt (kein
+  separates `resetRoom()` nötig, das gibt es im Code nicht als eigene
+  Funktion — `createState()` selbst IST dieser Reset).
+- **`killGhost(g)`** (neu): einziger Tod-Trichter für Geister, analog
+  `killTank()`. Aktuell reiner `alive=false`-Setter ohne Zusatzeffekt (Anhang
+  B: „der Basistod hat keinen Zusatzeffekt") — existiert als fester
+  Anschlusspunkt für Phase 8 (Wiederkehr-Karte).
+- **Beide Erzeuger reichen nur noch Position/Ausrichtung durch**, keine cfg
+  mehr: `state.js: killTank()`s Spawnwürfel ruft jetzt
+  `createGhost(state, tank.x, tank.y, tank.heading)`, `tank.js:
+  spawnGhostBomb()` entsprechend mit der Nekromanten-Position. Die
+  Geschoss-vs-Geist-Kollisionsschleife in `state.js` nutzt bei `hp<=0` jetzt
+  `killGhost(g)` statt eines direkten `g.alive=false`.
+- **Darstellung**: neue, immer sichtbare Lebensleiste über dem Geist
+  (`renderer.js: drawGhosts()`, Muster wie die Spieler-Leiste aus
+  UMBAUPLAN-LP Phase 3 — bewusst IMMER an, nicht nur bei Schaden, sonst wäre
+  die neue Sterblichkeit unlesbar), zusätzlich zum bestehenden
+  durchscheinenden Sprite (`body_ghost`/`turret_ghost`, unverändert seit der
+  Sprite-Lieferung). `sprites.js`/`debug.js` brauchten trotz Nennung in der
+  Auftrags-Dateiliste **keine Änderung** (verifiziert, nicht angenommen):
+  der Sprite-Lookup hängt schon an der literalen Zeichenkette `'ghost'`,
+  nicht an `g.type`; das Debug-Panel liest bereits dasselbe
+  `balance.ghost.maxActive`-Feld, das unverändert bleibt.
+- **Testkorrekturen an Bestandstests, ausgelöst durch den neuen Registry-
+  Eintrag** `ghost_tank`: die generische UMBAUPLAN-LP-Phase-2-Trefferzahl-
+  Prüfung („jeder Typ 2–5 Treffer") und ein Minen-Wirkungstest iterierten
+  bisher blind über `tanksData.types` und mussten `ghost_tank` (60 LP, kein
+  purchasable Gegner) explizit ausschließen — sonst schlägt der ganze
+  Regressionslauf fehl, ohne dass etwas kaputt ist.
+- **Ein Testfund beim eigenen Testbau**: die erste Fassung von „Raumwechsel
+  entfernt alle Geister" testete nur, dass der `necroRoom()`-Testhelfer
+  selbst `st.ghosts.length = 0` setzt (redundant zu `bullets`/`mines`,
+  kopiert) — das hätte den echten Mechanismus (frisches Array pro
+  `createState()`) nie geprüft, trivial wahr durch den Helfer statt durch
+  die Produktivlogik. Per Gegenprobe (Attrappe mit geteiltem Array über
+  `state.js`) gefunden und die Zeile aus dem Helfer entfernt.
+- **Neue Dauertests** (Abschnitt 43, Gegenprobe für jeden Kernpunkt
+  bestanden, teils mit hartem Browser-Absturz statt nur einem Check-Fehler
+  bestätigt — `ghost_tank` in `danger` bzw. ein Geist in `state.tanks` reißen
+  `DRIVES[role]`/`ai.threatTimer` sofort um): einheitlicher Unit-Typ über
+  beide Erzeuger, feste Basiswerte exakt gegen Anhang B, Mechanismus der
+  Prozent-Multiplikation (synthetische `speedPct`/`bulletSpeedPct`/
+  `rangePct`-Overrides), keine Stat-Übernahme (leichter vs. übermächtiger
+  Testgegner ergeben identische Geister), kein Lebensdauer-Timer (20 s ohne
+  Ziel simuliert), Feuer-Schwelle (schiesst nicht ausserhalb, verfolgt aber
+  trotzdem; synthetischer `rangePct`-Override statt realer Arena-Distanzen,
+  weil die echten 780 px in keiner Testarena Platz haben), `killGhost()` ohne
+  Nebeneffekt + idempotent, neuer Geist nach dem Tod des alten (Deckel
+  blockiert nicht dauerhaft), Raumwechsel entfernt alle Geister, `ghost_tank`
+  weder als Raum-Gegner kaufbar noch je in `state.tanks`. Playwright-Smoke
+  (Necromant wählen, Run starten, Snapshot bestätigt `starterTank: 'c_necro'`,
+  keine Konsolenfehler) + ein separater Fake-Canvas-Renderlauf mit einem
+  angeschlagenen Geist (Lebensleiste zeichnet, kein Absturz) bestanden.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`sig_necro_geisterlegion` ist wirkungslos (Upgradepool-v2 Phase 4)**:
       `core: {}`, weil ihre einzigen zwei Effekte (`grantGhostCrew`,
@@ -3473,12 +3558,16 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   werden gezaehlt, nicht heruntergezaehlt (bildratenunabhaengig). Werte in
   `data/status.json`. Haengt bis Phase 6 an keiner Quelle — nur
   `state.applyStatus()` (Debugtasten 1/2/3 bei `?debug=1`).
-- `src/game/ghost.js` — Geisterpanzer, seit Upgradepool-v2 Phase 6 wieder
-  AKTIV (zwei Erzeuger: `state.js: killTank()`s Spawnwürfel und `tank.js:
-  useSecondary()`s Geisterbombe), aber weiterhin ein INTERIMSSYSTEM: Phase 7
-  ersetzt das ganze Modul durch eine feste Basiseinheit. `createGhost`,
-  `updateGhosts` (eigenes `state.ghosts`-Array, kein Eintrag in
-  `state.tanks`; panzerkompatible Form seit Upgradepool-v2 Phase 5).
+- `src/game/ghost.js` — Geisterpanzer (Upgradepool-v2 Phase 7 komplett neu
+  gebaut, ersetzt das Phase-5/6-Interimssystem): eigener, fester Unit-Typ
+  `ghost_tank` (`data/tanks.json`) mit vom getöteten Panzer UNABHÄNGIGEN
+  Basiswerten (`resolveGhostCfg()` skaliert Prozentfelder auf die
+  Standardklasse `player`, nicht auf den Nekromanten selbst), kein
+  Lebensdauer-Timer mehr, `killGhost()` als einziger Tod-Trichter. Zwei
+  Erzeuger reichen nur noch Position/Ausrichtung durch: `state.js:
+  killTank()`s Spawnwürfel und `tank.js: useSecondary()`s Geisterbombe.
+  Eigenes `state.ghosts`-Array, kein Eintrag in `state.tanks` (blockiert
+  keine Kugeln, zählt nicht gegen `limits.enemiesAlive`).
 - `src/game/ai.js` — Gegner-KI-Dispatcher + Zielsystem (Upgradepool-v2
   Phase 5): `resolveTarget`/`pickTarget`/`updateTargeting`/`registerThreat`
   wählen zwischen Spieler und Geistern statt hart auf `state.player` zu

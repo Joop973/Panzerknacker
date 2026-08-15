@@ -76,6 +76,8 @@ export const TANK_COLORS = {
   t_reactor: '#e0a83c', // Reaktorkern -- warnendes Orange
   t_mirror: '#7fe6ff', // Der Spiegel -- kaltes Cyan, eigener Ton als das Prisma
   t_phalanx: '#c9d0da', // Phalanx-Wache -- helles Stahlgrau
+
+  ghost_tank: '#cfe0f5', // Geisterpanzer (Anhang B) -- blasses Kaltweiss
 };
 
 // Elite-Affixe (Phase 9): Farbpunkt je Affix-id (drawTank()).
@@ -945,8 +947,9 @@ export function createRenderer(ctx) {
 
   // Geisterpanzer (Phase 7): EIN gemeinsames Geister-Sprite fuer alle Panzer,
   // die zum Geist werden -- durchscheinend gezeichnet (konstante Transparenz
-  // statt Blinken), unabhaengig vom Ursprungstyp. Faellt ohne geladenes
-  // Sprite auf die alte prozedurale Wanne+Rohr-Form in der Typfarbe zurueck.
+  // statt Blinken), unabhaengig vom Ursprungstyp (ohnehin immer 'ghost_tank'
+  // seit Anhang B, Phase 7). Faellt ohne geladenes Sprite auf die alte
+  // prozedurale Wanne+Rohr-Form in der Typfarbe zurueck.
   function drawGhosts(ctx, state, alpha) {
     const ghostBody = sprite('body', 'ghost');
     const ghostTur = sprite('turret', 'ghost');
@@ -977,6 +980,22 @@ export function createRenderer(ctx) {
         ctx.restore();
       }
       ctx.globalAlpha = 1;
+
+      // Lebensleiste (Anhang B: "durchscheinender Look PLUS sichtbare LP" --
+      // sonst ist die neue Sterblichkeit unlesbar, seit Geister ab Phase 7
+      // echte, sichtbar sinkende LP haben). Anders als bei normalen Gegnern
+      // (nur bei Schaden, Phase 2) IMMER sichtbar: es gibt hoechstens 3-4
+      // Geister gleichzeitig, ein Dauerbalken ist hier keine Unordnung.
+      if (g.cfg.maxHp > 0) {
+        const w = Math.round(r * 2);
+        const bx = Math.round(x - w / 2);
+        const by = Math.round(y - r - 14);
+        const frac = Math.max(0, Math.min(1, g.hp / g.cfg.maxHp));
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(bx - 1, by - 1, w + 2, 5);
+        ctx.fillStyle = TANK_COLORS.ghost_tank || '#ffffff';
+        ctx.fillRect(bx, by, Math.max(1, Math.round(w * frac)), 3);
+      }
     }
   }
 
