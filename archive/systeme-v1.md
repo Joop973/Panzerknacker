@@ -6,6 +6,19 @@ klein/verstreut für eigene Dateien sind, aber zu wichtig für einen reinen
 `ARCHIV.md`-Einzeiler. Jeder Abschnitt nennt die entfernende Phase, den
 Grund und die tragenden Codestellen (verifiziert am Stand vom 2026-08-17).
 
+> **Update (Phase 4, gemergt):** Abschnitte 1-4 sind wie unten geplant
+> umgesetzt, mit zwei kleinen Abweichungen: (a) der `elements`-Filter in
+> `buildCandidates()` (Abschnitt 3) ist **entfernt**, nicht nur inert stehen
+> gelassen (leerer Code ohne Zweck ist im Projekt sonst nirgends Konvention);
+> (b) der 5-Karten-Sockel bekam zusätzlich zwei proaktive Sicherheitsnetze,
+> die nicht im Auftragstext stehen: `rollOffers()`/`drawOne()` füllen ein
+> erschöpftes Angebot seither mit `null`/einem kürzeren Array statt der
+> alten Fallback-Karte auf (der Sockel hat nur 20 Gesamtstufen — ein langer
+> Run kann ihn leerziehen), und `run.js` weicht bei leerem Angebot sofort auf
+> `afterRoomDone()` aus statt mit 0 Karten im Upgrade-Screen hängen zu
+> bleiben (dieselbe Fehlerklasse wie „Bugfix: Kartenscreen blockierte den
+> Run", CLAUDE.md). Details/Testabdeckung: `tests/regression.mjs`.
+
 ## 1. Transformationen (entfällt mit Phase 4)
 
 `data/transformations.json`: drei Karten desselben Tags (Schwelle

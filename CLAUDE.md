@@ -3753,8 +3753,9 @@ war entgegen der ursprünglichen Annahme aktiv) ist mit gefunden und
 mitentfernt. **Phase 2 (Kampfkern: Kugeltempo 200→450, Flanken-/
 Heckschaden, Exekutionsschwelle, Treffer-Rückmeldung) ist gebaut** —
 eigener Abschnitt weiter unten. **Phase 3 (Der Grüne wird Mörserschütze)
-ist gebaut** — eigener Abschnitt weiter unten. **Nächste Sitzung: Phase 4**
-(Upgrades raus, Sockel rein).
+ist gebaut** — eigener Abschnitt weiter unten. **Phase 4 (Upgrades raus,
+Sockel rein) ist gebaut** — eigener Abschnitt weiter unten. **Nächste
+Sitzung: Phase 5** (Klassen parken).
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -4109,6 +4110,88 @@ Bande. Neues Modul **`src/game/mortar.js`** (Muster wie `mine.js`/`trap.js`):
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
   **Nächste Sitzung: Phase 4** (Upgrades raus, Sockel rein).
 
+### Grundsteinumbau v3 — Phase 4 (Upgrades raus, Sockel rein) — gemergt
+Alle 251 Karten sind aus `data/upgrades.json` entfernt (Archiv aus Phase 0:
+`archive/upgrades-v1.json`) und durch **fünf** neutrale, klassenunabhängige
+Sockelkarten ersetzt — bewusst mager, der saubere Nullpunkt für die
+künftigen Klassenpools. Alle fünf nutzen bestehende `core`-Schlüssel aus der
+generischen Kernpool-Schleife (UMBAUPLAN-LP Phase 10) und brauchten deshalb
+**keine** `cfg.js`-Codeänderung: `sockel_panzerung` (+15 maximale LP, Stufen
+5), `sockel_motor` (Tempo +8 %, Stufen 5), `sockel_magazin` (+1 Magazin,
+Stufen 3), `sockel_ladeautomat` (Nachladezeit −10 %, Stufen 5),
+`sockel_ersatzpanzer` (+1 maximales und aktuelles Leben, Stufen 2). Werte
+sind Startvorschläge (`_todo: balance`).
+- **`sockel_ersatzpanzer` ist die einzige Ausnahme**: `core.extraLifeAdd`
+  wirkt auf `run.maxLives`/`run.lives`, nicht auf ein Panzer-cfg-Feld —
+  gelesen in `run.js: applyUpgradeChoice()` direkt aus
+  `upgradesData.upgrades[offer.id]?.core?.extraLifeAdd`, nicht in der
+  generischen cfg.js-Schleife (die kennt nur Panzer-Felder).
+- **Tags bewusst NICHT identisch mit den fünf Transformations-Tags**
+  (`terrain`/`mobility`/`information`/`defense`/`control`): die Sockelkarten
+  tragen `health`/`speed`/`magazine`/`reload`/`stat` — sonst würde die
+  Fortschrittsanzeige im Upgrade-Screen einen nie einlösbaren „3/3"-Fortschritt
+  zeigen. **Transformationen sind deaktiviert**: `run.js:
+  applyUpgradeChoice()` ruft `unlockTransformation()` nicht mehr auf — die
+  Funktion selbst UND `data/transformations.json` bleiben unangetastet
+  stehen (Wiederanschlusspunkt, `archive/systeme-v1.md` Abschnitt 1).
+- **Zweitelement-System und Element-Filter sind ersatzlos entfernt**
+  (`run.js`: `ELEMENTS`/`primaryElementOf`/`drawSecondElement`/`elementsOf`/
+  `rerollSecondElement` gelöscht, `run.secondElement`/`elementRerolls` aus
+  `createRun()`/`runSnapshot()` entfernt; `upgradepool.js`:
+  `makeElementWeight()` gelöscht, `makeCombinedWeight()` delegiert jetzt nur
+  noch an `makeSynergyWeight()`; `main.js`: `elementLineFor()` zeigt nur noch
+  die Primärelement-Zeile, `getSecondElement`/`onRerollElement` aus dem
+  Shop-Kontext entfernt — `roomscreens.js` blendet die Reroll-Sektion ohne
+  den Callback automatisch aus). Der `signatureClass`-Filter in
+  `buildCandidates()` bleibt als Pipeline-Baustein bestehen (aktuell
+  ungenutzt, keine Sockelkarte trägt `signatureClass`).
+- **Schatzkammer/Verflucht geben ein Schrottpaket statt eines Legendärs**
+  (neue Funktion `run.js: grantTreasureScrap()`, `balance.json: scrap.treasure`
+  = 12, `_todo: balance`): der Sockel hat keine einzige `legendary`-Karte
+  mehr. `rollReward()`s `onlyRarity: 'legendary'`-Zweig bleibt **unangetastet
+  im Code** als Wiederanschlusspunkt (`archive/systeme-v1.md` Abschnitt 4,
+  „nicht löschen, nur umleiten") — er wird nur nicht mehr aufgerufen. Beide
+  Raumtypen überspringen den Kartenscreen jetzt komplett (`afterRoomDone()`
+  direkt statt `run.phase = 'upgrade'`).
+- **Kein Fallback-Karten-Auffüllen mehr**: `upgradepool.js: rollOffers()`
+  gibt bei erschöpftem Pool sauber ein **kürzeres** Array zurück (statt mit
+  einer „+1 Leben"-Platzhalterkarte aufzufüllen), `drawOne()` gibt `null`
+  zurück statt eines Fallback-Objekts. Alle Aufrufer in `run.js`
+  (`rerollOffers`, `banOffer`, `buyFourthCard`, `applyUpgradeChoice`) sind
+  auf diese Semantik umgestellt; `data/upgrades.json` hat kein
+  `fallback`-Feld mehr. Die verbliebenen `o.fallback`-Prüfungen in
+  `upgradescreen.js`/`roomscreens.js`/`main.js` sind harmloser toter Code
+  (immer `undefined`/falsy) und bewusst nicht angefasst.
+- **Zwei proaktive Sicherheitsnetze, über den Auftragstext hinaus** (beide
+  in `archive/systeme-v1.md` als Abweichung dokumentiert): (1) der 5-Karten-
+  Sockel hat nur 20 Gesamtstufen — ein hinreichend langer Run (v. a. Endlos)
+  kann ihn leerziehen. Ohne Netz bliebe `run.phase` bei einem leeren
+  Kartenangebot auf `'upgrade'` hängen, ohne Weiter-Knopf — dieselbe
+  Fehlerklasse wie „Bugfix: Kartenscreen blockierte den Run" (s. o.). Fix:
+  `stepRun()`s Belohnungsblock und `rerollOffers()` prüfen `offers.length`
+  und weichen bei 0 auf `afterRoomDone()` aus, statt in die leere Kartenwahl
+  zu gehen. (2) `cursed`-Räume (garantierter Affix + garantiertes Legendär im
+  alten System) bekommen aus demselben Grund wie `treasure` ein Schrottpaket
+  statt eines 0-Karten-Screens — der Auftragstext erwähnt nur `treasure`
+  namentlich, aber `cursed` hätte sonst denselben Blocker gehabt.
+- **Testsuite**: die Sektionen 18–35 (Kernpool + sechs Element-Töpfe + zehn
+  Signaturtöpfe, UMBAUPLAN-LP Phasen 10–27) und 44 (Signaturtopf Nekromant,
+  18 Karten) sind archiviert — sie prüften ausschließlich Struktur/Filter/
+  Applier-Arithmetik der jetzt archivierten Karten-ids. Abschnitt 36 (Phase
+  28) behält nur noch die kartenunabhängige Raumdauer-Schranke, die beiden
+  Rarity-Verteilungsprüfungen über den echten Pool sind archiviert (der
+  Sockel ist zu 100 % `common`). Mehrere Mechanismus-Tests, die bisher über
+  eine echte (jetzt archivierte) Karte liefen, sind auf direkte
+  cfg-Feld-Injektion bzw. eine synthetische Testkarte umgestellt (Muster:
+  Konterschild-Raumkontext in Abschnitt 7b, `exclusions`-Filter in Abschnitt
+  42/46, Nekromanten-Wiederkehr in Abschnitt 45) — sie bewachen weiterhin den
+  ENGINE-Mechanismus, nicht die entfernte Karte. Alle 5 Seeds spielen weiter
+  deterministisch bis zum Sieg (inkl. Karte/Shop/Event/Boss); `tests/
+  gamepad.mjs`, `tests/music.mjs`, `tests/uilayout.mjs`, `tests/viewport.mjs`
+  bleiben grün.
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 5** (Klassen parken).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -4362,25 +4445,29 @@ Playwright-Browser liegt unter `/opt/pw-browsers/chromium`
 Regressions-Standard: `tests/regression.mjs` muss grün sein (~7 s). Enthält:
 5 Seeds über 16 Räume deterministisch bis zum Sieg, Ziellinien-Trace
 crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
-`sounds.json`, Transformationen freischaltbar, jede Karte ziehbar,
-Effekt-Renderpfad mit Fake-Canvas, **Overlay- und Touch-Verhalten mit
-`tests/domstub.mjs`** (inkl. Wurfstick/`pointercancel`, P3), die
-LP-Umbau-Abschnitte 9–36 (Schadensmodell, LP, Statuseffekte, Schadenstypen,
-Krit, Phase-8-Prisma/Schild, Phase-9-Klassen, Phase-10-Kernpool +
-Verteilungs-Fix, Phase-11-Physisch-Topf + Element-Filter,
-Phase-18–27-Signaturtöpfe (alle zehn Klassen) + `signatureClass`-Filter,
-Phase-28-Schlussabnahme (gezogene Verteilung über den echten Pool, keine leere
-Seltenheitsstufe, Raumdauer als HP/DPS-Schranke)) sowie die
-**Upgradepool-v2-Abschnitte 37–45** (fünf Seltenheiten, Synergie-Tags +
--gewichtung, Zielsystem der Gegner-KI, Nekromant-Klassenidentität,
-Geisterpanzer-Basiseinheit, 18-Karten-Signaturpool und die Phase-9-Abnahme mit
-dem **Bosskampf-Korridor**). Die frühere USP-Bankshot-Quote ist mit
-LP-Phase 8 entfallen. Mit **Grundsteinumbau Phase 1** ist der komplette
-Bandenschuss (Abpraller, Bankshot-KI, Trickshot-Belohnung, Spiegelwand)
-entfernt — Abschnitt 12 ("Abprall-Bonus") und mehrere Bandenschuss-
-Teilprüfungen in anderen Abschnitten sind archiviert (`ARCHIV.md`/
-`archive/bandenschuss.md`), nicht umnummeriert. **Abschnitt 47** bewacht
-den Ersatz-USP aus **Grundsteinumbau Phase 2** (Flanken-/Heckschaden,
-Exekutionsschwelle, Heck-Kill-Zeitlupe, Kampfkern-Telemetrie). **Abschnitt
-48** bewacht **Grundsteinumbau Phase 3** (t_green als Mörserschütze:
-`fireMortar()`/`updateMortars()`, `minRangePx`-Gate, Telegraph).
+`sounds.json`, jede Karte ziehbar, Effekt-Renderpfad mit Fake-Canvas,
+**Overlay- und Touch-Verhalten mit `tests/domstub.mjs`** (inkl.
+Wurfstick/`pointercancel`, P3), die LP-Umbau-Abschnitte 9–17 (Schadensmodell,
+LP, Statuseffekte, Schadenstypen, Krit, Phase-8-Prisma/Schild,
+Phase-9-Klassen — reine Engine-Mechanismen mit synthetischen Werten, keine
+Kartenabhängigkeit) sowie die **Upgradepool-v2-Abschnitte 37–45** (fünf
+Seltenheiten, Kategorie/Synergie-Tag-Struktur, Synergiegewichtung,
+Zielsystem der Gegner-KI, Nekromant-Klassenidentität,
+Geisterpanzer-Basiseinheit und die Phase-9-Abnahme mit dem
+**Bosskampf-Korridor**). Die frühere USP-Bankshot-Quote ist mit LP-Phase 8
+entfallen. Mit **Grundsteinumbau Phase 1** ist der komplette Bandenschuss
+(Abpraller, Bankshot-KI, Trickshot-Belohnung, Spiegelwand) entfernt —
+Abschnitt 12 ("Abprall-Bonus") und mehrere Bandenschuss-Teilprüfungen in
+anderen Abschnitten sind archiviert (`ARCHIV.md`/`archive/bandenschuss.md`),
+nicht umnummeriert. **Abschnitt 47** bewacht den Ersatz-USP aus
+**Grundsteinumbau Phase 2** (Flanken-/Heckschaden, Exekutionsschwelle,
+Heck-Kill-Zeitlupe, Kampfkern-Telemetrie). **Abschnitt 48** bewacht
+**Grundsteinumbau Phase 3** (t_green als Mörserschütze:
+`fireMortar()`/`updateMortars()`, `minRangePx`-Gate, Telegraph). Mit
+**Grundsteinumbau Phase 4** (Upgrades raus, Sockel rein) sind die Abschnitte
+18–35 (Kernpool + sechs Element-Töpfe + zehn Signaturtöpfe) und 44
+(Signaturtopf Nekromant) archiviert — sie prüften Struktur/Applier-Arithmetik
+der jetzt archivierten 251-Karten-Pool-Inhalte; Abschnitt 36 behält nur noch
+die kartenunabhängige Raumdauer-Schranke, Transformationen-Freischaltbarkeit
+(vormals Abschnitt 6a) ist ebenfalls archiviert (`ARCHIV.md`/
+`archive/upgrades-v1.json`/`archive/systeme-v1.md`).
