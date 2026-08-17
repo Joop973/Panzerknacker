@@ -31,6 +31,15 @@
     "slowMoS": 0.15,
     "slowMoScale": 0.35
   },
+  "_comment_mortar": "Grundsteinumbau Phase 3 (t_green wird Moerserschuetze). Alle Werte laut Auftrag '_todo: balance' -- noch nicht am Spielgefuehl geprueft. flightTimeS: Flugzeit bis zum Einschlag (auch die Dauer, ueber die die Einschlagmarkierung waechst). radiusPx/damage: wie mine.js: explodeAt(). leadPct: Anteil der Spielerbewegung, den das Zielsystem vorhersagt (0 = zielt auf die Position beim Abschuss, 1 = volle Vorhersage Position+Geschwindigkeit*flightTimeS). minRangePx: unter dieser Distanz feuert der Gruene nicht (Distanzgegner, sonst bombt er sich selbst weg).",
+  "mortar": {
+    "_todo": "balance",
+    "flightTimeS": 1.1,
+    "radiusPx": 44,
+    "damage": 25,
+    "leadPct": 0.4,
+    "minRangePx": 96
+  },
   "_comment_crit": "UMBAUPLAN-LP Phase 7 (Krit-Umbau): 5 % auf doppelten Schaden waeren +5 % Gesamtschaden und damit unsichtbar. Deshalb ist ein Krit ein spuerbares EREIGNIS: mult-facher Trefferschaden UND (resetsReload) das eigene Nachladen ist sofort zurueckgesetzt -- man darf sofort wieder feuern (nur noch vom Magazin begrenzt). baseChance ist der Grundwert; Karten/Klassen (Phase 9) bauen ihn bis cap auf. Vorerst SPIELERSEITIG: der Roll und das Nachlade-Reset haengen an tank === state.player. Gegner-Krit ist nicht spezifiziert und wuerde ueber resetsReload zu erratischem Doppelfeuer fuehren -- bewusst nicht gebaut. Der 2x-Schaden multipliziert sich mit dem Abprall-Bonus (Phase 4): ein gebandeter Krit macht 2 x 2 = 4x.",
   "crit": {
     "baseChance": 0.05,

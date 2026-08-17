@@ -279,13 +279,13 @@
       "speed": "fix",
       "magazine": 2,
       "mines": 0,
-      "weapon": "rocket",
+      "weapon": "mortar",
       "role": "guardian",
       "accuracy": 0.9,
       "label": "Grüner",
       "maxHp": 40,
       "damage": 25,
-      "desc": "Steht fest und schießt gerade Raketen mit 2 s Nachladezeit.",
+      "desc": "Steht fest und schießt Mörsergranaten über Wände hinweg, mit 2 s Nachladezeit.",
       "fireRate": 2
     },
     "t_purple": {

@@ -21,6 +21,7 @@ import {
 } from './tank.js';
 import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
+import { fireMortar, updateMortars } from './mortar.js';
 import { updateTraps } from './trap.js';
 import { createGhost, updateGhosts, killGhost } from './ghost.js';
 import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
@@ -307,6 +308,7 @@ export function createState(data, tiles, opts) {
     bullets: [],
     mines: [],
     traps: [],
+    mortars: [], // Grundsteinumbau Phase 3: fliegende Moerser-Granaten (t_green)
     ghosts: [], // Phase 7: Geisterpanzer (kein Eintrag in tanks -- s. ghost.js)
     explosions: [],
     flashes: [],
@@ -965,7 +967,14 @@ export function stepState(state, cmd, dt) {
     // Schuss, der einem Geist gilt.
     t.aimingAtPlayer = fire && resolveTarget(t, state) === state.player;
     moveTank(t, move, state, dt);
-    if (fire) fireBullet(t, state);
+    // Moerserschuetze (Grundsteinumbau Phase 3, t_green): eigener Abschuss-
+    // pfad statt fireBullet() -- die Granate landet nie in state.bullets,
+    // deshalb greifen Deflektor/Frontpanzerung (nur gerade Geschosse)
+    // automatisch nicht.
+    if (fire) {
+      if (t.cfg.weapon === 'mortar') fireMortar(t, state);
+      else fireBullet(t, state);
+    }
     if (mine) layMine(t, state);
   }
 
@@ -1186,6 +1195,7 @@ export function stepState(state, cmd, dt) {
 
   updateMines(state, dt);
   updateTraps(state, dt);
+  updateMortars(state, dt); // Grundsteinumbau Phase 3
   updateGhosts(state, dt);
   updateWave(state, dt);
 

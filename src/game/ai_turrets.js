@@ -15,8 +15,11 @@
 // Grundsteinumbau Phase 1: der Abpraller-Rechner (frueher requiresBounceShot/
 // solveBounce/bounceShot, einziger Nutzer t_green) ist mit dem Bandenschuss
 // vollstaendig entfernt -- Details in ARCHIV.md (archive/bandenschuss.md).
-// t_green schiesst seitdem uebergangsweise ueber die normale Turmlogik
-// unten (accuracy 0.9); Phase 3 baut ihn zum Moerserschuetzen um.
+// Grundsteinumbau Phase 3: t_green ist jetzt ein Moerserschuetze
+// (cfg.weapon === 'mortar', src/game/mortar.js) -- die Zielaufloesung/Kegel-
+// /Sichtlinienpruefung unten bleibt unveraendert (dieselbe generische
+// Turmlogik wie jeder andere Typ mit accuracy 0.9), nur der minRangePx-Gate
+// ganz unten ist mörserspezifisch.
 
 import { range } from '../core/rng.js';
 import { angleDiff, turnToward, targetInSight, muzzleBlocked, clearLine, resolveTarget } from './ai.js';
@@ -87,5 +90,13 @@ export function roleTurret(tank, state, dt) {
   // strong_aim). Vorhaltezielen verlangt sie immer.
   const needSight = acc >= 0.3 || cfg.leadAim;
   if (needSight && !clearLine(state, tank.x, tank.y, targetX, targetY)) return false;
+  // Mörser (Grundsteinumbau Phase 3, t_green): unter minRangePx feuert er
+  // nicht -- sonst bombt er sich selbst weg und ist im Nahkampf absurd
+  // (er ist ein Distanzgegner). Die Sichtlinien-Pflicht oben ("braucht
+  // Sichtlinie im Moment des Abschusses") gilt unverändert mit.
+  if (cfg.weapon === 'mortar') {
+    const minRangePx = state.data.balance.mortar?.minRangePx ?? 0;
+    if (Math.hypot(p.x - tank.x, p.y - tank.y) < minRangePx) return false;
+  }
   return true;
 }

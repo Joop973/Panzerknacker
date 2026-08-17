@@ -3752,8 +3752,9 @@ Umbau), eine dritte, in Phase 0 übersehene Stelle (Spiegelwand-Erzeugung
 war entgegen der ursprünglichen Annahme aktiv) ist mit gefunden und
 mitentfernt. **Phase 2 (Kampfkern: Kugeltempo 200→450, Flanken-/
 Heckschaden, Exekutionsschwelle, Treffer-Rückmeldung) ist gebaut** —
-eigener Abschnitt weiter unten. **Nächste Sitzung: Phase 3** (Der Grüne
-wird Mörserschütze).
+eigener Abschnitt weiter unten. **Phase 3 (Der Grüne wird Mörserschütze)
+ist gebaut** — eigener Abschnitt weiter unten. **Nächste Sitzung: Phase 4**
+(Upgrades raus, Sockel rein).
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -4029,6 +4030,85 @@ Ersatz für den alten Trickshot-Moment.
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
   **Nächste Sitzung: Phase 3** (Der Grüne wird Mörserschütze).
 
+### Grundsteinumbau v3 — Phase 3 (Der Grüne wird Mörserschütze) — gemergt
+`t_green` bekommt seine Deckungsbrecher-Rolle zurück — mit Bogen statt
+Bande. Neues Modul **`src/game/mortar.js`** (Muster wie `mine.js`/`trap.js`):
+`fireMortar()`/`updateMortars()`, neues `state.mortars`-Array.
+- **Keine physische Kugel**: `fireMortar()` legt einen Eintrag in
+  `state.mortars` an (`x0/y0` Abschussort, `tx/ty` Zielort, `age`,
+  `flightTimeS`) statt eine `createBullet()`-Kugel in `state.bullets` zu
+  erzeugen. Dadurch greifen Deflektor und Frontpanzerung (die beide nur
+  `state.bullets` lesen) **automatisch** nicht — kein Sonderfall im
+  Trefferpfad nötig, „nicht reflektierbar" ergibt sich rein aus der
+  Architektur.
+- **Ziel = Spielerposition beim Abschuss + Vorhalteanteil**:
+  `tx = p.x + p.vx * (flightTimeS * leadPct)` — bei `leadPct: 0.4`
+  entkommt ein Teil der Spielerbewegung dem Wurf (kein perfektes
+  Vorhaltezielen wie bei `t_black`). `resolveTarget()` (Upgradepool-v2
+  Phase 5) liefert dasselbe Ziel wie die Turmausrichtung — kann auch ein
+  Geist sein.
+- **Magazin/Nachladen bleiben wie beim alten Raketenwerfer** (`magazine: 2`,
+  `fireRate: 2`), aber `fireMortar()` muss sie **selbst** durchsetzen
+  (`tank.cooldown > 0` blockt, `tank.cooldown = tank.cfg.fireCooldown` nach
+  dem Schuss, ein eigenes `liveMortarsOf()` zählt gegen `state.mortars`
+  statt `tank.js: liveBulletsOf()` gegen `state.bullets`) — `roleTurret()`
+  entscheidet nur noch, OB gefeuert werden soll, nicht mehr WIE.
+- **`minRangePx`-Gate in `ai_turrets.js: roleTurret()`**: eine einzelne neue
+  Zeile ganz am Ende, nur für `cfg.weapon === 'mortar'` — unter der
+  Mindestdistanz feuert der Grüne nicht (sonst bombt er sich selbst weg).
+  Die bestehende Sichtlinien-/Kegel-Prüfung (`accuracy: 0.9` verlangt schon
+  freie Sicht) bleibt unverändert die „Sichtlinie im Moment des Abschusses"-
+  Bedingung aus dem Auftrag — kein zweiter Mechanismus nötig.
+- **Einschlag über den vorhandenen Helfer** `mine.js: explodeAt()` (Radius/
+  Schaden/Besitzer aus `balance.mortar`) — läuft nach Ablauf der Flugzeit in
+  `updateMortars()`. Kennt keine Sichtlinien-/Wandprüfung für den
+  Explosionsschaden selbst (wie bei Minen schon immer), die Granate wirkt
+  dadurch automatisch **über jede Wand hinweg**, ohne dass Phase 3 daran
+  etwas bauen musste. Explosionen ignorieren wie überall die Panzerung —
+  der Mörser trifft auch den Gepanzerten von vorn, passend zur Rolle.
+  Eigenbeschuss der KI-Seite ist erlaubt (`spare: null`).
+- **Telegraf** (`effects.js: drawMortars()`, **immer sichtbar, kein
+  Schalter** — Fairness-Regel des Auftrags): gestrichelter Umriss zeigt
+  sofort den vollen Explosionsradius, eine gefüllte Fläche wächst mit der
+  verstreichenden Flugzeit, ein kleiner dunkler Schatten deutet die Granate
+  im Flug an (linear vom Abschuss- zum Zielort interpoliert — kein
+  physischer Bogen, die Granate fliegt ohnehin „über" jede Wand, eine
+  Höhensimulation wäre hier ohne Mehrwert).
+- **Balance-Block `data/balance.json: mortar`** (`flightTimeS: 1.1`,
+  `radiusPx: 44`, `damage: 25`, `leadPct: 0.4`, `minRangePx: 96`) — alle
+  Werte laut Auftrag `_todo: balance`, noch nicht am Spielgefühl geprüft.
+  Neuer Sound `mortar_launch` (tiefer, dumpfer Abschussknall statt
+  `shoot_enemy`), der Einschlag läuft über den vorhandenen `boom`-Ton aus
+  `explodeAt()`.
+- **`data/tanks.json: t_green`**: `weapon: "rocket"` → `"mortar"`,
+  Beschreibungstext aktualisiert. `magazine`/`fireRate`/`accuracy`
+  unverändert.
+- **Neuer Testabschnitt 48** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt bestanden — je einzeln absichtlich rot gemacht: `minRangePx`-
+  Gate entfernt, Vorhalteberechnung entfernt, Magazin-Deckel entfernt,
+  Cooldown-Zuweisung entfernt, Explosions-Auslöser künstlich verzögert,
+  Filter für explodierte Granaten entfernt, Wandschutz künstlich eingebaut,
+  ein echtes `createBullet()` künstlich in `state.bullets` eingeschleust):
+  Struktur (`t_green.weapon`, Magazin/Nachladen unverändert,
+  `balance.mortar` vollständig), `fireMortar()`-Mechanismus mit EIGENEN
+  Zahlen (Vorhalteziel, Abschussort, Cooldown-Zuweisung, Sound),
+  Cooldown-/Magazin-Sperre (inkl. der Falle „eine geblockte Anfrage legt
+  trotzdem eine Granate an"), `updateMortars()` explodiert nicht vor Ablauf
+  der Flugzeit und erst danach über den echten `explodeAt()`-Pfad (Radius/
+  Schaden/Explosions-Anzeige), Einschlagschaden ignoriert eine dazwischen-
+  liegende Wand, `minRangePx`-Gate in `roleTurret()` mit EIGENEM Wert, kein
+  Eintrag in `state.bullets` entsteht. Abschnitt 7c (reiner „feuert
+  überhaupt"-Nachweis, seit Phase 1 ein dokumentierter Platzhalter) ist auf
+  den `mortar_launch`-Sound umgestellt statt archiviert. Der Fake-Canvas-
+  Renderpfadtest (Abschnitt 6d) bekommt `drawMortars` **und** — als
+  Nachtrag — das in Phase 2 vergessene `drawLeadMarkers` dazu.
+- Playwright-Smoke (eigens konstruierte Szene über die echten Spielmodule,
+  kein Durchspielen bis Raum 5 nötig): eine Granate fliegt, `render()`
+  zeichnet den Telegraphen (gestrichelter Kreis + wachsende Füllung +
+  Schatten) fehlerfrei, keine Konsolenfehler.
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 4** (Upgrades raus, Sockel rein).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -4121,6 +4201,13 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `tank.executing` (Exekutionsschwelle) über `balance.execute.slowMult`.
   `liveBulletsOf`/`magazineOf` sind seither exportiert (state.js braucht sie
   für die `magBlockedTime`-Telemetrie).
+- `src/game/mortar.js` — Mörser-Waffe (Grundsteinumbau Phase 3, `t_green`):
+  `fireMortar`/`updateMortars`. Kein physisches Geschoss (`state.mortars`
+  statt `state.bullets`) — Deflektor/Frontpanzerung greifen dadurch
+  automatisch nicht. Einschlag über den vorhandenen `mine.js: explodeAt()`.
+- `src/game/ai_turrets.js` — `roleTurret()` (Phase 8: eine generische
+  Funktion statt sechs benannter). Grundsteinumbau Phase 3: ein zusätzliches
+  `minRangePx`-Gate ganz am Ende, nur für `cfg.weapon === 'mortar'`.
 - `src/game/damagetypes.js` — Schadenstypen (Phase 6): `applyTypeEffects`
   (Statusauftrag + Blitzkette), `statusOf`, `typeColor`. Die damageType-ids
   sind absichtlich identisch mit den Statuseffekt-ids, deshalb ohne
@@ -4294,4 +4381,6 @@ entfernt — Abschnitt 12 ("Abprall-Bonus") und mehrere Bandenschuss-
 Teilprüfungen in anderen Abschnitten sind archiviert (`ARCHIV.md`/
 `archive/bandenschuss.md`), nicht umnummeriert. **Abschnitt 47** bewacht
 den Ersatz-USP aus **Grundsteinumbau Phase 2** (Flanken-/Heckschaden,
-Exekutionsschwelle, Heck-Kill-Zeitlupe, Kampfkern-Telemetrie).
+Exekutionsschwelle, Heck-Kill-Zeitlupe, Kampfkern-Telemetrie). **Abschnitt
+48** bewacht **Grundsteinumbau Phase 3** (t_green als Mörserschütze:
+`fireMortar()`/`updateMortars()`, `minRangePx`-Gate, Telegraph).

@@ -132,6 +132,12 @@
       "noise": { "dur": 0.04, "vol": 0.06 },
       "steps": [{ "freq": 160, "slideTo": 110, "dur": 0.05, "vol": 0.05, "wave": "square" }]
     },
+    "mortar_launch": {
+      "_comment": "Grundsteinumbau Phase 3: Moerser-Abschuss (t_green) -- dumpfer, tiefer Abschussknall statt des normalen 'shoot_enemy', damit ein Moerserwerfer sich auch mit geschlossenen Augen von einem Direktschuetzen unterscheidet. Der Einschlag laeuft ueber den vorhandenen 'boom'-Ton (mine.js: explodeAt()).",
+      "filter": { "type": "lowpass", "freq": 700 },
+      "noise": { "dur": 0.08, "vol": 0.08 },
+      "steps": [{ "freq": 140, "slideTo": 70, "dur": 0.12, "vol": 0.1, "wave": "sawtooth" }]
+    },
     "tone_high": {
       "_comment": "t_white wechselt in die offensive Rolle (Phase 8: phaseToggle).",
       "steps": [{ "freq": 880, "dur": 0.12, "vol": 0.12, "wave": "square" }]
