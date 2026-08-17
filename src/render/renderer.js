@@ -20,6 +20,7 @@ import {
   drawAimLine,
   drawThreatRings,
   drawLeadMarkers,
+  drawMortars,
 } from './effects.js';
 import { traceTrajectory } from '../game/bullet.js';
 import { visibleStatus } from '../game/status.js';
@@ -1141,6 +1142,7 @@ export function createRenderer(ctx) {
       drawWalls(state.walls, state.time);
       drawHazards(ctx, state);
       drawWaveWarning(ctx, state);
+      drawMortars(ctx, state); // Phase 3: immer sichtbar, kein Schalter
       drawGhosts(ctx, state, alpha);
       for (const t of state.tanks) drawTank(state, t, alpha);
       drawRadar(ctx, state);

@@ -298,6 +298,38 @@ export function drawAimLine(ctx, state, trace) {
   ctx.restore();
 }
 
+// Mörser-Granaten (Grundsteinumbau Phase 3, t_green): IMMER sichtbar, kein
+// Schalter -- die Fairness-Regel des Auftrags ist, dass der Spieler von
+// Abschuss an sieht, wohin es fällt, und herauslaufen kann. Gestrichelter
+// Umriss zeigt sofort den vollen Explosionsradius, die gefüllte Fläche
+// wächst mit der verstreichenden Flugzeit (bei Einschlag komplett gefüllt);
+// ein kleiner dunkler Schatten deutet die Granate selbst im Flug an
+// (linear vom Abschussort zum Ziel interpoliert -- kein physischer Bogen,
+// die Granate fliegt ohnehin "über" jede Wand).
+export function drawMortars(ctx, state) {
+  for (const m of state.mortars) {
+    if (m.exploded) continue;
+    const frac = Math.min(1, m.age / m.flightTimeS);
+    ctx.strokeStyle = 'rgba(255,90,50,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.arc(m.tx, m.ty, m.radiusPx, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = `rgba(255,60,40,${(0.15 + 0.35 * frac).toFixed(3)})`;
+    ctx.beginPath();
+    ctx.arc(m.tx, m.ty, m.radiusPx * frac, 0, Math.PI * 2);
+    ctx.fill();
+    const sx = m.x0 + (m.tx - m.x0) * frac;
+    const sy = m.y0 + (m.ty - m.y0) * frac;
+    ctx.fillStyle = 'rgba(20,20,24,0.55)';
+    ctx.beginPath();
+    ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 // Vorhaltemarkierung (Grundsteinumbau Phase 2): auf jedem bewegten Gegner
 // ein kleiner Punkt an der Position, an der er beim Einschlag einer JETZT
 // abgefeuerten Kugel waere -- eine iterative Naeherung (2-3 Schritte ueber

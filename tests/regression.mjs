@@ -368,6 +368,13 @@ function check(ok, msg) {
     st.mines.push(m);
   }
   if (enemy) enemy.aimingAtPlayer = true;
+  // Grundsteinumbau Phase 3: eine fliegende Moerser-Granate im Renderpfad,
+  // damit drawMortars() nicht ungetestet bleibt (derselbe blinde Fleck wie
+  // beim Ziellinien-Crash).
+  st.mortars.push({
+    x0: st.player.x, y0: st.player.y, tx: st.player.x + 80, ty: st.player.y,
+    age: 0.4, flightTimeS: 1.1, radiusPx: 44, damage: 25, owner: enemy || st.player, exploded: false,
+  });
   const { traceTrajectory: trace } = await import('../src/game/bullet.js');
   for (const [name, fn, args] of [
     ['drawMines', effects.drawMines, [fakeCtx, st]],
@@ -385,6 +392,10 @@ function check(ok, msg) {
     // der Renderpfad war schon zweimal der blinde Fleck.
     ['drawHookPreview', effects.drawHookPreview, [fakeCtx, st, 0]],
     ['drawHookPreview(quer)', effects.drawHookPreview, [fakeCtx, st, Math.PI / 3]],
+    // Phase 2 (Nachtrag): war beim Bau der Vorhaltemarkierung vergessen worden.
+    ['drawLeadMarkers', effects.drawLeadMarkers, [fakeCtx, st]],
+    // Phase 3: Moerser-Telegraph.
+    ['drawMortars', effects.drawMortars, [fakeCtx, st]],
   ]) {
     try {
       fn(...args);
@@ -524,14 +535,14 @@ function check(ok, msg) {
   }
 }
 
-// ---- 7c. Der Gruene feuert normal (frueher: Bankshot-Frame-Budget) ------
+// ---- 7c. Der Gruene feuert zuverlaessig (jetzt: Moerser statt Kugel) -----
 // Der Abpraller-Rechner (ai_turrets.js: solveBounce/bounceShot), einziger
 // Nutzer t_green, ist mit dem Bandenschuss vollstaendig entfernt
-// (Grundsteinumbau Phase 1) -- t_green feuert seitdem ueber die normale
-// Turmlogik (accuracy 0.9), das teure Solver-Frame-Budget existiert nicht
-// mehr. Details in ARCHIV.md/archive/bandenschuss.md. Verbleibender
-// Sinn dieses Tests: t_green feuert weiterhin zuverlaessig (Phase 3 baut
-// ihn zum Moerserschuetzen um und ersetzt diesen Test dann erneut).
+// (Grundsteinumbau Phase 1); t_green feuerte danach uebergangsweise ueber
+// die normale Turmlogik gerade Raketen. Grundsteinumbau Phase 3 hat ihn zum
+// Moerserschuetzen umgebaut (eigener Abschnitt 48 fuer den Mechanismus
+// selbst) -- dieser Test bleibt der reine "feuert ueberhaupt"-Nachweis,
+// jetzt gegen den 'mortar_launch'-Sound statt 'shoot_enemy'.
 {
   const { createState, stepState } = await import('../src/game/state.js');
   const { hashSeed, rngFor } = await import('../src/core/rng.js');
@@ -553,18 +564,18 @@ function check(ok, msg) {
         1 / 60,
       );
       for (const ev of st.sounds.splice(0)) {
-        if ((typeof ev === 'string' ? ev : ev.name) === 'shoot_enemy') shots++;
+        if ((typeof ev === 'string' ? ev : ev.name) === 'mortar_launch') shots++;
       }
       st.player.protect = 1; // Spieler am Leben halten
       for (const t of st.tanks) if (t !== st.player) t.alive = true;
     }
   }
   // Schwelle bewusst niedrig: die normale Turmlogik verlangt ab accuracy 0.3
-  // freie Sichtlinie (anders als der alte, sichtlinienfreie Bankshot-Solver)
-  // -- der wackelnde Testspieler steht nicht immer frei. Reiner
+  // freie Sichtlinie -- der wackelnde Testspieler steht nicht immer frei,
+  // und minRangePx blockt zusaetzlich, wenn er zu nah dransteht. Reiner
   // "feuert ueberhaupt"-Nachweis, kein Feuerraten-Budget.
-  check(shots > 10, `Grüner feuert kaum (${shots} Schüsse in 6 Räumen à 6 s mit je 3 Grünen)`);
-  console.log(`Grüner (Platzhalter-Moerser): ${shots} Schüsse in 6 Räumen à 6 s`);
+  check(shots > 10, `Grüner feuert kaum (${shots} Granaten in 6 Räumen à 6 s mit je 3 Grünen)`);
+  console.log(`Grüner (Mörserschütze): ${shots} Granaten in 6 Räumen à 6 s`);
 }
 
 // ---- 8h. P9: Lautstaerkeregler (audio.js) --------------------------------
@@ -7481,6 +7492,175 @@ for (const seed of SEEDS) {
     p.cooldown = 0; // jetzt IST das Magazin wirklich voll (die eine Kugel fliegt noch)
     stepState(st, cmdFire, 1 / 60);
     check(Math.abs(st.magBlockedTime - 1 / 60) < 1e-9, `Phase 2: magBlockedTime nach echter Blockade ${st.magBlockedTime} statt ${1 / 60}`);
+  }
+}
+
+// ---- 48. Grundsteinumbau Phase 3: Der Gruene wird Moerserschuetze -------
+// t_green bekommt seine Deckungsbrecher-Rolle zurueck -- mit Bogen statt
+// Bande. Kein physisches Geschoss: eine Granate mit fester Flugzeit, die
+// ueber jede Wand fliegt, mit einer von Abschuss an sichtbaren, wachsenden
+// Einschlagmarkierung (Fairness-Regel). Wo moeglich mit EIGENEN Zahlen
+// geprueft, nicht den echten balance.json-Werten.
+{
+  const { fireMortar, updateMortars } = await import('../src/game/mortar.js');
+  const { roleTurret } = await import('../src/game/ai_turrets.js');
+
+  // (a) Struktur: t_green ist jetzt ein Moerserschuetze, Magazin/Nachladen
+  // bleiben wie beim frueheren Raketenwerfer (Auftrag: "Magazin 2 und die
+  // 2s Nachladezeit bleiben").
+  {
+    const g = resolveCfg(tanksData, 't_green');
+    check(g.weapon === 'mortar', `Phase 3: t_green.weapon ist "${g.weapon}" statt "mortar"`);
+    check(tanksData.types.t_green.magazine === 2, 'Phase 3: t_green verliert sein 2er-Magazin');
+    check(tanksData.types.t_green.fireRate === 2, 'Phase 3: t_green verliert seine 2s-Nachladezeit');
+    const M = tanksData.balance.mortar;
+    check(
+      typeof M?.flightTimeS === 'number' && typeof M?.radiusPx === 'number' &&
+        typeof M?.damage === 'number' && typeof M?.leadPct === 'number' && typeof M?.minRangePx === 'number',
+      'Phase 3: balance.mortar fehlt/unvollstaendig',
+    );
+  }
+
+  // Minimaler Fake-State fuer fireMortar()/updateMortars() -- isoliert vom
+  // Rest der Simulation (kein createRun() noetig).
+  const mkState = (mortarCfg, player) => ({
+    player,
+    mortars: [],
+    tanks: [player],
+    walls: [],
+    mines: [],
+    explosions: [],
+    sounds: [],
+    particles: [],
+    data: { balance: { mortar: mortarCfg, damage: { explosion: 999 } }, limits: {}, transform: {} },
+    transform: {},
+    spawnParticles() {},
+    addShake() {},
+    applyDamage(tank, amount) {
+      tank.hp -= amount;
+      if (tank.hp <= 0) tank.alive = false;
+    },
+    destroyWall() {},
+  });
+  const mkTank = (x, y, cfgExtra = {}) => ({
+    x, y, cooldown: 0, alive: true, protect: 0, hp: 999,
+    cfg: { magazine: 2, fireCooldown: 2, radius: 12, maxHp: 999, ...cfgExtra },
+  });
+
+  // (b) fireMortar(): MECHANISMUS mit EIGENEN Zahlen -- Ziel = Spieler-
+  // position + Vorhalteanteil (leadPct * flightTimeS * Geschwindigkeit).
+  {
+    const M = { flightTimeS: 2, radiusPx: 10, damage: 5, leadPct: 0.5, minRangePx: 0 };
+    const player = mkTank(100, 50);
+    player.vx = 40;
+    player.vy = 0;
+    const st = mkState(M, player);
+    const shooter = mkTank(0, 0);
+    const ok = fireMortar(shooter, st);
+    check(ok === true, 'Phase 3: fireMortar() meldet keinen Abschuss, obwohl bereit');
+    check(st.mortars.length === 1, `Phase 3: fireMortar() legt keine Granate an (${st.mortars.length})`);
+    const m = st.mortars[0];
+    // leadT = flightTimeS * leadPct = 1 -> Ziel = Spielerposition + v*1.
+    check(Math.abs(m.tx - 140) < 1e-9 && Math.abs(m.ty - 50) < 1e-9, `Phase 3: Vorhalteziel (${m.tx},${m.ty}) statt (140,50)`);
+    check(m.x0 === 0 && m.y0 === 0, 'Phase 3: Abschussort der Granate stimmt nicht');
+    check(shooter.cooldown === 2, `Phase 3: fireMortar() setzt das Nachladen nicht (${shooter.cooldown} statt 2)`);
+    check(st.sounds.some((s) => s.name === 'mortar_launch'), 'Phase 3: fireMortar() spielt keinen Abschusston');
+  }
+
+  // (c) Cooldown- und Magazin-Sperre (dasselbe Muster wie fireBullet()s
+  // liveBulletsOf(), hier gegen state.mortars statt state.bullets).
+  {
+    const M = { flightTimeS: 2, radiusPx: 10, damage: 5, leadPct: 0, minRangePx: 0 };
+    const player = mkTank(100, 50);
+    player.vx = 0; player.vy = 0;
+    const st = mkState(M, player);
+    const shooter = mkTank(0, 0);
+    shooter.cooldown = 0.5; // noch am Nachladen
+    check(fireMortar(shooter, st) === false, 'Phase 3: fireMortar() feuert trotz laufendem Nachladen');
+    check(st.mortars.length === 0, 'Phase 3: fireMortar() legt trotz Cooldown eine Granate an');
+    shooter.cooldown = 0;
+    shooter.cfg.magazine = 1;
+    check(fireMortar(shooter, st) === true, 'Phase 3: Vorbedingung -- der erste Schuss bei Magazin 1 loest nicht aus');
+    shooter.cooldown = 0; // erneut bereit, aber Magazin voll (1 Granate noch in der Luft)
+    check(fireMortar(shooter, st) === false, 'Phase 3: Magazin-Deckel greift nicht (2. Schuss bei Magazin 1)');
+    check(st.mortars.length === 1, 'Phase 3: eine geblockte fireMortar()-Anfrage legt trotzdem eine Granate an');
+  }
+
+  // (d) updateMortars(): explodiert erst NACH Ablauf der Flugzeit, nicht
+  // frueher -- und dann ueber denselben explodeAt()-Helfer wie Minen (Radius/
+  // Schaden aus balance.mortar, Explosionen ignorieren Panzerung/Waende).
+  {
+    const M = { flightTimeS: 1, radiusPx: 20, damage: 7, leadPct: 0, minRangePx: 0 };
+    const player = mkTank(50, 50);
+    const st = mkState(M, player);
+    const shooter = mkTank(0, 0);
+    fireMortar(shooter, st);
+    const m = st.mortars[0];
+    m.tx = 50; m.ty = 50; // exakt auf dem Spieler landen
+    updateMortars(st, 0.9); // noch nicht abgelaufen
+    check(st.mortars.length === 1 && !m.exploded, 'Phase 3: die Granate explodiert vor Ablauf der Flugzeit');
+    check(player.hp === 999, 'Phase 3: die Granate schadet, bevor sie eingeschlagen ist');
+    updateMortars(st, 0.2); // jetzt ueber die Flugzeit (0.9+0.2 > 1)
+    check(st.mortars.length === 0, 'Phase 3: die explodierte Granate bleibt in state.mortars stehen');
+    check(player.hp === 999 - 7, `Phase 3: Einschlagschaden ${999 - player.hp} statt 7`);
+    check(st.explosions.length === 1, 'Phase 3: der Einschlag hinterlaesst keine Explosions-Anzeige');
+  }
+
+  // (e) "Fliegt ueber alle Waende": ein Ziel HINTER einer Wand (aus Sicht
+  // des Abschussorts) nimmt trotzdem Schaden -- explodeAt() kennt keine
+  // Sichtlinien-/Wandpruefung fuer den Explosionsschaden selbst.
+  {
+    const M = { flightTimeS: 0.5, radiusPx: 30, damage: 9, leadPct: 0, minRangePx: 0 };
+    const player = mkTank(200, 50);
+    const st = mkState(M, player);
+    st.walls.push({ x: 90, y: 0, w: 20, h: 200, type: 'solid' }); // zwischen Schuetze und Ziel
+    const shooter = mkTank(0, 50);
+    fireMortar(shooter, st);
+    st.mortars[0].tx = 200; st.mortars[0].ty = 50;
+    updateMortars(st, 1); // Flugzeit sicher um
+    check(player.hp === 999 - 9, `Phase 3: die Wand blockt den Einschlagschaden (hp ${player.hp} statt ${999 - 9})`);
+  }
+
+  // (f) minRangePx (ai_turrets.js: roleTurret()): unter der Mindestdistanz
+  // feuert der Gruene nicht -- MECHANISMUS mit EIGENEM minRangePx, damit
+  // der Test nicht an 96 haengt.
+  {
+    const mkAimState = (minRangePx) => ({
+      data: {
+        balance: { mortar: { minRangePx } },
+        ai: { muzzleClearPx: 0, raycastStepPx: 4, raycastMaxPx: 900 },
+      },
+      rng: () => 0.5,
+      walls: [],
+      isSolid: () => false,
+      blocksSight: () => false,
+      smokeClouds: [],
+      tanks: [],
+    });
+    const target = { x: 0, y: 0, alive: true, vx: 0, vy: 0 };
+    const mkGreen = (x) => ({
+      x, y: 0, turret: 0, ai: { target },
+      cfg: { weapon: 'mortar', accuracy: 0.9, leadAim: false },
+    });
+    const st = mkAimState(100);
+    st.tanks = [target];
+    const nah = mkGreen(50); // 50 px entfernt -- unter minRangePx 100
+    check(roleTurret(nah, st, 1) === false, 'Phase 3: der Gruene feuert unterhalb minRangePx');
+    const fern = mkGreen(150); // 150 px entfernt -- ueber minRangePx 100
+    check(roleTurret(fern, st, 1) === true, 'Phase 3: der Gruene feuert nicht mehr, sobald er ausserhalb minRangePx steht');
+  }
+
+  // (g) Nicht reflektierbar: eine Moerser-Granate erzeugt NIE einen Eintrag
+  // in state.bullets -- Deflektor/Frontpanzerung (die nur auf state.bullets
+  // wirken) haben dadurch automatisch keinen Zugriff, ohne Sonderfall im
+  // Trefferpfad.
+  {
+    const M = { flightTimeS: 1, radiusPx: 10, damage: 5, leadPct: 0, minRangePx: 0 };
+    const player = mkTank(50, 50);
+    const st = mkState(M, player);
+    st.bullets = [];
+    fireMortar(mkTank(0, 0), st);
+    check(st.bullets.length === 0, 'Phase 3: fireMortar() erzeugt faelschlich ein Geschoss in state.bullets');
   }
 }
 
