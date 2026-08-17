@@ -20,8 +20,7 @@
   },
   "bulletSpeeds": {
     "bullet": 130,
-    "rocket": 300,
-    "bounce_rocket": 200
+    "rocket": 300
   },
   "ai": {
     "raycastStepPx": 4,
@@ -51,15 +50,6 @@
         "orbitFlipMaxS": 5
       }
     },
-    "bounceShot": {
-      "turnSpeed": 2.2,
-      "fireConeRad": 0.06,
-      "solveIntervalS": 0.4,
-      "angleSamples": 120,
-      "hitTolerancePx": 14,
-      "maxTravelPx": 1200,
-      "solvesPerTick": 1
-    },
     "white": {
       "invisibleAfterS": 1.5,
       "shimmerIntervalS": 2,
@@ -88,7 +78,6 @@
       "speedMult": 1,
       "crit": 0.05,
       "magazine": 5,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet"
     },
@@ -101,7 +90,6 @@
       "speed": "normal",
       "speedMult": 0.9,
       "crit": 0.03,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
       "damageType": "explosive",
@@ -116,7 +104,6 @@
       "speed": "normal",
       "speedMult": 0.95,
       "crit": 0.05,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
       "damageType": "frost",
@@ -131,7 +118,6 @@
       "speed": "normal",
       "speedMult": 1.05,
       "crit": 0.05,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
       "damageType": "lightning",
@@ -146,7 +132,6 @@
       "speed": "normal",
       "speedMult": 1,
       "crit": 0.05,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
       "damageType": "poison",
@@ -161,7 +146,6 @@
       "speed": "normal",
       "speedMult": 1,
       "crit": 0.05,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
       "scrapDamagePer100": 0.05
@@ -175,7 +159,6 @@
       "speed": "normal",
       "speedMult": 1,
       "crit": 0.05,
-      "ricochets": 1,
       "bonusRicochets": 1,
       "mines": 2,
       "weapon": "bullet"
@@ -190,7 +173,6 @@
       "speed": "normal",
       "speedMult": 1.05,
       "crit": 0.05,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet"
     },
@@ -203,7 +185,6 @@
       "speed": "normal",
       "speedMult": 0.95,
       "crit": 0.05,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
       "builtHpMult": 1.2
@@ -217,7 +198,6 @@
       "speed": "normal",
       "speedMult": 1,
       "crit": 0.05,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
       "damageType": "fire",
@@ -226,7 +206,6 @@
     "t_brown": {
       "speed": "fix",
       "magazine": 1,
-      "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
       "role": "guardian",
@@ -239,7 +218,6 @@
     "t_grey": {
       "speed": "slow",
       "magazine": 1,
-      "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
       "role": "sapper",
@@ -253,7 +231,6 @@
     "t_teal": {
       "speed": "slow",
       "magazine": 1,
-      "ricochets": 0,
       "mines": 0,
       "weapon": "rocket",
       "role": "sieger",
@@ -269,7 +246,6 @@
     "t_yellow": {
       "speed": "fast",
       "magazine": 1,
-      "ricochets": 1,
       "mines": 4,
       "weapon": "bullet",
       "role": "sapper",
@@ -288,7 +264,6 @@
     "t_pink": {
       "speed": "normal",
       "magazine": 3,
-      "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
       "role": "hunter",
@@ -302,7 +277,6 @@
     "t_green": {
       "speed": "fix",
       "magazine": 2,
-      "ricochets": 2,
       "mines": 0,
       "weapon": "rocket",
       "role": "guardian",
@@ -310,14 +284,12 @@
       "label": "Grüner",
       "maxHp": 40,
       "damage": 25,
-      "desc": "Steht fest und rechnet Abprallwinkel aus: schießt fast nur Bankshots mit 2 Abprallern — lädt 2 s pro Schuss nach.",
-      "fireRate": 2,
-      "requiresBounceShot": true
+      "desc": "Steht fest und schießt gerade Raketen mit 2 s Nachladezeit.",
+      "fireRate": 2
     },
     "t_purple": {
       "speed": "fast",
       "magazine": 5,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
       "role": "hunter",
@@ -337,7 +309,6 @@
     "t_white": {
       "speed": "normal",
       "magazine": 5,
-      "ricochets": 1,
       "mines": 2,
       "weapon": "bullet",
       "role": "hunter",
@@ -365,7 +336,6 @@
     "t_armored": {
       "speed": "slow",
       "magazine": 1,
-      "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
       "role": "hunter",
@@ -380,25 +350,9 @@
       "damage": 25,
       "desc": "Dicke Frontpanzerung: Schüsse von vorn prallen an ihm ab. Er fährt auf dich zu — triff ihn von der Seite oder von hinten."
     },
-    "t_prism": {
-      "speed": "slow",
-      "magazine": 1,
-      "ricochets": 1,
-      "mines": 0,
-      "weapon": "bullet",
-      "role": "sapper",
-      "aggression": 0.17,
-      "accuracy": 0.2,
-      "bounceDamageTakenMult": 3,
-      "label": "Prisma",
-      "maxHp": 40,
-      "damage": 25,
-      "desc": "Nimmt normalen Schaden — aber ein an einer Wand abgeprallter Schuss trifft ihn dreifach statt doppelt. Der Bankshot lohnt sich, ist aber nicht mehr Pflicht."
-    },
     "t_black": {
       "speed": "veryfast",
       "magazine": 2,
-      "ricochets": 0,
       "mines": 2,
       "weapon": "rocket",
       "role": "sieger",
@@ -419,7 +373,6 @@
     "t_reactor": {
       "speed": "fix",
       "magazine": 2,
-      "ricochets": 1,
       "mines": 0,
       "weapon": "rocket",
       "role": "guardian",
@@ -433,7 +386,6 @@
     "t_mirror": {
       "speed": "fix",
       "magazine": 3,
-      "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
       "role": "guardian",
@@ -452,7 +404,6 @@
     "t_phalanx": {
       "speed": "fix",
       "magazine": 1,
-      "ricochets": 1,
       "mines": 0,
       "weapon": "bullet",
       "role": "guardian",
@@ -475,7 +426,6 @@
       "speedPct": 0.7,
       "bulletSpeedPct": 0.8,
       "rangePct": 0.65,
-      "ricochets": 0,
       "weapon": "bullet",
       "damageType": "physical"
     }

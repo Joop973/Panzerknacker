@@ -186,7 +186,7 @@ function check(ok, msg) {
 // Doppelschlag ohne Powershot -> bulletSpeed * undefined = NaN).
 {
   const numericFields = [
-    'speed', 'bulletSpeed', 'fireCooldown', 'magazine', 'ricochets', 'mines',
+    'speed', 'bulletSpeed', 'fireCooldown', 'magazine', 'mines',
     'radius', 'bulletRadius',
   ];
   for (const id of Object.keys(upgradesData.upgrades)) {
@@ -206,11 +206,10 @@ function check(ok, msg) {
       }
       // Powershot-Verstaerker duerfen nie halb gesetzt sein -- sonst rechnet
       // tank.js: fireBullet() mit undefined weiter.
-      const boostable = cfg.powershotPerRoom || cfg.trickshotPowershot;
-      if (boostable) {
+      if (cfg.powershotPerRoom) {
         check(
-          Number.isFinite(cfg.powershotSpeedFactor) && Number.isFinite(cfg.powershotBonusRicochets),
-          `Karte "${id}" Stufe ${lvl}: vergibt Powershot-Ladungen ohne speedFactor/bonusRicochets`,
+          Number.isFinite(cfg.powershotSpeedFactor),
+          `Karte "${id}" Stufe ${lvl}: vergibt Powershot-Ladungen ohne speedFactor`,
         );
       }
     }
@@ -294,27 +293,6 @@ function check(ok, msg) {
 // Fehlerklasse (doppelrohr nie im Pool, pionier mit totem Tag) -- deshalb
 // fuer jede mechanische Karte ein direkter Wirkungsnachweis.
 {
-  const mkState = (playerCfgExtra, walls = []) => {
-    const player = {
-      x: 100, y: 100, alive: true, stunTimer: 0, powershotCharges: 0,
-      cfg: { radius: 12, ...playerCfgExtra },
-    };
-    return {
-      data: tanksData,
-      player,
-      tanks: [player],
-      walls,
-      bullets: [],
-      bonusScrap: 0,
-      transform: {},
-      spawnParticles() {},
-      addShake() {},
-      sounds: [],
-      texts: [],
-      explosions: [],
-    };
-  };
-
   // Sappeur: rissige Wand (3 Treffer) faellt mit Stufe 1 schon nach zweien.
   {
     const { createState } = await import('../src/game/state.js');
@@ -351,64 +329,11 @@ function check(ok, msg) {
     }
   }
 
-  // Abprallschock: Kugel prallt an einer Wand ab -> Gegner daneben betaeubt.
-  {
-    const { updateBullet, createBullet } = await import('../src/game/bullet.js');
-    const st = mkState({ bounceStunRadius: 60, bounceStunS: 0.7 }, [
-      { x: 200, y: 0, w: 32, h: 400, type: 'solid', col: 6, row: 0 },
-    ]);
-    const enemy = { x: 180, y: 100, alive: true, stunTimer: 0, cfg: { radius: 12 } };
-    st.tanks.push(enemy);
-    const b = createBullet(150, 100, 0, {
-      speed: 400, radius: 3, ricochets: 2, owner: st.player, kind: 'bullet',
-    });
-    st.bullets.push(b);
-    for (let i = 0; i < 30 && b.wallBounces === 0; i++) updateBullet(b, st, 1 / 60);
-    check(b.wallBounces > 0, 'Abprallschock-Test: Kugel ist gar nicht abgeprallt');
-    check(enemy.stunTimer > 0, 'Abprallschock wirkt nicht: Gegner neben dem Abprallpunkt ist nicht betäubt');
-  }
-
-  // Doppelschlag: ein Trickshot-Kill laedt eine Powershot-Ladung nach.
-  {
-    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1337);
-    const st = run.state;
-    const enemy = st.tanks.find((t) => t !== st.player && t.alive);
-    check(!!enemy, 'Doppelschlag-Test: kein Gegner im Raum');
-    if (enemy) {
-      Object.assign(st.player.cfg, {
-        trickshotPowershot: 1, trickshotPowershotMax: 3,
-        powershotSpeedFactor: 2, powershotBonusRicochets: 2,
-      });
-      st.player.powershotCharges = 0;
-      run.phase = 'playing'; // frischer Run steht auf 'preview' -- stepRun stiege sonst sofort aus
-      enemy.cfg.armor = null;
-      enemy.cfg.requiresRicochet = false;
-      enemy.protect = 0;
-      // Kugel des Spielers, bereits abgeprallt, direkt auf dem Gegner.
-      st.bullets.push({
-        x: enemy.x, y: enemy.y, prevX: enemy.x, prevY: enemy.y, vx: 10, vy: 0,
-        radius: 3, owner: st.player, kind: 'bullet', age: 5, distance: 10,
-        wallBounces: 2, ricochetsLeft: 0, ricochetsStart: 2, dead: false,
-        reflected: false, reflectImmune: null, reflectImmuneT: 0, trail: [],
-        // Seit dem LP-Umbau (Phase 2) haben Gegner 20-50 LP: die Kugel muss
-        // ausdruecklich toedlich sein, sonst zaehlt kein Kill. Frueher war
-        // jeder Treffer toedlich, deshalb stand hier gar kein Schaden.
-        damage: enemy.cfg.maxHp,
-      });
-      // CMD/STEP stehen erst weiter unten (const) -- hier lokal.
-      stepRun(run, { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false }, 1 / 60);
-      check(
-        st.player.powershotCharges === 1,
-        `Doppelschlag wirkt nicht: powershotCharges = ${st.player.powershotCharges} (erwartet 1)`,
-      );
-      // Der Kill zaehlt als Abpraller-Kill (die freiwilligen Bankshots aus
-      // USP-Kennzahl 3 sind mit Phase 8 ausgemustert).
-      check(
-        st.ricochetKills === 1,
-        `Abpraller-Kill nicht gezählt (ricochet=${st.ricochetKills})`,
-      );
-    }
-  }
+  // Abprallschock und Doppelschlag hingen beide am Bandenschuss (Wandabpraller
+  // loeste Betaeubung bzw. Trickshot-Powershot-Nachladung aus) und sind mit
+  // Grundsteinumbau Phase 1 wirkungslos -- die Karten bleiben bis Phase 4
+  // unangetastet in data/upgrades.json/im Pool ziehbar (6b2 oben), ihre
+  // Wirkungsnachweise sind hier archiviert (ARCHIV.md/archive/bandenschuss.md).
 }
 
 // ---- 6d. Der Effekt-Renderpfad crasht nicht ----------------------------
@@ -486,7 +411,7 @@ function check(ok, msg) {
     p.cooldown = 0;
     // Magazin vollschiessen.
     for (let i = 0; i < 3; i++) {
-      st.bullets.push(createBullet(p.x, p.y, i, { speed: 100, radius: 3, ricochets: 1, owner: p, kind: 'bullet' }));
+      st.bullets.push(createBullet(p.x, p.y, i, { speed: 100, radius: 3, owner: p, kind: 'bullet' }));
     }
     check(fireBullet(p, st) === false, 'Aasgeier-Test: Magazin war nicht voll (Vorbedingung)');
     const enemy = st.tanks.find((t) => t !== p && t.alive);
@@ -535,12 +460,11 @@ function check(ok, msg) {
         st.walls.splice(st.walls.indexOf(w), 1);
       },
     };
-    const b = createBullet(150, 104, 0, { speed: 300, radius: 3, ricochets: 1, owner: null, kind: 'bullet', tungsten: true });
+    const b = createBullet(150, 104, 0, { speed: 300, radius: 3, owner: null, kind: 'bullet', tungsten: true });
     for (let i = 0; i < 40 && !b.dead; i++) updateBullet(b, st, 1 / 60);
     check(destroyed === 1, `Wolframkern: Wand nicht eingerissen (${destroyed})`);
     check(!b.dead, 'Wolframkern: Geschoss ist an der Wand verschwunden statt weiterzufliegen');
     check(b.x > 232, `Wolframkern: Geschoss ist nicht hinter der Wand angekommen (x=${b.x.toFixed(0)})`);
-    check(b.wallBounces === 0, 'Wolframkern: Einreissen hat einen Abpraller verbraucht');
   }
 }
 
@@ -559,7 +483,7 @@ function check(ok, msg) {
   p.cfg.magazine = 2;
   p.cooldown = 0;
   for (let i = 0; i < 2; i++) {
-    st.bullets.push(createBullet(p.x, p.y, i, { speed: 100, radius: 3, ricochets: 1, owner: p, kind: 'bullet' }));
+    st.bullets.push(createBullet(p.x, p.y, i, { speed: 100, radius: 3, owner: p, kind: 'bullet' }));
   }
   st.sounds.length = 0;
   st.flashes.length = 0;
@@ -592,7 +516,7 @@ function check(ok, msg) {
   if (enemy) {
     enemy.cfg.magazine = 1;
     enemy.cooldown = 0;
-    st.bullets.push(createBullet(enemy.x, enemy.y, 0, { speed: 100, radius: 3, ricochets: 1, owner: enemy, kind: 'bullet' }));
+    st.bullets.push(createBullet(enemy.x, enemy.y, 0, { speed: 100, radius: 3, owner: enemy, kind: 'bullet' }));
     st.sounds.length = 0;
     st.blockedShotTimer = 0;
     fireBullet(enemy, st, true);
@@ -600,24 +524,18 @@ function check(ok, msg) {
   }
 }
 
-// ---- 7c. Bankshot-Gegner: feuert er, und haelt er das Frame-Budget? ----
-// Der Gruene (t_green) nutzt seit der Nutzer-Balancerunde den
-// Abpraller-Rechner (ai_turrets.js: solveBounce). Der marched angleSamples
-// Strahlen ueber die halbe Arena und ist damit die teuerste KI im Spiel:
-// EIN Solver-Lauf kostete mit den urspruenglichen 180 Samples bis zu
-// 4,8 ms von 6 ms Frame-Budget (PLAN.md Phase 11b). Gegengemessen wurde
-// deshalb 120 Samples -- gleiche Loesungsquote (15/18), rund halbe Zeit.
-// `solvesPerTick` ist zusaetzlich ein Sicherheitsnetz: die Solver-Timer
-// staffeln sich zwar von selbst (gemessen: 260 Laeufe in 260 verschiedenen
-// Ticks), aber bei vielen Bankshot-Gegnern koennten sie zusammenfallen.
+// ---- 7c. Der Gruene feuert normal (frueher: Bankshot-Frame-Budget) ------
+// Der Abpraller-Rechner (ai_turrets.js: solveBounce/bounceShot), einziger
+// Nutzer t_green, ist mit dem Bandenschuss vollstaendig entfernt
+// (Grundsteinumbau Phase 1) -- t_green feuert seitdem ueber die normale
+// Turmlogik (accuracy 0.9), das teure Solver-Frame-Budget existiert nicht
+// mehr. Details in ARCHIV.md/archive/bandenschuss.md. Verbleibender
+// Sinn dieses Tests: t_green feuert weiterhin zuverlaessig (Phase 3 baut
+// ihn zum Moerserschuetzen um und ersetzt diesen Test dann erneut).
 {
   const { createState, stepState } = await import('../src/game/state.js');
   const { hashSeed, rngFor } = await import('../src/core/rng.js');
-  check(!!tanksData.types.t_green.requiresBounceShot, 'Der Grüne nutzt den Abpraller-Rechner nicht mehr');
   let shots = 0;
-  const samplesMs = [];
-  let maxSolvesInOneTick = 0;
-  const budget = tanksData.ai.bounceShot.solvesPerTick ?? 1;
   for (let seed = 1; seed <= 6; seed++) {
     const st = createState(tanksData, tilesData, {
       genRng: rngFor(seed, 3, 'rooms'),
@@ -629,16 +547,11 @@ function check(ok, msg) {
       transform: {},
     });
     for (let i = 0; i < 60 * 6; i++) {
-      const t0 = process.hrtime.bigint();
       stepState(
         st,
         { move: { x: Math.sin(i / 40), y: Math.cos(i / 55) }, aim: { x: st.player.x + 50, y: st.player.y }, fire: false, mine: false, dash: false },
         1 / 60,
       );
-      samplesMs.push(Number(process.hrtime.bigint() - t0) / 1e6);
-      // Budget-Buchhaltung: stepState() setzt es am Anfang, bounceShot()
-      // zaehlt herunter -- es darf nie unter 0 rutschen.
-      maxSolvesInOneTick = Math.max(maxSolvesInOneTick, budget - st.bounceSolveBudget);
       for (const ev of st.sounds.splice(0)) {
         if ((typeof ev === 'string' ? ev : ev.name) === 'shoot_enemy') shots++;
       }
@@ -646,35 +559,12 @@ function check(ok, msg) {
       for (const t of st.tanks) if (t !== st.player) t.alive = true;
     }
   }
-  check(shots > 40, `Bankshot-Gegner feuert kaum (${shots} Schüsse in 6 Räumen à 6 s mit je 3 Grünen)`);
-  check(
-    maxSolvesInOneTick <= budget,
-    `Abpraller-Rechner überschreitet sein Frame-Budget (${maxSolvesInOneTick} Läufe in einem Tick, erlaubt ${budget})`,
-  );
-  // Bewertet wird der DRITTGROESSTE Messwert, nicht der groesste.
-  // Begruendung (gemessen, nicht geschaetzt): von 2160 Ticks liegen nur ~10
-  // ueber 1 ms -- der Solver laeuft dank solvesPerTick + gestaffelter Timer
-  // eben selten. Der rohe Maximalwert ist damit ein Einzelereignis und
-  // fing prompt eine GC-Pause ein (6,39 ms in einem Lauf, 1,8-2,4 ms in
-  // fuenf direkt danach). Ein Perzentil ist hier das falsche Werkzeug: p99,5
-  // liegt bei 0,99 ms und verduennt genau das seltene Ereignis, um das es
-  // geht. Die drittgroesste Messung (heute ~2,1 ms) behaelt das Signal --
-  // eine echte Verteuerung des Solvers hebt die ganze Spitzengruppe --,
-  // vertraegt aber zwei Ausreisser.
-  // Gegengeprueft ueber angleSamples: 120 -> 1,1-2,1 ms (gruen),
-  // 600 -> 3,9-5,4 ms (gruen, und zwar zu Recht: das Budget ist knapp
-  // gehalten), 2400 -> 7,5 ms (rot). Die Schwelle misst also das Budget,
-  // nicht die Zahl der Strahlen.
-  samplesMs.sort((a, b) => a - b);
-  const worstMs = samplesMs[samplesMs.length - 1];
-  const robustMs = samplesMs[Math.max(0, samplesMs.length - 3)];
-  check(
-    robustMs < 6,
-    `Logikschritt mit 3 Bankshot-Gegnern zu teuer: ${robustMs.toFixed(2)} ms (drittgrösster Wert, Budget 6 ms, Maximum ${worstMs.toFixed(2)} ms)`,
-  );
-  console.log(
-    `Bankshot-Gegner: ${shots} Schüsse, Logikschritt ${robustMs.toFixed(2)} ms (drittgrösster Wert, Maximum ${worstMs.toFixed(2)} ms)`,
-  );
+  // Schwelle bewusst niedrig: die normale Turmlogik verlangt ab accuracy 0.3
+  // freie Sichtlinie (anders als der alte, sichtlinienfreie Bankshot-Solver)
+  // -- der wackelnde Testspieler steht nicht immer frei. Reiner
+  // "feuert ueberhaupt"-Nachweis, kein Feuerraten-Budget.
+  check(shots > 10, `Grüner feuert kaum (${shots} Schüsse in 6 Räumen à 6 s mit je 3 Grünen)`);
+  console.log(`Grüner (Platzhalter-Moerser): ${shots} Schüsse in 6 Räumen à 6 s`);
 }
 
 // ---- 8h. P9: Lautstaerkeregler (audio.js) --------------------------------
@@ -1016,7 +906,7 @@ function check(ok, msg) {
   plain.phase = 'playing';
   const outPlain = draw(plain);
   check(/WERTE/.test(outPlain), 'P7: Werte-Anzeige zeichnet keine Ueberschrift');
-  for (const label of ['Tempo', 'Geschosstempo', 'Abpraller', 'Magazin', 'Bomben', 'Bombenradius']) {
+  for (const label of ['Tempo', 'Geschosstempo', 'Magazin', 'Bomben', 'Bombenradius']) {
     check(outPlain.includes(label), `P7: Zeile "${label}" fehlt in der Werte-Anzeige`);
   }
   // Ohne Upgrades darf keine Abweichung ausgewiesen sein.
@@ -1638,7 +1528,7 @@ function check(ok, msg) {
       // greift).
       const shooter = st.tanks.find((t) => t !== p && t !== e) || p;
       const b = createBullet(e.x, e.y, 0, {
-        speed: 1, radius: 3, ricochets: 1, owner: shooter, kind: 'bullet', damage: 12,
+        speed: 1, radius: 3, owner: shooter, kind: 'bullet', damage: 12,
       });
       b.age = 5;
       st.bullets.push(b);
@@ -1779,7 +1669,7 @@ function check(ok, msg) {
       e.hp = 50;
       e.heading = 0;
       const b = createBullet(e.x + 40, e.y, Math.PI, {
-        speed: 100, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10,
+        speed: 100, radius: 3, owner: st.player, kind: 'bullet', damage: 10,
       });
       check(armorBlocks(e, b), 'Phase 2: Frontpanzerung blockt den Frontaltreffer nicht mehr');
       check(e.hp === 50, `Phase 2: Frontpanzerung laesst Teilschaden durch (hp=${e.hp})`);
@@ -1878,7 +1768,7 @@ function check(ok, msg) {
     const p = st.player;
     p.protect = 0;
     const b = createBullet(p.x, p.y, 0, {
-      speed: 1, radius: 3, ricochets: 1, owner, kind: 'bullet', damage: dmg ?? owner.cfg.damage,
+      speed: 1, radius: 3, owner, kind: 'bullet', damage: dmg ?? owner.cfg.damage,
     });
     b.age = 5;
     if (owner === p) b.reflected = true;
@@ -2042,153 +1932,12 @@ function check(ok, msg) {
   }
 }
 
-// ---- 12. UMBAUPLAN-LP Phase 4: Abprall-Bonus ----------------------------
-// "Der Abprall bleibt relevant, ohne erzwungen zu sein": eine Kugel mit
-// Wandkontakt richtet doppelten Schaden an -- kein Upgrade, keine
-// Klassenregel, und ausdruecklich fuer BEIDE Seiten.
-{
-  const { createBullet } = await import('../src/game/bullet.js');
-  const { stepState } = await import('../src/game/state.js');
-  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
-  const MULT = tanksData.balance.bullet.wallBounceDamageMult;
-
-  const blank = () => {
-    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
-    const st = run.state;
-    st.player.protect = 0;
-    st.player.shieldReady = false;
-    st.shieldCharges = [];
-    return st;
-  };
-  // Einen Treffer zustellen und den tatsaechlich abgezogenen Schaden melden.
-  const schadenAn = (st, ziel, owner, opt = {}) => {
-    ziel.protect = 0;
-    ziel.shieldReady = false;
-    if (ziel !== st.player) {
-      ziel.cfg.armor = null;
-      ziel.cfg.requiresRicochet = false;
-    }
-    const vorher = ziel.hp;
-    const b = createBullet(ziel.x, ziel.y, 0, {
-      speed: 1, radius: 3, ricochets: 1, owner, kind: 'bullet',
-      damage: opt.damage ?? owner.cfg.damage,
-      explosive: !!opt.explosive,
-      explosionRadius: opt.explosive ? 60 : 0,
-    });
-    b.age = 5;
-    b.wallBounces = opt.bounces ?? 0;
-    b.reflected = !!opt.reflected;
-    st.bullets.length = 0;
-    st.bullets.push(b);
-    stepState(st, CMD0, 1 / 60);
-    return vorher - ziel.hp;
-  };
-  const gegner = (st) => st.tanks.find((t) => t !== st.player && t.alive);
-
-  // (a) Gegen einen Gegner: Wandkontakt verdoppelt.
-  {
-    const st1 = blank();
-    const e1 = gegner(st1);
-    e1.cfg.maxHp = 500;
-    e1.hp = 500; // hoch genug, dass beide Varianten ueberlebt werden
-    const direkt = schadenAn(st1, e1, st1.player);
-    const st2 = blank();
-    const e2 = gegner(st2);
-    e2.cfg.maxHp = 500;
-    e2.hp = 500;
-    const gebandet = schadenAn(st2, e2, st2.player, { bounces: 1 });
-    check(direkt > 0, 'Phase 4: direkter Treffer richtet gar keinen Schaden an');
-    check(
-      gebandet === Math.round(direkt * MULT),
-      `Phase 4: Abpraller macht ${gebandet} statt ${Math.round(direkt * MULT)} Schaden (direkt ${direkt}, Faktor ${MULT})`,
-    );
-  }
-
-  // (b) Die Auflage des Plans: der Bonus gilt AUCH fuer gegnerische
-  // Geschosse. "Sonst lernt der Spieler, dass gebandete Kugeln nur fuer ihn
-  // gefaehrlich sind." Das ist die Pruefung, die eine einseitige Umsetzung
-  // (nur Spielerkugeln) auffliegen laesst.
-  {
-    const st1 = blank();
-    st1.player.cfg.maxHp = 500;
-    st1.player.hp = 500;
-    const direkt = schadenAn(st1, st1.player, gegner(st1));
-    const st2 = blank();
-    st2.player.cfg.maxHp = 500;
-    st2.player.hp = 500;
-    const gebandet = schadenAn(st2, st2.player, gegner(st2), { bounces: 1 });
-    check(
-      gebandet === Math.round(direkt * MULT),
-      `Phase 4: gegnerischer Bankschuss macht ${gebandet} statt ${Math.round(direkt * MULT)} (direkt ${direkt})`,
-    );
-  }
-
-  // (c) Eine REFLEXION (Prisma/Panzerung, E3) ist kein Wandkontakt und
-  // verdoppelt deshalb nicht. Der Code zaehlt Reflexionen bewusst nicht in
-  // wallBounces (sonst liessen sich zwei Prismen gegeneinander ausspielen,
-  // ohne je eine Bande zu spielen) -- diese Trennung muss auch beim Schaden
-  // gelten, sonst waere sie an einer Stelle unterlaufen.
-  {
-    const st1 = blank();
-    st1.player.cfg.maxHp = 500;
-    st1.player.hp = 500;
-    const reflektiert = schadenAn(st1, st1.player, st1.player, { reflected: true });
-    const st2 = blank();
-    st2.player.cfg.maxHp = 500;
-    st2.player.hp = 500;
-    const gebandet = schadenAn(st2, st2.player, st2.player, { bounces: 1 });
-    check(
-      reflektiert === tanksData.balance.damage.ownBullet,
-      `Phase 4: reflektierte eigene Kugel macht ${reflektiert} statt ${tanksData.balance.damage.ownBullet} (Grundwert)`,
-    );
-    check(
-      gebandet === Math.round(reflektiert * MULT),
-      `Phase 4: gebandete eigene Kugel macht ${gebandet} statt ${Math.round(reflektiert * MULT)}`,
-    );
-  }
-
-  // (d) Nur der AUFSCHLAG wird verdoppelt, nicht die Explosion eines
-  // gebandeten Sprenggeschosses -- sonst wuerde ein einziger Wandkontakt
-  // gleich zwei Schadensquellen verdoppeln.
-  {
-    const st1 = blank();
-    const e1 = gegner(st1);
-    e1.cfg.maxHp = 900;
-    e1.hp = 900;
-    const direkt = schadenAn(st1, e1, st1.player, { explosive: true });
-    const st2 = blank();
-    const e2 = gegner(st2);
-    e2.cfg.maxHp = 900;
-    e2.hp = 900;
-    const gebandet = schadenAn(st2, e2, st2.player, { explosive: true, bounces: 1 });
-    const aufschlag = st1.player.cfg.damage;
-    // Nur der AUFSCHLAG traegt den Faktor: die Differenz ist der Extra-Aufschlag
-    // (round(dmg*MULT) - dmg), NICHT der ganze Aufschlag -- bei MULT=2 waren beide
-    // zufaellig gleich, bei 2,5 nicht mehr. Die Explosion bleibt konstant.
-    const MULT = tanksData.balance.bullet.wallBounceDamageMult;
-    const extra = Math.round(aufschlag * MULT) - aufschlag;
-    check(
-      gebandet - direkt === extra,
-      `Phase 4: gebandetes Sprenggeschoss macht ${gebandet - direkt} mehr statt ${extra} -- die Explosion wurde mitskaliert`,
-    );
-  }
-
-  // (e) Der Faktor kommt aus balance.json, ist also kein hartkodiertes 2.
-  {
-    const alt = tanksData.balance.bullet.wallBounceDamageMult;
-    tanksData.balance.bullet.wallBounceDamageMult = 3;
-    const st = blank();
-    const e = gegner(st);
-    e.cfg.maxHp = 500;
-    e.hp = 500;
-    const dreifach = schadenAn(st, e, st.player, { bounces: 1 });
-    tanksData.balance.bullet.wallBounceDamageMult = alt;
-    check(
-      dreifach === st.player.cfg.damage * 3,
-      `Phase 4: Faktor wird nicht aus balance.json gelesen (${dreifach} statt ${st.player.cfg.damage * 3})`,
-    );
-  }
-}
+// ---- 12. Abprall-Bonus (wallBounceDamageMult) -- archiviert -----------
+// Die gesamte Wirkungspruefung des Abprall-Schadensbonus (UMBAUPLAN-LP
+// Phase 4) ist mit dem Bandenschuss entfernt (Grundsteinumbau Phase 1) --
+// b.wallBounces existiert nicht mehr, kein Geschoss kann noch "gebandet"
+// sein. Mechanik + alte Testfaelle sind in ARCHIV.md/archive/bandenschuss.md
+// dokumentiert.
 
 // ---- 13. UMBAUPLAN-LP Phase 5: Statuseffekt-System ----------------------
 // Das gemeinsame Regelwerk fuer Effekte ueber Zeit, gebaut BEVOR es die
@@ -2436,13 +2185,12 @@ function check(ok, msg) {
     st.mines.length = 0;
     return { st, ziele };
   };
-  const schuss = (st, ziel, typ, opt = {}) => {
+  const schuss = (st, ziel, typ) => {
     const b = createBullet(ziel.x, ziel.y, 0, {
-      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet',
+      speed: 1, radius: 3, owner: st.player, kind: 'bullet',
       damage: st.player.cfg.damage, damageType: typ,
     });
     b.age = 5;
-    b.wallBounces = opt.bounces ?? 0;
     st.bullets.length = 0;
     st.bullets.push(b);
     stepState(st, CMD0, 1 / 60);
@@ -2525,30 +2273,17 @@ function check(ok, msg) {
     );
   }
 
-  // (f) Der Abprall-Bonus (Phase 4) verdoppelt den AUFSCHLAG, nicht die
-  // Statusstufen -- "gebandetes Feuergeschoss: doppelter Aufschlagschaden,
-  // Brand unveraendert".
-  {
-    const a = raum(1);
-    schuss(a.st, a.ziele[0], 'fire');
-    const direktAufschlag = 9999 - a.ziele[0].hp;
-    const direktStufen = a.ziele[0].status.fire.stacks;
-    const b = raum(1);
-    schuss(b.st, b.ziele[0], 'fire', { bounces: 1 });
-    const bankAufschlag = 9999 - b.ziele[0].hp;
-    const bankStufen = b.ziele[0].status.fire.stacks;
-    check(
-      bankAufschlag === direktAufschlag * tanksData.balance.bullet.wallBounceDamageMult,
-      `Phase 6: gebandetes Feuergeschoss macht ${bankAufschlag} statt ${direktAufschlag * tanksData.balance.bullet.wallBounceDamageMult} Aufschlag`,
-    );
-    check(bankStufen === direktStufen, `Phase 6: der Abprall verdoppelt die Brandstufen (${direktStufen} -> ${bankStufen})`);
-  }
+  // (f) [archiviert] Der frühere Abprall-Bonus (wallBounceDamageMult,
+  // UMBAUPLAN-LP Phase 4) ist mit dem Bandenschuss entfernt
+  // (Grundsteinumbau Phase 1, s. Abschnitt 12 oben) -- der Wirkungsnachweis
+  // "gebandetes Feuergeschoss verdoppelt nur den Aufschlag" ist damit
+  // gegenstandslos, archiviert in ARCHIV.md/archive/bandenschuss.md.
 
   // (g) Standard ist physisch: ein Geschoss ohne Angabe traegt nichts auf.
   {
     const { st, ziele } = raum(1);
     const b = createBullet(ziele[0].x, ziele[0].y, 0, {
-      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10,
+      speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10,
     });
     check(b.damageType === 'physical', `Phase 6: Standard-Schadenstyp ist "${b.damageType}" statt "physical"`);
     b.age = 5;
@@ -2634,8 +2369,10 @@ function check(ok, msg) {
   }
 
   // (d) Schadensmultiplikation im Treffer. Ein Ziel exakt unter der Kugel,
-  //     unverwundbar hoch, ohne Panzerung/Schild -- so misst der hp-Abfall nur
-  //     die Faktoren. Krit und Bankschuss MULTIPLIZIEREN sich (Testschritt 3).
+  //     unverwundbar hoch, ohne Panzerung/Schild -- so misst der hp-Abfall
+  //     nur den Krit-Faktor (Testschritt 3). Die fruehere zweite Achse
+  //     "Krit x Bankschuss" ist mit dem Bandenschuss entfallen
+  //     (Grundsteinumbau Phase 1, s. Abschnitt 12).
   const treffer = (opt) => {
     const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
     const proto = st.tanks.find((t) => t !== st.player && t.alive);
@@ -2648,10 +2385,9 @@ function check(ok, msg) {
     };
     st.tanks.push(z);
     const b = createBullet(z.x, z.y, 0, {
-      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10, crit: opt.crit,
+      speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10, crit: opt.crit,
     });
     b.age = 5;
-    b.wallBounces = opt.bounces ?? 0;
     st.bullets.length = 0;
     st.mines.length = 0;
     st.bullets.push(b);
@@ -2661,14 +2397,8 @@ function check(ok, msg) {
   };
   {
     const grund = 10;
-    const bounce = tanksData.balance.bullet.wallBounceDamageMult;
-    check(treffer({ crit: false, bounces: 0 }) === grund, 'Phase 7: Vorbedingung -- Grundtreffer nicht 10');
-    check(treffer({ crit: true, bounces: 0 }) === Math.round(grund * CRIT.mult), 'Phase 7: Krit verdoppelt den Aufschlag nicht');
-    check(treffer({ crit: false, bounces: 1 }) === Math.round(grund * bounce), 'Phase 7: Vorbedingung -- Bankschuss-Bonus stimmt nicht');
-    check(
-      treffer({ crit: true, bounces: 1 }) === Math.round(grund * CRIT.mult * bounce),
-      `Phase 7: Krit und Bankschuss multiplizieren sich nicht (${grund}x${CRIT.mult}x${bounce})`,
-    );
+    check(treffer({ crit: false }) === grund, 'Phase 7: Vorbedingung -- Grundtreffer nicht 10');
+    check(treffer({ crit: true }) === Math.round(grund * CRIT.mult), 'Phase 7: Krit verdoppelt den Aufschlag nicht');
   }
 
   // (e) Feedback: der Krit spielt einen eigenen Ton, ruettelt den Bildschirm
@@ -2717,61 +2447,24 @@ function check(ok, msg) {
 {
   const { createBullet } = await import('../src/game/bullet.js');
   const { stepState } = await import('../src/game/state.js');
-  const { resolveCfg } = await import('../src/game/cfg.js');
   const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
 
-  // Treffer auf ein Ziel mit gegebenem cfg; misst den hp-Abfall. Ziel
-  // unverwundbar hoch, ohne Schild -- so zaehlt nur der Abprall-Faktor.
-  const trefferAuf = (cfgTarget, opt) => {
-    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
-    const proto = st.tanks.find((t) => t !== st.player && t.alive);
-    st.tanks.length = 0;
-    st.tanks.push(st.player);
-    const z = {
-      ...proto, x: 200, y: 250, prevX: 200, prevY: 250,
-      alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
-      cfg: { ...cfgTarget, maxHp: 9999 },
-    };
-    st.tanks.push(z);
-    const b = createBullet(z.x, z.y, 0, {
-      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10,
-    });
-    b.age = 5;
-    b.wallBounces = opt.bounces ?? 0;
-    st.bullets.length = 0;
-    st.mines.length = 0;
-    st.bullets.push(b);
-    const vor = z.hp;
-    stepState(st, CMD0, 1 / 60);
-    return vor - z.hp;
-  };
-
-  // (a) Struktur: t_prism hat weder Panzerung noch requiresRicochet, dafuer
-  //     den 3x-Abprallschaden. Der Spiegel-Boss behaelt requiresRicochet --
-  //     der Mechanismus darf nicht mitentfernt worden sein.
+  // (a)+(b) [archiviert] t_prism (Panzerung/requiresRicochet/
+  // bounceDamageTakenMult) und die Bankshot-Schadensvergleiche sind mit dem
+  // Bandenschuss vollstaendig entfernt (Grundsteinumbau Phase 1) --
+  // t_prism existiert nicht mehr, s. ARCHIV.md/archive/gegner-v1.json.
+  // Was bleibt: der Spiegel-Boss behaelt requiresRicochet als reinen
+  // Platzhalter-Passthrough (aktuell nicht spielbar erreichbar, s. CLAUDE.md
+  // "Bosse (Platzhalter, Nutzerentscheidung)") und bankshotGuarantee ist
+  // aus difficulty.json vollstaendig entfernt, nicht nur auf chance:0
+  // gesetzt.
   {
-    const P = tanksData.types.t_prism;
-    check(!P.armor && !P.requiresRicochet, 'Phase 8: t_prism traegt noch Panzerung/requiresRicochet');
-    check(P.bounceDamageTakenMult === 3, `Phase 8: t_prism hat bounceDamageTakenMult ${P.bounceDamageTakenMult} statt 3`);
-    check(tanksData.types.t_mirror.requiresRicochet === true, 'Phase 8: der Spiegel-Boss hat requiresRicochet verloren (Mechanismus kaputt)');
-    check(diffData.bankshotGuarantee.chance === 0, 'Phase 8: bankshotGuarantee.chance ist nicht 0 (Bankshot-Zwang noch aktiv)');
-  }
-
-  // (b) Prisma: direkter Schuss nimmt NORMALEN Schaden (Testschritt 2),
-  //     gebandeter Schuss den DREIFACHEN (Testschritt 3). Zum Vergleich ein
-  //     normaler Gegner: gebandet nur das Doppelte.
-  {
-    const prism = resolveCfg(tanksData, 't_prism');
-    const normal = resolveCfg(tanksData, 't_brown');
-    check(trefferAuf(prism, { bounces: 0 }) === 10, 'Phase 8: Prisma nimmt keinen normalen Direktschaden');
-    check(trefferAuf(prism, { bounces: 1 }) === 30, 'Phase 8: Prisma nimmt aus dem Bankshot nicht 3x (30) -- der eigene Faktor ersetzt den globalen');
-    // Der normale Gegner nimmt den GLOBALEN Abprall-Faktor (balance, aktuell 2,5),
-    // nicht die 3x des Prismas -- dynamisch gelesen, damit eine Faktor-Aenderung
-    // den Test nicht grundlos rot macht. Design-Aussage: das Prisma bleibt haerter.
-    const bounceMult = tanksData.balance.bullet.wallBounceDamageMult;
-    check(trefferAuf(normal, { bounces: 1 }) === Math.round(10 * bounceMult), `Phase 8: normaler Gegner nimmt aus dem Bankshot nicht ${bounceMult}x`);
-    check(trefferAuf(prism, { bounces: 1 }) > trefferAuf(normal, { bounces: 1 }), 'Phase 8: das Prisma ist beim Bankshot nicht mehr haerter als ein normaler Gegner');
-    check(trefferAuf(normal, { bounces: 0 }) === 10, 'Phase 8: normaler Direktschaden nicht 10');
+    check(!tanksData.types.t_prism, 'Phase 8: t_prism existiert noch (sollte mit Phase 1 entfernt sein)');
+    check(
+      tanksData.types.t_mirror.requiresRicochet === true,
+      'Phase 8: der Spiegel-Boss hat requiresRicochet verloren (Platzhalter-Feld fuer einen Bossneubau)',
+    );
+    check(!diffData.bankshotGuarantee, 'Phase 8: bankshotGuarantee existiert noch in difficulty.json');
   }
 
   // (c) Schild-Absorber (Testschritt 4): faengt die naechsten `absorb` Punkte
@@ -2818,7 +2511,7 @@ function check(ok, msg) {
     };
     st.tanks.push(z);
     const b = createBullet(z.x, z.y, 0, {
-      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10, damageType: 'fire',
+      speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10, damageType: 'fire',
     });
     b.age = 5;
     st.bullets.length = 0;
@@ -2867,11 +2560,10 @@ function check(ok, msg) {
     check(cfg.damageType === 'lightning', `Phase 9: Teslapanzer schiesst ${cfg.damageType} statt lightning`);
   }
 
-  // (c) Abprallpanzer: +1 Abpraller auf die Basis.
-  {
-    check(resolveCfg(tanksData, 'c_ricochet').ricochets === 2, 'Phase 9: Abprallpanzer nicht 2 Abpraller');
-    check(resolveCfg(tanksData, 'player').ricochets === 1, 'Phase 9: Standard nicht 1 Abpraller');
-  }
+  // (c) [archiviert] Abprallpanzer-Passiv (+1 Abpraller auf die Basis) --
+  // cfg.ricochets ist mit dem Bandenschuss entfernt (Grundsteinumbau
+  // Phase 1); c_ricochet ist bis zu ihrem Neubau ohne Identitaet
+  // (s. AUFTRAG-GRUNDSTEINUMBAU.md, Festgelegte Entscheidungen).
 
   // (d) Sprengpanzer: +20 % Bombenradius, in mineRadiusMult gefaltet (Test-
   //     schritt 2). Mit eigenen Zahlen, nicht dem aktuellen JSON-Wert allein.
@@ -2912,7 +2604,7 @@ function check(ok, msg) {
     const { st, ziele } = reihe(5, Math.round(L.jumpRangePx * 0.5));
     st.player.cfg.lightningBonusTargets = 1;
     const b = createBullet(ziele[0].x, ziele[0].y, 0, {
-      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10, damageType: 'lightning',
+      speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10, damageType: 'lightning',
     });
     b.age = 5;
     st.bullets.push(b);
@@ -3107,7 +2799,7 @@ function check(ok, msg) {
 
   // Feuert eine physische Kugel vom Spieler (mit gesetzten cfg-Feldern) auf ein
   // Ziel; misst den hp-Abfall. Ziel ohne Panzerung/Schild.
-  const treffer = (ownerFields, { damage = 10, bounces = 0, crit = false, hp = 9999, maxHp = 9999 } = {}) => {
+  const treffer = (ownerFields, { damage = 10, crit = false, hp = 9999, maxHp = 9999 } = {}) => {
     const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
     const proto = st.tanks.find((t) => t !== st.player && t.alive);
     st.tanks.length = 0;
@@ -3120,10 +2812,9 @@ function check(ok, msg) {
     };
     st.tanks.push(z);
     const b = createBullet(z.x, z.y, 0, {
-      speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage, damageType: 'physical', crit,
+      speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage, damageType: 'physical', crit,
     });
     b.age = 5;
-    b.wallBounces = bounces;
     st.bullets.length = 0;
     st.mines.length = 0;
     st.bullets.push(b);
@@ -3132,18 +2823,9 @@ function check(ok, msg) {
     return { dmg: vor - z.hp, tot: !z.alive };
   };
 
-  // (d) Kaltschütze: gebandeter Schuss ist kritisch (×2) trotz crit=false.
-  //     Testschritt 3 (Zusammenspiel mit dem Bankschuss-Faktor).
-  {
-    // Faktoren dynamisch aus balance.json (Abprall aktuell 2,5, Krit 2), damit
-    // eine Faktor-Aenderung den Test nicht grundlos rot macht.
-    const MULT = tanksData.balance.bullet.wallBounceDamageMult;
-    const critMult = tanksData.balance.crit.mult;
-    const plain = treffer({}, { damage: 10, bounces: 1 }).dmg; // Abprall = 10*MULT
-    const cold = treffer({ critOnBounce: true }, { damage: 10, bounces: 1 }).dmg; // Abprall * Krit
-    check(plain === Math.round(10 * MULT), `Phase 11: Vorbedingung Bankschaden ${plain} statt ${Math.round(10 * MULT)}`);
-    check(cold === Math.round(10 * MULT * critMult), `Phase 11: Kaltschütze macht gebandeten Schuss nicht kritisch (${cold} statt ${Math.round(10 * MULT * critMult)})`);
-  }
+  // (d) [archiviert] Kaltschuetze (gebandeter Schuss wird kritisch) hing am
+  // Bandenschuss und ist mit Grundsteinumbau Phase 1 wirkungslos -- die
+  // Karte bleibt bis Phase 4 im Pool ziehbar, s. ARCHIV.md.
 
   // (e) Splittergeschoss: Krit-Faktor +0,5 -> ×2,5.
   {
@@ -3160,13 +2842,9 @@ function check(ok, msg) {
     check(high === 10, `Phase 11: Fangschuss trifft volles Ziel faelschlich haerter (${high} statt 10)`);
   }
 
-  // (g) Abprallkönig: gebandet Abprall-Faktor UND Bonus ×2 (1 + bounceDamageBonus).
-  {
-    const MULT = tanksData.balance.bullet.wallBounceDamageMult;
-    const king = treffer({ bounceDamageBonus: 1.0 }, { damage: 10, bounces: 1 }).dmg;
-    const erw = Math.round(10 * MULT * (1 + 1.0));
-    check(king === erw, `Phase 11: Abprallkönig gebandet ${king} statt ${erw}`);
-  }
+  // (g) [archiviert] Abprallkoenig (Abprall-Faktor UND Bonus) hing am
+  // Bandenschuss und ist mit Grundsteinumbau Phase 1 wirkungslos -- die
+  // Karte bleibt bis Phase 4 im Pool ziehbar, s. ARCHIV.md.
 
   // (h) Kopfschuss: ein Krit tötet einen Nicht-Boss sofort.
   {
@@ -3244,7 +2922,7 @@ function check(ok, msg) {
     };
     st.tanks.push(z);
     // Bereits totes Sprenggeschoss GENAU am Ziel -> nur die Explosion wirkt.
-    const b = createBullet(z.x, z.y, 0, { speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10, damageType: 'explosive' });
+    const b = createBullet(z.x, z.y, 0, { speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10, damageType: 'explosive' });
     b.explosive = true;
     b.explosionRadius = 60;
     b.dead = true;
@@ -3501,7 +3179,7 @@ function check(ok, msg) {
         cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
       };
       st.tanks.push(z);
-      const b = createBullet(z.x, z.y, 0, { speed: 1, radius: 3, ricochets: 1, owner: st.player, kind: 'bullet', damage: 10, damageType: 'frost' });
+      const b = createBullet(z.x, z.y, 0, { speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10, damageType: 'frost' });
       b.age = 5;
       st.bullets.length = 0;
       st.mines.length = 0;
@@ -3901,10 +3579,11 @@ function check(ok, msg) {
     const c2 = applyUpgrades(resolveCfg(tanksData, 'player'), { sig_std_drill: 2 }, upgradesData, 'mine', null);
     check(c2.damage === base.damage + drill.damageAdd * 2, `Phase 18: Grundausbildung Schaden ${c2.damage} statt ${base.damage + drill.damageAdd * 2}`);
     check(Math.abs(c2.fireCooldown - base.fireCooldown * Math.pow(drill.reloadMult, 2)) < 1e-6, 'Phase 18: Grundausbildung Nachladen falsch');
-    const wanne = U.sig_std_wanne.core; // { hpAdd, ricochetAdd }
+    // sig_std_wanne.core hat auch ricochetAdd -- seit Grundsteinumbau
+    // Phase 1 ohne Wirkung (cfg.ricochets entfallen), nur noch hpAdd geprueft.
+    const wanne = U.sig_std_wanne.core;
     const w2 = applyUpgrades(resolveCfg(tanksData, 'player'), { sig_std_wanne: 2 }, upgradesData, 'mine', null);
     check(w2.maxHp === base.maxHp + wanne.hpAdd * 2, `Phase 18: Wanne LP ${w2.maxHp} statt ${base.maxHp + wanne.hpAdd * 2}`);
-    check(w2.ricochets === base.ricochets + wanne.ricochetAdd * 2, `Phase 18: Wanne Abpraller ${w2.ricochets} statt ${base.ricochets + wanne.ricochetAdd * 2}`);
     const gard = U.sig_std_gardist.core; // { damageAdd, magAdd, hpAdd }, legendary maxStacks 1
     const g1 = applyUpgrades(resolveCfg(tanksData, 'player'), { sig_std_gardist: 1 }, upgradesData, 'mine', null);
     check(g1.damage === base.damage + gard.damageAdd && g1.magazine === base.magazine + gard.magAdd && g1.maxHp === base.maxHp + gard.hpAdd, 'Phase 18: Gardist-Kombiwerte falsch');
@@ -4329,11 +4008,8 @@ function check(ok, msg) {
 // zurueckgestellte perBounce-Alternative). Mechanismus mit eigenen Zahlen auf
 // Schadensebene geprueft; Gegenprobe fuer jeden Kernpunkt bestanden.
 {
-  const { resolveCfg, applyUpgrades } = await import('../src/game/cfg.js');
   const { rollOffers } = await import('../src/game/upgradepool.js');
   const { mulberry32 } = await import('../src/core/rng.js');
-  const { createBullet } = await import('../src/game/bullet.js');
-  const { stepState } = await import('../src/game/state.js');
   const U = upgradesData.upgrades;
   const ric = Object.entries(U).filter(([, d]) => d.signatureClass === 'c_ricochet');
 
@@ -4363,55 +4039,14 @@ function check(ok, msg) {
     check(!sieht('player'), 'Phase 24: fremde Klasse sieht die Abprall-Signatur (Filter greift nicht)');
   }
 
-  // (c) Applier: Abprall-core-Schluessel landen im aufgeloesten c_ricochet-cfg.
-  //     Die Basis-Abprallzahl ist 2 (ricochets 1 + Passiv bonusRicochets 1).
-  {
-    const base = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), {}, upgradesData, 'mine', null);
-    check(base.ricochets === 2, `Phase 24: Vorbedingung -- Basis-Abpraller ${base.ricochets} statt 2`);
-    const za = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), { sig_ric_zusatzabpraller: 1 }, upgradesData, 'mine', null);
-    check(za.ricochets === base.ricochets + U.sig_ric_zusatzabpraller.core.ricochetAdd, `Phase 24: Zusatzabpraller Abprallzahl ${za.ricochets} falsch`);
-    const ws = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), { sig_ric_wuchtgeschoss: 2 }, upgradesData, 'mine', null);
-    check(Math.abs((ws.bounceDamageBonus || 0) - U.sig_ric_wuchtgeschoss.core.bounceDamageBonus * 2) < 1e-6, `Phase 24: Wuchtgeschoss bounceDamageBonus ${ws.bounceDamageBonus} falsch`);
-    const ks = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), { sig_ric_konterschlag: 1 }, upgradesData, 'mine', null);
-    check(ks.critOnBounce === true, 'Phase 24: Konterschlag setzt critOnBounce nicht');
-    const vs = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), { sig_ric_verstaerker: 2 }, upgradesData, 'mine', null);
-    check(Math.abs((vs.critMultBonus || 0) - U.sig_ric_verstaerker.core.critMultBonus * 2) < 1e-6, `Phase 24: Verstärker critMultBonus ${vs.critMultBonus} falsch`);
-    const kb = applyUpgrades(resolveCfg(tanksData, 'c_ricochet'), { sig_ric_kettenbank: 1 }, upgradesData, 'mine', null);
-    check(Math.abs((kb.bounceRampPerBounce || 0) - U.sig_ric_kettenbank.core.bounceRampPerBounce) < 1e-6, `Phase 24: Kettenbank bounceRampPerBounce ${kb.bounceRampPerBounce} falsch`);
-  }
-
-  // (d) SCHADENSEBENE: die neue Regel bounceRampPerBounce skaliert den Schaden
-  //     JE Wandabpraller. Kontrolle ohne Rampe, dann mit Rampe bei 1 und 2
-  //     Abprallern. Erwartung: base * wallBounceDamageMult * (1 + ramp*bounces).
-  {
-    const MULT = tanksData.balance.bullet.wallBounceDamageMult;
-    const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
-    const blank = () => {
-      const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
-      return run.state;
-    };
-    const gegner = (st) => st.tanks.find((t) => t !== st.player && t.alive);
-    const treffer = (ramp, bounces) => {
-      const st = blank();
-      const e = gegner(st);
-      e.cfg.armor = null; e.cfg.requiresRicochet = false; e.cfg.bounceDamageTakenMult = null;
-      e.cfg.maxHp = 100000; e.hp = 100000; e.protect = 0; e.shieldReady = false;
-      st.player.cfg.bounceRampPerBounce = ramp;
-      const vor = e.hp;
-      const b = createBullet(e.x, e.y, 0, { speed: 1, radius: 3, ricochets: 3, owner: st.player, kind: 'bullet', damage: 100 });
-      b.age = 5; b.wallBounces = bounces; b.crit = false;
-      st.bullets.length = 0; st.bullets.push(b);
-      stepState(st, CMD0, 1 / 60);
-      return vor - e.hp;
-    };
-    const ohne = treffer(0, 2); // nur der pauschale 2x-Bonus
-    const mit1 = treffer(0.5, 1);
-    const mit2 = treffer(0.5, 2);
-    check(ohne === Math.round(100 * MULT), `Phase 24: Kontrolle ohne Rampe ${ohne} statt ${Math.round(100 * MULT)}`);
-    check(mit1 === Math.round(100 * MULT * (1 + 0.5 * 1)), `Phase 24: Rampe bei 1 Abpraller ${mit1} statt ${Math.round(100 * MULT * 1.5)}`);
-    check(mit2 === Math.round(100 * MULT * (1 + 0.5 * 2)), `Phase 24: Rampe bei 2 Abprallern ${mit2} statt ${Math.round(100 * MULT * 2.0)}`);
-    check(mit2 > mit1 && mit1 > ohne, 'Phase 24: die Rampe waechst nicht mit der Abprallzahl');
-  }
+  // (c)+(d) [archiviert] Alle Abprall-core-Schluessel (ricochetAdd/
+  // bounceDamageBonus/critOnBounce/critMultBonus/bounceRampPerBounce) hingen
+  // am Bandenschuss und sind mit Grundsteinumbau Phase 1 wirkungslos --
+  // c_ricochet ist bis zu ihrem Neubau ohne Identitaet (s.
+  // AUFTRAG-GRUNDSTEINUMBAU.md, Festgelegte Entscheidungen). Die zwoelf
+  // Karten bleiben unangetastet in data/upgrades.json/im Pool ziehbar
+  // (Struktur/Filter/Mehrfachangebot oben und (e) unten), Details in
+  // ARCHIV.md/archive/bandenschuss.md.
 
   // (e) Upgradepool-v2 Phase 2: mehrere Abprall-Signaturen duerfen jetzt
   //     gemeinsam im selben Angebot erscheinen (dedupen ueber die eigene id
@@ -5858,7 +5493,7 @@ for (const seed of SEEDS) {
     const hpVor = g.hp;
     const dmg = 17;
     st.bullets.push(
-      createBullet(g.x, g.y, 0, { speed: 1, radius: 4, ricochets: 1, owner: e, kind: 'bullet', damage: dmg }),
+      createBullet(g.x, g.y, 0, { speed: 1, radius: 4, owner: e, kind: 'bullet', damage: dmg }),
     );
     stepState(st, CMD, STEP);
     check(
@@ -5873,14 +5508,14 @@ for (const seed of SEEDS) {
     st.bullets.length = 0;
     const hpVor2 = g.hp;
     st.bullets.push(
-      createBullet(g.x, g.y, 0, { speed: 1, radius: 4, ricochets: 1, owner: st.player, kind: 'bullet', damage: 999 }),
+      createBullet(g.x, g.y, 0, { speed: 1, radius: 4, owner: st.player, kind: 'bullet', damage: 999 }),
     );
     stepState(st, CMD, STEP);
     check(g.hp === hpVor2, 'Phase 5 (Zielsystem): eine Spielerkugel schadet dem Geist');
 
     st.bullets.length = 0;
     st.bullets.push(
-      createBullet(g.x, g.y, 0, { speed: 1, radius: 4, ricochets: 1, owner: e, kind: 'bullet', damage: 99999 }),
+      createBullet(g.x, g.y, 0, { speed: 1, radius: 4, owner: e, kind: 'bullet', damage: 99999 }),
     );
     stepState(st, CMD, STEP);
     check(st.ghosts.length === 0, 'Phase 5 (Zielsystem): ein toedlicher Treffer entfernt den Geist nicht');
@@ -5982,7 +5617,7 @@ for (const seed of SEEDS) {
       e.hp = 1;
       st.rng = () => 0;
       st.bullets.push(
-        createBullet(e.x, e.y, 0, { speed: 1, radius: 4, ricochets: 1, owner: st.player, kind: 'bullet', damage: 99999 }),
+        createBullet(e.x, e.y, 0, { speed: 1, radius: 4, owner: st.player, kind: 'bullet', damage: 99999 }),
       );
       stepState(st, CMD, STEP);
       check(!e.alive, 'Phase 6: Vorbedingung Kugel-Kill (Ziel nicht getroffen)');
@@ -6010,7 +5645,7 @@ for (const seed of SEEDS) {
       e.protect = 0;
       e.hp = 1;
       st.rng = () => 0;
-      const b = createBullet(e.x, e.y, 0, { speed: 0, radius: 1, ricochets: 1, owner: st.player, kind: 'bullet', damage: 1 });
+      const b = createBullet(e.x, e.y, 0, { speed: 0, radius: 1, owner: st.player, kind: 'bullet', damage: 1 });
       b.dead = true;
       b.explosive = true;
       b.explosionRadius = 200;
@@ -6085,7 +5720,7 @@ for (const seed of SEEDS) {
       st.rng = () => 0;
       st.bullets.push(
         createBullet(a.x, a.y, 0, {
-          speed: 1, radius: 4, ricochets: 1, owner: st.player, kind: 'bullet', damage: 99999, damageType: 'lightning',
+          speed: 1, radius: 4, owner: st.player, kind: 'bullet', damage: 99999, damageType: 'lightning',
         }),
       );
       stepState(st, CMD, STEP);
@@ -6270,10 +5905,12 @@ for (const seed of SEEDS) {
   }
 
   // (b) Feste Basiswerte gegen die Anhang-B-Zahlen (S7): 60 LP, 8 Schaden,
-  // 2,0 s Schussintervall, 0 Abpraller, keine Ruestung. Tempo/Kugeltempo/
-  // Reichweite als Prozentsatz der STANDARDKLASSE player (nicht des
-  // Nekromanten) -- ausdruecklich gegen resolveCfg(tanksData,'player')
-  // nachgerechnet, nicht gegen einen zweiten hartkodierten Wert.
+  // 2,0 s Schussintervall, keine Ruestung. ("0 Abpraller" aus Anhang B ist
+  // mit dem Bandenschuss gegenstandslos, Grundsteinumbau Phase 1 -- es gibt
+  // das Konzept fuer niemanden mehr.) Tempo/Kugeltempo/Reichweite als
+  // Prozentsatz der STANDARDKLASSE player (nicht des Nekromanten) --
+  // ausdruecklich gegen resolveCfg(tanksData,'player') nachgerechnet, nicht
+  // gegen einen zweiten hartkodierten Wert.
   {
     const st = necroRoom();
     const g = createGhost(st, 0, 0);
@@ -6281,7 +5918,6 @@ for (const seed of SEEDS) {
     check(g.cfg.maxHp === 60, `Phase 7: Geist-LP ${g.cfg.maxHp} statt 60`);
     check(g.cfg.damage === 8, `Phase 7: Geist-Schaden ${g.cfg.damage} statt 8`);
     check(g.cfg.fireCooldown === 2.0, `Phase 7: Geist-Schussintervall ${g.cfg.fireCooldown} statt 2,0 s`);
-    check(g.cfg.ricochets === 0, `Phase 7: Geist hat Abpraller (${g.cfg.ricochets})`);
     check(g.cfg.armor === null, 'Phase 7: Geist hat eine Panzerung');
     check(
       Math.abs(g.cfg.speed - p.speed * 0.7) < 1e-9,
@@ -6648,7 +6284,7 @@ for (const seed of SEEDS) {
     e.hp = 1; e.cfg.maxHp = 999; e.protect = 0; e.cfg.armor = null; e.cfg.requiresRicochet = false;
     const g = createGhost(st, e.x, e.y);
     st.ghosts.push(g);
-    const b = createBullet(e.x, e.y, 0, { speed: 1, radius: 3, ricochets: 0, owner: g, kind: 'bullet', damage: g.cfg.damage, damageType: 'physical' });
+    const b = createBullet(e.x, e.y, 0, { speed: 1, radius: 3, owner: g, kind: 'bullet', damage: g.cfg.damage, damageType: 'physical' });
     b.age = 5;
     st.bullets.length = 0;
     st.bullets.push(b);
@@ -6669,7 +6305,7 @@ for (const seed of SEEDS) {
     e.stunTimer = 0;
     const g = createGhost(st, e.x, e.y);
     st.ghosts.push(g);
-    const b = createBullet(e.x, e.y, 0, { speed: 1, radius: 3, ricochets: 0, owner: g, kind: 'bullet', damage: 1, damageType: 'physical' });
+    const b = createBullet(e.x, e.y, 0, { speed: 1, radius: 3, owner: g, kind: 'bullet', damage: 1, damageType: 'physical' });
     b.age = 5;
     st.bullets.length = 0;
     st.bullets.push(b);

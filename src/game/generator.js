@@ -56,30 +56,6 @@ function pickTile(tilesData, rng, weights) {
   return tilesData.tiles[names[names.length - 1]];
 }
 
-// Spiegelwaende (Phase 5): ersetzt 2-4 Aussenrand-Zellen (ohne Ecken) durch
-// 'r' (Reflekt-Wandtyp). Nur der Aussenrand ist bereits geschlossene Wand,
-// also aendert das weder den Wandanteil noch die Erreichbarkeit -- kein
-// Risiko fuer Flood-Fill/Spawn-Platzierung.
-function placeReflectWalls(grid, rng, count) {
-  const border = [];
-  for (let c = 1; c < COLS - 1; c++) {
-    border.push([c, 0]);
-    border.push([c, ROWS - 1]);
-  }
-  for (let r = 1; r < ROWS - 1; r++) {
-    border.push([0, r]);
-    border.push([COLS - 1, r]);
-  }
-  for (let i = border.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [border[i], border[j]] = [border[j], border[i]];
-  }
-  for (let i = 0; i < count && i < border.length; i++) {
-    const [c, r] = border[i];
-    grid[r][c] = 'r';
-  }
-}
-
 // Zerstoerbare Waende (Phase 11): markiert einen Anteil der INNEREN
 // soliden Zellen (kein Aussenrand -- der bleibt immer geschlossen) als
 // eigenes Zeichen 'd'. Physisch identisch zu '#' (blockiert, keine
@@ -131,10 +107,6 @@ function buildGrid(tilesData, rng, weights, destructibleWalls) {
     grid[r][0] = '#';
     grid[r][COLS - 1] = '#';
   }
-  const mirrorCfg = tilesData.mirror || { minPerRoom: 2, maxPerRoom: 4 };
-  const span = mirrorCfg.maxPerRoom - mirrorCfg.minPerRoom;
-  const count = mirrorCfg.minPerRoom + Math.floor(rng() * (span + 1));
-  placeReflectWalls(grid, rng, count);
   placeDestructibleWalls(grid, rng, destructibleWalls);
   return grid;
 }
@@ -169,10 +141,9 @@ function reachableCells(grid, startC, startR) {
   return seen;
 }
 
-// Sichtlinie zwischen zwei Zellzentren; '#', 'b', 'r' (Spiegelwand,
-// Phase 5) und 'd' (zerstoerbare Wand, Phase 11 -- bis zur Zerstoerung
-// physisch eine normale Wand) blockieren (Geschosse fliegen ueber 'o'
-// hinweg, also blockiert 'o' NICHT).
+// Sichtlinie zwischen zwei Zellzentren; '#', 'b' und 'd' (zerstoerbare
+// Wand, Phase 11 -- bis zur Zerstoerung physisch eine normale Wand)
+// blockieren (Geschosse fliegen ueber 'o' hinweg, also blockiert 'o' NICHT).
 function hasLos(grid, c0, r0, c1, r1) {
   const x0 = c0 * CELL + CELL / 2;
   const y0 = r0 * CELL + CELL / 2;
@@ -184,7 +155,7 @@ function hasLos(grid, c0, r0, c1, r1) {
     const x = x0 + ((x1 - x0) * i) / steps;
     const y = y0 + ((y1 - y0) * i) / steps;
     const cell = grid[Math.floor(y / CELL)][Math.floor(x / CELL)];
-    if (cell === '#' || cell === 'b' || cell === 'r' || cell === 'd') return false;
+    if (cell === '#' || cell === 'b' || cell === 'd') return false;
   }
   return true;
 }
@@ -242,14 +213,14 @@ export function buildFixedRoom(roomDef, enemyCount) {
 // Layouts erzeugen exakt dieselbe Kachelstruktur (dasselbe grid-Format) wie
 // generierte Raeume.
 //
-// Legende -> Rasterzeichen der Engine. Phase 14 aktiviert die beiden
-// Sonderfelder: 'mirror' wird zur bereits bestehenden Spiegelwand ('r',
-// Phase 5 -- Der Spiegel-Boss braucht keine eigene Wandmechanik dafuer),
-// 'generator' zu einem neuen, eigenen Wandtyp mit Bankshot-Haltbarkeit
-// (state.js: WALL_TYPES.g, bullet.js: nur Treffer mit wallBounces>0
-// beschaedigen ihn). Beide werden trotzdem weiter als Marker gemeldet
-// (siehe arenaCells()) -- ungenutzt fuer diese zwei Kinds, aber offen fuer
-// spaetere Spezialfaelle.
+// Legende -> Rasterzeichen der Engine. Phase 14 aktivierte das Sonderfeld
+// 'generator': eigener Wandtyp (state.js: WALL_TYPES.g), aktuell ohne
+// Zerstoerungspfad (Bandenschuss-Vorbedingung entfallen, Boss ist
+// Platzhalter, s. CLAUDE.md). Bleibt trotzdem als Marker gemeldet (siehe
+// arenaCells()) -- offen fuer einen kuenftigen Bossneubau. Das frueher
+// gleichrangige 'mirror' (Spiegelwand-Legendenkuerzel, NICHT der
+// Spiegel-Boss selbst -- der bewegt sich unabhaengig von Wandtypen) ist
+// mit dem Bandenschuss entfallen (Grundsteinumbau Phase 1).
 const LEGEND_TO_CELL = {
   wall: '#',
   breakable: 'b',
@@ -257,13 +228,12 @@ const LEGEND_TO_CELL = {
   floor: '.',
   spawn: '.',
   enemy: '.',
-  mirror: 'r',
   generator: 'g',
 };
 
 function arenaCells(def, name) {
   const grid = [];
-  const markers = []; // { type, col, row } fuer mirror/generator (Phase 14)
+  const markers = []; // { type, col, row } fuer generator (Phase 14)
   let player = null;
   const enemies = [];
   for (let r = 0; r < def.grid.length; r++) {
@@ -285,7 +255,7 @@ function arenaCells(def, name) {
       row.push(cell);
       if (kind === 'spawn') player = [c, r];
       else if (kind === 'enemy') enemies.push([c, r]);
-      else if (kind === 'mirror' || kind === 'generator') markers.push({ type: kind, col: c, row: r });
+      else if (kind === 'generator') markers.push({ type: kind, col: c, row: r });
     }
     grid.push(row);
   }

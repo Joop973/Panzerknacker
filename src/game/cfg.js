@@ -42,8 +42,6 @@ export function resolveCfg(data, type) {
     // Typmagazin, unbegrenzten Deckel und die weapon-Geschwindigkeitstabelle.
     magazine: isPlayerClass ? (t.magazine ?? bbullet?.maxActive) : t.magazine,
     magazineCap: isPlayerClass ? (t.magazineCap ?? bbullet?.maxActiveCap ?? Infinity) : Infinity,
-    // Phase 9: Abprallpanzer bekommt +bonusRicochets auf die Basis.
-    ricochets: (t.ricochets ?? 0) + (t.bonusRicochets ?? 0),
     mines: t.mines,
     weapon: t.weapon,
     bulletSpeed: isPlayerClass
@@ -60,19 +58,17 @@ export function resolveCfg(data, type) {
     // Typen setzen sie, die sie tatsaechlich nutzen.
     packFlank: t.packFlank || false,
     leadAim: t.leadAim || false,
-    requiresBounceShot: t.requiresBounceShot || false,
     phaseToggle: t.phaseToggle || null,
     avoidMines: t.avoidMines || false,
     miner: t.miner,
     trackStampPx: t.trackStampPx || 3,
     // Gerichtete Panzerung (Phase 4) -- reine Datenuebernahme.
     armor: t.armor || null,
+    // Grundsteinumbau Phase 1: die INTERPRETATION dieses Feldes (Kill-Block
+    // ohne Wandabpraller) ist aus armor.js entfernt -- reiner Boss-Platzhalter-
+    // Passthrough (t_mirror, s. CLAUDE.md "Bosse (Platzhalter,
+    // Nutzerentscheidung)"), nur noch fuer die Renderer-Optik gebraucht.
     requiresRicochet: t.requiresRicochet || false,
-    // Ziel-seitige Verwundbarkeit gegen Wandabpraller (UMBAUPLAN-LP Phase 8,
-    // t_prism): ein gebandeter Treffer richtet diesen Faktor statt des
-    // globalen wallBounceDamageMult an -- "dreifach statt doppelt". Ersetzt
-    // den frueheren requiresRicochet-Zwang durch einen Anreiz.
-    bounceDamageTakenMult: t.bounceDamageTakenMult ?? null,
     // Klassen-Passive (UMBAUPLAN-LP Phase 9). Reine Datenuebernahme; jeder
     // Wert wird an genau EINER Stelle ausgewertet (s. Kommentar dort).
     classMineRadiusMult: t.classMineRadiusMult ?? 1, // Sprengpanzer: Bombenradius (mine.js via mineRadiusMult)
@@ -119,7 +115,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   if (!ups) return cfg;
   const l = (k) => ups[k] || 0;
   cfg.magazine += 2 * l('magazin');
-  cfg.ricochets += l('abpraller'); // Basis 1, max +1 => harte Grenze 2
+  // Grundsteinumbau Phase 1: die Karte 'abpraller' (Bandenschuss) ist ohne
+  // Wirkung -- data/upgrades.json bleibt bis Phase 4 unangetastet, ihr
+  // Effekt greift bewusst ins Leere statt Einzelausbau (s. Auftrag).
   cfg.bulletSpeed *= Math.pow(1.2, l('ladung'));
   cfg.mines += l('kettenglied');
   cfg.mineRadiusMult =
@@ -200,7 +198,6 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   if (l('streuschuss')) {
     cfg.spreadCount = U.streuschuss.count;
     cfg.spreadRad = U.streuschuss.spreadRad;
-    cfg.ricochets = 0; // Faecher ohne Abpraller (Selbstschutz)
   }
   if (l('nachbrenner')) {
     cfg.afterburnerMult = 1 + (U.nachbrenner.boostMult - 1) * l('nachbrenner');
@@ -291,7 +288,6 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   if (l('scharfschuetze')) {
     cfg.bulletSpeed *= U.scharfschuetze.speedMult;
     cfg.fireCooldown *= U.scharfschuetze.cooldownMult;
-    cfg.ricochets += U.scharfschuetze.ricochetsBonus;
     // Hartes Magazin-Limit (unten angewandt, schlaegt alle anderen
     // Magazin-Effekte). Frueher fest 1 -- jetzt aus den Kartendaten.
     cfg.magazineFixed = U.scharfschuetze.magazineFixed;
@@ -300,20 +296,17 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   // sind automatisch verstaerkt (tank.js verwaltet den Ladungszaehler).
   if (l('powershot')) {
     cfg.powershotPerRoom = l('powershot') * U.powershot.perRoom;
-    cfg.powershotBonusRicochets = U.powershot.bonusRicochets;
     cfg.powershotSpeedFactor = U.powershot.speedFactor;
   }
-  // Doppelschlag (Phase 18, Welle 3): ein Trickshot-Kill laedt eine
-  // Powershot-Ladung nach (state.js). Die Verstaerkungswerte kommen aus der
-  // powershot-Definition -- sonst waere die Kugelgeschwindigkeit NaN, wenn
-  // Doppelschlag OHNE die Powershot-Karte gewaehlt wird (tank.js multipliziert
-  // ungeprueft mit cfg.powershotSpeedFactor). Nach dem powershot-Block, damit
-  // dessen eigene Werte Vorrang behalten.
+  // Doppelschlag (Phase 18, Welle 3): laud eine Powershot-Ladung frueher pro
+  // Trickshot-Kill nach -- die Trickshot-Belohnung selbst ist mit dem
+  // Bandenschuss entfallen (Grundsteinumbau Phase 1), die Karte bleibt bis
+  // zum Kartenabbau in Phase 4 wirkungslos in data/upgrades.json stehen.
+  // cfg.powershotSpeedFactor braucht trotzdem einen Fallback, falls
+  // tank.powershotCharges je ohne die Powershot-Karte gesetzt wird (sonst
+  // NaN in tank.js: fireBullet()).
   if (l('doppelschlag')) {
-    cfg.trickshotPowershot = U.doppelschlag.chargesPerTrickshot;
-    cfg.trickshotPowershotMax = U.doppelschlag.maxCharges;
     cfg.powershotSpeedFactor = cfg.powershotSpeedFactor || U.powershot.speedFactor;
-    cfg.powershotBonusRicochets = cfg.powershotBonusRicochets ?? U.powershot.bonusRicochets;
   }
 
   // Scharfschuetze: hartes Magazin (schlaegt alles, ganz am Ende angewandt).
@@ -325,9 +318,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   // Beutejagd (Phase 18, zweite Tag-resource-Karte): Bonus-Schrott fuer den
   // ERSTEN Kill in jedem Raum (state.js: firstKillGiven-Zaehler).
   if (l('beutejagd')) cfg.firstKillScrap = U.beutejagd.scrapPerLevel * l('beutejagd');
-  // Meisterschuetze (Phase 18, Tag synergy): verdoppelt die Trickshot-
-  // Belohnung (Phase 5) -- reiner Multiplikator, keine neue Mechanik.
-  if (l('meisterschuetze')) cfg.trickshotScrapMult = U.meisterschuetze.scrapMult;
+  // Meisterschuetze (Phase 18, Tag synergy): verdoppelte die Trickshot-
+  // Belohnung (Phase 5) -- mit dem Bandenschuss entfallen (Grundsteinumbau
+  // Phase 1), die Karte bleibt bis Phase 4 wirkungslos in data/upgrades.json.
   // Sekundärslot (Phase 6, seit P4 fest): die Bombe ist immer ausgeruestet
   // und nicht mehr tauschbar. Der Parameter bleibt bestehen, damit ein
   // spaeterer zweiter Sekundaertyp keinen Umbau braucht.
@@ -385,7 +378,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.speedMult) cfg.speed *= Math.pow(c.speedMult, lvl);
     if (c.hpAdd) cfg.maxHp += c.hpAdd * lvl;
     if (c.magAdd) cfg.magazine += c.magAdd * lvl;
-    if (c.ricochetAdd) cfg.ricochets += c.ricochetAdd * lvl;
+    // Grundsteinumbau Phase 1: c.ricochetAdd (Bandenschuss-Karten) wird
+    // bewusst nicht mehr ausgewertet -- data/upgrades.json bleibt bis
+    // Phase 4 unangetastet, die Karten greifen ins Leere statt Einzelausbau.
     if (c.critAdd) cfg.critChance += c.critAdd * lvl;
     if (c.scrapAdd) cfg.scrapBonusPerRoom = (cfg.scrapBonusPerRoom || 0) + c.scrapAdd * lvl;
     // UMBAUPLAN-LP Phase 25 (Signaturtopf Schrottpanzer): staerkt die
@@ -411,15 +406,15 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.executeThreshold = c.executeThreshold;
       cfg.executeMult = (cfg.executeMult || 1) * Math.pow(c.executeMult ?? 1, lvl);
     }
-    if (c.critOnBounce) cfg.critOnBounce = true;
     if (c.critMultBonus) cfg.critMultBonus = (cfg.critMultBonus || 0) + c.critMultBonus * lvl;
     if (c.critExecute) cfg.critExecute = true;
-    if (c.bounceDamageBonus) cfg.bounceDamageBonus = (cfg.bounceDamageBonus || 0) + c.bounceDamageBonus * lvl;
-    // UMBAUPLAN-LP Phase 24 (Signaturtopf Abprallpanzer): Schaden JE Wandabpraller
-    // (b.wallBounces), nicht nur der pauschale 2x-Bonus fuer >=1 Abpraller. Das
-    // ist die in Phase 4 bewusst zurueckgestellte Alternative (perBounce) --
-    // hier als klassenexklusive Regel des Abprallpanzers. Ausgewertet in state.js.
-    if (c.bounceRampPerBounce) cfg.bounceRampPerBounce = (cfg.bounceRampPerBounce || 0) + c.bounceRampPerBounce * lvl;
+    // Grundsteinumbau Phase 1: c.critOnBounce/c.bounceDamageBonus/
+    // c.bounceRampPerBounce (Abprallpanzer-Signaturtopf) werden bewusst nicht
+    // mehr ausgewertet -- ihr einziger Leseort (state.js: Trefferschleife)
+    // ist mit dem Bandenschuss entfallen. data/upgrades.json bleibt bis
+    // Phase 4 unangetastet, die Klasse c_ricochet ist bis zu ihrem Neubau
+    // ohne Identitaet (s. AUFTRAG-GRUNDSTEINUMBAU.md, Festgelegte
+    // Entscheidungen).
     // Phase 12 (Sprengstoff-Topf):
     if (c.allExplosive) grantExplosive = true;
     if (c.shotExplosionRadius) explBaseRadius = Math.max(explBaseRadius, c.shotExplosionRadius);
@@ -558,15 +553,15 @@ export function applyRoomContext(cfg, ctx) {
 
 // Raum-Modifikator (Phase 10, data/modifiers.json) auf ein aufgeloestes cfg
 // anwenden -- nach resolveCfg()/applyUpgrades(), fuer Spieler UND Gegner.
-// bulletSpeedMult/ricochetsBonus wirken symmetrisch auf beide Seiten (das
-// ist der Punkt: Stoersender/Ueberdruck veraendern das Gefecht fuer alle
-// gleich). aggressionMult/roleOverride betreffen nur Gegner (der Spieler
-// hat kein KI-Verhalten), noSecondary nur den Spieler (Gegner setzen nie
-// eine Sekundaerwaffe).
+// bulletSpeedMult wirkt symmetrisch auf beide Seiten (das ist der Punkt:
+// Stoersender veraendert das Gefecht fuer alle gleich). aggressionMult/
+// roleOverride betreffen nur Gegner (der Spieler hat kein KI-Verhalten),
+// noSecondary nur den Spieler (Gegner setzen nie eine Sekundaerwaffe).
+// Grundsteinumbau Phase 1: der Modifikator "Ueberdruck" (ricochetsBonus)
+// ist mit dem Bandenschuss ins Archiv gewandert (ARCHIV.md).
 export function applyRoomModifier(cfg, modifier, isPlayer) {
   if (!modifier) return cfg;
   if (modifier.bulletSpeedMult) cfg.bulletSpeed *= modifier.bulletSpeedMult;
-  if (modifier.ricochetsBonus) cfg.ricochets += modifier.ricochetsBonus;
   if (!isPlayer) {
     if (modifier.aggressionMult) cfg.aggression *= modifier.aggressionMult;
     if (modifier.roleOverride) cfg.role = modifier.roleOverride;

@@ -31,7 +31,6 @@ function bulletSpriteKey(b) {
   if (b.tungsten) return 'tungsten';
   if (b.explosive) return 'explosive';
   if (b.kind === 'rocket') return 'rocket';
-  if (b.kind === 'bounce_rocket') return 'bounce';
   return 'normal';
 }
 
@@ -71,10 +70,9 @@ export const TANK_COLORS = {
   t_black: '#33333c',
 
   t_armored: '#9aa6b4', // Stahl -- der dicke Frontbalken traegt die Lesbarkeit
-  t_prism: '#b8ecff', // Prisma -- eigene Silhouette (Rautenkranz)
 
   t_reactor: '#e0a83c', // Reaktorkern -- warnendes Orange
-  t_mirror: '#7fe6ff', // Der Spiegel -- kaltes Cyan, eigener Ton als das Prisma
+  t_mirror: '#7fe6ff', // Der Spiegel -- kaltes Cyan
   t_phalanx: '#c9d0da', // Phalanx-Wache -- helles Stahlgrau
 
   ghost_tank: '#cfe0f5', // Geisterpanzer (Anhang B) -- blasses Kaltweiss
@@ -93,7 +91,6 @@ const AFFIX_COLORS = {
 const BULLET_COLORS = {
   bullet: { fill: '#e8e4d8', edge: '#8a8578' },
   rocket: { fill: '#ff9a4a', edge: '#a05620' },
-  bounce_rocket: { fill: '#7ade6a', edge: '#3d8a30' },
 };
 
 function lerp(a, b, t) {
@@ -290,9 +287,9 @@ export function createRenderer(ctx) {
         ctx.stroke();
         continue;
       }
-      // Reaktor-Generator (Phase 14): IMMER prozedural -- eigene, klar von
-      // der zerstoerbaren Wand unterscheidbare Silhouette (pulsierender
-      // Kern), damit "hier zaehlt nur ein Bankshot" sofort lesbar ist.
+      // Reaktor-Generator (Phase 14, Boss aktuell Platzhalter): IMMER
+      // prozedural -- eigene, klar von der zerstoerbaren Wand unterscheidbare
+      // Silhouette (pulsierender Kern).
       if (wall.type === 'generator') {
         const dur = wall.destructibleHits || 1;
         const rest = Math.max(0, dur - (wall.hits || 0));
@@ -515,43 +512,29 @@ export function createRenderer(ctx) {
       ctx.restore();
     }
 
-    // Ziellinie des Spielers mit EINEM Abpraller-Vorgriff: Ray-March
-    // wie ein Geschoss (achsweise Reflexion) -- man sieht die erste
-    // Bande. Wichtig fuer Touch/Gamepad ohne Cursor.
+    // Kurze Ziellinien-Andeutung direkt am Rohr (Ray-March bis zur ersten
+    // Wand). Wichtig fuer Touch/Gamepad ohne Cursor -- unabhaengig vom
+    // laengeren, abschaltbaren aimLine-Overlay aus effects.js.
+    // Grundsteinumbau Phase 1: kein Abpraller-Vorgriff mehr, die Linie
+    // endet an der ersten Wand wie das Geschoss selbst.
     if (isPlayer) {
-      let dx = Math.cos(t.turret);
-      let dy = Math.sin(t.turret);
+      const dx = Math.cos(t.turret);
+      const dy = Math.sin(t.turret);
       let lx = x + dx * (r + 10);
       let ly = y + dy * (r + 10);
-      const pts = [[lx, ly]];
-      let bounced = false;
       for (let d = 0; d < 320; d += 6) {
         const nx = lx + dx * 6;
         const ny = ly + dy * 6;
-        if (state.isSolid(nx, ny)) {
-          if (bounced) break;
-          const sx = state.isSolid(nx, ly);
-          const sy = state.isSolid(lx, ny);
-          if (sx) dx = -dx;
-          if (sy) dy = -dy;
-          if (!sx && !sy) {
-            dx = -dx;
-            dy = -dy;
-          }
-          bounced = true;
-          pts.push([lx, ly]);
-          continue;
-        }
+        if (state.isSolid(nx, ny)) break;
         lx = nx;
         ly = ny;
       }
-      pts.push([lx, ly]);
       ctx.strokeStyle = 'rgba(140,200,255,0.4)';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 6]);
       ctx.beginPath();
-      ctx.moveTo(pts[0][0], pts[0][1]);
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.moveTo(x + dx * (r + 10), y + dy * (r + 10));
+      ctx.lineTo(lx, ly);
       ctx.stroke();
       ctx.setLineDash([]);
     }
@@ -747,16 +730,16 @@ export function createRenderer(ctx) {
         if (left <= (bcfg.blinkFraction ?? 0.15) && Math.sin(b.distance * 0.35) < 0) continue;
       }
 
-      // Nach dem ersten Abpraller wird die Kugel gefaehrlich (auch fuer
-      // den Spieler) -> heller Glow als Warnung. Von einer Panzerung
-      // zurueckgeworfene Kugeln (E3) bekommen einen eigenen kalten Glow --
-      // sie kommen direkt zurueck und sterben an der naechsten Wand.
-      if (b.reflected || b.wallBounces > 0) {
+      // Von einer Panzerung zurueckgeworfene Kugeln (E3) sind fuer ihren
+      // eigenen Schuetzen wieder gefaehrlich (armor.js: isLive()) -- eigener
+      // kalter Glow als Warnung, sie kommen direkt zurueck und sterben an
+      // der naechsten Wand.
+      if (b.reflected) {
         ctx.save();
-        ctx.globalAlpha = b.reflected ? 0.6 : 0.45;
-        ctx.fillStyle = b.reflected ? '#7fe6ff' : '#fff2c0';
+        ctx.globalAlpha = 0.6;
+        ctx.fillStyle = '#7fe6ff';
         ctx.beginPath();
-        ctx.arc(x, y, b.radius + (b.reflected ? 5 : 4), 0, Math.PI * 2);
+        ctx.arc(x, y, b.radius + 5, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }

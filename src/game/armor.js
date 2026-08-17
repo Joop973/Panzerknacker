@@ -1,23 +1,25 @@
 // Gerichtete Panzerung (PLAN.md v2, Phase 4).
 //
-// Zwei Bauformen, beide rein datengesteuert ueber data/tanks.json --
-// im Code steht keine tunbare Zahl:
+// armor: { arc: 120, reflects: true }   Frontpanzerung: Treffer im
+//     Frontsektor (gemessen zur Fahrtrichtung der Wanne) prallen ab,
+//     Treffer von der Seite oder von hinten toeten.
 //
-//   armor: { arc: 120, reflects: true }   Frontpanzerung: Treffer im
-//        Frontsektor (gemessen zur Fahrtrichtung der Wanne) prallen ab,
-//        Treffer von der Seite oder von hinten toeten.
-//   requiresRicochet: true                Prisma: JEDER direkte Schuss
-//        wird zurueckgeworfen; nur eine an einer WAND abgeprallte Kugel
-//        toetet.
-//
-// Reflektierte Geschosse folgen E3: der Schuetze bleibt Besitzer, sie
-// verlieren alle Abpraller (despawnen also am naechsten Wandkontakt),
-// koennen ihn damit nur auf direktem, sichtbarem Weg toeten, und
-// wechseln die Farbe.
+// Reflektierte Geschosse folgen E3: der Schuetze bleibt Besitzer, sterben
+// am naechsten Wandkontakt (Grundsteinumbau Phase 1: das ist seit dem
+// Wegfall des Bandenschusses ohnehin JEDER Wandkontakt, kein Sonderfall
+// mehr noetig) und wechseln die Farbe.
 //
 // Explosionen (Minen, Sprengschuss) ignorieren die Panzerung bewusst.
-// Sonst waere ein Prisma fuer Builds ohne Abpraller (Durchschlag,
-// Streuschuss) gar nicht mehr toetbar -- der Raum waere unloesbar.
+//
+// Grundsteinumbau Phase 1, Ist-Abgleich: `cfg.requiresRicochet` blockte
+// frueher JEDEN direkten Schuss (Prisma-Mechanik, seit UMBAUPLAN-LP Phase 8
+// durch t_prism.bounceDamageTakenMult ersetzt) -- diese Auswertung ist hier
+// ENTFALLEN, weil sie ohne Wandabpraller keinen Sinn mehr ergibt (waere ein
+// dauerhafter Kill-Block). Das Datenfeld selbst bleibt als reiner
+// Boss-Platzhalter in cfg.js/tanks.json stehen (t_mirror, aktuell nicht
+// spielbar erreichbar, s. CLAUDE.md "Bosse (Platzhalter, Nutzerentscheidung)")
+// -- ein kuenftiger Bossneubau muss sich hier ohnehin eine neue Regel
+// ueberlegen, s. ARCHIV.md.
 
 const TAU = Math.PI * 2;
 
@@ -29,25 +31,17 @@ function angleDelta(a, b) {
   return d;
 }
 
-// Hat die Kugel an einer WAND abgeprallt? Eine Reflexion an einem Panzer
-// zaehlt bewusst NICHT mit -- sonst koennte man zwei Prismen gegeneinander
-// ausspielen, ohne je eine Bande zu benutzen, und der Gegner haette seinen
-// Lehrzweck verloren.
-export function hasWallBounced(b) {
-  return (b.wallBounces || 0) > 0;
-}
-
-// Gilt die Kugel als "gefaehrlich fuer den eigenen Schuetzen"? Das ist der
-// Fall nach dem ersten Wandabpraller UND nach einer Reflexion (E3).
+// Gilt die Kugel als "gefaehrlich fuer den eigenen Schuetzen"? Grundstein-
+// umbau Phase 1: nur noch nach einer Reflexion (E3) -- ohne Bandenschuss
+// gibt es keinen "erster Abpraller macht sie scharf"-Uebergang mehr, eine
+// nicht reflektierte Kugel stirbt ja schon am ersten Wandkontakt.
 export function isLive(b) {
-  return hasWallBounced(b) || !!b.reflected;
+  return !!b.reflected;
 }
 
 // Blockt die Panzerung dieses Panzers den Treffer? true = kein Kill.
 export function armorBlocks(tank, b) {
-  const cfg = tank.cfg;
-  if (cfg.requiresRicochet) return !hasWallBounced(b);
-  const arc = cfg.armor?.arc;
+  const arc = tank.cfg.armor?.arc;
   if (!arc) return false;
   if (arc >= 360) return true;
   // Einschlagrichtung relativ zur Ausrichtung der Wanne (= was der
@@ -73,7 +67,9 @@ export function reflectBullet(b, tank, state) {
   b.y = tank.y + (ny / len) * push;
   b.prevX = b.x;
   b.prevY = b.y;
-  b.ricochetsLeft = rc.ricochetsLeft ?? 0; // stirbt am naechsten Wandkontakt
+  // Grundsteinumbau Phase 1: kein "stirbt am naechsten Wandkontakt"-Sonderfall
+  // mehr noetig -- das gilt seit dem Wegfall des Bandenschusses fuer JEDES
+  // Geschoss, auch dieses reflektierte.
   b.homing = 0; // ein Zielsucher darf nicht sofort zurueckdrehen
   b.reflected = true;
   b.reflectImmune = tank;
@@ -91,10 +87,8 @@ export function reflectBullet(b, tank, state) {
 // Sekundärslot "Deflektor" (Phase 6): reflektiert eine eingehende Kugel in
 // die Blickrichtung des Spielers -- anders als reflectBullet() (Richtung
 // "weg vom reflektierenden Panzer") ist die Quelle hier tank.turret, daher
-// eine eigene, bewusst getrennte Funktion. b.owner bleibt unveraendert
-// (wie bei E3 bleibt der urspruengliche Schuetze Besitzer); b.wallBounces
-// erhoeht sich (nicht b.reflected), damit der Treffer wie ein Wandabpraller
-// gegen Prisma-Panzer zaehlt.
+// eine eigene, bewusst getrennte Funktion. b.owner bleibt unveraendert (der
+// urspruengliche Schuetze bleibt Besitzer).
 export function reflectFromAim(b, tank, state) {
   const rc = state.data.balance.reflect || {};
   const speed = Math.hypot(b.vx, b.vy) * (rc.speedMult ?? 1);
@@ -105,7 +99,6 @@ export function reflectFromAim(b, tank, state) {
   b.y = tank.y + Math.sin(tank.turret) * push;
   b.prevX = b.x;
   b.prevY = b.y;
-  b.wallBounces++;
   b.homing = 0;
   state.sounds.push({ name: 'reflect', x: b.x });
   state.flashes?.push({ x: b.x, y: b.y, age: 0 });

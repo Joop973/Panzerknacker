@@ -94,8 +94,6 @@ export function recordRoom(r) {
     hazard: r.hazard || null, // Phase 15
     enemies: r.enemies || [], // [{type, affix}]
     minFps: r.minFps ?? null,
-    ricochetKills: r.ricochetKills || 0,
-    directKills: r.directKills || 0,
     // UMBAUPLAN-LP Phase 8: Schaden je Schadenstyp -- ersetzt die
     // ausgemusterten USP-Kennzahlen als das, was das LP-Spiel wirklich misst.
     damageByType: r.damageByType || null,
@@ -167,14 +165,12 @@ export function endRun({ won, roomReached, deathCause, deathCauseLabel, enemyTyp
     deathCause: won ? null : deathCause || null,
     deathCauseLabel: won ? null : deathCauseLabel || null,
     enemyType: won ? null : enemyType || null,
-    // Details des toedlichen Treffers: beantwortet, ob ein ungesehener
-    // Querschlaeger getoetet hat oder ein sauberer Gegnerschuss.
+    // Details des toedlichen Treffers: wessen Kugel, wie weit sie flog.
     death: won
       ? null
       : {
           cause: deathCause || null,
           bulletOwner: death?.bulletOwner ?? null,
-          bulletRicochets: death?.bulletRicochets ?? null,
           bulletDistanceTravelled: death?.bulletDistanceTravelled ?? null,
           enemyType: enemyType || null,
         },
@@ -269,14 +265,12 @@ export function computeMetrics(runs) {
     : null;
   const causes = {};
   for (const r of runs) if (!r.won && r.deathCause) causes[r.deathCause] = (causes[r.deathCause] || 0) + 1;
-  let ric = 0, dir = 0, minFps = Infinity;
+  let minFps = Infinity;
   // UMBAUPLAN-LP Phase 8: Schaden je Schadenstyp ueber alle Runs -- die
   // Kennzahl, die das LP-Spiel braucht (welche Schadensart traegt den Run?).
   const DAMAGE_TYPES = ['physical', 'explosive', 'fire', 'frost', 'poison', 'lightning'];
   const dmgByType = Object.fromEntries(DAMAGE_TYPES.map((k) => [k, 0]));
   for (const r of runs) for (const room of r.rooms || []) {
-    ric += room.ricochetKills || 0;
-    dir += room.directKills || 0;
     if (room.damageByType) for (const k of DAMAGE_TYPES) dmgByType[k] += room.damageByType[k] || 0;
     if (room.minFps != null) minFps = Math.min(minFps, room.minFps);
   }
@@ -295,8 +289,6 @@ export function computeMetrics(runs) {
   return {
     runs: n, wins, winRate: Math.round((100 * wins) / n),
     medianDeathRoom: median, causes,
-    ricochetKills: ric, directKills: dir,
-    ricochetShare: ric + dir ? Math.round((100 * ric) / (ric + dir)) : null,
     damagePerRun: dmgPerRun,
     minFps: minFps === Infinity ? null : minFps,
     neverChosen, mostRejected,
@@ -313,8 +305,6 @@ function refreshSummary() {
   debugSummary.innerHTML =
     `<b>${m.runs} Runs</b> · Siege ${m.wins} (${m.winRate} %) · ` +
     `Median-Todesraum <b>${m.medianDeathRoom ?? '–'}</b> (Ziel 8–14) · ` +
-    `Abpraller-Kills ${m.ricochetKills}/${m.ricochetKills + m.directKills}` +
-    `${m.ricochetShare != null ? ` (<b>${m.ricochetShare} %</b>)` : ''} · ` +
     `minFps ${m.minFps ?? '–'} (Ziel &ge; 50)<br>` +
     // UMBAUPLAN-LP Phase 8: Schaden je Schadenstyp pro Run -- die Kennzahl des
     // LP-Spiels (traegt der Run auf Feuer, Blitz, physisch …?).

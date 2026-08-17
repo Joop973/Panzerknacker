@@ -63,7 +63,6 @@ function resolveGhostCfg(data, playerCfg) {
     // schiesst erst innerhalb dieser Distanz, verfolgt sein Ziel aber
     // unbegrenzt weit (Anhang B S7: "das Verfolgen bleibt unbegrenzt").
     fireRangePx: (data.balance?.bullet?.maxDistance ?? 1200) * (g.rangePct ?? 0.65),
-    ricochets: g.ricochets ?? 0,
     weapon: g.weapon ?? 'bullet',
     armor: null, // Ruestung 0 (Anhang B S7)
   };
@@ -265,7 +264,6 @@ export function updateGhosts(state, dt) {
         createBullet(g.x + dx * muzzle, g.y + dy * muzzle, g.turret, {
           speed: g.cfg.bulletSpeed,
           radius: state.data.physics.bulletRadius,
-          ricochets: g.cfg.ricochets,
           owner: g,
           kind: g.cfg.weapon,
           damage: Math.round(g.cfg.damage * packMult),

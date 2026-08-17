@@ -73,11 +73,9 @@ export function explodeAt(state, x, y, R, spare, meta, damage, damageType) {
   for (const wall of [...state.walls]) {
     // Zerstoerbare Waende (Phase 11) nehmen wie Kugeln einen Treffer --
     // dieselbe destroyWall()-Haltbarkeit, keine Extra-Regel fuer Explosionen.
-    // Reaktor-Generatoren (Phase 14) BEWUSST NICHT hier aufgenommen: die
-    // Bankshot-Huerde (siehe bullet.js) soll keine Explosion (Mine,
-    // Kettenblitz, Kamikaze) umgehen koennen, sonst waere das Raetsel
-    // trivial ausspielbar -- Muster wie "Explosionen ignorieren die
-    // Panzerung" in armor.js.
+    // Reaktor-Generatoren (Phase 14) BEWUSST NICHT hier aufgenommen -- Muster
+    // wie "Explosionen ignorieren die Panzerung" in armor.js (aktuell ohnehin
+    // gegenstandslos, der Boss ist ein Platzhalter, s. CLAUDE.md).
     if ((wall.type === 'breakable' || wall.type === 'destructible') && circleOverlapsAABB(x, y, R, wall)) {
       state.destroyWall(wall);
     }
@@ -191,8 +189,9 @@ export function updateMines(state, dt) {
     // Warnpuls (Phase 7b): in den letzten warningTime Sekunden vor der
     // Selbstzuendung tickt die Mine im Takt warnPulseS. Ueber einen Zaehler
     // statt eines Timers gerechnet, damit der Takt unabhaengig von der
-    // Framerate und (Trickshot-)Zeitlupe derselbe bleibt. Sichtbares
-    // Gegenstueck ist das schnelle rote Blinken (effects.js: drawMines).
+    // Framerate und einer evtl. aktiven Zeitlupe (Taktiker-Transformation)
+    // derselbe bleibt. Sichtbares Gegenstueck ist das schnelle rote Blinken
+    // (effects.js: drawMines).
     const bmine = state.data.balance.mine;
     const remaining = bmine.fuse - m.age;
     if (remaining <= bmine.warningTime) {

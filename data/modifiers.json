@@ -30,12 +30,6 @@
       "bulletSpeedMult": 0.7
     },
     {
-      "id": "overpressure",
-      "name": "Ueberdruck",
-      "desc": "Alle Geschosse prallen einmal mehr ab.",
-      "ricochetsBonus": 1
-    },
-    {
       "id": "slippery",
       "name": "Glatteis",
       "desc": "Der Boden ist rutschig -- alle Panzer gleiten nach.",
@@ -60,12 +54,6 @@
       "name": "Ausruestungssperre",
       "desc": "Bombe und Gadget sind in diesem Raum gesperrt.",
       "noSecondary": true
-    },
-    {
-      "id": "mirror_hall",
-      "name": "Spiegelsaal",
-      "desc": "Alle festen Waende werfen Geschosse zurueck.",
-      "mirrorHall": true
     }
   ]
 }

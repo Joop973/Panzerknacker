@@ -25,7 +25,7 @@ Bedarf zurückzuholen.
 
 | Was | Phase | Warum | Datei | Zurückholen |
 |---|---|---|---|---|
-| Bandenschuss (Abpraller-Physik, Bankshot-KI, Trickshot-Belohnung, Spiegelwand, `t_prism`, `bankshotGuarantee`) | 1 | Erzwingt langsame Spielerkugel → unzumutbare Vorhaltewinkel; Ziellinie zeigt nur Kugelweg, nicht Zielposition | `archive/bandenschuss.md` | Mechanikbeschreibung lesen, betroffene Felder/Funktionen wieder einbauen. **Enthält zwei offene Punkte, die vor Phase 1 entschieden werden müssen** (Reaktor-Generatoren, `t_mirror`) — siehe „Ist-Abgleich" unten. |
+| Bandenschuss (Abpraller-Physik, Bankshot-KI, Trickshot-Belohnung, Spiegelwand-Erzeugung, `t_prism`, `bankshotGuarantee`, Raum-Modifikatoren „Überdruck"/„Spiegelsaal", Abpraller-Telemetrie) | 1 (gemergt) | Erzwingt langsame Spielerkugel → unzumutbare Vorhaltewinkel; Ziellinie zeigt nur Kugelweg, nicht Zielposition | `archive/bandenschuss.md` | Mechanikbeschreibung lesen, betroffene Felder/Funktionen wieder einbauen. Die beiden Phase-0-Blocker (Reaktor-Generatoren, `t_mirror`) sind über den Boss-Platzhalter (`t_black`) gelöst, nicht über den ursprünglich vorgeschlagenen Direkttreffer-Umbau — siehe „Ist-Abgleich" unten und `bandenschuss.md`. |
 | Alle Upgrade-Karten (aktuell 251, nicht 246 — s. u.) | 4 | Klassen bekommen künftig eigene Kartenpools statt eines gemeinsamen Generik-Pools | `archive/upgrades-v1.json` | Verbatim-Kopie von `data/upgrades.json` (Stand Phase 0) — Datei kann 1:1 zurückkopiert werden. Enthält auch alle Signaturkarten der acht geparkten Klassen und die sechs Elementtöpfe. |
 | Transformationen | 4 | Hängen an `run.tagCounts` der alten Kartentags; der 5-Karten-Sockel kann „drei Karten desselben Tags" strukturell nicht erreichen | `archive/systeme-v1.md` (Abschnitt 1) | `data/transformations.json` bleibt unverändert im Repo stehen — nur die auswertenden Codepfade werden entfernt und müssten reaktiviert werden. |
 | Zweitelement-System | 4 | Ohne `damageType`-Karten (die mit den 251 Karten fallen) wirkungslos | `archive/systeme-v1.md` (Abschnitt 2) | Erst Klassenpool mit `damageType`-Karten wiederherstellen, dann Codepfade. |
@@ -44,14 +44,22 @@ Wiederherstellungsziel.
 ## Ist-Abgleich Phase 0 (Auftrag Abschnitt 3, gegen den Code geprüft am 2026-08-17)
 
 > **Update (2026-08-17, Nutzerentscheidung nach dieser Sitzung):** Die
-> beiden unten dokumentierten Blocker (Punkt 1 und 2) sind **keine
+> beiden unten dokumentierten Blocker (Punkt 1 und 2) waren **keine
 > Blocker für Phase 1 mehr** — die Bosse sind noch nicht ausgearbeitet und
-> werden in einer eigenen künftigen Aufgabe neu gebaut; bis dahin ersetzt
-> `run.js: BOSS_ENEMY_TYPES` alle drei Boss-Arenen durch einen
+> werden in einer eigenen künftigen Aufgabe neu gebaut; `run.js:
+> BOSS_ENEMY_TYPES` ersetzt alle drei Boss-Arenen durch einen
 > Platzhalter-Gegner (`t_black`). Details: `CLAUDE.md`, Abschnitt "Bosse
-> (Platzhalter, Nutzerentscheidung)". Die Funde selbst bleiben unten
-> stehen, weil sie technisch weiterhin zutreffen und beim künftigen
-> Boss-Neubau gelöst werden müssen.
+> (Platzhalter, Nutzerentscheidung)".
+>
+> **Update (Phase 1, gemergt):** Beide Punkte sind jetzt umgesetzt —
+> **nicht** über den unten vorgeschlagenen "Generator auf Direkttreffer
+> umstellen"-Fix, sondern konsequent über den Boss-Platzhalter: da kein
+> Boss im normalen Spiel mehr gespawnt wird, hat Phase 1 die
+> Bandenschuss-Bedingungen bei Reaktor-Generator UND `t_mirror` ersatzlos
+> entfernt, ohne ihr Verhalten zu ersetzen (Generatoren sind jetzt normale
+> unzerstörbare Wände, `t_mirror` würde bei jedem Kugeltreffer weiter
+> abprallen). Beide bleiben als Wiederanschlusspunkt für einen künftigen
+> Bossneubau dokumentiert, Details in `archive/bandenschuss.md`.
 
 Alle Punkte aus dem "Verifizierten Ist-Stand" wurden am aktuellen Code
 nachvollzogen. Die meisten stimmen; drei sind echte Abweichungen, zwei davon

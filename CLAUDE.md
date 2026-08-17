@@ -3745,6 +3745,14 @@ Fundstellen in `ARCHIV.md`, Abschnitt „Ist-Abgleich Phase 0"):
    nicht in `renderer.js` (das importiert/ruft nur auf). Alles Übrige aus
    Abschnitt 3 wurde ohne Abweichung bestätigt.
 
+**Phase 1 (Bandenschuss vollständig entfernen) ist gebaut** — eigener
+Abschnitt weiter unten. Beide oben genannten Blocker sind über den
+Boss-Platzhalter aufgelöst (nicht über den vorgeschlagenen Direkttreffer-
+Umbau), eine dritte, in Phase 0 übersehene Stelle (Spiegelwand-Erzeugung
+war entgegen der ursprünglichen Annahme aktiv) ist mit gefunden und
+mitentfernt. **Nächste Sitzung: Phase 2** (Kampfkern: Kugeltempo 200→450,
+Flanken-/Heckschaden, Exekutionsschwelle, Treffer-Rückmeldung).
+
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
 (Reaktor/Spiegel/Phalanx) sind noch nicht ausgearbeitet und werden erst in
@@ -3788,6 +3796,116 @@ mehr erreichbar.
   Punkte trotzdem irgendwann adressiert werden (Details weiterhin in
   `ARCHIV.md`, Abschnitt „Ist-Abgleich Phase 0" — dort stehengelassen, weil
   technisch weiterhin zutreffend, nur nicht mehr dringlich).
+
+### Grundsteinumbau v3 — Phase 1 (Bandenschuss vollständig entfernen) — gemergt
+Kein Geschoss prallt mehr von einer Wand ab — bei niemandem, Spieler wie
+Gegner. Größte Einzelphase des Umbaus bisher: die Mechanik durchzog
+Geschossphysik, KI, Panzerung, Telemetrie, Raum-Modifikatoren und den
+Raumgenerator gleichermaßen.
+- **`src/game/bullet.js`**: `createBullet()` verliert `ricochetsLeft`/
+  `ricochetsStart`/`wallBounces`; jeder Wandkontakt tötet das Geschoss sofort
+  (`moveAxis()`/`updateBullet()` radikal vereinfacht). Die Sonderfälle
+  bleiben unverändert: Wolframkern reißt Wände ein und fliegt weiter,
+  Sprengmunition zündet an der Wand, Sperrmauer/zerstörbare Wände nehmen
+  weiter Schaden. Ein Wandtreffer spielt jetzt `'bounce'` (Bedeutung
+  umgewidmet: reiner Wand-Einschlag-Ton, nicht mehr "erster Abpraller").
+  **`traceTrajectory()`/`effects.js: drawAimLine()`** verlieren den
+  Abpraller-Vorgriff — die Ziellinie zeigt nur noch die gerade Strecke bis
+  zur ersten Wand. Eine **zweite, bis dahin unbemerkte** Aimline-Instanz
+  direkt in `renderer.js: drawTank()` (kurze Vorschau am Rohr, unabhängig
+  vom abschaltbaren `effects.js`-Overlay, "wichtig für Touch/Gamepad ohne
+  Cursor") hatte ihre eigene, kleine Bounce-Simulation — ebenfalls auf
+  reine Direktlinie vereinfacht.
+- **`armor.js`**: `hasWallBounced()` entfernt, `isLive(b)` ist jetzt nur
+  noch `!!b.reflected` (die einzige verbleibende Quelle einer für den
+  Schützen gefährlichen eigenen Kugel ist die Frontpanzerung-Reflexion,
+  E3). `armorBlocks()` verliert die `requiresRicochet`-Auswertung
+  (Kill-Block ganz ohne Bandenschuss ergäbe einen Dauer-Block). Das
+  **Datenfeld** `cfg.requiresRicochet`/`tanks.json: t_mirror.requiresRicochet`
+  bleibt bewusst als reiner Boss-Platzhalter-Passthrough stehen (nur noch
+  für die Renderer-Optik gebraucht) — siehe „Bosse (Platzhalter)" oben,
+  der Spiegel wird ohnehin gerade nicht gespawnt.
+- **`ai_turrets.js`**: `solveBounce()`/`bounceShot()` (Abpraller-Rechner,
+  einziger Nutzer `t_green`) vollständig entfernt. `t_green` feuert seitdem
+  über die normale, sichtlinienabhängige Turmlogik (`accuracy: 0.9`) —
+  ein dokumentierter Übergangszustand, Phase 3 baut ihn zum Mörserschützen
+  um. `tanks.json: ai.bounceShot`-Konfigurationsblock entfernt,
+  `state.bounceSolveBudget` (Frame-Budget-Sicherheitsnetz) entfernt.
+- **`t_prism` komplett aus dem Spiel** (`data/tanks.json:types`,
+  `data/difficulty.json:danger`) — bestand nur noch aus
+  `bounceDamageTakenMult`, ohne Bandenschuss bedeutungslos.
+  `data/difficulty.json: bankshotGuarantee` (seit UMBAUPLAN-LP Phase 8
+  ohnehin No-op) samt auswertendem Mechanismus `run.js:
+  ensureBankshotEnemy()` restlos entfernt.
+- **Spiegelwand-Erzeugung war AKTIV, nicht tot** — eine echte Korrektur des
+  Phase-0-Ist-Abgleichs: `generator.js: placeReflectWalls()` platzierte bei
+  **jedem** generierten Kampfraum 2–4 Spiegelwände am Außenrand
+  (`data/tiles.json: mirror.min/maxPerRoom`); Phase 0 hatte nur die
+  statischen Arena-Dateien auf das Zeichen `'r'` geprüft (0 Vorkommen dort,
+  korrekt), nicht den Generator-Code, der es zur Laufzeit selbst einsetzt.
+  Jetzt entfernt: `placeReflectWalls()`, der `mirror`-Config-Block aus
+  `tiles.json`, der Wandtyp `'r'`/`'reflect'` aus `state.js: WALL_TYPES`/
+  `isSolid()` und `generator.js: hasLos()`, das Legendenkürzel `mirror` aus
+  `LEGEND_TO_CELL`/`arenaCells()`. `data/arenas.json: test_arena` hatte zwei
+  `M`-Zellen (Entwickler-Testarena, keine der drei Boss-Arenen nutzte das
+  Kürzel) — durch normale Wände (`#`) ersetzt, sonst hätte `validateArenas()`
+  das Spiel beim Start abgeschossen.
+- **Zwei Raum-Modifikatoren waren ebenfalls Bandenschuss-abhängig** (beim
+  Umsetzen gefunden, nicht im Phase-0-Befund): `data/modifiers.json:
+  overpressure` ("Überdruck", +1 Abpraller) und `mirror_hall`
+  ("Spiegelsaal", wandelte alle festen Wände in den jetzt nicht mehr
+  existierenden `'reflect'`-Typ um) — beide aus dem aktiven Modifikator-Pool
+  entfernt, Archiv in `archive/bandenschuss.md`.
+- **`wallBounceDamageMult`-Schadensbonus entfernt** (`data/balance.json:
+  bullet`, samt `_comment`): die gesamte darauf aufbauende Schadensformel in
+  `state.js`s Trefferschleife ist vereinfacht — kein `abprallMult`, kein
+  `shooterBounceBonus` (Signaturkarten-Felder `bounceDamageBonus`/
+  `bounceRampPerBounce`/`critOnBounce` werden nicht mehr ausgewertet, s. u.).
+- **Trickshot-Belohnung (der einzige Belohnungsmoment des alten Spiels)
+  vollständig entfernt**: `balance.json: trickshot`, `state.trickshotTimer`/
+  `trickshotScrap`, der ganze Rückmeldungsblock in `state.js`s
+  Trefferschleife, `run.js`s Zeitlupen-Kombination und Schrott-Sync. Sound
+  `'trickshot'` (ohne "2") ohne verbleibende Push-Stelle entfernt,
+  `'trickshot2'` bleibt (Generator-Zerstörungs-Feedback). **Phase 2 baut den
+  Ersatz** (Flanken-/Heck-Treffer-Rückmeldung) in der nächsten Sitzung.
+- **`cfg.ricochets` als Konzept vollständig entfernt** — aus `resolveCfg()`
+  und aus jeder Karten-/Modifikator-Anwendungsstelle in `cfg.js`
+  (`abpraller`, `streuschuss`, `scharfschuetze`, der generische
+  `ricochetAdd`-Kern-Schlüssel, `overpressure`). Betroffene Karten
+  (`data/upgrades.json` bleibt bis Phase 4 unangetastet, s. Auftrag) und die
+  Klasse `c_ricochet` (Abprallpanzer) sind dadurch bis zu ihrem jeweiligen
+  Neubau ohne Wirkung/Identität — akzeptierter Zwischenzustand.
+- **Telemetrie**: `state.ricochetKills`/`directKills` und
+  `trefferMeta.bulletRicochets` entfernt (wären für immer 0 bzw. bedeutungs­
+  los gewesen) — `main.js`, `telemetry.js` (`recordRoom`/`computeMetrics`/
+  Debug-Ansicht „Abpraller-Kills") entsprechend bereinigt. `hud.js`s
+  Werte-Anzeige verliert die „Abpraller"-Zeile.
+- **RNG-Determinismus bewusst NICHT rückwärtskompatibel**: `placeReflectWalls()`
+  verbrauchte bei jedem Raumaufbau reichlich RNG aus dem `rooms`-Strom (ein
+  Fisher-Yates-Shuffle über ~68 Randzellen); `ensureBankshotEnemy()` einen
+  Wurf aus `enemies` ab Raum 6. Ihr Wegfall verschiebt nachfolgende Zufalls­
+  ziehungen desselben Raums gegenüber alten Seeds — erwartet und vom Auftrag
+  gedeckt (ein Run mit gleichem Seed bleibt weiterhin **in sich** deterministisch,
+  nur nicht mehr identisch zum Vor-Phase-1-Stand).
+- **Tests**: `tests/regression.mjs` — Abschnitt 12 ("Abprall-Bonus") komplett
+  archiviert; die Bandenschuss-Teilprüfungen in den Abschnitten zu Phase 6
+  (Schadenstypen), Phase 7 (Krit-Umbau), Phase 8 (Altlasten), Phase 9
+  (Klassen), Phase 11 (Physisch-Topf), Phase 18 (Signaturtopf Standard) und
+  Phase 24 (Signaturtopf Abprallpanzer) sind archiviert, die jeweils
+  bandenschuss-**unabhängigen** Prüfungen derselben Abschnitte bleiben
+  scharf. Abschnitt 7c (Bankshot-Gegner-Frame-Budget) ist zu einem
+  schlichten „feuert t_green überhaupt"-Nachweis reduziert (Phase 3 baut
+  ihn zum Mörser-Test um). Ein struktureller `t_prism`-Test wurde zu einem
+  „existiert nicht mehr"-Nachweis umgedreht. **Kein Abschnitt umnummeriert**
+  — archivierte Abschnitte behalten ihre alte Nummer mit Archivvermerk,
+  passend zu Querverweisen in anderen Kommentaren/CLAUDE.md.
+- **Kein `sw.js`-Bump**: reine Code-/Datenänderung ohne neue/geänderte
+  Asset-Dateien, network-first liefert online sofort den neuen Stand
+  (Konvention aus den LP-Umbau-Phasen, die ebenfalls nicht bumpten).
+- Playwright-Smoke bestätigt: Raumvorschau und laufender Kampf rendern
+  fehlerfrei, die Ziellinie ist eine gerade Linie bis zur ersten Wand, keine
+  Konsolenfehler. `tests/uilayout.mjs`/`viewport.mjs`/`fogperf.mjs`/
+  `gamepad.mjs`/`music.mjs` bleiben grün.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -3869,7 +3987,9 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 ### Wichtige Dateien
 - `src/game/state.js` — `stepState`, Treffer, Minen, `killTank`.
 - `src/game/armor.js` — gerichtete Panzerung (Phase 4): `armorBlocks`,
-  `reflectBullet`, `hasWallBounced`, `isLive`.
+  `reflectBullet`, `isLive`. Seit Grundsteinumbau Phase 1 ist `isLive(b)`
+  nur noch `!!b.reflected` (kein Bandenschuss mehr, `hasWallBounced()` ist
+  entfernt).
 - `src/game/tank.js` — Feuern, Minen legen/werfen, `useSecondary()`
   (Phase 6: generischer Sekundärwaffen-Dispatch inkl. Enterhaken/Sperrmauer).
 - `src/game/damagetypes.js` — Schadenstypen (Phase 6): `applyTypeEffects`
@@ -4039,4 +4159,8 @@ Seltenheitsstufe, Raumdauer als HP/DPS-Schranke)) sowie die
 -gewichtung, Zielsystem der Gegner-KI, Nekromant-Klassenidentität,
 Geisterpanzer-Basiseinheit, 18-Karten-Signaturpool und die Phase-9-Abnahme mit
 dem **Bosskampf-Korridor**). Die frühere USP-Bankshot-Quote ist mit
-LP-Phase 8 entfallen.
+LP-Phase 8 entfallen. Mit **Grundsteinumbau Phase 1** ist der komplette
+Bandenschuss (Abpraller, Bankshot-KI, Trickshot-Belohnung, Spiegelwand)
+entfernt — Abschnitt 12 ("Abprall-Bonus") und mehrere Bandenschuss-
+Teilprüfungen in anderen Abschnitten sind archiviert (`ARCHIV.md`/
+`archive/bandenschuss.md`), nicht umnummeriert.
