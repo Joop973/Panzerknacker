@@ -1,8 +1,4 @@
 {
- "mirror": {
-  "minPerRoom": 2,
-  "maxPerRoom": 4
- },
  "hazards": {
   "minRoom": 3,
   "types": ["movingWall", "oil", "laser", "conveyor"],

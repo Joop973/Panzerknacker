@@ -14,7 +14,7 @@ import { CELL } from '../config.js';
 
 let nextTankId = 1;
 
-// cfg = { radius, speed, magazine, ricochets, bulletSpeed, bulletRadius,
+// cfg = { radius, speed, magazine, bulletSpeed, bulletRadius,
 //         fireCooldown, turret?, drive? } -- aufgeloest in state.js.
 export function createTank(type, cfg, x, y) {
   return {
@@ -290,15 +290,14 @@ export function fireBullet(tank, state, pressed) {
     const a = angles[i];
     const mx = tank.x + Math.cos(a) * muzzle;
     const my = tank.y + Math.sin(a) * muzzle;
-    // Sprengschuss prallt ab (mind. 1 Abpraller); Sprengmunition/
-    // Glaskanone zuenden hart an der Wand (detonateOnWall).
+    // Sprengmunition/Glaskanone zuenden hart an der Wand (detonateOnWall);
+    // Sprengschuss (nicht detonateOnWall) explodiert seit Grundsteinumbau
+    // Phase 1 einfach am ersten Wandkontakt wie jedes andere Geschoss.
     const isExplosive = explosiveShot || tank.cfg.allExplosive;
-    const baseRicochets = explosiveShot ? Math.max(1, tank.cfg.ricochets) : tank.cfg.ricochets;
     state.bullets.push(
       createBullet(mx, my, a, {
         speed: boosted ? tank.cfg.bulletSpeed * tank.cfg.powershotSpeedFactor : tank.cfg.bulletSpeed,
         radius: tank.cfg.bulletRadius,
-        ricochets: boosted ? baseRicochets + tank.cfg.powershotBonusRicochets : baseRicochets,
         owner: tank,
         kind: tank.cfg.weapon,
         tungsten: tank.cfg.tungsten || false,

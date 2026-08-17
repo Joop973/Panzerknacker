@@ -9,9 +9,11 @@
 // Der Reaktorkern (t_reactor) braucht KEINEN Sondercode: er nutzt die
 // bestehende Rolle "guardian" (steht fest) unveraendert -- nur seine
 // Unverwundbarkeit ist Boss-Logik (siehe state.js: killTank()). Auch KEINE
-// Fixierungs-Sonderregel (Upgradepool-v2 Phase 5): Geister koennen das
-// Generator-Raetsel nicht loesen, der Kampf bleibt eine Bankshot-Aufgabe
-// fuer den Spieler -- der Reaktor laeuft normal ueber ai.js: updateTargeting.
+// Fixierungs-Sonderregel (Upgradepool-v2 Phase 5) -- laeuft normal ueber
+// ai.js: updateTargeting. Aktuell ohnehin ein Platzhalter (t_black statt
+// t_reactor, s. CLAUDE.md "Bosse (Platzhalter, Nutzerentscheidung)"); das
+// Generator-Raetsel selbst haengt mit dem Bandenschuss (Grundsteinumbau
+// Phase 1) und wartet auf einen Bossneubau.
 
 import { WIDTH, HEIGHT } from '../config.js';
 import { fireBullet } from './tank.js';

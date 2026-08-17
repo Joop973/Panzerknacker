@@ -1,10 +1,13 @@
-// Geschosse + Abpraller-Physik (Spec Abschnitt 4: Geschosse).
+// Geschosse (Spec Abschnitt 4: Geschosse).
 //
-// Bewegung geradlinig mit konstanter Geschwindigkeit. Wandkontakt:
-// Reflexion an der Normalen der getroffenen Flaeche. Die Bewegung wird
-// pro Achse aufgeloest -- trifft ein Geschoss im selben Schritt auf
-// beiden Achsen (Eckenfall), wird auf beiden Achsen reflektiert und
-// trotzdem nur EIN Abpraller abgezogen.
+// Grundsteinumbau Phase 1: Bandenschuss vollstaendig entfernt. Ein Geschoss
+// bewegt sich geradlinig mit konstanter Geschwindigkeit und stirbt am
+// ERSTEN Wandkontakt -- bei niemandem mehr ein Abpraller, egal ob Spieler
+// oder Gegner. Die einzige verbleibende Ausnahme ist die Reflexion durch
+// Frontpanzerung (E3, armor.js: reflectBullet()): eine zurueckgeworfene
+// Kugel fliegt einfach bis zur naechsten Wand und stirbt dort -- das ergibt
+// sich jetzt automatisch aus der generischen "jede Wand toetet"-Regel, ohne
+// eigenen Sonderfall. Die Bewegung wird weiterhin pro Achse aufgeloest.
 
 import { circleOverlapsAABB } from './collision.js';
 import { WIDTH, HEIGHT } from '../config.js';
@@ -20,7 +23,6 @@ export function createBullet(
   {
     speed,
     radius,
-    ricochets,
     owner,
     kind,
     tungsten,
@@ -45,10 +47,10 @@ export function createBullet(
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
     radius,
-    kind: kind || 'bullet', // 'bullet' | 'rocket' | 'bounce_rocket'
+    kind: kind || 'bullet', // 'bullet' | 'rocket'
     tungsten: tungsten || false, // Wolframkern-Upgrade (Spec Abschnitt 8)
     explosive: explosive || false, // explodiert beim Tod
-    detonateOnWall: detonateOnWall || false, // an der Wand zuenden statt abprallen
+    detonateOnWall: detonateOnWall || false, // an der Wand zuenden statt zu sterben
     explosionRadius: explosionRadius || 0,
     phaseWalls: phaseWalls || false, // Durchschlag-Upgrade
     homing: homing || 0, // Zielsucher: rad/s Lenkrate (0 = aus)
@@ -72,13 +74,12 @@ export function createBullet(
     // Aasgeier (state.js: killTank): true = zaehlt nicht mehr gegen das
     // Magazin des Schuetzen, fliegt und toetet aber normal weiter.
     magFreed: false,
-    ricochetsLeft: ricochets,
-    ricochetsStart: ricochets, // fuer "Abpraller-Kill"-Feedback
-    owner, // Referenz auf den Schuetzen (fuer den 80-ms-Schutz)
+    owner, // Referenz auf den Schuetzen (fuer den Selbst-Immunitaets-Schutz)
     age: 0, // s seit Abschuss
     distance: 0, // px zurueckgelegter Weg (E4: Wegbudget statt Zeit)
-    wallBounces: 0, // Abpraller an WAENDEN (Phase 4: zaehlt fuer Prisma)
-    reflected: false, // von einer Panzerung zurueckgeworfen (E3)
+    reflected: false, // von einer Panzerung zurueckgeworfen (E3) -- einzige
+    // verbleibende Quelle einer fuer den eigenen Schuetzen gefaehrlichen
+    // Kugel, siehe armor.js: isLive().
     reflectImmune: null, // Panzer, der sie zurueckwarf (kurz unverwundbar)
     reflectImmuneT: 0, // Restzeit dieses Fensters
     dead: false,
@@ -86,17 +87,15 @@ export function createBullet(
   };
 }
 
-// Bewegt das Geschoss auf einer Achse und reflektiert an Waenden.
+// Bewegt das Geschoss auf einer Achse; jeder Wandkontakt ist toedlich.
 // Wolframkern (Spec Abschnitt 8): trifft ein Wolfram-Geschoss eine
-// zerstoerbare Wand, wird die Wand zerstoert und das Geschoss
-// verschwindet; solid-Waende bleiben normale Abpraller.
-// Gibt { hit, mirror } zurueck -- mirror markiert einen Treffer auf einer
-// Spiegelwand (Phase 5: kostet keinen Abpraller, siehe updateBullet).
+// zerstoerbare Wand, wird die Wand zerstoert und das Geschoss fliegt
+// unbeschadet weiter (kein Wandkontakt im Sinne dieser Funktion).
+// Gibt { hit } zurueck.
 function moveAxis(b, state, axis, dt) {
   b[axis] += (axis === 'x' ? b.vx : b.vy) * dt;
-  if (b.phaseWalls) return { hit: false, mirror: false }; // Durchschlag: ignoriert alle Waende
+  if (b.phaseWalls) return { hit: false }; // Durchschlag: ignoriert alle Waende
   let hit = false;
-  let mirror = false;
   // Laserbarriere (Phase 15): blockt NUR Geschosse, nie Panzer -- deshalb
   // ein eigenes Array statt eines Eintrags in state.walls (das wuerde auch
   // die Panzerkollision (tank.js: resolveCircleWalls) treffen).
@@ -104,38 +103,26 @@ function moveAxis(b, state, axis, dt) {
     if (wall.type === 'hole') continue; // Geschosse fliegen ueber Loecher
     if (!circleOverlapsAABB(b.x, b.y, b.radius, wall)) continue;
     // Wolframkern: reisst zerstoerbare Waende ein und fliegt WEITER (bis zur
-    // Nutzer-Balancerunde verschwand das Geschoss dabei). Kein b.dead und
-    // kein Abpraller -- die Zelle ist nach dem Treffer ja offen. `continue`
-    // statt `return`, damit im selben Schritt auch eine zweite Wand fallen
-    // kann. `destructible` (Phase 11) zaehlt hier mit: beides sind Waende,
-    // die eingerissen werden koennen.
+    // Nutzer-Balancerunde verschwand das Geschoss dabei). Kein b.dead --
+    // die Zelle ist nach dem Treffer ja offen. `continue` statt `return`,
+    // damit im selben Schritt auch eine zweite Wand fallen kann.
+    // `destructible` (Phase 11) zaehlt hier mit: beides sind Waende, die
+    // eingerissen werden koennen.
     if (b.tungsten && (wall.type === 'breakable' || wall.type === 'destructible')) {
       state.destroyWall?.(wall);
       continue;
     }
-    // Sprengmunition/Glaskanone: zuenden am Wandkontakt (statt
-    // abzuprallen) -- so toetet die Explosion durch die Wand. Die
-    // Sprengschuss-Salve hat detonateOnWall=false und prallt ab.
-    if (b.explosive && b.detonateOnWall) {
-      b.dead = true;
-      return { hit: true, mirror: false };
-    }
-    // Sekundärslot "Sperrmauer" (Phase 6) und zerstoerbare Waende (Phase 11):
-    // nehmen Schaden wie jede andere Wand-Haltbarkeit (destroyWall zaehlt
-    // wall.customDurability/destructibleHits runter), prallen aber wie eine
-    // normale Wand ab, bis sie zerbrechen -- daher KEIN return hier, faellt
-    // in die generische Bounce-Behandlung durch. Optional-Chaining, weil der
-    // Ziellinien-Schattenzustand (traceTrajectory) kein destroyWall traegt --
-    // die Vorschau prallt dann einfach ab, ohne die Wand zu beschaedigen.
+    // Sperrmauer (Phase 6) und zerstoerbare Waende (Phase 11): nehmen
+    // Schaden wie jede andere Wand-Haltbarkeit (destroyWall zaehlt
+    // wall.customDurability/destructibleHits runter). Das Geschoss selbst
+    // stirbt trotzdem am Kontakt -- kein Sonderfall mehr noetig.
     if (wall.type === 'trap' || wall.type === 'destructible') state.destroyWall?.(wall);
-    // Reaktor-Generator (Phase 14): nimmt NUR Schaden, wenn die Kugel schon
-    // an einer WAND abgeprallt ist ("Bankshot") -- ein direkter Treffer
-    // prallt wirkungslos ab wie an jeder anderen Wand. b.wallBounces zaehlt
-    // hier noch den Stand VOR diesem Treffer (wird erst unten in
-    // updateBullet() erhoeht), erfasst also genau "schon vorher abgeprallt".
-    else if (wall.type === 'generator' && b.wallBounces > 0) state.destroyWall?.(wall);
+    // Reaktor-Generator (Grundsteinumbau, Bosse aktuell Platzhalter):
+    // die alte "nur ein Bankshot beschaedigt ihn"-Bedingung ist mit dem
+    // Wegfall des Bandenschusses gegenstandslos -- ein Generator verhaelt
+    // sich bis zum Bossneubau wie eine normale, unzerstoerbare Wand. Siehe
+    // CLAUDE.md ("Bosse (Platzhalter, Nutzerentscheidung)") und ARCHIV.md.
     hit = true;
-    if (wall.type === 'reflect') mirror = true; // Spiegelwand (Phase 5)
     if (axis === 'x') {
       b.x = b.vx > 0 ? wall.x - b.radius : wall.x + wall.w + b.radius;
       b.vx = -b.vx;
@@ -144,30 +131,7 @@ function moveAxis(b, state, axis, dt) {
       b.vy = -b.vy;
     }
   }
-  return { hit, mirror };
-}
-
-// Abprallschock-Upgrade (Phase 18, Welle 3): jeder WANDabpraller betaeubt
-// Gegner im Umkreis kurz. Bewusst nur die Bewegung (stunTimer), nicht der
-// Turm -- dieselbe Trennung wie bei Krallenfalle/Erschuetterungsdash; das
-// Turm-Einfrieren bleibt der EMP-Mine vorbehalten (turretStunTimer).
-// Im Ziellinien-Schattenzustand ist `tanks` leer und `owner` null -- die
-// Vorschau loest also nie eine Betaeubung aus.
-function applyBounceStun(b, state) {
-  const R = b.owner?.cfg?.bounceStunRadius;
-  if (!R) return;
-  const dur = b.owner.cfg.bounceStunS || 0.5;
-  let hit = false;
-  for (const t of state.tanks || []) {
-    if (!t.alive || t === b.owner) continue;
-    const dx = t.x - b.x;
-    const dy = t.y - b.y;
-    if (dx * dx + dy * dy <= R * R) {
-      t.stunTimer = Math.max(t.stunTimer, dur);
-      hit = true;
-    }
-  }
-  if (hit) state.spawnParticles?.(b.x, b.y, '#8ecaf0', 6, 90);
+  return { hit };
 }
 
 // Lenkt ein Zielsucher-Geschoss weich zum naechsten gegnerischen Panzer.
@@ -202,38 +166,26 @@ function applyHoming(b, state, dt) {
 // `sounds` und ohne `destroyWall` bleibt der Aufruf nebenwirkungsfrei
 // (Wolframkern ist im Trace-Geschoss aus).
 //
-// Gibt Wegpunkte zurueck: [{x,y,bounce}] -- bounce=true markiert den
-// Punkt, an dem das Geschoss zum ersten Mal abprallt.
+// Grundsteinumbau Phase 1: kein Abpraller-Vorgriff mehr -- die Kugel stirbt
+// wie im echten Spiel am ersten Wandkontakt, die Vorschau zeigt also nur
+// noch die gerade Strecke bis dahin. Gibt Wegpunkte zurueck: [{x,y}].
 export function traceTrajectory(state, x, y, angle, cfg, opts = {}) {
-  const maxBounces = opts.maxBounces ?? 1; // erster Abpraller als Vorschau
   const steps = opts.steps ?? 240; // Sicherheitslimit (~4 s bei 60 Hz)
   const dt = opts.dt ?? 1 / 60;
   const b = createBullet(x, y, angle, {
     speed: cfg.bulletSpeed,
     radius: cfg.bulletRadius,
-    ricochets: maxBounces,
     owner: null,
     kind: 'bullet',
     phaseWalls: cfg.phaseWalls || false,
     burstDistance: cfg.burstRangePx || 0,
   });
   const shadow = { walls: state.walls, laserWalls: state.laserWalls, data: state.data, tanks: [] };
-  const tailSteps = opts.tailSteps ?? 45; // Laenge des Abpraller-Segments
-  const pts = [{ x, y, bounce: false }];
-  // Ueber wallBounces statt ricochetsLeft erkennen (Phase 5: eine
-  // Spiegelwand aendert ricochetsLeft nicht, waere sonst unsichtbar
-  // fuer die Vorschau).
-  let left = b.wallBounces;
-  let sinceBounce = -1; // -1 = noch nicht abgeprallt
+  const pts = [{ x, y }];
   for (let i = 0; i < steps; i++) {
     updateBullet(b, shadow, dt);
-    const bounced = b.wallBounces > left;
-    left = b.wallBounces;
-    pts.push({ x: b.x, y: b.y, bounce: bounced });
+    pts.push({ x: b.x, y: b.y });
     if (b.dead) break;
-    if (bounced && sinceBounce < 0) sinceBounce = 0;
-    // Nach dem Abpraller nur noch ein kurzes Stueck als Vorschau zeigen.
-    else if (sinceBounce >= 0 && ++sinceBounce >= tailSteps) break;
   }
   return pts;
 }
@@ -244,7 +196,6 @@ export function updateBullet(b, state, dt) {
   b.prevY = b.y;
   b.age += dt;
   if (b.reflectImmuneT > 0) b.reflectImmuneT = Math.max(0, b.reflectImmuneT - dt);
-
 
   if (b.homing > 0) applyHoming(b, state, dt);
 
@@ -277,37 +228,14 @@ export function updateBullet(b, state, dt) {
     return;
   }
 
+  // Grundsteinumbau Phase 1: kein Bandenschuss mehr -- jeder Wandkontakt
+  // toetet das Geschoss sofort, auch eine gerade erst reflektierte (E3)
+  // Kugel. Optional-Chaining wie zuvor: der Ziellinien-Schattenzustand
+  // (traceTrajectory) traegt kein `sounds`, bleibt also nebenwirkungsfrei.
   if (hitX.hit || hitY.hit) {
-    const mirror = hitX.mirror || hitY.mirror;
-    // Spiegelwand (Phase 5): reflektiert, ohne einen Abpraller zu
-    // verbrauchen -- ABER nur, solange noch einer da ist. Eine Kugel mit
-    // ricochetsLeft <= 0 (z. B. eine von Phase 4 reflektierte E3-Kugel)
-    // stirbt auch an einer Spiegelwand, sonst wuerde E3s "stirbt beim
-    // naechsten Wandkontakt" durch eine Spiegelwand ausgehebelt.
-    if (mirror && b.ricochetsLeft > 0) {
-      const firstBounce = b.wallBounces === 0;
-      state.sounds?.push({ name: firstBounce ? 'tick' : 'bounce', x: b.x });
-      b.wallBounces++;
-      applyBounceStun(b, state); // Abprallschock (Phase 18) -- auch an Spiegelwaenden
-      b.trail.push({ x: b.x, y: b.y });
-      if (b.trail.length > TRAIL_MAX) b.trail.shift();
-      return;
-    }
-    // Ein Wandkontakt pro Schritt kostet genau einen Abpraller --
-    // auch im Eckenfall (hitX && hitY). Bei 0 verbleibenden
-    // Abprallern verschwindet das Geschoss.
-    if (b.ricochetsLeft <= 0) {
-      state.sounds?.push({ name: 'bounce', x: b.x });
-      b.dead = true;
-      return;
-    }
-    // Der erste Abpraller macht die Kugel gefaehrlich (auch fuer den
-    // Schuetzen) -> eigener kurzer Tick-Sound zum Telegraphieren.
-    const firstBounce = b.ricochetsLeft === b.ricochetsStart;
-    state.sounds?.push({ name: firstBounce ? 'tick' : 'bounce', x: b.x });
-    b.ricochetsLeft--;
-    b.wallBounces++; // nur WAND-Abpraller (Phase 4: toeten das Prisma)
-    applyBounceStun(b, state); // Abprallschock (Phase 18)
+    state.sounds?.push({ name: 'bounce', x: b.x });
+    b.dead = true;
+    return;
   }
 
   b.trail.push({ x: b.x, y: b.y });

@@ -1,13 +1,11 @@
 {
-  "_comment_wallBounceDamageMult": "UMBAUPLAN-LP Phase 4: eine Kugel mit Wandkontakt (wallBounces > 0) richtet den wallBounceDamageMult-fachen Schaden an (Nutzer-Feedback nach Phase 28: von 2,0 auf 2,5 angehoben, weil sich der freiwillige Bankshot zu flach anfuehlte -- der im Plan vorgesehene naechste Schritt ist 3,0). Gilt fuer jedes Geschoss und BEIDE Seiten, auch gegnerische -- sonst lernt der Spieler, dass gebandete Kugeln nur fuer ihn gefaehrlich sind. Ersetzt den frueheren Abprallzwang durch einen Anreiz. Nur der AUFSCHLAG-Schaden wird skaliert, nicht die Explosion eines Sprenggeschosses (die laeuft ueber damage.explosion). Eine REFLEXION (Prisma/Panzerung, E3) zaehlt bewusst nicht als Wandkontakt und skaliert daher nicht. Das Prisma (t_prism.bounceDamageTakenMult) ERSETZT diesen Faktor durch 3, staffelt sich also nicht.",
   "bullet": {
     "speed": 200,
     "maxDistance": 1200,
     "blinkFraction": 0.15,
     "maxActive": 5,
     "maxActiveCap": 8,
-    "selfImmunity": 0.35,
-    "wallBounceDamageMult": 2.5
+    "selfImmunity": 0.35
   },
   "_comment_damage": "UMBAUPLAN-LP: Schaden von Quellen ohne eigenen Panzer als Urheber bzw. mit zielabhaengigem Wert. Panzer-/Geschossschaden steht sonst beim Typ in tanks.json (cfg.damage). explosion 40 gilt in BEIDE Richtungen (Phase 2 gegen Gegner, Phase 3 gegen den Spieler -- der Plan nennt fuer beides 40). ownBullet: die eigene, zurueckgekommene Kugel tut dem Spieler 15 statt der 10, die sie einem Gegner zufuegt -- sie soll wehtun, aus voller Gesundheit aber nie toeten, damit der Bankschuss eine Entscheidung bleibt und kein Todesurteil.",
   "damage": {
@@ -30,17 +28,9 @@
     "absorb": 40
   },
   "reflect": {
-    "ricochetsLeft": 0,
     "speedMult": 1,
     "pushPx": 2,
     "graceS": 0.15
-  },
-  "trickshot": {
-    "scrap": 1,
-    "scrapStrong": 2,
-    "strongRicochets": 2,
-    "slowMoS": 0.15,
-    "slowMoScale": 0.35
   },
   "mine": {
     "fuse": 3,
@@ -57,9 +47,15 @@
     "legendary": 5
   },
   "rarityGates": {
-    "epic": { "minRoom": 3 },
-    "unique": { "minRoom": 6 },
-    "legendary": { "minRoom": 9 }
+    "epic": {
+      "minRoom": 3
+    },
+    "unique": {
+      "minRoom": 6
+    },
+    "legendary": {
+      "minRoom": 9
+    }
   },
   "scrap": {
     "perRoom": [

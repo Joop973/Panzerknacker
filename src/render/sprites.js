@@ -73,12 +73,12 @@ export function spritesReady() {
 // (Phase 4: keine neuen Asset-Dateien). Ihre Identitaet traegt das
 // Panzerungs-Overlay im Renderer -- dicker Frontbalken bzw. Rautenkranz.
 // Phase 14: die drei Bosse borgen sich aus demselben Grund eine Wanne --
-// Der Spiegel bekommt (wie das Prisma) den rotierenden Rautenkranz ueber
-// requiresRicochet, die Phalanx den Frontbalken ueber armor.arc, beide
-// automatisch aus tanks.json, ohne Renderer-Sonderfall.
+// Der Spiegel bekommt den rotierenden Rautenkranz ueber requiresRicochet,
+// die Phalanx den Frontbalken ueber armor.arc, beide automatisch aus
+// tanks.json, ohne Renderer-Sonderfall. (Aktuell beide Platzhalter-Bosse,
+// s. CLAUDE.md -- die Aliase bleiben als Referenz fuer einen Bossneubau.)
 const SPRITE_ALIAS = {
   t_armored: 't_grey',
-  t_prism: 't_teal',
   t_reactor: 't_green',
   t_mirror: 't_teal',
   t_phalanx: 't_grey',

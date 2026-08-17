@@ -220,7 +220,6 @@ export function createHud(ctx) {
       ['Tempo', `${num(p.cfg.speed)}${pct(p.cfg.speed, base.speed)}`],
       ['Geschosstempo', `${num(p.cfg.bulletSpeed)}${pct(p.cfg.bulletSpeed, base.bulletSpeed)}`],
       ['Nachladen', `${p.cfg.fireCooldown.toFixed(2)} s${pct(p.cfg.fireCooldown, base.fireCooldown)}`],
-      ['Abpraller', `${p.cfg.ricochets}${p.cfg.ricochets !== base.ricochets ? ` (${base.ricochets})` : ''}`],
       ['Magazin', `${p.cfg.magazine - liveBullets}/${p.cfg.magazine}${pct(p.cfg.magazine, base.magazine)}`],
       ['Bomben', `${p.cfg.mines}${pct(p.cfg.mines, base.mines)}`],
       [

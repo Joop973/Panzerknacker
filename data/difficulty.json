@@ -36,11 +36,6 @@
       "points": 6,
       "unlockRoom": 5
     },
-    "t_prism": {
-      "points": 7,
-      "unlockRoom": 6,
-      "maxPerRoom": 1
-    },
     "t_purple": {
       "points": 9,
       "unlockRoom": 7
@@ -128,14 +123,6 @@
   "destructibleWalls": {
     "hits": 3,
     "share": 0.25
-  },
-  "_bankshotGuarantee": "UMBAUPLAN-LP Phase 8: chance auf 0 -- die erzwungenen Bankshots sind ABGESCHALTET. Einen Panzer in 58 % der Raeume zu einem Gegner zu zwingen, den seine Klasse nicht spielt, ist im LP-Modell unfair; der Wert wird spaeter eine Eigenschaft des Abprallpanzers (Klasse, Phase 9). Der Tausch-Mechanismus in run.js: ensureBankshotEnemy() bleibt erhalten (bei chance 0 ein No-op), damit Phase 9 ihn ohne Code-Neubau wieder scharf schalten kann. Frueher (Phase 4/USP): in `chance` der Raeume ab `minRoom` wurde ein Gegner gegen einen Bankshot-Typ getauscht, um die inzwischen ausgemusterte USP-Kennzahl 1 (60 %) zu treffen.",
-  "bankshotGuarantee": {
-    "minRoom": 6,
-    "chance": 0,
-    "types": [
-      "t_prism"
-    ]
   },
   "treasure": {
     "lifeCost": 1

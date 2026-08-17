@@ -129,9 +129,9 @@ export function updateStatus(state, dt) {
       // Restdauer) driften bei 1/60-Schritten gegeneinander -- gemessen fiel
       // der erste Tick dadurch einen Frame zu spaet und der letzte hinter das
       // Dauerende. Mit einem Zaehler sind es bei 3 s Dauer und 0,5 s Takt
-      // IMMER exakt 6 Ticks, unabhaengig von Bildrate und (Trickshot-)
-      // Zeitlupe. Dasselbe Muster nutzt der Minen-Warnpuls (Phase 7b) aus
-      // genau diesem Grund.
+      // IMMER exakt 6 Ticks, unabhaengig von Bildrate und einer evtl.
+      // aktiven Zeitlupe. Dasselbe Muster nutzt der Minen-Warnpuls
+      // (Phase 7b) aus genau diesem Grund.
       const faellig = Math.floor(e.tickElapsed / tickS);
       if (faellig > e.ticksDone) {
         const n = faellig - e.ticksDone;

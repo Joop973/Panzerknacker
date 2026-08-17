@@ -20,24 +20,23 @@ import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
 import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, isBossCfg } from './cfg.js';
-import { armorBlocks, reflectBullet, reflectFromAim, hasWallBounced, isLive } from './armor.js';
+import { armorBlocks, reflectBullet, reflectFromAim, isLive } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
-// 'reflect' (Phase 5, Spiegelwand): physisch wie 'solid', aber bullet.js
-// laesst Geschosse dort abprallen, ohne einen Abpraller zu verbrauchen.
 // 'destructible' (Phase 11): physisch wie 'solid', bis sie durch
 // destructibleHits Treffer (Kugel ODER Explosion) abgebaut ist.
-// 'generator' (Phase 14, Reaktor-Boss): physisch wie 'solid', nimmt aber
-// NUR von einem bereits abgeprallten Geschoss (Bankshot) Schaden -- ein
-// direkter Treffer prallt wirkungslos ab (siehe bullet.js: moveAxis()).
-// Explosionen (Minen etc.) ignorieren ihn bewusst (siehe mine.js).
-const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole', r: 'reflect', d: 'destructible', g: 'generator' };
+// 'generator' (Phase 14, Reaktor-Boss): physisch wie 'solid'. Verhielt sich
+// vor dem Grundsteinumbau wie eine zerstoerbare Wand, die nur ein bereits
+// abgeprallter Schuss beschaedigte -- ohne Bandenschuss (Phase 1) ist das
+// gegenstandslos, der Reaktor-Boss ist ohnehin aktuell ein Platzhalter
+// (t_black, s. CLAUDE.md). Generatoren stehen bis zum Bossneubau als
+// gewoehnliche, unzerstoerbare Waende.
+const WALL_TYPES = { '#': 'solid', b: 'breakable', o: 'hole', d: 'destructible', g: 'generator' };
 
 // Truemmerfarben fuer Partikel (Politur, Phase 10).
 const DEBRIS_COLORS = {
   player: '#3d8ef0',
   t_armored: '#7d8794',
-  t_prism: '#8fd8ee',
   t_brown: '#8a5a33',
   t_grey: '#9aa0a8',
   t_teal: '#3aa8a0',
@@ -62,8 +61,9 @@ function buildWalls(grid, destructibleHits, generatorHits) {
         // Phase 11: eigene Haltbarkeit statt state.transform.wallDurability --
         // dieselbe destroyWall()-Zaehllogik wie Sperrmauer/Baumeister.
         if (type === 'destructible') wall.destructibleHits = destructibleHits || 1;
-        // Phase 14: Reaktor-Generator -- eigene (meist kleinere) Haltbarkeit,
-        // zaehlt aber nur bei Bankshot-Treffern (siehe bullet.js).
+        // Phase 14: Reaktor-Generator -- eigene (meist kleinere) Haltbarkeit.
+        // Aktuell nie erreichbar (Bandenschuss-Vorbedingung entfallen, Boss
+        // ist Platzhalter, s. bullet.js), Feld bleibt fuer den Bossneubau.
         if (type === 'generator') wall.destructibleHits = generatorHits || 1;
         walls.push(wall);
       }
@@ -126,12 +126,9 @@ export function createState(data, tiles, opts) {
     : generateRoom(tiles, genRng, enemyTypes.length, weights, roomSpec, arenas, destructibleWalls, hazardType);
   const grid = room.grid;
   const walls = buildWalls(grid, destructibleWalls?.hits, data.balance?.boss?.generatorHits);
-  // Raum-Modifikator "Spiegelsaal" (Phase 10): feste Waende werfen Kugeln
-  // zurueck -- nur `solid`, durchschiessbare (`breakable`) Waende behalten
-  // ihre eigene Mechanik, sonst waere die Wandzerstoerung im Raum entwertet.
-  if (modifier?.mirrorHall) {
-    for (const w of walls) if (w.type === 'solid') w.type = 'reflect';
-  }
+  // Der Raum-Modifikator "Spiegelsaal" (liess feste Waende Kugeln zurueck-
+  // werfen) ist mit dem Bandenschuss ins Archiv gewandert (Grundsteinumbau
+  // Phase 1, s. ARCHIV.md) -- data/modifiers.json fuehrt ihn nicht mehr.
 
   // Raum-Gefahr (Phase 15): genau EIN Element pro Raum (room.hazard kommt
   // aus generator.js: placeRoomHazard()). Bewegliche Wand bleibt eine ganz
@@ -242,10 +239,6 @@ export function createState(data, tiles, opts) {
     enemyKills: 0, // in diesem Raum getoetete Gegner
     playerDeaths: 0, // Tode des Spielers in diesem Raum
     playerShots: 0, // Spieler-Abzuege in diesem Raum (Trefferquote)
-    // Telemetrie-Zaehler (nur Instrument -- die Spiellogik liest sie nie):
-    // Kills mit abgeprallter vs. direkter Spielerkugel + Zweitwaffen-Einsatz.
-    ricochetKills: 0,
-    directKills: 0,
     // UMBAUPLAN-LP Phase 8: Schaden je Schadenstyp, den der SPIELER an Gegnern
     // anrichtet -- die neue Telemetrie-Grundlage, die die ausgemusterten
     // USP-Kennzahlen (u. a. die freiwilligen Bankshots) ersetzt.
@@ -254,14 +247,9 @@ export function createState(data, tiles, opts) {
     gadgetUses: 0, // P4: Nutzungen des zweiten Slots (Telemetrie)
     powershotsFired: 0,
     ghostKills: 0, // Phase 7: Kills durch Geister-Kugeln (nicht dem Spieler zugerechnet)
-    // Trickshot-Belohnung (PLAN.md v2 Phase 5): kurze Zeitlupe nach einem
-    // Abpraller-Kill. trickshotTimer zaehlt in (moeglicherweise bereits
-    // verlangsamter) dt herunter -- run.js liest ihn fuer den Zeitlupen-Scale.
-    trickshotTimer: 0,
-    trickshotScrap: 0,
-    // Beutejagd-Upgrade (Phase 18): eigener Raum-Zaehler fuer sonstige
-    // Schrott-Boni ausserhalb des Trickshot-Systems (Muster identisch zu
-    // trickshotScrap, damit run.js denselben Sync-Delta-Ansatz nutzen kann).
+    // Beutejagd-Upgrade (Phase 18): eigener Raum-Zaehler fuer Schrott-Boni
+    // ausserhalb des (mit dem Bandenschuss entfallenen) Trickshot-Systems --
+    // run.js liest ihn per Sync-Delta wie bisher.
     bonusScrap: 0,
     firstKillGiven: false, // pro Raum einmalig, NICHT bei respawnPlayer() zuruecksetzen
     // Notschild-Ladungen als Liste: jede Ladung altert EINZELN (E2).
@@ -310,17 +298,15 @@ export function createState(data, tiles, opts) {
     time: 0,
     respawnTimer: 0,
     // Solid-Test fuer Geschosse/Sichtlinien: 'o' (hole) blockiert NICHT.
-    // 'r' (Spiegelwand, Phase 5) ist optisch/physisch eine normale Wand --
-    // nur bullet.js behandelt sie beim Abprallen anders. 'd' (zerstoerbare
-    // Wand, Phase 11) ist bis zur Zerstoerung ebenfalls physisch normal.
-    // 'g' (Reaktor-Generator, Phase 14) ebenso, bis alle Bankshot-Treffer
-    // sitzen.
+    // 'd' (zerstoerbare Wand, Phase 11) ist bis zur Zerstoerung physisch
+    // normal, 'g' (Reaktor-Generator, Phase 14) ebenso (aktuell unzerstoerbar,
+    // s. WALL_TYPES-Kommentar oben).
     isSolid(px, py) {
       const col = Math.floor(px / CELL);
       const row = Math.floor(py / CELL);
       if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return true;
       const cell = grid[row][col];
-      return cell === '#' || cell === 'b' || cell === 'r' || cell === 'd' || cell === 'g';
+      return cell === '#' || cell === 'b' || cell === 'd' || cell === 'g';
     },
     // Sicht-Test fuer KI-Raycasts (Phase 6): zusaetzlich zu Waenden
     // blockieren aktive Rauchwolken die Sicht -- Geschossphysik/Bewegung
@@ -567,7 +553,6 @@ export function createState(data, tiles, opts) {
         state.lastDeathCauseCode = meta?.code || null;
         state.lastDeathEnemyType = meta?.enemyType || null;
         state.lastDeathBulletOwner = meta?.bulletOwner || null;
-        state.lastDeathBulletRicochets = meta?.bulletRicochets ?? null;
         state.lastDeathBulletDistance = meta?.bulletDistance ?? null;
         state.damageFlash = 0.5;
         state.respawnTimer = RESPAWN_DELAY;
@@ -577,8 +562,9 @@ export function createState(data, tiles, opts) {
         const pc = state.player.cfg;
         // Beutejagd-Upgrade (Phase 18): der ERSTE Kill in jedem Raum gibt
         // sofort Bonus-Schrott -- eigener Raum-Zaehler (Muster wie
-        // trickshotScrap), nicht an killTank()s Aufrufart gebunden (zaehlt
-        // also auch bei einem Ghost-/Minen-/Kettenblitz-Kill als erster Kill).
+        // bonusScrap/steinbruch), nicht an killTank()s Aufrufart gebunden
+        // (zaehlt also auch bei einem Ghost-/Minen-/Kettenblitz-Kill als
+        // erster Kill).
         if (!state.firstKillGiven && pc.firstKillScrap) {
           state.firstKillGiven = true;
           state.bonusScrap += pc.firstKillScrap;
@@ -674,7 +660,6 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
       createBullet(x + Math.cos(a) * 10, y + Math.sin(a) * 10, a, {
         speed: sp,
         radius: state.data.physics.bulletRadius,
-        ricochets: 0,
         owner,
         kind: 'bullet',
         friendly: true, // Splitter/Kranz treffen den Leger nie
@@ -785,7 +770,6 @@ function updateWave(state, dt) {
 export function stepState(state, cmd, dt) {
   const p = state.player;
   state.time += dt;
-  if (state.trickshotTimer > 0) state.trickshotTimer = Math.max(0, state.trickshotTimer - dt);
   if (state.blockedShotTimer > 0) state.blockedShotTimer = Math.max(0, state.blockedShotTimer - dt);
 
   // Transformation "Saboteur" (Phase 5): betaeubte Gegner explodieren,
@@ -881,10 +865,6 @@ export function stepState(state, cmd, dt) {
   // tank.ai.threatened dieses Ticks entscheidet. Bleibt bewusst
   // spielerbezogen (Phase 5 aendert daran nichts).
   updateCoverPerception(state, dt);
-  // Frame-Budget fuer den Abpraller-Rechner (ai_turrets.js: bounceShot):
-  // hoechstens so viele Solver-Laeufe pro Frame, egal wie viele
-  // Bankshot-Gegner im Raum stehen.
-  state.bounceSolveBudget = state.data.ai.bounceShot?.solvesPerTick ?? 1;
 
   // Gegner: getrennte Turm-/Fahr-KI liefert Bewegung, Schuss- und
   // Minenwunsch. Zwei Boss-Sonderfaelle (Phase 14) haben KEINE physik-
@@ -936,10 +916,13 @@ export function stepState(state, cmd, dt) {
     }
   }
 
-  // Geschoss gegen Panzer: toedlich fuer JEDEN, auch den Schuetzen --
-  // ausser (a) innerhalb der Selbst-Immunitaet direkt nach dem Abschuss
-  // oder (b) solange die eigene Kugel noch nicht abgeprallt ist. Erst
-  // nach dem ersten Abpraller gilt sie als gefaehrlich fuer den Leger.
+  // Geschoss gegen Panzer: toedlich fuer JEDEN, auch den Schuetzen -- ausser
+  // (a) innerhalb der Selbst-Immunitaet direkt nach dem Abschuss oder (b)
+  // solange die eigene Kugel nicht reflektiert wurde (Grundsteinumbau
+  // Phase 1: die einzige verbleibende Quelle einer fuer den Schuetzen
+  // gefaehrlichen eigenen Kugel ist die Frontpanzerung-Reflexion, E3 --
+  // ohne Bandenschuss gibt es keinen "erster Abpraller macht sie scharf"-
+  // Uebergang mehr, siehe armor.js: isLive()).
   const grace = state.data.balance.bullet.selfImmunity;
   for (const b of state.bullets) {
     if (b.dead) continue;
@@ -949,7 +932,6 @@ export function stepState(state, cmd, dt) {
       // `friendly` reicht nicht, das schuetzt nur den Besitzer selbst, und
       // der Besitzer ist der Geist, kein echter Tank.
       if (t === state.player && b.owner?.isGhost) continue;
-      const bounced = hasWallBounced(b);
       if (b.owner === t && (b.age < grace || !isLive(b) || b.friendly)) continue;
       if (t.protect > 0) continue; // Spawn-Schutz
       // Kurzes Fenster nach einer Reflexion: die zurueckgeworfene Kugel
@@ -957,14 +939,14 @@ export function stepState(state, cmd, dt) {
       if (b.reflectImmune === t && b.reflectImmuneT > 0) continue;
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
         // Sekundärslot "Deflektor" (Phase 6): reflektiert den naechsten
-        // Treffer in Blickrichtung -- zaehlt als Abprallschuss gegen Prisma.
+        // Treffer in Blickrichtung.
         if (t === state.player && t.deflectorCharges > 0 && b.owner !== t) {
           t.deflectorCharges--;
           reflectFromAim(b, t, state);
           break;
         }
-        // Gerichtete Panzerung (Phase 4): Frontsektor bzw. Prisma faengt
-        // den Treffer ab -- reflects wirft die Kugel zurueck (E3).
+        // Gerichtete Panzerung (Phase 4): Frontsektor faengt den Treffer ab
+        // -- reflects wirft die Kugel zurueck (E3).
         if (armorBlocks(t, b)) {
           if (t.cfg.armor?.reflects) reflectBullet(b, t, state);
           else b.dead = true;
@@ -972,47 +954,8 @@ export function stepState(state, cmd, dt) {
         }
         b.dead = true;
         // Todesursache fuer den Game-Over-Screen + Telemetrie.
-        const WEAPON_LABEL = { bullet: 'Kugel', rocket: 'Rakete', bounce_rocket: 'Bounce-Rakete' };
+        const WEAPON_LABEL = { bullet: 'Kugel', rocket: 'Rakete' };
         const own = b.owner === state.player;
-        // Trickshot-Belohnung (Phase 5): nur fuer Spieler-Kills mit
-        // Wandabpraller. Ab strongRicochets Wandabprallern deutlicher
-        // (mehr Schrott, staerkere Zeitlupe). Ersetzt die reine
-        // "Abpraller!"-Textmeldung an dieser Stelle, statt einen zweiten,
-        // ueberlappenden Text zu zeigen.
-        if (t !== state.player && bounced) {
-          if (own) {
-            const ts = state.data.balance.trickshot;
-            const strong = b.wallBounces >= (ts.strongRicochets ?? 2);
-            // Meisterschuetze-Upgrade (Phase 18): verdoppelt die Trickshot-
-            // Belohnung -- reiner Multiplikator an der einzigen Stelle, an
-            // der Trickshot-Schrott entsteht.
-            const mult = b.owner.cfg.trickshotScrapMult || 1;
-            const gained = (strong ? ts.scrapStrong : ts.scrap) * mult;
-            state.trickshotScrap += gained;
-            state.trickshotTimer = ts.slowMoS;
-            // Doppelschlag-Upgrade (Phase 18, Welle 3): der Trickshot laedt
-            // eine Powershot-Ladung nach -- gedeckelt, damit sich Ladungen
-            // in einem Kettenraum nicht ins Unendliche stapeln.
-            const pc2 = b.owner.cfg;
-            if (pc2.trickshotPowershot) {
-              b.owner.powershotCharges = Math.min(
-                (b.owner.powershotCharges || 0) + pc2.trickshotPowershot,
-                pc2.trickshotPowershotMax,
-              );
-            }
-            state.sounds.push({ name: strong ? 'trickshot2' : 'trickshot', x: t.x });
-            state.texts.push({
-              x: t.x,
-              y: t.y - 18,
-              text: strong ? `Trickshot!! +${gained} Schrott` : `Trickshot! +${gained} Schrott`,
-              age: 0,
-              life: 0.9,
-              color: '#ffd23c',
-            });
-          } else {
-            state.texts.push({ x: t.x, y: t.y - 18, text: 'Abpraller!', age: 0, life: 0.9, color: '#8ecae6' });
-          }
-        }
         const cause = own
           ? 'die eigene Kugel'
           : `${state.data.types[b.owner?.type]?.label || '?'} (${WEAPON_LABEL[b.kind] || b.kind})`;
@@ -1021,47 +964,22 @@ export function stepState(state, cmd, dt) {
         // Gegner zufuegt -- sie soll wehtun, aus voller Gesundheit aber nie
         // toeten. Der Wert haengt also am Ziel, nicht am Geschoss, deshalb
         // hier und nicht in b.damage. (Eine eigene Kugel wird ohnehin erst
-        // nach einem Abpraller fuer den Schuetzen scharf, siehe isLive().)
+        // nach einer Reflexion fuer den Schuetzen scharf, siehe isLive().)
         const selbstbeschuss = t === state.player && b.owner === state.player;
         const basisSchaden = selbstbeschuss
           ? state.data.balance?.damage?.ownBullet ?? b.damage ?? 1
           : b.damage ?? 1;
-        // UMBAUPLAN-LP Phase 4: eine Kugel mit Wandkontakt richtet doppelten
-        // Schaden an. Kein Upgrade und keine Klassenregel -- gilt fuer JEDES
-        // Geschoss und BEIDE Seiten, auch gegnerische (sonst lernt der
-        // Spieler, dass gebandete Kugeln nur fuer ihn gefaehrlich sind).
-        // Damit ersetzt der Anreiz den frueheren Zwang: der Abpraller lohnt
-        // sich, statt vorgeschrieben zu sein.
-        // Bewusst nur der AUFSCHLAG-Schaden: die Explosion eines gebandeten
-        // Sprenggeschosses laeuft ueber balance.damage.explosion und bleibt
-        // unveraendert -- sonst wuerde ein einziger Wandkontakt gleich zwei
-        // Schadensquellen verdoppeln.
-        // UMBAUPLAN-LP Phase 8: der Abprall-Bonus ist ZIEL-abhaengig. Ein
-        // Prisma (cfg.bounceDamageTakenMult) nimmt aus gebandeten Schuessen
-        // dreifachen STATT doppelten Schaden -- der Wert ersetzt den globalen
-        // wallBounceDamageMult, staffelt sich also nicht mit ihm. Ein direkter
-        // Schuss (bounced === false) trifft das Prisma dagegen ganz normal.
-        const abprallMult = bounced
-          ? t.cfg.bounceDamageTakenMult ?? state.data.balance?.bullet?.wallBounceDamageMult ?? 1
-          : 1;
         // UMBAUPLAN-LP Phase 11 (Physisch-Topf): Trefferregeln des Schuetzen.
-        // Kaltschuetze macht gebandete Schuesse kritisch; Splittergeschoss
-        // verstaerkt den Krit-Faktor; Abprallkoenig gibt gebandeten Schuessen
-        // Extra-Schaden; Fangschuss trifft angeschlagene Ziele haerter. Alle
-        // aus b.owner.cfg -- nur der Spieler traegt diese physischen Karten.
+        // Fangschuss trifft angeschlagene Ziele haerter. Aus b.owner.cfg --
+        // nur der Spieler traegt diese physischen Karten. (Kaltschuetze/
+        // Splittergeschoss/Abprallkoenig hingen am Bandenschuss und sind mit
+        // Grundsteinumbau Phase 1 wirkungslos -- data/upgrades.json bleibt
+        // bis Phase 4 unangetastet, s. Auftrag.)
         const oc = b.owner?.cfg;
-        const isCrit = b.crit || (bounced && !!oc?.critOnBounce);
-        // Kritischer Treffer (UMBAUPLAN-LP Phase 7): der Aufschlag traegt den
-        // balance.crit.mult (+ Splittergeschoss-Bonus). Faktoren MULTIPLIZIEREN
-        // sich: ein gebandeter Krit macht abprallMult * critMult = 2 * 2 = 4.
+        const isCrit = b.crit;
+        // Kritischer Treffer (UMBAUPLAN-LP Phase 7): der Aufschlag traegt
+        // den balance.crit.mult (+ Splittergeschoss-Bonus, falls gesetzt).
         const critMult = isCrit ? (state.data.balance?.crit?.mult ?? 1) + (oc?.critMultBonus || 0) : 1;
-        // shooterBounceBonus: pauschaler Abprall-Bonus (bounceDamageBonus) +
-        // Abprallpanzer-Rampe (bounceRampPerBounce, Phase 24): je gezaehltem
-        // Wandabpraller (b.wallBounces) zusaetzlicher Schaden -- ein Doppelbank-
-        // Schuss trifft dadurch haerter als ein einfacher.
-        const shooterBounceBonus = bounced
-          ? 1 + (oc?.bounceDamageBonus || 0) + (oc?.bounceRampPerBounce || 0) * (b.wallBounces || 0)
-          : 1;
         const execMult =
           oc?.executeThreshold && t !== state.player && t.hp / (t.cfg.maxHp || 1) < oc.executeThreshold
             ? oc.executeMult || 1
@@ -1069,7 +987,7 @@ export function stepState(state, cmd, dt) {
         // Frost-Topf (Phase 14): "Splittern" -- Extra-Schaden gegen ERSTARRTE
         // (betaeubte) Ziele, damit die Frost-CC in Schaden umschlaegt.
         const shatterMult = oc?.shatterMult && t.stunTimer > 0 ? 1 + oc.shatterMult : 1;
-        let schaden = Math.round(basisSchaden * abprallMult * critMult * shooterBounceBonus * execMult * shatterMult);
+        let schaden = Math.round(basisSchaden * critMult * execMult * shatterMult);
         // Kopfschuss (Phase 11): ein Krit toetet einen Nicht-Boss-Gegner sofort.
         if (isCrit && oc?.critExecute && t !== state.player && !isBossCfg(t.cfg)) {
           schaden = Math.max(schaden, t.hp);
@@ -1078,7 +996,6 @@ export function stepState(state, cmd, dt) {
           code: own ? 'own_bullet' : 'enemy_bullet',
           enemyType: own ? null : b.owner?.type || null,
           bulletOwner: own ? 'player' : 'enemy',
-          bulletRicochets: b.wallBounces || 0,
           bulletDistance: Math.round(b.distance || 0),
           // Klassen-Passive (Phase 9): der Schuetze bestimmt Blitzziele +
           // Status-Dauer/Verlangsamung. Ueber die Kugel statt global, damit
@@ -1109,7 +1026,7 @@ export function stepState(state, cmd, dt) {
         // weiterspringen lassen. NACH dem eigentlichen Treffer, damit die
         // Kette vom bereits geschaedigten Ziel ausgeht.
         applyTypeEffects(state, t, b.damageType, schaden, trefferMeta);
-        // Geisterpanzer: eigener Kill-Zaehler statt Spieler-Trickshot/Ricochet.
+        // Geisterpanzer: eigener Kill-Zaehler, nicht dem Spieler zugerechnet.
         // Upgradepool-v2 Phase 4: die Timer-Verlaengerung (b.owner.timeLeft +=
         // balance.ghost.killBonus) ist mit dem alten Geistersystem abgebaut --
         // ghostKills bleibt als reine Telemetrie bestehen, der Neubau in
@@ -1135,14 +1052,6 @@ export function stepState(state, cmd, dt) {
           const stunS = state.player?.cfg?.ghostStunOnHit;
           if (stunS) t.stunTimer = Math.max(t.stunTimer || 0, stunS);
         }
-        // Telemetrie: Abpraller- vs. Direkt-Kills des Spielers an Gegnern.
-        // Die freiwilligen Bankshots (USP-Kennzahl 3) sind mit Phase 8
-        // ausgemustert -- das LP-Modell belohnt den Abprall ueber Schaden,
-        // nicht mehr ueber einen Kill-Zaehler.
-        if (own && t !== state.player && !t.alive) {
-          if (bounced) state.ricochetKills++;
-          else state.directKills++;
-        }
         break;
       }
     }
@@ -1150,8 +1059,8 @@ export function stepState(state, cmd, dt) {
 
   // Gegner-Geschosse gegen Geister (Upgradepool-v2 Phase 5): eigene, kleine
   // Schleife statt Geister in die grosse Panzer-Trefferschleife oben zu
-  // pressen -- deren Logik (Panzerung, Krit, Trickshot, Kopfschuss-Execute)
-  // ist auf echte Panzer in state.tanks zugeschnitten und wuerde fuer
+  // pressen -- deren Logik (Panzerung, Krit, Kopfschuss-Execute) ist auf
+  // echte Panzer in state.tanks zugeschnitten und wuerde fuer
   // Geister falsche Sonderfaelle auswerten. Nur GEGNERISCHE Kugeln sind
   // gefaehrlich (Geister kaempfen auf Spielerseite); eigene/Geister-Kugeln
   // ignorieren einander. killGhost() (Phase 7) ist der einzige Tod-Trichter

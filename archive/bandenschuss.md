@@ -1,11 +1,22 @@
-# Bandenschuss (archiviert Phase 0, Grundsteinumbau v3)
+# Bandenschuss (archiviert Phase 0/1, Grundsteinumbau v3)
 
-Archiviert am 2026-08-17, vor der eigentlichen Entfernung in **Phase 1**
-("Bandenschuss vollständig entfernen") des Grundsteinumbaus. Dieses Dokument
-ist die Mechanikbeschreibung des Systems **wie es vor Phase 1 tatsächlich
-im Code stand** — verifiziert, nicht aus der Erinnerung geschrieben.
-Zeilennummern können durch spätere Commits leicht wandern; die
-Funktions-/Feldnamen sind der verlässliche Anker beim Wiederfinden.
+Ursprünglich am 2026-08-17 in Phase 0 angelegt (vor der eigentlichen
+Entfernung), am selben Tag in **Phase 1** ("Bandenschuss vollständig
+entfernen") um den Abgleich "was stimmte an der Phase-0-Beschreibung
+tatsächlich" und die neu gefundenen Systeme ergänzt. **Status: Phase 1 ist
+gemergt — die Mechanik unten existiert nicht mehr im aktiven Code**, dieses
+Dokument ist die Referenz beim Zurückholen. Zeilennummern können durch
+spätere Commits leicht wandern; die Funktions-/Feldnamen sind der
+verlässliche Anker beim Wiederfinden.
+
+> **Korrektur aus Phase 1 (wichtig):** Der Phase-0-Absatz unten zur
+> Spiegelwand ("existierte also nur als ungenutzter Mechanismus") war
+> **falsch**. `generator.js: placeReflectWalls()` wurde in JEDEM generierten
+> Kampfraum aufgerufen und platzierte dort 2–4 Spiegelwände — Phase 0 hatte
+> nur die STATISCHEN Dateien (`tiles.json`/`arenas.json`) auf das Zeichen
+> `'r'` geprüft, nicht den Generator-Code, der es zur Laufzeit selbst
+> einsetzt. Die Mechanik war also aktiv im Spiel, nicht tot. Siehe
+> Abschnitt "Spiegelwand-Erzeugung" unten für die korrekte Beschreibung.
 
 Grund der Entfernung (siehe `AUFTRAG-GRUNDSTEINUMBAU.md`, Abschnitt 1):
 die langsame Spielerkugel (200 px/s), die der Bandenschuss erzwang, machte
@@ -34,9 +45,24 @@ Ein Wandtreffer ohne verbleibende Abpraller lässt die Kugel sterben; sonst
 prallt sie ab (Vorzeichenwechsel der Geschwindigkeitskomponente),
 `ricochetsLeft--`, `wallBounces++`. Eine **Spiegelwand** (Wandtyp `'r'` →
 `WALL_TYPES.r = 'reflect'`, `state.js:34`) prallt IMMER ab, OHNE
-`ricochetsLeft` zu verbrauchen (nur `wallBounces` zählt normal mit) — war
-aber in `data/tiles.json`/`data/arenas.json` **null Mal** tatsächlich
-platziert, existierte also nur als ungenutzter Mechanismus.
+`ricochetsLeft` zu verbrauchen (nur `wallBounces` zählt normal mit).
+
+## Spiegelwand-Erzeugung (`generator.js: placeReflectWalls()`) — war AKTIV
+
+Anders als der ursprüngliche Phase-0-Befund (s. Korrektur oben): dies war
+**kein** ungenutzter Mechanismus. `buildGrid()` rief `placeReflectWalls()`
+bei **jedem** generierten Kampf-/Eliteraum auf und ersetzte 2–4 zufällige
+Außenrand-Zellen (ohne Ecken) durch `'r'`, Anzahl aus
+`data/tiles.json: mirror.minPerRoom/maxPerRoom` (2/4). Der Fisher-Yates-
+Shuffle darin verbrauchte bei jedem Raumaufbau reichlich RNG aus dem
+`rooms`-Strom (Border-Array eines 24×16-Rasters, ~68 Zellen) — das Entfernen
+in Phase 1 verschiebt dadurch die Ergebnisse nachfolgender `rooms`-Zufalls-
+ziehungen im selben Raum gegenüber alten Seeds (akzeptiert, siehe
+Auftrag: der Umbau ändert Gameplay-Determinismus bewusst). Feste Arenen
+(`boss_reactor`/`boss_mirror`/`boss_phalanx`) nutzten das Legendenkürzel
+`mirror` NICHT (0 Vorkommen dort — das war der Teil, den Phase 0 korrekt
+gemessen hatte); nur `test_arena` (Entwickler-Testarena) hatte zwei `M`-
+Zellen darüber gelegt, in Phase 1 durch normale Wände (`#`) ersetzt.
 
 ## Schadensbonus (`data/balance.json: bullet.wallBounceDamageMult`)
 
@@ -108,13 +134,13 @@ Raum-Zähler über einen Delta-Sync nach `run.scrap`.
 ## Reflexion durch Frontpanzerung (E3, `armor.js: reflectBullet()`) — bleibt!
 
 **Nicht Teil dieser Archivierung** — Reflexion (nicht Bandenschuss)
-funktioniert nach Phase 1 weiter, nur ohne `ricochetsLeft`-Feld: die
-zurückgeworfene Kugel fliegt bis zur nächsten Wand und stirbt dort (statt
-weiter abzuprallen). `data/balance.json: reflect` bleibt unverändert
-bestehen: `{ ricochetsLeft: 0, speedMult: 1, pushPx: 2, graceS: 0.15 }` —
-`ricochetsLeft: 0` bedeutete auch VOR Phase 1 schon "stirbt am nächsten
-Wandkontakt", die Reflexionsmechanik hat sich also inhaltlich nie auf
-mehrfaches Abprallen verlassen.
+funktioniert nach Phase 1 weiter: die zurückgeworfene Kugel fliegt bis zur
+nächsten Wand und stirbt dort (statt weiter abzuprallen) — das ergibt sich
+jetzt automatisch aus der generischen "jede Wand tötet"-Regel, kein
+Sonderfall mehr nötig. `data/balance.json: reflect.ricochetsLeft` (vor
+Phase 1: `0`, bedeutete schon davor "stirbt am nächsten Wandkontakt") ist
+mit Phase 1 als totes Feld entfernt; `speedMult`/`pushPx`/`graceS` bleiben
+unverändert in `reflect` stehen.
 
 ## Ziellinien-Vorschau (`src/render/effects.js: drawAimLine()`, Zeile 277)
 
@@ -129,28 +155,90 @@ kamen aus `p.cfg.aimPreviewBounces` (Ballistikrechner-Karte, jetzt in
 `archive/upgrades-v1.json`). Nach Phase 1 bleibt nur die gerade Linie bis
 zur ersten Wand.
 
-## `t_mirror` (Boss "Der Spiegel") — WICHTIGER OFFENER PUNKT, nicht archiviert
+## `t_mirror` (Boss "Der Spiegel") — GELÖST über den Boss-Platzhalter
 
-`t_mirror` bleibt im Spiel (Boss von Akt 2) und nutzt weiterhin
-`requiresRicochet: true` + `armor: { arc: 360, reflects: true }` — genau
-der Mechanismus, den Phase 1 laut Auftrag "ersatzlos" entfernen soll
-(`hasWallBounced()`/`requiresRicochet`). Mit `arc >= 360` blockt
-`armor.js: armorBlocks()` **jeden** Treffer, außer `requiresRicochet` lässt
-über `!hasWallBounced(b)` die Ausnahme "Kugel hat schon an einer Wand
-abgeprallt" zu. Ohne Wandabpraller (Phase 1) gibt es diese Ausnahme nicht
-mehr — der Spiegel würde für **jede Kugel**, direkt oder nicht, unverwundbar.
-Explosionen (Minen) ignorieren die Panzerung bewusst und blieben ihm
-gefährlich, aber jede Kugelwaffe würde komplett wirkungslos. **Dieser Punkt
-ist im Auftrag nicht vorgesehen und muss vor/in Phase 1 entschieden werden**
-(siehe `ARCHIV.md`, Abschnitt "Ist-Abgleich Phase 0").
+War in Phase 0 als blockierender Fund markiert. **Aufgelöst noch vor Phase
+1**, durch eine eigene Nutzerentscheidung direkt nach Phase 0 (s. CLAUDE.md
+"Bosse (Platzhalter, Nutzerentscheidung)"): alle drei Bosse sind noch nicht
+ausgearbeitet und werden aktuell durch `t_black` ersetzt (`run.js:
+BOSS_ENEMY_TYPES`) — `t_mirror` wird im normalen Spiel gar nicht mehr
+gespawnt. Phase 1 konnte `requiresRicochet`/`hasWallBounced()` deshalb wie
+im Auftrag vorgesehen **ersatzlos aus `armor.js` entfernen** (die
+KILL-BLOCKIERENDE Interpretation), OHNE den Spiegel spielbar unverwundbar zu
+machen. Das Datenfeld `t_mirror.requiresRicochet: true` selbst bleibt
+bewusst unverändert in `tanks.json` stehen (reiner Boss-Platzhalter-
+Passthrough über `cfg.js: resolveCfg()`, nur noch für die Renderer-Optik
+gebraucht — ein künftiger Bossneubau braucht ohnehin eine neue Regel dafür,
+"jeder Treffer blockt für immer" ist mit `armor.arc: 360` und ohne
+Bandenschuss keine spielbare Mechanik mehr).
 
-## Reaktor-Generatoren — WICHTIGER OFFENER PUNKT, nicht archiviert
+## Reaktor-Generatoren — GELÖST über den Boss-Platzhalter (nicht "auf Direkttreffer umgestellt")
 
-Ebenfalls kein Bandenschuss-Feature im engeren Sinn, aber direkt betroffen:
-`bullet.js: moveAxis()` beschädigt eine Generator-Wand (`t_reactor`-Boss)
-nur, wenn die treffende Kugel **vorher schon an einer anderen Wand
-abgeprallt ist** (`b.wallBounces > 0`) — ein Direkttreffer prallt
-wirkungslos ab. Ohne Wandabpraller (Phase 1) kann `b.wallBounces` nie mehr
-größer 0 werden — der Reaktor-Bosskampf wäre ohne eine gezielte
-Codeänderung an dieser Stelle unlösbar. Details und Fundstelle in
-`ARCHIV.md`, Abschnitt "Ist-Abgleich Phase 0".
+Ebenfalls in Phase 0 als blockierender Fund markiert, ebenfalls durch den
+Boss-Platzhalter aufgelöst — **anders als der Phase-0-Vorschlag** ("auf
+reinen Direkttreffer umstellen"). Da `t_reactor` aktuell nicht gespawnt wird
+(Platzhalter `t_black`), hat Phase 1 die Bedingung `wall.type ===
+'generator' && b.wallBounces > 0` in `bullet.js: moveAxis()` ersatzlos
+entfernt statt umzustellen — Generatoren verhalten sich bis zu einem
+Bossneubau wie **gewöhnliche, unzerstörbare Wände** (fallen in den
+generischen "hit=true"-Pfad, kein `destroyWall()`-Aufruf mehr erreichbar).
+`state.js: destroyWall()`s Generator-Zweig (Zähler `bossGeneratorsLeft`,
+Sound `trickshot2`, Text "Generator zerstört!") bleibt unverändert im Code
+stehen — totes, aber harmloses Boss-Feature, bis ein Bossneubau eine neue
+Zerstörungsbedingung braucht.
+
+## Raum-Modifikatoren "Überdruck"/"Spiegelsaal" (`data/modifiers.json`) — in Phase 1 gefunden und archiviert
+
+Zwei der neun Raum-Modifikatoren (Phase 10) waren vollständig
+Bandenschuss-abhängig und standen nicht im ursprünglichen Phase-0-Befund
+(erst beim Umsetzen von Phase 1 entdeckt, als `state.js` einer Wand den
+inzwischen ungültigen Typ `'reflect'` zuweisen wollte):
+
+- **`overpressure`** ("Überdruck", `ricochetsBonus: 1`, "Alle Geschosse
+  prallen einmal mehr ab") — `cfg.js: applyRoomModifier()` addierte den Wert
+  auf `cfg.ricochets`. Mit `cfg.ricochets` entfallen ist der Modifikator
+  bedeutungslos, aus dem aktiven Pool entfernt.
+- **`mirror_hall`** ("Spiegelsaal", `mirrorHall: true`, "Alle festen Wände
+  werfen Geschosse zurück") — `state.js: createState()` wandelte nach
+  `buildWalls()` alle `solid`-Wände in `'reflect'` um. Da der Wandtyp
+  `'reflect'` komplett entfernt ist, hätte der ungefixte Code eine
+  ungültige Wand erzeugt; der Modifikator ist aus dem aktiven Pool entfernt.
+
+Beide Einträge sind aus `data/modifiers.json: modifiers[]` entfernt (nicht
+nur deaktiviert). Zum Zurückholen: die JSON-Blöcke stehen hier archiviert,
+`cfg.js: applyRoomModifier()` bräuchte für `overpressure` einen neuen
+Zielwert (kein `cfg.ricochets` mehr) und `mirror_hall` bräuchte einen neuen
+Wandtyp, falls Spiegelwände je zurückkehren.
+
+```json
+{ "id": "overpressure", "name": "Ueberdruck",
+  "desc": "Alle Geschosse prallen einmal mehr ab.", "ricochetsBonus": 1 }
+{ "id": "mirror_hall", "name": "Spiegelsaal",
+  "desc": "Alle festen Waende werfen Geschosse zurueck.", "mirrorHall": true }
+```
+
+## Telemetrie: Abpraller-/Direkt-Kill-Zähler — entfernt
+
+`state.ricochetKills`/`state.directKills` (gezählt in der Trefferschleife
+über `bounced`) und `trefferMeta.bulletRicochets` (= `b.wallBounces`) sind
+mit Phase 1 vollständig entfernt — `main.js`, `telemetry.js`
+(`recordRoom()`, `computeMetrics()`, die Debug-Ansicht "Abpraller-Kills
+X/Y") kannten sie. Ohne Wandabpraller wäre `ricochetKills` für immer 0 und
+`directKills` gleich der Gesamt-Killzahl gewesen — eine dauerhaft
+bedeutungslose Kennzahl statt eines echten Signals. Historische, bereits
+gespeicherte `localStorage.runs`-Einträge behalten die alten Felder (keine
+Migration), neue Runs schreiben sie nicht mehr.
+
+## Rein kosmetische Reste, ohne Funktionsverlust entfernt
+
+- `data/tanks.json: bulletSpeeds.bounce_rocket` (200) — Geschwindigkeits-
+  eintrag für eine Waffenart, die **kein** Panzertyp je nutzte (verifiziert
+  in Phase 0). `bullet.js: createBullet()`s `kind`-Kommentar, `renderer.js:
+  bulletSpriteKey()`/`BULLET_COLORS.bounce_rocket`, `state.js:
+  WEAPON_LABEL.bounce_rocket` entsprechend bereinigt. Das Sprite-Asset
+  `assets/sprites/bullet_bounce.png` bleibt unangetastet (weiterhin über
+  `sprites.js: BULLET_KEYS` geladen, referenziert von keinem Code mehr,
+  aber harmlos) — kein Cache-Bump nötig, kein Asset entfernt.
+- Sound `data/sounds.json: trickshot` (ohne "2") — nach Wegfall der
+  Trickshot-Belohnung ohne verbleibende Push-Stelle, entfernt.
+  `trickshot2` bleibt (Generator-Zerstörungs-Sound, s. o.).

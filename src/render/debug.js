@@ -42,16 +42,6 @@ export function createDebugOverlay(ctx) {
     }
   }
 
-  function drawRicochetCounters(bullets) {
-    ctx.fillStyle = COLORS.text;
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
-    for (const b of bullets) {
-      ctx.fillText(String(b.ricochetsLeft), b.x, b.y - 8);
-    }
-    ctx.textAlign = 'left';
-  }
-
   // Zuendradius scharfer Minen als gestrichelter Kreis.
   function drawMineRadii(state) {
     const mcfg = state.data.mine;
@@ -128,7 +118,6 @@ export function createDebugOverlay(ctx) {
       for (const m of state.mines) drawCircle(m.x, m.y, m.radius);
       drawMineRadii(state);
       drawTrails(state.bullets);
-      drawRicochetCounters(state.bullets);
       drawPanel(state, fps, timing);
     },
   };

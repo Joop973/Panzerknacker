@@ -193,8 +193,6 @@ async function init() {
   let teleEnemies = [];
   let teleShield = 0;
   let teleMinFps = Infinity;
-  let teleRic = 0;
-  let teleDir = 0;
   let teleDmgType = null; // Phase 8: Schaden je Schadenstyp in diesem Raum
   let teleSec = 0;
   let telePowershots = 0;
@@ -213,8 +211,6 @@ async function init() {
     teleEnemies = [];
     teleShield = 0;
     teleMinFps = Infinity;
-    teleRic = 0;
-    teleDir = 0;
     teleDmgType = null;
     teleSec = 0;
     telePowershots = 0;
@@ -239,8 +235,6 @@ async function init() {
     // Raum spaeter neue Panzer hinzufuegen -- st.tanks.length ist nicht
     // mehr ueber die ganze Raumdauer konstant).
     teleEnemies = st.tanks.slice(1).map((t) => ({ type: t.type, affixes: t.affixes || [] }));
-    teleRic = st.ricochetKills;
-    teleDir = st.directKills;
     teleDmgType = { ...st.damageByType };
     teleSec = st.secondaryUses;
     telePowershots = st.powershotsFired;
@@ -259,8 +253,6 @@ async function init() {
       scrapEarned: run.scrapThisRoom,
       enemies: teleEnemies,
       minFps: teleMinFps === Infinity ? null : Math.round(teleMinFps),
-      ricochetKills: teleRic,
-      directKills: teleDir,
       damageByType: teleDmgType,
       secondaryUses: teleSec,
       powershotsFired: telePowershots,
@@ -304,7 +296,6 @@ async function init() {
         enemyType: st.lastDeathEnemyType || null,
         death: {
           bulletOwner: st.lastDeathBulletOwner || null,
-          bulletRicochets: st.lastDeathBulletRicochets ?? null,
           bulletDistanceTravelled: st.lastDeathBulletDistance ?? null,
         },
       });
