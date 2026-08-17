@@ -3750,8 +3750,10 @@ Abschnitt weiter unten. Beide oben genannten Blocker sind über den
 Boss-Platzhalter aufgelöst (nicht über den vorgeschlagenen Direkttreffer-
 Umbau), eine dritte, in Phase 0 übersehene Stelle (Spiegelwand-Erzeugung
 war entgegen der ursprünglichen Annahme aktiv) ist mit gefunden und
-mitentfernt. **Nächste Sitzung: Phase 2** (Kampfkern: Kugeltempo 200→450,
-Flanken-/Heckschaden, Exekutionsschwelle, Treffer-Rückmeldung).
+mitentfernt. **Phase 2 (Kampfkern: Kugeltempo 200→450, Flanken-/
+Heckschaden, Exekutionsschwelle, Treffer-Rückmeldung) ist gebaut** —
+eigener Abschnitt weiter unten. **Nächste Sitzung: Phase 3** (Der Grüne
+wird Mörserschütze).
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -3907,6 +3909,126 @@ Raumgenerator gleichermaßen.
   Konsolenfehler. `tests/uilayout.mjs`/`viewport.mjs`/`fogperf.mjs`/
   `gamepad.mjs`/`music.mjs` bleiben grün.
 
+### Grundsteinumbau v3 — Phase 2 (Kampfkern: treffen, töten, spüren) — gemergt
+Der eigentliche Ersatz-USP für den in Phase 1 entfernten Bandenschuss:
+Flanken-/Heckschaden über die Wannen-Ausrichtung statt Vorhaltefrust, eine
+Exekutionsschwelle für einen klaren Abschlussmoment, Treffer-Rückmeldung als
+Ersatz für den alten Trickshot-Moment.
+- **Kugeltempo 200→450** (`balance.bullet.speed`): senkt die nötige
+  Vorhaltung gegen 40–140-px/s-Gegner von 12–44° auf 5–18°. **Gegnerraketen
+  300→210** (`tanks.json: bulletSpeeds.rocket`) — schneller als eine
+  Gegnerkugel (130), langsamer als die neue Spielerkugel: ausweichbar, aber
+  drängend.
+- **Flanken-/Heckschaden** (`data/balance.json: flank`, `sideArcDeg 110`/
+  `rearArcDeg 70`/`sideMult 1.5`/`rearMult 2.5`): neue Funktion
+  `armor.js: flankZone(tank, bx, by, flank)` misst den Einschlagwinkel
+  relativ zur **Wannen-Ausrichtung** (`heading`, nicht Turm — Entscheidung
+  B: am Turm gemessen wäre das Heck praktisch nie treffbar, weil Türme das
+  Ziel verfolgen), über dieselbe `angleDelta()`-Hilfsfunktion wie
+  `armorBlocks()` (jetzt exportiert statt dupliziert). Heck zählt zuerst
+  (Priorität bei überlappenden Konfigurationswerten), dann je eine
+  Seitenkeule links/rechts um die Querachse, der Rest ist Front (×1). Bei
+  den Standardwerten deckt das den Kreis exakt ohne Lücke/Überlappung
+  (70 + 2×110 + 70 = 360). Gilt **nur gegen normale Gegner + Elites**
+  (Entscheidung C — Bosse behalten ihre eigene Panzerungslogik, der Spieler
+  ist selbst nie Ziel). `t_armored` behält zusätzlich seine reflektierende
+  Front — Panzerung und Flankenmultiplikator widersprechen sich nicht: von
+  vorn prallt ab, von der Seite/hinten greift der neue Multiplikator.
+- **Exekutionsschwelle** (`balance.json: execute`, `thresholdPct 0.35`/
+  `slowMult 0.6`/`smokeIntervalS 0.35`): ein Gegner unter der Schwelle
+  raucht sichtbar (`state.js`s Timer-Schleife spawnt Partikel im Takt),
+  fährt mit `slowMult` (`tank.js: moveTank()`, neuer `execSlow`-Faktor), und
+  **jeder** Treffer tötet ihn ab da garantiert — unabhängig vom Schaden.
+  `t.executing` wird einmal pro Tick **vor** der Trefferverarbeitung
+  gesetzt (Timer-Schleife in `stepState()`), `applyDamage()` liest das Flag
+  nur noch an den beiden Stellen, an denen wirklich abgezogen wird (normaler
+  Pfad + der `overTime`-Zweig für Statuseffekt-Ticks) — **nach** allen
+  Abwehr-Gattern (Schilde/Boss-Unverwundbarkeit), nicht davor: ein Schild
+  soll einen Gegner unter der Schwelle weiterhin retten können, wenn er den
+  Treffer voll abfängt. Der Schaden wird dabei **immer** normal abgezogen
+  (hp bleibt eine ehrliche Zahl, auch negativ/„Overkill" möglich) — nur der
+  **Tod selbst** ist garantiert, unabhängig davon, ob der Abzug allein dafür
+  gereicht hätte. Bosse und der Spieler sind ausgenommen (Entscheidung C).
+  Die 35-%-Schwelle spart laut Entscheidung D bei den aktuellen LP-Werten
+  mathematisch fast nie einen echten Treffer — ihr Wert ist die
+  **Lesbarkeit** (ein rauchender Gegner ist ein sichtbares „noch ein
+  Treffer").
+- **Treffer-Rückmeldung** (Ersatz für den alten Trickshot-Moment):
+  Seiten-/Heck-Treffer zeigen den Faktor als schwebenden Kurztext
+  („Seite ×1.5"/„Heck ×2.5") am Einschlagpunkt (`state.texts`); ein
+  **Heck-Kill** löst eine kurze Zeitlupe aus (`state.rearKillTimer`,
+  `balance.json: killFeedback.slowMoS/slowMoScale`) — dieselbe
+  dt-Skalierungstechnik wie der alte Trickshot, in `run.js: stepRun()`
+  kombiniert mit der Taktiker-Transformations-Zeitlupe (stärkerer/kleinerer
+  Faktor gewinnt); ein **Exekutions-Kill** löst stattdessen einen kräftigeren
+  Einschlag aus (zusätzlicher Screenshake + eigener Partikelstoß in
+  `killTank()`, gated auf `tank.executing`). Der Krit (Phase 7) hat seit
+  jeher eigene Rückmeldung (Ton/Shake/Text am Schützen) und wurde nicht
+  angefasst.
+- **Vorhaltemarkierung** (`effects.js: drawLeadMarkers`, Schalter
+  `data/options.json: leadMarker` + `#optLead`-Checkbox, Muster wie
+  `aimLine`): auf jedem bewegten (`|v| > 4 px/s`), lebenden Gegner ein
+  kleiner Ring+Kreuz an der Position, an der er beim Einschlag einer JETZT
+  abgefeuerten Kugel wäre — eine iterative Näherung über drei Schritte
+  (Distanz/Kugeltempo), keine Zielhilfe, kein Einrasten. Nutzt `t.vx/t.vy`
+  (schon seit `moveTank()` gepflegt), keine neuen Felder nötig.
+- **Telemetrie** (Entscheidung I: erst messen, dann an LP/Balance-Werte
+  gehen — die schnellere Kugel + der Flankenbonus + die Exekution können die
+  Gegner spürbar weicher machen): drei neue Felder pro Raum, `shotsFired`
+  (= `state.playerShots`, gab es schon), **neu** `shotsHit`
+  (`state.playerHits`, zählt nur Treffer auf Panzer, keine Fehlschüsse an
+  die Wand) und `magBlockedTime` (Sekunden, in denen ein gehaltener
+  Feuerbefehl **wirklich** am vollen Magazin scheiterte — bewusst NICHT das
+  normale Nachladen, das ist übliche Kadenz, keine Blockade). Debug-Ansicht
+  zeigt „Trefferquote X % · Magazin blockiert Ø Ys/Run" zusätzlich zur
+  minFps-Zeile. `tank.js: liveBulletsOf()`/`magazineOf()` sind dafür
+  exportiert statt ein zweites Mal dupliziert.
+- **Entscheidung G bestätigt**: bei 450 px/s lebt eine verfehlte Kugel nur
+  noch ~2,7 s statt ~6 s (`maxDistance` unverändert) — die 5er-
+  Magazin-Sperre wird dadurch seltener, ohne dass `magBlockedTime`
+  selbst als Test dafür gebraucht wird (das Feld misst nur, es steuert
+  nichts).
+- **Card-Auswirkung**: `data/upgrades.json` blieb unangetastet (Phase 4
+  archiviert den ganzen Kartenpool ohnehin), zwei Karten mit eigenem
+  Execute-artigen Mechanismus (`phys_fangschuss`: `executeThreshold`/
+  `executeMult`, `phys_kopfschuss`: `critExecute`) bleiben als **separate,
+  card-lokale** Multiplikatoren bestehen — sie kollidieren nicht mit der
+  neuen globalen Exekutionsschwelle (unterschiedliche Variablen im Code),
+  wirken bei Ziel unter Schwelle aber ohnehin nur noch als Nebeneffekt eines
+  bereits garantierten Kills.
+- **Neuer Testabschnitt 47** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt bestanden — je einzeln absichtlich rot gemacht: Flankenmultiplikator
+  entfernt, Bossausnahme (Flanke UND Exekution) entfernt, hp-Abzug beim
+  Exekutions-Kill wieder eingefroren, Exekutions-Verlangsamung entfernt,
+  Heck-Kill-Timer-Zuweisung entfernt, `run.js`-dt-Skalierung entfernt,
+  `magBlockedTime`-Zählung entfernt, Heck-vor-Seite-Priorität in `flankZone()`
+  vertauscht): Struktur (neue Balance-Werte), `flankZone()`-Geometrie mit
+  EIGENEN Zahlen (nicht 110/70/1,5/2,5) inkl. Prioritäts-Nachweis bei
+  überlappenden Bögen, Schadensmultiplikation Ende-zu-Ende mit den ECHTEN
+  balance.json-Werten (front/side/rear + Bossausnahme), Spieler nie Ziel des
+  Flankenschadens, Exekutionsschwelle mit EIGENEM `thresholdPct` (über/unter
+  der Schwelle, Bossausnahme, Spielerausnahme, hp bleibt korrekt abgezogen),
+  Exekutions-Verlangsamung in `moveTank()` mit EIGENEM `slowMult`,
+  Heck-Kill-Timer nur bei echtem Heck-Kill (nicht Front-Kill), `run.js`s
+  dt-Skalierung mit EIGENEM `slowMoScale` (nachgewiesen über `run.playTime`),
+  `playerHits` zählt keine Fehlschüsse, `magBlockedTime` zählt nur echte
+  Blockade (nicht normales Nachladen). Ein Testfund unterwegs: die zahlreichen
+  bestehenden „isolierter Treffer"-Testhelfer (Kritumbau, Schadenstypen,
+  Physisch-/Frost-Topf, Seelensog) platzierten ihre Testkugel exakt auf der
+  Zielposition (`toBullet = atan2(0,0) = 0`) — ohne festgehaltene
+  `heading`/`role: 'guardian'` driftete die von der echten Gegner-KI gesetzte
+  Ausrichtung zufällig in die Seiten-/Heckzone und verfälschte zwölf
+  Bestandstests mit dem neuen Flankenmultiplikator (z. B. „Splittergeschoss
+  63 statt 25"). Fix: `heading: 0` + `role: 'guardian'` (bewegt sich nie) an
+  allen betroffenen Testhelfern.
+- Playwright-Smoke bestätigt: Raum rendert fehlerfrei, die Vorhaltemarkierung
+  erscheint sichtbar auf einem bewegten Gegner, keine Konsolenfehler.
+  `tests/uilayout.mjs`/`viewport.mjs` bleiben grün; `tests/fogperf.mjs`
+  bleibt im dokumentierten Sandbox-Rauschband um das 6-ms-Budget (mehrfach
+  gemessen 4,2–6,2 ms p90, unverändert seit vor dieser Phase).
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 3** (Der Grüne wird Mörserschütze).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -3989,9 +4111,16 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/game/armor.js` — gerichtete Panzerung (Phase 4): `armorBlocks`,
   `reflectBullet`, `isLive`. Seit Grundsteinumbau Phase 1 ist `isLive(b)`
   nur noch `!!b.reflected` (kein Bandenschuss mehr, `hasWallBounced()` ist
-  entfernt).
+  entfernt). Grundsteinumbau Phase 2: `angleDelta` ist jetzt exportiert
+  (gemeinsame Hilfsfunktion) und `flankZone(tank, bx, by, flank)`
+  klassifiziert einen Einschlag als `'front'|'side'|'rear'` relativ zur
+  Wannen-Ausrichtung — Grundlage des Flanken-/Heckschadens.
 - `src/game/tank.js` — Feuern, Minen legen/werfen, `useSecondary()`
   (Phase 6: generischer Sekundärwaffen-Dispatch inkl. Enterhaken/Sperrmauer).
+  `moveTank()` bremst seit Grundsteinumbau Phase 2 einen Panzer mit
+  `tank.executing` (Exekutionsschwelle) über `balance.execute.slowMult`.
+  `liveBulletsOf`/`magazineOf` sind seither exportiert (state.js braucht sie
+  für die `magBlockedTime`-Telemetrie).
 - `src/game/damagetypes.js` — Schadenstypen (Phase 6): `applyTypeEffects`
   (Statusauftrag + Blitzkette), `statusOf`, `typeColor`. Die damageType-ids
   sind absichtlich identisch mit den Statuseffekt-ids, deshalb ohne
@@ -4163,4 +4292,6 @@ LP-Phase 8 entfallen. Mit **Grundsteinumbau Phase 1** ist der komplette
 Bandenschuss (Abpraller, Bankshot-KI, Trickshot-Belohnung, Spiegelwand)
 entfernt — Abschnitt 12 ("Abprall-Bonus") und mehrere Bandenschuss-
 Teilprüfungen in anderen Abschnitten sind archiviert (`ARCHIV.md`/
-`archive/bandenschuss.md`), nicht umnummeriert.
+`archive/bandenschuss.md`), nicht umnummeriert. **Abschnitt 47** bewacht
+den Ersatz-USP aus **Grundsteinumbau Phase 2** (Flanken-/Heckschaden,
+Exekutionsschwelle, Heck-Kill-Zeitlupe, Kampfkern-Telemetrie).

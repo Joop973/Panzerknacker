@@ -137,8 +137,18 @@ export function moveTank(tank, axis, state, dt) {
   // Ablaufen des Effekts von selbst wieder weg.
   const boost = tank.boostTimer > 0 ? tank.cfg.afterburnerMult || 1 : 1;
   const blood = tank.bloodTimer > 0 ? tank.cfg.bloodlustSpeed || 1 : 1;
+  // Exekutionsschwelle (Grundsteinumbau Phase 2): ein angeschlagener Gegner
+  // fährt langsamer -- das Flag wird in state.js: stepState() einmal pro
+  // Tick VOR der Bewegung gesetzt (t.executing), gilt fuer Spieler und Bosse
+  // nie (dort bleibt es immer false).
+  const execSlow = tank.executing ? state.data.balance.execute?.slowMult ?? 1 : 1;
   const spd =
-    tank.cfg.speed * (tank.berserkerSpeed || 1) * boost * blood * statusSpeedMult(state, tank);
+    tank.cfg.speed *
+    (tank.berserkerSpeed || 1) *
+    boost *
+    blood *
+    execSlow *
+    statusSpeedMult(state, tank);
   const mod = state.modifier;
   // Oelpfuetze (Phase 15): dieselbe Grip-Physik wie das raumweite Glatteis
   // (Phase 10), nur ausgeloest durch die aktuelle Kachel statt durch einen
@@ -187,7 +197,10 @@ export function moveTank(tank, axis, state, dt) {
 // `magFreed` (Aasgeier-Upgrade, siehe state.js: killTank) nimmt eine bereits
 // fliegende Kugel aus dieser Rechnung heraus -- sie fliegt weiter und toetet
 // weiter, blockiert aber keinen Magazinplatz mehr.
-function liveBulletsOf(state, owner) {
+// Exportiert (Grundsteinumbau Phase 2): state.js braucht dieselbe Pruefung,
+// um magBlockedTime zu messen (Sekunden mit Feuerbefehl am vollen Magazin) --
+// eine zweite, driftende Kopie der Bedingung waere die Alternative.
+export function liveBulletsOf(state, owner) {
   let n = 0;
   for (const b of state.bullets) {
     if (!b.dead && b.owner === owner && !b.magFreed) n++;
@@ -198,7 +211,7 @@ function liveBulletsOf(state, owner) {
 // Effektives Magazin: Basis + dynamischer Bonus (Uebermacht), gedeckelt
 // durch den harten Aktiv-Kugel-Cap (balance.bullet.maxActiveCap, nur
 // Spieler -- Gegner haben cfg.magazineCap = Infinity).
-function magazineOf(tank) {
+export function magazineOf(tank) {
   const base = tank.cfg.magazine + (tank.magazineBonus || 0);
   return Math.min(base, tank.cfg.magazineCap ?? Infinity);
 }

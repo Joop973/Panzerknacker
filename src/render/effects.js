@@ -298,6 +298,44 @@ export function drawAimLine(ctx, state, trace) {
   ctx.restore();
 }
 
+// Vorhaltemarkierung (Grundsteinumbau Phase 2): auf jedem bewegten Gegner
+// ein kleiner Punkt an der Position, an der er beim Einschlag einer JETZT
+// abgefeuerten Kugel waere -- eine iterative Naeherung (2-3 Schritte ueber
+// Distanz/Kugeltempo, klassischer "Lead-Punkt"-Trick) statt eines echten
+// Loesers. Kein Einrasten, keine Zielhilfe: nur ehrliche Information, die
+// vorher fehlte (die gestrichelte Ziellinie zeigt nur, wohin die KUGEL
+// fliegt, nicht wo ein bewegtes Ziel beim Einschlag steht). Abschaltbar
+// ueber data/options.json (leadMarker), Muster wie aimLine.
+export function drawLeadMarkers(ctx, state) {
+  const p = state.player;
+  if (!p.alive || !p.cfg.bulletSpeed) return;
+  const speed = p.cfg.bulletSpeed;
+  for (const t of state.tanks) {
+    if (t === p || !t.alive) continue;
+    const spd = Math.hypot(t.vx || 0, t.vy || 0);
+    if (spd < 4) continue; // praktisch stillstehend -- Punkt waere nur Unruhe
+    let ex = t.x;
+    let ey = t.y;
+    for (let i = 0; i < 3; i++) {
+      const dist = Math.hypot(ex - p.x, ey - p.y);
+      const travelT = dist / speed;
+      ex = t.x + (t.vx || 0) * travelT;
+      ey = t.y + (t.vy || 0) * travelT;
+    }
+    ctx.strokeStyle = 'rgba(255,220,120,0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(ex, ey, 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ex - 6, ey);
+    ctx.lineTo(ex + 6, ey);
+    ctx.moveTo(ex, ey - 6);
+    ctx.lineTo(ex, ey + 6);
+    ctx.stroke();
+  }
+}
+
 // Schwebende Kurztexte ("Abpraller!").
 export function drawTexts(ctx, state) {
   ctx.font = 'bold 12px monospace';

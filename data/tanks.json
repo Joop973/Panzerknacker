@@ -18,9 +18,10 @@
     "fast": 100,
     "veryfast": 140
   },
+  "_comment_bulletSpeeds": "Grundsteinumbau Phase 2: rocket 300 -> 210 -- schneller als eine Gegnerkugel (130), aber langsamer als die neue Spielerkugel (450): ausweichbar, aber draengend (Entscheidung, s. AUFTRAG-GRUNDSTEINUMBAU.md Phase 2).",
   "bulletSpeeds": {
     "bullet": 130,
-    "rocket": 300
+    "rocket": 210
   },
   "ai": {
     "raycastStepPx": 4,

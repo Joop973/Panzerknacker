@@ -23,8 +23,11 @@
 
 const TAU = Math.PI * 2;
 
-// Differenz zweier Winkel, normiert auf [-PI, PI].
-function angleDelta(a, b) {
+// Differenz zweier Winkel, normiert auf [-PI, PI]. Exportiert (Grundstein-
+// umbau Phase 2): der Flanken-/Heckschaden (state.js: flankZone unten)
+// braucht dieselbe Winkelmathematik wie armorBlocks() -- eine gemeinsame
+// Hilfsfunktion statt einer zweiten Kopie.
+export function angleDelta(a, b) {
   let d = (a - b) % TAU;
   if (d > Math.PI) d -= TAU;
   if (d < -Math.PI) d += TAU;
@@ -48,6 +51,29 @@ export function armorBlocks(tank, b) {
   // Spieler als dicken Balken sieht).
   const toBullet = Math.atan2(b.y - tank.y, b.x - tank.x);
   return Math.abs(angleDelta(toBullet, tank.heading)) <= (arc * Math.PI) / 360;
+}
+
+// Flanken-/Heckschaden (Grundsteinumbau Phase 2, der Ersatz fuer den
+// entfernten Bandenschuss): Front/Seite/Heck ueber DIESELBE Winkelmathematik
+// wie armorBlocks() -- der Einschlagwinkel relativ zur WANNEN-Ausrichtung
+// (heading, nicht Turm; Entscheidung B: am Turm gemessen waere das Heck
+// praktisch nie treffbar, weil Tuerme das Ziel verfolgen).
+//
+// rearArcDeg/sideArcDeg sind wie armor.arc TOTALE Bogenbreiten (Halbwinkel =
+// arc/2). Heck zaehlt zuerst (Prioritaet bei ueberlappenden Werten), dann je
+// eine Seitenkeule links/rechts um die Querachse; alles Uebrige ist Front
+// ("Rest des Kreises", so vom Auftrag gefordert) -- bei den Standardwerten
+// (rear 70, side 110 je Seite) deckt das den Kreis exakt ohne Luecke oder
+// Ueberlappung: Front 70 + Seite 2x110 + Heck 70 = 360.
+export function flankZone(tank, bx, by, flank) {
+  const toBullet = Math.atan2(by - tank.y, bx - tank.x);
+  const rearHalf = (flank.rearArcDeg * Math.PI) / 360;
+  if (Math.abs(angleDelta(toBullet, tank.heading + Math.PI)) <= rearHalf) return 'rear';
+  const sideHalf = (flank.sideArcDeg * Math.PI) / 360;
+  const dRight = Math.abs(angleDelta(toBullet, tank.heading + Math.PI / 2));
+  const dLeft = Math.abs(angleDelta(toBullet, tank.heading - Math.PI / 2));
+  if (Math.min(dRight, dLeft) <= sideHalf) return 'side';
+  return 'front';
 }
 
 // Wirft die Kugel zurueck (E3). Sie gehoert weiter dem Schuetzen, verliert
