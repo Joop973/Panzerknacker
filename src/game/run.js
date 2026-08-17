@@ -21,10 +21,23 @@ const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
 // Boss-Panzertypen je Arena (Phase 14) -- kommen IMMER zuerst in enemyTypes,
 // die restlichen Slots (bis zur Spawnzahl der Arena) fuellt buyEnemies() wie
 // bisher mit gekaufter Unterstuetzung.
+//
+// PLATZHALTER (Nutzerentscheidung nach Grundsteinumbau-Phase 0, 2026-08-17):
+// die drei eigentlichen Bosse (t_reactor/t_mirror/t_phalanx) sind noch nicht
+// ausgearbeitet und werden in einer eigenen kuenftigen Aufgabe neu gebaut --
+// die alte Mechanik (Reaktor-Generatoren, Spiegelbewegung, rotierende
+// Phalanx-Formation) hat "keine Bewandtnis mehr" und wird deshalb bewusst
+// NICHT mehr angesteuert. Bis dahin spawnt jede der drei Boss-Arenen
+// stattdessen einen einzelnen t_black als Platzhalter-Gegner; die restlichen
+// Spawnpunkte der Arena (v. a. bei boss_phalanx, 5 Slots) fuellt weiterhin
+// die normale Untersttuetzungs-Einkaufslogik. t_reactor/t_mirror/t_phalanx,
+// bossai.js, die boss_*-Arenen (data/arenas.json) und die Panzerungslogik
+// dahinter bleiben unangetastet im Code/in den Daten stehen (nichts geloescht,
+// nur nicht mehr erreicht) -- siehe CLAUDE.md, Abschnitt "Bosse (Platzhalter)".
 const BOSS_ENEMY_TYPES = {
-  boss_reactor: ['t_reactor'],
-  boss_mirror: ['t_mirror'],
-  boss_phalanx: ['t_phalanx', 't_phalanx', 't_phalanx', 't_phalanx', 't_phalanx'],
+  boss_reactor: ['t_black'],
+  boss_mirror: ['t_black'],
+  boss_phalanx: ['t_black'],
 };
 
 // Raumtyp -> Anzeige (Raumvorschau + Kartenscreen, Phase 12). Symbole sind
