@@ -1,6 +1,7 @@
 {
+  "_comment_bullet": "Grundsteinumbau Phase 2: speed 200 -> 450 senkt die noetige Vorhaltung von 12/21/30/44 Grad (gegen 40/70/100/140 px/s schnelle Gegner) auf etwa 5/9/13/18 Grad -- die Ziellinie (zeigt wohin die KUGEL fliegt) wird dadurch fast ehrlich, den Rest deckt die neue Vorhaltemarkierung (data/options.json: leadMarker).",
   "bullet": {
-    "speed": 200,
+    "speed": 450,
     "maxDistance": 1200,
     "blinkFraction": 0.15,
     "maxActive": 5,
@@ -11,6 +12,24 @@
   "damage": {
     "explosion": 40,
     "ownBullet": 15
+  },
+  "_comment_flank": "Grundsteinumbau Phase 2: Ersatz-USP fuer den entfernten Bandenschuss. Gemessen an der WANNEN-Ausrichtung (heading, nicht Turm -- armor.js: flankZone), gilt NUR gegen normale Gegner + Elites (Bosse ausgenommen, Entscheidung C -- der Spieler ist nie Ziel dieser Mechanik). sideArcDeg/rearArcDeg sind wie armor.arc TOTALE Bogenbreiten; Front ist bei den Standardwerten (70/110/110/70) genau der 'Rest des Kreises' ohne Luecke/Ueberlappung.",
+  "flank": {
+    "sideArcDeg": 110,
+    "rearArcDeg": 70,
+    "sideMult": 1.5,
+    "rearMult": 2.5
+  },
+  "_comment_execute": "Grundsteinumbau Phase 2, Entscheidung D: die 35 %-Schwelle spart bei 10 Schaden gegen 20/30/40 LP mathematisch NULL Treffer -- ihr Wert ist die LESBARKEIT (ein rauchender Gegner ist ein sichtbares 'noch ein Treffer'). smokeIntervalS ist ein Zusatzwert (im Auftrag nicht als Feld vorgegeben, aber wie ALLE Balance-Werte datengetrieben statt hartkodiert): Takt der Rauchpartikel waehrend state.js: t.executing.",
+  "execute": {
+    "thresholdPct": 0.35,
+    "slowMult": 0.6,
+    "smokeIntervalS": 0.35
+  },
+  "_comment_killFeedback": "Grundsteinumbau Phase 2: Heck-Kill-Zeitlupe, dieselbe Technik wie der (entfernte) alte Trickshot (state.js: rearKillTimer, run.js: stepRun()).",
+  "killFeedback": {
+    "slowMoS": 0.15,
+    "slowMoScale": 0.35
   },
   "_comment_crit": "UMBAUPLAN-LP Phase 7 (Krit-Umbau): 5 % auf doppelten Schaden waeren +5 % Gesamtschaden und damit unsichtbar. Deshalb ist ein Krit ein spuerbares EREIGNIS: mult-facher Trefferschaden UND (resetsReload) das eigene Nachladen ist sofort zurueckgesetzt -- man darf sofort wieder feuern (nur noch vom Magazin begrenzt). baseChance ist der Grundwert; Karten/Klassen (Phase 9) bauen ihn bis cap auf. Vorerst SPIELERSEITIG: der Roll und das Nachlade-Reset haengen an tank === state.player. Gegner-Krit ist nicht spezifiziert und wuerde ueber resetsReload zu erratischem Doppelfeuer fuehren -- bewusst nicht gebaut. Der 2x-Schaden multipliziert sich mit dem Abprall-Bonus (Phase 4): ein gebandeter Krit macht 2 x 2 = 4x.",
   "crit": {

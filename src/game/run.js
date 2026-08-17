@@ -754,6 +754,14 @@ export function stepRun(run, cmd, dt) {
       }
     }
   }
+  // Heck-Kill-Zeitlupe (Phase 2, Ersatz fuer den alten Trickshot-Moment):
+  // dieselbe dt-Skalierungstechnik, kombiniert sich mit der Taktiker-
+  // Transformation (der staerkere/kleinere Faktor gewinnt). Liest den vom
+  // VORHERIGEN Tick gesetzten Wert -- stepState() unten zaehlt ihn erst
+  // danach herunter.
+  if (st.rearKillTimer > 0) {
+    scale = Math.min(scale, run.data.balance.killFeedback?.slowMoScale ?? 1);
+  }
   run.slowMo = scale < 1; // nur fuer die Anzeige
   dt *= scale;
   stepState(st, cmd, dt);

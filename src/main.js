@@ -200,6 +200,11 @@ async function init() {
   let teleGhosts = 0;
   let teleModifier = null;
   let teleHazard = null;
+  // Grundsteinumbau Phase 2 (Kampfkern-Telemetrie, Entscheidung I): erst
+  // messen, dann an LP/Balance drehen.
+  let teleShotsFired = 0;
+  let teleShotsHit = 0;
+  let teleMagBlocked = 0;
   // Phase 11b: schlechtester Logik-/Render-Frame IM AKTUELLEN RAUM, nur fuer
   // die Debug-Anzeige -- bewusst nicht in der Telemetrie (die hat mit
   // minFps schon ihre eigene, persistierte Kennzahl seit Phase 1).
@@ -219,6 +224,9 @@ async function init() {
     teleGhosts = 0;
     teleModifier = null;
     teleHazard = null;
+    teleShotsFired = 0;
+    teleShotsHit = 0;
+    teleMagBlocked = 0;
   }
 
   // Momentaufnahme des laufenden Raums (jeden Tick, sehr billig).
@@ -241,6 +249,9 @@ async function init() {
     teleGhosts = st.ghostKills;
     teleModifier = st.modifier?.id || null;
     teleHazard = st.hazard?.type || null;
+    teleShotsFired = st.playerShots;
+    teleShotsHit = st.playerHits;
+    teleMagBlocked = st.magBlockedTime;
   }
 
   function flushRoomTelemetry() {
@@ -260,6 +271,9 @@ async function init() {
       ghostKills: teleGhosts,
       modifier: teleModifier,
       hazard: teleHazard,
+      shotsFired: teleShotsFired,
+      shotsHit: teleShotsHit,
+      magBlockedTime: teleMagBlocked,
     });
     run.scrapThisRoom = 0;
   }
@@ -314,6 +328,16 @@ async function init() {
     optAim.addEventListener('change', () => {
       renderOpts.aimLine = optAim.checked;
       setPref('aimLine', optAim.checked);
+    });
+  }
+  // Vorhaltemarkierung (Grundsteinumbau Phase 2), gleiches Muster wie aimLine.
+  renderOpts.leadMarker = getPref('leadMarker', optionsData.leadMarker !== false);
+  const optLead = document.getElementById('optLead');
+  if (optLead) {
+    optLead.checked = renderOpts.leadMarker;
+    optLead.addEventListener('change', () => {
+      renderOpts.leadMarker = optLead.checked;
+      setPref('leadMarker', optLead.checked);
     });
   }
   const optThreat = document.getElementById('optThreat');

@@ -101,6 +101,10 @@ export function recordRoom(r) {
     powershotsFired: r.powershotsFired || 0, // Phase 5
     secondaryUses: r.secondaryUses || 0,
     secondary: r.secondary || null, // Phase 6: aktive Sekundärwaffe dieses Raums
+    // Grundsteinumbau Phase 2: Kampfkern-Messgrundlage (Entscheidung I).
+    shotsFired: r.shotsFired || 0,
+    shotsHit: r.shotsHit || 0,
+    magBlockedTime: Math.round((r.magBlockedTime || 0) * 100) / 100,
   });
 }
 
@@ -270,10 +274,18 @@ export function computeMetrics(runs) {
   // Kennzahl, die das LP-Spiel braucht (welche Schadensart traegt den Run?).
   const DAMAGE_TYPES = ['physical', 'explosive', 'fire', 'frost', 'poison', 'lightning'];
   const dmgByType = Object.fromEntries(DAMAGE_TYPES.map((k) => [k, 0]));
+  // Grundsteinumbau Phase 2 (Entscheidung I: erst messen, dann an LP/Balance
+  // drehen): Trefferquote und Magazin-Blockade ueber ALLE Raeume aller Runs.
+  let shotsFired = 0, shotsHit = 0, magBlocked = 0;
   for (const r of runs) for (const room of r.rooms || []) {
     if (room.damageByType) for (const k of DAMAGE_TYPES) dmgByType[k] += room.damageByType[k] || 0;
     if (room.minFps != null) minFps = Math.min(minFps, room.minFps);
+    shotsFired += room.shotsFired || 0;
+    shotsHit += room.shotsHit || 0;
+    magBlocked += room.magBlockedTime || 0;
   }
+  const accuracyPct = shotsFired ? Math.round((100 * shotsHit) / shotsFired) : null;
+  const magBlockedPerRun = Math.round((magBlocked / n) * 10) / 10;
   // Durchschnitt je Run (der Plan sagt "Schaden je Schadenstyp pro Run").
   const dmgPerRun = Object.fromEntries(DAMAGE_TYPES.map((k) => [k, Math.round(dmgByType[k] / n)]));
   // Angebotene, aber nie gewaehlte Karten (Grundlage fuer Phase 18).
@@ -292,6 +304,7 @@ export function computeMetrics(runs) {
     damagePerRun: dmgPerRun,
     minFps: minFps === Infinity ? null : minFps,
     neverChosen, mostRejected,
+    accuracyPct, magBlockedPerRun,
   };
 }
 
@@ -305,7 +318,9 @@ function refreshSummary() {
   debugSummary.innerHTML =
     `<b>${m.runs} Runs</b> · Siege ${m.wins} (${m.winRate} %) · ` +
     `Median-Todesraum <b>${m.medianDeathRoom ?? '–'}</b> (Ziel 8–14) · ` +
-    `minFps ${m.minFps ?? '–'} (Ziel &ge; 50)<br>` +
+    `minFps ${m.minFps ?? '–'} (Ziel &ge; 50) · ` +
+    // Grundsteinumbau Phase 2: Kampfkern-Messgrundlage (Entscheidung I).
+    `Trefferquote ${m.accuracyPct ?? '–'} % · Magazin blockiert Ø ${m.magBlockedPerRun}s/Run<br>` +
     // UMBAUPLAN-LP Phase 8: Schaden je Schadenstyp pro Run -- die Kennzahl des
     // LP-Spiels (traegt der Run auf Feuer, Blitz, physisch …?).
     `<b>Schaden/Typ pro Run</b> ` +

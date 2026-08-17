@@ -1522,6 +1522,14 @@ function check(ok, msg) {
       e.cfg.armor = null;
       e.cfg.requiresRicochet = false;
       e.protect = 0;
+      // heading: 0 + role 'guardian' (bewegt sich nie, s. ai_drives.js) --
+      // die Kugel unten landet exakt auf e.x/e.y (toBullet = atan2(0,0) = 0),
+      // das muss mit der Wannen-Ausrichtung uebereinstimmen und darf sich
+      // nicht durch die Gegner-KI aendern, sonst faellt der Treffer durch
+      // Zufall in die Seiten-/Heckzone (Phase 2: armor.js: flankZone) und
+      // verfaelscht den gemessenen Wert.
+      e.heading = 0;
+      e.cfg.role = 'guardian';
       st.bullets.length = 0;
       // Kugel direkt auf den Gegner setzen, Besitzer ist ein Dritter (damit
       // weder Selbst-Immunitaet noch die "erst nach Abpraller scharf"-Regel
@@ -2175,8 +2183,13 @@ function check(ok, msg) {
       const z = {
         ...proto,
         x: 200 + i * abstand, y: 250, prevX: 200 + i * abstand, prevY: 250,
+        // heading: 0 -- die Testkugel landet unten exakt auf ziel.x/y (toBullet
+        // = atan2(0,0) = 0), das muss mit der Wannen-Ausrichtung uebereinstimmen,
+        // sonst faellt der Treffer durch Zufall in die Seiten-/Heckzone (Phase 2:
+        // armor.js: flankZone) und verfaelscht den gemessenen Schadenstyp-Wert.
+        heading: 0,
         alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
-        cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+        cfg: { ...proto.cfg, role: 'guardian', maxHp: 9999, armor: null, requiresRicochet: false },
       };
       st.tanks.push(z);
       ziele.push(z);
@@ -2380,8 +2393,9 @@ function check(ok, msg) {
     st.tanks.push(st.player);
     const z = {
       ...proto, x: 200, y: 250, prevX: 200, prevY: 250,
+      heading: 0, // s. Abschnitt 14: toBullet ist hier atan2(0,0) = 0
       alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
-      cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+      cfg: { ...proto.cfg, role: 'guardian', maxHp: 9999, armor: null, requiresRicochet: false },
     };
     st.tanks.push(z);
     const b = createBullet(z.x, z.y, 0, {
@@ -2506,8 +2520,9 @@ function check(ok, msg) {
     st.tanks.push(st.player);
     const z = {
       ...proto, x: 200, y: 250, prevX: 200, prevY: 250,
+      heading: 0, // s. Abschnitt 14: toBullet ist hier atan2(0,0) = 0
       alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
-      cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+      cfg: { ...proto.cfg, role: 'guardian', maxHp: 9999, armor: null, requiresRicochet: false },
     };
     st.tanks.push(z);
     const b = createBullet(z.x, z.y, 0, {
@@ -2807,8 +2822,9 @@ function check(ok, msg) {
     Object.assign(st.player.cfg, ownerFields);
     const z = {
       ...proto, x: 200, y: 250, prevX: 200, prevY: 250,
+      heading: 0, // s. Abschnitt 14: toBullet ist hier atan2(0,0) = 0
       alive: true, hp, protect: 0, shieldReady: false, status: {},
-      cfg: { ...proto.cfg, maxHp, armor: null, requiresRicochet: false, bounceDamageTakenMult: null },
+      cfg: { ...proto.cfg, role: 'guardian', maxHp, armor: null, requiresRicochet: false, bounceDamageTakenMult: null },
     };
     st.tanks.push(z);
     const b = createBullet(z.x, z.y, 0, {
@@ -3175,8 +3191,9 @@ function check(ok, msg) {
       if (shatter) st.player.cfg.shatterMult = shatter;
       const z = {
         ...proto, x: 200, y: 250, prevX: 200, prevY: 250,
+        heading: 0, // s. Abschnitt 14: toBullet ist hier atan2(0,0) = 0
         alive: true, hp: 9999, protect: 0, shieldReady: false, status: {}, stunTimer: stun,
-        cfg: { ...proto.cfg, maxHp: 9999, armor: null, requiresRicochet: false },
+        cfg: { ...proto.cfg, role: 'guardian', maxHp: 9999, armor: null, requiresRicochet: false },
       };
       st.tanks.push(z);
       const b = createBullet(z.x, z.y, 0, { speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10, damageType: 'frost' });
@@ -6282,6 +6299,7 @@ for (const seed of SEEDS) {
     st.player.cfg.maxHp = 100;
     const e = st.tanks.find((t) => t !== st.player);
     e.hp = 1; e.cfg.maxHp = 999; e.protect = 0; e.cfg.armor = null; e.cfg.requiresRicochet = false;
+    e.heading = 0; e.cfg.role = 'guardian'; // s. Abschnitt 14: toBullet ist hier atan2(0,0) = 0
     const g = createGhost(st, e.x, e.y);
     st.ghosts.push(g);
     const b = createBullet(e.x, e.y, 0, { speed: 1, radius: 3, owner: g, kind: 'bullet', damage: g.cfg.damage, damageType: 'physical' });
@@ -7178,6 +7196,291 @@ for (const seed of SEEDS) {
     } finally {
       restore();
     }
+  }
+}
+
+// ---- 47. Grundsteinumbau Phase 2: Kampfkern (treffen, toeten, spueren) --
+// Der Ersatz-USP fuer den in Phase 1 entfernten Bandenschuss: Flanken-/
+// Heckschaden statt Vorhaltefrust, eine Exekutionsschwelle statt endlosem
+// Nachtreten, Treffer-Rueckmeldung statt des alten Trickshot-Moments. Wo
+// moeglich mit EIGENEN Zahlen geprueft (nicht den echten balance.json-
+// Werten), damit eine spaetere Balance-Aenderung die Tests nicht grundlos
+// rot macht -- Ausnahme sind die End-zu-Ende-Schadenstests (c), die
+// ausdruecklich pruefen, dass die ECHTEN konfigurierten Werte auch wirklich
+// gelesen werden.
+{
+  const { stepState } = await import('../src/game/state.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { moveTank } = await import('../src/game/tank.js');
+  const { flankZone } = await import('../src/game/armor.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  // (a) Struktur: die neuen Balance-Werte sind da und haben die Form, die
+  // der Rest dieses Abschnitts voraussetzt.
+  {
+    const B = tanksData.balance;
+    check(B.bullet.speed === 450, `Phase 2: bullet.speed ${B.bullet.speed} statt 450`);
+    check(tanksData.bulletSpeeds.rocket === 210, `Phase 2: Raketentempo ${tanksData.bulletSpeeds.rocket} statt 210`);
+    check(typeof B.flank?.sideMult === 'number' && typeof B.flank?.rearMult === 'number', 'Phase 2: balance.flank fehlt/unvollstaendig');
+    check(typeof B.execute?.thresholdPct === 'number' && typeof B.execute?.slowMult === 'number', 'Phase 2: balance.execute fehlt/unvollstaendig');
+    check(typeof B.killFeedback?.slowMoS === 'number' && typeof B.killFeedback?.slowMoScale === 'number', 'Phase 2: balance.killFeedback fehlt/unvollstaendig');
+  }
+
+  // (b) flankZone(): reine Geometrie mit EIGENEN Zahlen (nicht 110/70/1,5/2,5
+  // aus balance.json). Tank bei (0,0), heading 0 (schaut nach "rechts").
+  {
+    const F = { sideArcDeg: 60, rearArcDeg: 60, sideMult: 2, rearMult: 3 };
+    const tank = { x: 0, y: 0, heading: 0 };
+    check(flankZone(tank, 10, 0, F) === 'front', 'Phase 2: flankZone -- direkt von vorn ist nicht "front"');
+    check(flankZone(tank, -10, 0, F) === 'rear', 'Phase 2: flankZone -- direkt von hinten ist nicht "rear"');
+    check(flankZone(tank, 0, 10, F) === 'side', 'Phase 2: flankZone -- von rechts (90°) ist nicht "side"');
+    check(flankZone(tank, 0, -10, F) === 'side', 'Phase 2: flankZone -- von links (-90°) ist nicht "side"');
+    // Prioritaet bei Ueberlappung: ein riesiges sideArcDeg (200) wuerde den
+    // Heckbereich mit abdecken -- Heck wird trotzdem zuerst geprueft und
+    // gewinnt (s. armor.js-Kommentar "Heck zaehlt zuerst").
+    const Fueberlapp = { sideArcDeg: 200, rearArcDeg: 60, sideMult: 2, rearMult: 3 };
+    check(flankZone(tank, -10, 0, Fueberlapp) === 'rear', 'Phase 2: flankZone -- Heck-Prioritaet bei Ueberlappung greift nicht');
+  }
+
+  // Feuert eine Testkugel des Spielers auf ein isoliertes Ziel (guardian --
+  // bewegt sich nie, damit die gesetzte heading nicht von der Gegner-KI
+  // ueberschrieben wird, bevor die Trefferschleife laeuft) aus einer
+  // gewaehlten Richtung relativ zur Wannen-Ausrichtung. offsetAngleDeg 0 =
+  // von vorn, 180 = von hinten, ±90 = von der Seite.
+  const flankTreffer = (offsetAngleDeg, hp, cfgExtra = {}) => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const z = {
+      ...proto, x: 200, y: 250, prevX: 200, prevY: 250, heading: 0,
+      alive: true, hp, protect: 0, shieldReady: false, status: {},
+      cfg: { ...proto.cfg, role: 'guardian', maxHp: 100, armor: null, requiresRicochet: false, ...cfgExtra },
+    };
+    st.tanks.push(z);
+    const off = (offsetAngleDeg * Math.PI) / 180;
+    const b = createBullet(z.x + Math.cos(off) * 2, z.y + Math.sin(off) * 2, 0, {
+      speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10,
+    });
+    b.age = 5;
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+    return { st, z };
+  };
+
+  // (c) Schadensmultiplikation Ende-zu-Ende MIT DEN ECHTEN balance.json-
+  // Werten (1,5x Seite, 2,5x Heck) -- prueft, dass wirklich diese Felder
+  // gelesen werden, nicht nur dass irgendein Multiplikator wirkt.
+  {
+    const front = flankTreffer(0, 9999);
+    check(9999 - front.z.hp === 10, `Phase 2: Fronttreffer ${9999 - front.z.hp} statt 10`);
+    const side = flankTreffer(90, 9999);
+    check(9999 - side.z.hp === 15, `Phase 2: Seitentreffer ${9999 - side.z.hp} statt 15 (1,5x)`);
+    const rear = flankTreffer(180, 9999);
+    check(9999 - rear.z.hp === 25, `Phase 2: Hecktreffer ${9999 - rear.z.hp} statt 25 (2,5x)`);
+    // Bosse ausgenommen (Entscheidung C): bossInvincible markiert isBossCfg,
+    // OHNE eine eigene Bewegungsfunktion auszuloesen (die wuerde x/y/heading
+    // vor der Trefferschleife veraendern) und OHNE die Unverwundbarkeits-
+    // Sperre zu ziehen (kein Generator im Testraum -> bossGeneratorsLeft 0).
+    const boss = flankTreffer(180, 9999, { bossInvincible: true });
+    check(9999 - boss.z.hp === 10, `Phase 2: Hecktreffer gegen einen Boss ${9999 - boss.z.hp} statt 10 (Ausnahme greift nicht)`);
+  }
+
+  // (d) Der Spieler ist selbst nie Ziel des Flankenschadens.
+  {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const shooter = st.tanks.find((t) => t !== st.player);
+    st.player.heading = 0;
+    st.player.hp = 9999;
+    st.player.cfg.maxHp = 9999;
+    st.player.protect = 0;
+    st.player.shieldReady = false;
+    const off = Math.PI; // von hinten
+    const b = createBullet(st.player.x + Math.cos(off) * 2, st.player.y + Math.sin(off) * 2, 0, {
+      speed: 1, radius: 3, owner: shooter, kind: 'bullet', damage: 10,
+    });
+    b.age = 5;
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+    check(9999 - st.player.hp === 10, `Phase 2: Heck-Treffer auf den Spieler ${9999 - st.player.hp} statt 10 (Flankenschaden traf faelschlich den Spieler)`);
+  }
+
+  // (e) Exekutionsschwelle: MECHANISMUS mit EIGENEN Zahlen (thresholdPct 0,5
+  // statt der echten 0,35). stepState() einmal ohne Kugeln laufen lassen,
+  // damit die Timer-Schleife t.executing aus dem gerade gesetzten hp/maxHp
+  // berechnet -- danach wird applyDamage() direkt aufgerufen (isoliert vom
+  // Rest der Trefferschleife).
+  {
+    const execTank = (hp, maxHp, cfgExtra = {}) => {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+      const dataClone = { ...tanksData, balance: { ...tanksData.balance, execute: { thresholdPct: 0.5, slowMult: 1, smokeIntervalS: 999 } } };
+      run.data = dataClone;
+      const st = run.state;
+      st.data = dataClone;
+      const proto = st.tanks.find((t) => t !== st.player && t.alive);
+      st.tanks.length = 0;
+      st.tanks.push(st.player);
+      const z = {
+        ...proto, x: 200, y: 250, prevX: 200, prevY: 250, heading: 0,
+        alive: true, hp, protect: 0, shieldReady: false, status: {},
+        cfg: { ...proto.cfg, role: 'guardian', maxHp, armor: null, requiresRicochet: false, ...cfgExtra },
+      };
+      st.tanks.push(z);
+      st.bullets.length = 0;
+      st.mines.length = 0;
+      stepState(st, CMD0, 1 / 60);
+      return { st, z };
+    };
+
+    // Ueber der Schwelle (60/100 = 0,6 > 0,5): normaler Abzug, kein
+    // garantierter Tod.
+    {
+      const { st, z } = execTank(60, 100);
+      check(z.executing === false, 'Phase 2: Exekutionsflag faelschlich gesetzt (60/100 ueber der Schwelle)');
+      st.applyDamage(z, 5, 'test', {});
+      check(z.hp === 55 && z.alive, `Phase 2: Treffer ueber der Schwelle veraendert (hp=${z.hp}, lebt=${z.alive}, erwartet 55/true)`);
+    }
+    // Unter der Schwelle (40/100 = 0,4 <= 0,5): JEDER Treffer toetet,
+    // unabhaengig vom Schaden -- UND hp wird trotzdem korrekt abgezogen
+    // (keine "eingefrorene" hp-Zahl nach dem Tod).
+    {
+      const { st, z } = execTank(40, 100);
+      check(z.executing === true, 'Phase 2: Exekutionsflag nicht gesetzt (40/100 unter der Schwelle)');
+      st.applyDamage(z, 1, 'test', {});
+      check(!z.alive, 'Phase 2: 1 Schaden unter der Schwelle toetet nicht garantiert');
+      check(z.hp === 39, `Phase 2: hp nach Exekutions-Kill ${z.hp} statt 39 (Schaden wurde nicht abgezogen)`);
+    }
+    // Bosse ausgenommen (Entscheidung C).
+    {
+      const { st, z } = execTank(40, 100, { bossInvincible: true });
+      check(z.executing === false, 'Phase 2: Exekutionsflag ignoriert die Boss-Ausnahme nicht');
+      st.applyDamage(z, 1, 'test', {});
+      check(z.alive && z.hp === 39, `Phase 2: Exekution toetet einen Boss trotz Ausnahme (hp=${z.hp}, lebt=${z.alive})`);
+    }
+    // Der Spieler ist nie Ziel der Exekutionsschwelle, auch weit unter der
+    // Schwelle nicht.
+    {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+      const dataClone = { ...tanksData, balance: { ...tanksData.balance, execute: { thresholdPct: 0.5, slowMult: 1, smokeIntervalS: 999 } } };
+      run.data = dataClone;
+      const st = run.state;
+      st.data = dataClone;
+      st.player.hp = 10;
+      st.player.cfg.maxHp = 100; // 0,1 -- weit unter der Schwelle
+      stepState(st, CMD0, 1 / 60);
+      check(st.player.executing !== true, 'Phase 2: der Spieler wird faelschlich als exekutierbar markiert');
+      st.applyDamage(st.player, 1, 'test', {});
+      check(st.player.alive && st.player.hp === 9, `Phase 2: ein 1er-Treffer toetet den Spieler unter der Schwelle (hp=${st.player.hp}, lebt=${st.player.alive})`);
+    }
+  }
+
+  // (f) Exekutions-Verlangsamung in moveTank(): EIGENER slowMult (0,25 statt
+  // der echten 0,6).
+  {
+    const dataClone = { balance: { execute: { thresholdPct: 0.5, slowMult: 0.25 } } };
+    const state = { data: dataClone, modifier: null, oilCells: null, hazard: null, walls: [], tanks: [], conveyor: null };
+    const mkTank = (executing) => ({
+      x: 0, y: 0, prevX: 0, prevY: 0, heading: 0, vx: 0, vy: 0,
+      cfg: { speed: 100, radius: 12 }, executing,
+      stunTimer: 0, boostTimer: 0, bloodTimer: 0, hookTimer: 0, status: {},
+    });
+    const dt = 1 / 60;
+    const normal = mkTank(false);
+    moveTank(normal, { x: 1, y: 0 }, state, dt);
+    const slowed = mkTank(true);
+    moveTank(slowed, { x: 1, y: 0 }, state, dt);
+    const distNormal = Math.hypot(normal.x, normal.y);
+    const distSlowed = Math.hypot(slowed.x, slowed.y);
+    check(distNormal > 0.1, 'Phase 2: Vorbedingung -- der ungebremste Panzer bewegt sich kaum');
+    check(Math.abs(distSlowed / distNormal - 0.25) < 1e-6, `Phase 2: Exekutions-Verlangsamung ${(distSlowed / distNormal).toFixed(4)} statt 0,25`);
+  }
+
+  // (g) Heck-Kill-Zeitlupe: state.js setzt rearKillTimer NUR bei einem
+  // toedlichen HECK-Treffer, nicht bei einem toedlichen Front-Treffer.
+  {
+    const front = flankTreffer(0, 5); // 10 Schaden toetet ein 5-hp-Ziel auch von vorn
+    check(!front.z.alive, 'Phase 2: Vorbedingung -- der Fronttreffer toetet das schwache Ziel nicht');
+    check(front.st.rearKillTimer === 0, `Phase 2: rearKillTimer nach einem Front-Kill ${front.st.rearKillTimer} statt 0`);
+
+    const rear = flankTreffer(180, 5); // 25 Schaden (2,5x) toetet ueber das Heck
+    check(!rear.z.alive, 'Phase 2: Vorbedingung -- der Hecktreffer toetet das schwache Ziel nicht');
+    const erwartet = tanksData.balance.killFeedback.slowMoS;
+    check(rear.st.rearKillTimer === erwartet, `Phase 2: rearKillTimer nach einem Heck-Kill ${rear.st.rearKillTimer} statt ${erwartet}`);
+  }
+
+  // (h) run.js: stepRun() kombiniert einen aktiven rearKillTimer in die
+  // dt-Skalierung -- MECHANISMUS mit EIGENEM slowMoScale (0,1 statt der
+  // echten 0,35), nachgewiesen ueber run.playTime (waechst nur um das
+  // skalierte dt).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    run.phase = 'playing';
+    const dataClone = { ...tanksData, balance: { ...tanksData.balance, killFeedback: { slowMoS: 0.2, slowMoScale: 0.1 } } };
+    run.data = dataClone;
+    run.state.data = dataClone;
+    run.state.rearKillTimer = 999; // eigener Wert, garantiert > 0 fuer diesen Tick
+    const dt = 1 / 60;
+    const playTimeBefore = run.playTime;
+    stepRun(run, CMD0, dt);
+    check(run.slowMo === true, 'Phase 2: run.slowMo wird bei aktivem rearKillTimer nicht gesetzt');
+    const delta = run.playTime - playTimeBefore;
+    check(Math.abs(delta - dt * 0.1) < 1e-9, `Phase 2: stepRun() skaliert dt nicht mit killFeedback.slowMoScale (Δ${delta} statt ${dt * 0.1})`);
+  }
+
+  // (i) Telemetrie (Entscheidung I -- erst messen, dann an LP/Balance
+  // drehen): playerHits zaehlt nur Treffer auf Panzer, nicht Fehlschuesse.
+  {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const z = {
+      ...proto, x: 200, y: 250, prevX: 200, prevY: 250, heading: 0,
+      alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+      cfg: { ...proto.cfg, role: 'guardian', maxHp: 9999, armor: null, requiresRicochet: false },
+    };
+    st.tanks.push(z);
+    check(st.playerHits === 0, 'Phase 2: Vorbedingung -- playerHits steht nicht bei 0');
+    const hit = createBullet(z.x + 2, z.y, 0, { speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10 });
+    hit.age = 5;
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(hit);
+    stepState(st, CMD0, 1 / 60);
+    check(st.playerHits === 1, `Phase 2: playerHits nach einem echten Treffer ${st.playerHits} statt 1`);
+    st.bullets.length = 0;
+    const miss = createBullet(-1000, -1000, 0, { speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10 });
+    st.bullets.push(miss);
+    stepState(st, CMD0, 1 / 60);
+    check(st.playerHits === 1, `Phase 2: playerHits zaehlt einen Fehlschuss mit (${st.playerHits} statt 1)`);
+  }
+
+  // (j) Telemetrie: magBlockedTime akkumuliert NUR bei echter Magazin-
+  // Blockade (Magazin voll ausgeflogen), NICHT waehrend des normalen
+  // Nachladens (das ist uebliche Kadenz, keine Blockade -- Entscheidung G).
+  {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const p = st.player;
+    p.cfg.magazine = 1; // eigener, kleiner Wert -- ein Schuss fuellt das Magazin
+    p.cfg.magazineCap = Infinity;
+    p.magazineBonus = 0;
+    p.cooldown = 0;
+    st.bullets.length = 0;
+    const cmdFire = { move: { x: 0, y: 0 }, aim: { x: p.x + 100, y: p.y }, fire: true, firePressed: true, mine: false, dash: false };
+    stepState(st, cmdFire, 1 / 60); // Schuss 1 fuellt das 1er-Magazin
+    check(st.bullets.filter((b) => !b.dead && b.owner === p).length === 1, 'Phase 2: Vorbedingung -- der erste Schuss loest nicht aus');
+    check(st.magBlockedTime === 0, `Phase 2: magBlockedTime steigt schon beim ersten Schuss (${st.magBlockedTime})`);
+    const cooldownBefore = p.cooldown;
+    check(cooldownBefore > 0, 'Phase 2: Vorbedingung -- kein Nachladen nach dem Schuss');
+    stepState(st, cmdFire, 1 / 60); // waehrend des Nachladens ist ein Feuerbefehl keine Blockade
+    check(st.magBlockedTime === 0, `Phase 2: magBlockedTime zaehlt normales Nachladen mit (${st.magBlockedTime})`);
+    p.cooldown = 0; // jetzt IST das Magazin wirklich voll (die eine Kugel fliegt noch)
+    stepState(st, cmdFire, 1 / 60);
+    check(Math.abs(st.magBlockedTime - 1 / 60) < 1e-9, `Phase 2: magBlockedTime nach echter Blockade ${st.magBlockedTime} statt ${1 / 60}`);
   }
 }
 

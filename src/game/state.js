@@ -8,7 +8,17 @@
 
 import { CELL, COLS, ROWS, RESPAWN_DELAY } from '../config.js';
 import { mulberry32 } from '../core/rng.js';
-import { createTank, moveTank, fireBullet, layMine, useSecondary, useGadget, dashTank } from './tank.js';
+import {
+  createTank,
+  moveTank,
+  fireBullet,
+  layMine,
+  useSecondary,
+  useGadget,
+  dashTank,
+  liveBulletsOf,
+  magazineOf,
+} from './tank.js';
 import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { updateTraps } from './trap.js';
@@ -20,7 +30,7 @@ import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
 import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, isBossCfg } from './cfg.js';
-import { armorBlocks, reflectBullet, reflectFromAim, isLive } from './armor.js';
+import { armorBlocks, reflectBullet, reflectFromAim, isLive, flankZone } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
 // 'destructible' (Phase 11): physisch wie 'solid', bis sie durch
@@ -239,6 +249,17 @@ export function createState(data, tiles, opts) {
     enemyKills: 0, // in diesem Raum getoetete Gegner
     playerDeaths: 0, // Tode des Spielers in diesem Raum
     playerShots: 0, // Spieler-Abzuege in diesem Raum (Trefferquote)
+    // Grundsteinumbau Phase 2: Kampfkern-Telemetrie (Entscheidung I -- erst
+    // messen, dann an LP/Balance drehen). playerHits zaehlt Treffer auf
+    // Panzer (nicht Waende), magBlockedTime die Sekunden, in denen ein
+    // gehaltener Feuerbefehl am vollen Magazin scheiterte (nicht am
+    // Nachladen -- das ist normale Kadenz, kein Blockieren).
+    playerHits: 0,
+    magBlockedTime: 0,
+    // Heck-Kill-Zeitlupe (Ersatz fuer den alten Trickshot-Moment, s.
+    // stepRun() in run.js): laeuft wie blockedShotTimer unten in stepState()
+    // herunter.
+    rearKillTimer: 0,
     // UMBAUPLAN-LP Phase 8: Schaden je Schadenstyp, den der SPIELER an Gegnern
     // anrichtet -- die neue Telemetrie-Grundlage, die die ausgemusterten
     // USP-Kennzahlen (u. a. die freiwilligen Bankshots) ersetzt.
@@ -459,8 +480,13 @@ export function createState(data, tiles, opts) {
       // sonst drei Ladungen in anderthalb Sekunden verbrauchen. Die
       // Boss-Unverwundbarkeit oben gilt dagegen weiter.
       if (meta?.overTime) {
+        // Exekutionsschwelle (Phase 2): der Schaden wird trotzdem abgezogen
+        // (hp bleibt eine ehrliche Zahl, auch nach dem Tod) -- garantiert ist
+        // nur der TOD selbst, unabhaengig davon, ob der Abzug allein dafuer
+        // gereicht haette (ein bereits rauchender Gegner stirbt so auch an
+        // einem kleinen Statuseffekt-Tick).
         tank.hp -= amount ?? 1;
-        if (tank.hp > 0) return;
+        if (tank.hp > 0 && !tank.executing) return;
         state.killTank(tank, cause, meta);
         return;
       }
@@ -520,9 +546,18 @@ export function createState(data, tiles, opts) {
         state.killTank(tank, cause, meta);
         return;
       }
-      // Kein Gatter hat gegriffen -> der Treffer geht durch.
+      // Kein Gatter hat gegriffen -> der Treffer geht durch. Der Schaden wird
+      // immer abgezogen (hp bleibt eine ehrliche Zahl).
       tank.hp -= amount ?? 1;
-      if (tank.hp > 0) return;
+      // Exekutionsschwelle (Grundsteinumbau Phase 2): war das Ziel VOR
+      // diesem Treffer schon im Exekutionszustand (t.executing, s.
+      // stepState()-Timer-Schleife), toetet dieser Treffer garantiert --
+      // unabhaengig davon, ob der Abzug allein hp<=0 gebracht haette.
+      // Absichtlich HIER (nach allen Abwehr-Gattern), nicht ganz oben: ein
+      // Schild soll einen Gegner unter der Schwelle weiterhin retten koennen,
+      // wenn er den Treffer voll abfaengt -- nur ein Treffer, der wirklich
+      // durchkommt, ist garantiert toedlich.
+      if (tank.hp > 0 && !tank.executing) return;
       state.killTank(tank, cause, meta);
     },
     // Reine Todeslogik -- ab hier ist der Panzer tot, es gibt keine
@@ -539,6 +574,15 @@ export function createState(data, tiles, opts) {
       state.sounds.push({ name: tank === state.player ? 'player_death' : 'kill', x: tank.x });
       state.addShake(4);
       state.spawnParticles(tank.x, tank.y, DEBRIS_COLORS[tank.type] || '#fff', 10, 120);
+      // Exekutions-Kill (Phase 2): kraeftigerer Einschlag als Rueckmeldung
+      // fuer den garantierten Kill -- tank.executing wurde diesen Tick schon
+      // VOR dem toedlichen Treffer gesetzt (applyDamage() ruft killTank() in
+      // diesem Fall immer ueber den Exekutions-Zweig, nie ueber die normale
+      // hp<=0-Pruefung, s. o.).
+      if (tank.executing) {
+        state.addShake(5);
+        state.spawnParticles(tank.x, tank.y, '#ffd23c', 14, 200);
+      }
       if (tank === state.player) {
         // Kamikaze: der Spieler explodiert beim Sterben.
         if (tank.cfg.kamikazeRadius) {
@@ -771,12 +815,35 @@ export function stepState(state, cmd, dt) {
   const p = state.player;
   state.time += dt;
   if (state.blockedShotTimer > 0) state.blockedShotTimer = Math.max(0, state.blockedShotTimer - dt);
+  // Heck-Kill-Zeitlupe (Phase 2): dieselbe Technik wie der alte Trickshot --
+  // run.js: stepRun() liest den vom VORHERIGEN Tick gesetzten Wert, BEVOR es
+  // stepState() aufruft (genau das Muster, das trickshotTimer schon nutzte).
+  if (state.rearKillTimer > 0) state.rearKillTimer = Math.max(0, state.rearKillTimer - dt);
 
   // Transformation "Saboteur" (Phase 5): betaeubte Gegner explodieren,
   // sobald ihre Betaeubung endet.
   const sabotageR = state.transform.stunExplodeRadiusPx || 0;
+  // Exekutionsschwelle (Grundsteinumbau Phase 2): einmal pro Tick VOR der
+  // Trefferverarbeitung dieses Ticks festgestellt (t.executing), damit
+  // applyDamage() spaeter im selben Tick nur noch das Flag liest -- das
+  // erfuellt "bereits im Exekutionszustand" woertlich, der Zustand muss vor
+  // diesem Treffer schon bestanden haben, nicht durch ihn erst entstehen.
+  // Nur normale GEGNER (Entscheidung C: Bosse ausgenommen, der Spieler ist
+  // nie Ziel dieser Mechanik).
+  const exCfg = state.data.balance.execute;
   for (const t of state.tanks) {
     if (!t.alive) continue;
+    t.executing =
+      !!exCfg && t !== state.player && !isBossCfg(t.cfg) && t.hp / (t.cfg.maxHp || 1) <= exCfg.thresholdPct;
+    if (t.executing) {
+      // "raucht sichtbar (Partikel im Takt)" -- die Lesbarkeit ist der
+      // eigentliche Nutzen der Schwelle (Entscheidung D).
+      t.executeSmokeTimer = (t.executeSmokeTimer || 0) - dt;
+      if (t.executeSmokeTimer <= 0) {
+        t.executeSmokeTimer = exCfg.smokeIntervalS ?? 0.35;
+        state.spawnParticles(t.x, t.y, '#5a5a5a', 2, 40);
+      }
+    }
     t.cooldown = Math.max(0, t.cooldown - dt);
     const wasStunned = t.stunTimer > 0;
     t.stunTimer = Math.max(0, t.stunTimer - dt);
@@ -843,6 +910,13 @@ export function stepState(state, cmd, dt) {
     if (cmd.dash) dashTank(p, state, cmd.move); // vor der Bewegung
     moveTank(p, cmd.move, state, dt);
     p.turret = Math.atan2(cmd.aim.y - p.y, cmd.aim.x - p.x);
+    // Telemetrie (Phase 2, Entscheidung G/I): NUR das volle Magazin zaehlt
+    // als "blockiert" -- ein Feuerbefehl waehrend des normalen Nachladens
+    // ist keine Blockade, sondern die uebliche Kadenz. p.cooldown <= 0 filtert
+    // genau diesen Fall raus, derselbe Ausschluss wie in fireBullet() selbst.
+    if (cmd.fire && p.cooldown <= 1e-9 && liveBulletsOf(state, p) >= magazineOf(p)) {
+      state.magBlockedTime += dt;
+    }
     if (cmd.fire) fireBullet(p, state, cmd.firePressed);
     if (cmd.mine && useSecondary(p, state, cmd.mineThrow)) state.secondaryUses++;
     // P4: zweiter Slot mit eigenem Ausloeser und eigener Zielvorgabe.
@@ -987,7 +1061,16 @@ export function stepState(state, cmd, dt) {
         // Frost-Topf (Phase 14): "Splittern" -- Extra-Schaden gegen ERSTARRTE
         // (betaeubte) Ziele, damit die Frost-CC in Schaden umschlaegt.
         const shatterMult = oc?.shatterMult && t.stunTimer > 0 ? 1 + oc.shatterMult : 1;
-        let schaden = Math.round(basisSchaden * critMult * execMult * shatterMult);
+        // Flanken-/Heckschaden (Grundsteinumbau Phase 2, der Ersatz-USP fuer
+        // den entfernten Bandenschuss): nur gegen normale Gegner + Elites
+        // (Entscheidung C -- Bosse behalten ihre eigene Panzerungslogik, der
+        // Spieler ist selbst nie Ziel dieser Mechanik). front = 1x.
+        const flankCfg = state.data.balance.flank;
+        const flankZoneHit =
+          flankCfg && t !== state.player && !isBossCfg(t.cfg) ? flankZone(t, b.x, b.y, flankCfg) : 'front';
+        const flankMult =
+          flankZoneHit === 'rear' ? flankCfg.rearMult : flankZoneHit === 'side' ? flankCfg.sideMult : 1;
+        let schaden = Math.round(basisSchaden * critMult * execMult * shatterMult * flankMult);
         // Kopfschuss (Phase 11): ein Krit toetet einen Nicht-Boss-Gegner sofort.
         if (isCrit && oc?.critExecute && t !== state.player && !isBossCfg(t.cfg)) {
           schaden = Math.max(schaden, t.hp);
@@ -1010,6 +1093,28 @@ export function stepState(state, cmd, dt) {
           killer: b.owner,
         };
         state.applyDamage(t, schaden, cause, trefferMeta);
+        // Telemetrie (Phase 2): Treffer auf Panzer, nicht Waende.
+        if (own) state.playerHits++;
+        // Treffer-Rueckmeldung (Phase 2, Ersatz fuer den alten Trickshot-
+        // Moment): Seiten-/Heck-Treffer zeigen den Faktor als schwebenden
+        // Kurztext am Einschlagpunkt -- der Krit hat seit Phase 7 bereits
+        // eigene Rueckmeldung (Ton/Shake/Text am Schuetzen).
+        if (flankZoneHit !== 'front') {
+          state.texts.push({
+            x: t.x,
+            y: t.y - 14,
+            text: `${flankZoneHit === 'rear' ? 'Heck' : 'Seite'} ×${flankMult}`,
+            age: 0,
+            life: 0.6,
+            color: flankZoneHit === 'rear' ? '#ff5a3c' : '#ffb347',
+          });
+        }
+        // Heck-Kill: kurze Zeitlupe (killFeedback.slowMoS/slowMoScale),
+        // ausgewertet in run.js: stepRun() -- dieselbe dt-Skalierungstechnik
+        // wie der alte Trickshot.
+        if (flankZoneHit === 'rear' && !t.alive) {
+          state.rearKillTimer = state.data.balance.killFeedback?.slowMoS || 0;
+        }
         // Upgradepool-v2 Phase 5: der Verursacher zieht das Ziel-Scoring
         // kurzzeitig an (ai.js: candidateScore) -- nur relevant fuer Gegner
         // (registerThreat() no-opt fuer den Spieler von selbst).

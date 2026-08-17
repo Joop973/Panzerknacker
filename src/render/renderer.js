@@ -19,6 +19,7 @@ import {
   drawHookPreview,
   drawAimLine,
   drawThreatRings,
+  drawLeadMarkers,
 } from './effects.js';
 import { traceTrajectory } from '../game/bullet.js';
 import { visibleStatus } from '../game/status.js';
@@ -36,8 +37,9 @@ function bulletSpriteKey(b) {
 
 // Optionen (von main.js gesetzt): reduzierte Bewegung schaltet
 // Screenshake ab; Bedrohungslinien sind optional.
-// aimLine kommt aus data/options.json (Phase 0a).
-export const renderOpts = { reduceMotion: false, threatLines: true, aimLine: true };
+// aimLine kommt aus data/options.json (Phase 0a), leadMarker analog dazu
+// aus Grundsteinumbau Phase 2.
+export const renderOpts = { reduceMotion: false, threatLines: true, aimLine: true, leadMarker: true };
 
 const COLORS = {
   floor: '#1b1b22',
@@ -1143,6 +1145,7 @@ export function createRenderer(ctx) {
       for (const t of state.tanks) drawTank(state, t, alpha);
       drawRadar(ctx, state);
       drawThreatRings(ctx, state); // Gefahrensinn (Phase 18, Welle 3)
+      if (renderOpts.leadMarker) drawLeadMarkers(ctx, state); // Phase 2
       drawBullets(state.bullets, alpha);
       drawFlashes(ctx, state);
       drawParticles(ctx, state);
