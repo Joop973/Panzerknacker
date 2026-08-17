@@ -43,6 +43,16 @@ Wiederherstellungsziel.
 
 ## Ist-Abgleich Phase 0 (Auftrag Abschnitt 3, gegen den Code geprüft am 2026-08-17)
 
+> **Update (2026-08-17, Nutzerentscheidung nach dieser Sitzung):** Die
+> beiden unten dokumentierten Blocker (Punkt 1 und 2) sind **keine
+> Blocker für Phase 1 mehr** — die Bosse sind noch nicht ausgearbeitet und
+> werden in einer eigenen künftigen Aufgabe neu gebaut; bis dahin ersetzt
+> `run.js: BOSS_ENEMY_TYPES` alle drei Boss-Arenen durch einen
+> Platzhalter-Gegner (`t_black`). Details: `CLAUDE.md`, Abschnitt "Bosse
+> (Platzhalter, Nutzerentscheidung)". Die Funde selbst bleiben unten
+> stehen, weil sie technisch weiterhin zutreffen und beim künftigen
+> Boss-Neubau gelöst werden müssen.
+
 Alle Punkte aus dem "Verifizierten Ist-Stand" wurden am aktuellen Code
 nachvollzogen. Die meisten stimmen; drei sind echte Abweichungen, zwei davon
 mit Konsequenz für Phase 1 — **vor Phase 1 zu entscheiden, nicht zu

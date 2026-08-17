@@ -3745,18 +3745,58 @@ Fundstellen in `ARCHIV.md`, Abschnitt „Ist-Abgleich Phase 0"):
    nicht in `renderer.js` (das importiert/ruft nur auf). Alles Übrige aus
    Abschnitt 3 wurde ohne Abweichung bestätigt.
 
-**Vor Phase 1 zu klären** (siehe To-do unten): wie der Reaktor-Generator-
-Direkttreffer und `t_mirror`s Verwundbarkeit ohne Bandenschuss aussehen
-sollen — beides betrifft laufende Bosskämpfe, kein Nice-to-have.
+### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
+Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
+(Reaktor/Spiegel/Phalanx) sind noch nicht ausgearbeitet und werden erst in
+einer eigenen künftigen Aufgabe neu gebaut** — die alte Mechanik
+(Generator-Rätsel, Spiegelbewegung, rotierende Formation) "hat keine
+Bewandtnis mehr" (O-Ton Nutzer). Damit sind auch die beiden Phase-0-Blocker
+gegenstandslos, bis die Bosse neu entstehen — nicht behoben, sondern nicht
+mehr erreichbar.
+- **`src/game/run.js: BOSS_ENEMY_TYPES`**: alle drei Boss-Arenen
+  (`boss_reactor`/`boss_mirror`/`boss_phalanx`) spawnen jetzt **`t_black`**
+  statt `t_reactor`/`t_mirror`/5×`t_phalanx` als Platzhalter-Gegner. Die
+  restlichen Spawnpunkte der Arena (v. a. `boss_phalanx` mit 5 Slots)
+  füllt weiterhin die normale Unterstützungs-Einkaufslogik
+  (`buyEnemies()`, `diff.finalRoom.supportBudget`), unverändert.
+- **Nichts gelöscht, nur nicht mehr erreicht**: `t_reactor`/`t_mirror`/
+  `t_phalanx` (`data/tanks.json`), `bossai.js`
+  (`stepMirrorBoss`/`stepPhalanxBoss`), die `boss_*`-Arenen
+  (`data/arenas.json`), die Panzerungs-Sonderfälle (`armor.js`:
+  `requiresRicochet`, `armor.arc:360`) und `data/balance.json: boss.*`
+  bleiben unverändert im Code/in den Daten stehen — kein zweiter
+  Archivpfad nötig, weil nichts aus dem aktiven Code entfernt wurde,
+  nur die Auswahl in `run.js` umgebogen ist. Die dazugehörigen
+  Bestandstests (`tests/regression.mjs`, u. a. Abschnitte zu
+  `t_reactor`/`t_mirror`/`t_phalanx`-LP, Boss-Fixierung, Generator-Zähler)
+  bauen ihre Test-Räume direkt über `createState()` mit expliziten
+  `enemyTypes`/`roomSpec` — sie laufen an `run.js`/`BOSS_ENEMY_TYPES`
+  vorbei und bleiben deshalb unverändert grün; die Boss-Mechanik ist also
+  weiterhin bewacht, falls sie später wiederverwendet/überarbeitet wird.
+- **`t_black`** ist ein regulärer, bereits vorhandener Spätspiel-Gegner
+  (`unlockRoom: 11`, Vorhaltezielen, weicht aus, legt Minen, flieht vor
+  Beschuss) — kein Boss-Ersatz im Sinne eines eigenen Kampfsystems, nur ein
+  bekannter, funktionierender Platzhalter. `isBossCfg()` (`cfg.js`) erkennt
+  ihn NICHT als Boss (kein `bossInvincible`/`mirrorBoss`/`phalanx`) —
+  bewusst so, ein Platzhalter soll sich nicht wie ein echter Boss
+  ausgeben (keine HP-Skalierungs-Ausnahme, kein Flanken-Schaden-Opt-out).
+- **Blockiert Grundsteinumbau-Phase 1 nicht mehr**: die beiden Phase-0-Funde
+  (Reaktor-Generatoren brauchen aktuell einen Bankshot, `t_mirror` hängt an
+  `requiresRicochet`) betreffen jetzt keinen im Spiel erreichbaren Boss
+  mehr — Phase 1 kann den Bandenschuss entfernen, ohne diese beiden Punkte
+  vorher zu lösen. Sobald echte Bosse neu gebaut werden, müssen beide
+  Punkte trotzdem irgendwann adressiert werden (Details weiterhin in
+  `ARCHIV.md`, Abschnitt „Ist-Abgleich Phase 0" — dort stehengelassen, weil
+  technisch weiterhin zutreffend, nur nicht mehr dringlich).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **BLOCKIEREND für Grundsteinumbau-Phase 1**: Entscheiden, wie
-      Reaktor-Generatoren (aktuell: nur eine schon abgeprallte Kugel
-      beschädigt sie) und `t_mirror` (aktuell: `requiresRicochet`, blockt
-      sonst mit `armor.arc:360` jede Kugel für immer) ohne Wandabpraller
-      verwundbar bleiben. Naheliegend: Generator auf reinen Direkttreffer
-      umstellen, Spiegel bekommt wie einst das Prisma einen
-      Schadensmultiplikator statt eines Zwangs. Details in `ARCHIV.md`.
+- [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
+      laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
+      ersetzt (s. o.), bis ein neues Bosskonzept entsteht. Beim Neubau die
+      beiden in `ARCHIV.md` dokumentierten Funde mitlösen (Reaktor-
+      Generatoren brauchen aktuell einen Bankshot statt eines Direkttreffers;
+      `t_mirror` hängt an `requiresRicochet`, das Grundsteinumbau-Phase 1
+      entfernt).
 - [ ] **`drawOne()`-Signaturkarten-Inkonsistenz (Upgradepool-v2 Phase 2)**:
       „Verbannen"/„Vierte Karte" (`run.js`) sperren beim Ersatzziehen weiterhin
       den ganzen Tag `signature` statt nur die gebannte id — banning einer von
