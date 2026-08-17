@@ -3701,7 +3701,62 @@ Bestaetigung der Unaustauschbarkeit, Gadget-Ausschluss.
   dem initialen `el.innerHTML = ''`) — auf `el.textContent` umgestellt, das
   rekursiv aus den echten Kindknoten liest.
 
+### Grundsteinumbau v3 — Phase 0 (Archiv anlegen) — gemergt
+**Neu eingegangen: `AUFTRAG-GRUNDSTEINUMBAU.md` (v3).** Elf Sitzungen
+(Phase 0–10), die **vor** dem überarbeiteten Nekromanten-Auftrag laufen:
+Bandenschuss komplett raus (Spieler UND Gegner), Spielerkugel 200→450,
+gerichteter Flanken-/Heckschaden statt Vorhaltefrust, Exekutionsschwelle,
+der Grüne wird vom Bankshot- zum Mörserschützen, alle Upgrade-Karten ins
+Archiv zugunsten eines 5-Karten-Sockels (künftig klassenspezifische Pools),
+acht Klassen geparkt (nur `player`+`c_necro` aktiv), Run-Struktur auf drei
+Akte à ~16 Räume mit fester Boss-Zuordnung (Reaktor/Spiegel/Phalanx)
+umgebaut. **Eine Phase pro Sitzung, strikt in Reihenfolge.**
+
+**Phase 0 (Archiv anlegen) ist gebaut**: `ARCHIV.md` (Index) + `archive/`
+(`upgrades-v1.json`: Verbatim-Kopie aller aktuell 251 Karten;
+`bandenschuss.md`: komplette Mechanikbeschreibung des Bandenschusses;
+`klassen-v1.json`: die acht zu parkenden Klassen; `gegner-v1.json`:
+`t_prism` vollständig + die Vor-Phase-3-Fassung von `t_green` als reine
+Referenz; `systeme-v1.md`: Transformationen, Zweitelement, Element-Filter,
+Schatzraum-Legendär-Belohnung, alter Extra-Leben-Mechanismus). Noch keine
+Codeänderung am Spiel selbst — reine Ablage + Ist-Abgleich.
+**Der Ist-Abgleich gegen den Code (Auftrag Abschnitt 3) hat zwei
+Abweichungen mit echter Konsequenz für Phase 1 gefunden** (Details +
+Fundstellen in `ARCHIV.md`, Abschnitt „Ist-Abgleich Phase 0"):
+1. **Reaktor-Generatoren (Akt-1-Boss) brauchen HEUTE bereits einen
+   Bankshot, nicht umgekehrt** — der Auftrag behauptet das Gegenteil
+   ("Direkttreffer genügt"). `bullet.js:136`:
+   `wall.type === 'generator' && b.wallBounces > 0` — ein Direkttreffer
+   prallt wirkungslos ab, nur eine schon abgeprallte Kugel beschädigt den
+   Generator. Ohne Wandabpraller (Phase 1) kann diese Bedingung nie mehr
+   eintreten — der Reaktorkampf wird ohne eine gezielte Codeänderung genau
+   an dieser Stelle unlösbar.
+2. **`t_mirror` (Akt-2-Boss) hängt an `requiresRicochet`/`hasWallBounced()`**
+   — Phase 1 will genau das "ersatzlos" entfernen. Mit `armor.arc: 360`
+   blockt der Spiegel sonst JEDE Kugel für immer (nur Minen blieben
+   wirksam, die Panzerung ignorieren Explosionen bewusst).
+3. (Klarstellung, keine Handlungskonsequenz) `t_prism` nutzt entgegen der
+   Ist-Stand-Prosa in Auftrag Abschnitt 3 **kein** `requiresRicochet` mehr
+   (das ist seit UMBAUPLAN-LP Phase 8 durch `bounceDamageTakenMult: 3`
+   ersetzt) — die "Festgelegte Entscheidung" in Auftrag Abschnitt 2 ist
+   davon nicht betroffen und stimmt bereits mit dem Code überein.
+4. Kartenzahl ist **251**, nicht 246 (Prosa-Zahl im Auftrag veraltet, keine
+   Logik betroffen). `drawAimLine()` liegt in `src/render/effects.js:277`,
+   nicht in `renderer.js` (das importiert/ruft nur auf). Alles Übrige aus
+   Abschnitt 3 wurde ohne Abweichung bestätigt.
+
+**Vor Phase 1 zu klären** (siehe To-do unten): wie der Reaktor-Generator-
+Direkttreffer und `t_mirror`s Verwundbarkeit ohne Bandenschuss aussehen
+sollen — beides betrifft laufende Bosskämpfe, kein Nice-to-have.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **BLOCKIEREND für Grundsteinumbau-Phase 1**: Entscheiden, wie
+      Reaktor-Generatoren (aktuell: nur eine schon abgeprallte Kugel
+      beschädigt sie) und `t_mirror` (aktuell: `requiresRicochet`, blockt
+      sonst mit `armor.arc:360` jede Kugel für immer) ohne Wandabpraller
+      verwundbar bleiben. Naheliegend: Generator auf reinen Direkttreffer
+      umstellen, Spiegel bekommt wie einst das Prisma einen
+      Schadensmultiplikator statt eines Zwangs. Details in `ARCHIV.md`.
 - [ ] **`drawOne()`-Signaturkarten-Inkonsistenz (Upgradepool-v2 Phase 2)**:
       „Verbannen"/„Vierte Karte" (`run.js`) sperren beim Ersatzziehen weiterhin
       den ganzen Tag `signature` statt nur die gebannte id — banning einer von

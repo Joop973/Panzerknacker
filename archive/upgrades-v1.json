@@ -1,0 +1,3772 @@
+{
+  "everyNRooms": 1,
+  "offersPerScreen": 3,
+  "upgrades": {
+    "magazin": {
+      "id": "magazin",
+      "name": "Magazin",
+      "description": "+2 gleichzeitige Geschosse",
+      "tag": "stat",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔢"
+    },
+    "abpraller": {
+      "id": "abpraller",
+      "name": "Abpraller",
+      "description": "+1 Abpraller pro Geschoss",
+      "tag": "stat",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "↗️"
+    },
+    "ladung": {
+      "id": "ladung",
+      "name": "Ladung",
+      "description": "Geschossgeschwindigkeit +20 %",
+      "tag": "stat",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡"
+    },
+    "kettenglied": {
+      "id": "kettenglied",
+      "name": "Kettenglied",
+      "description": "+1 gleichzeitige Mine",
+      "tag": "stat",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔗",
+      "exclusions": ["c_necro"]
+    },
+    "sprengkraft": {
+      "id": "sprengkraft",
+      "name": "Sprengkraft",
+      "description": "Minen-Explosionsradius +25 % pro Stufe",
+      "tag": "stat",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "radiusMult": 1.25,
+      "symbol": "💥",
+      "exclusions": ["c_necro"]
+    },
+    "kettenantrieb": {
+      "id": "kettenantrieb",
+      "name": "Kettenantrieb",
+      "description": "Bewegungstempo +12 %",
+      "tag": "mobility",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙️"
+    },
+    "wolframkern": {
+      "id": "wolframkern",
+      "name": "Wolframkern",
+      "description": "Geschoss reißt zerstörbare Wände ein und fliegt dabei weiter",
+      "tag": "terrain",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🪨"
+    },
+    "sprengschuss": {
+      "id": "sprengschuss",
+      "name": "Sprengschuss",
+      "description": "Jeder 4. Schuss ist eine abprallende Sprengkugel",
+      "tag": "reactive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "everyShots": 4,
+      "radiusPx": 60,
+      "symbol": "🧨"
+    },
+    "krallenfalle": {
+      "id": "krallenfalle",
+      "name": "Krallenfalle",
+      "description": "Alle 300 gefahrene Pixel bleibt eine Falle liegen: wer hineinfährt (auch du!), steht 4 s still",
+      "tag": "control",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "everyPx": [
+        300
+      ],
+      "stunS": 4,
+      "radiusPx": 9,
+      "armDelayS": 0.8,
+      "maxActive": 3,
+      "symbol": "🪤"
+    },
+    "powershot": {
+      "id": "powershot",
+      "name": "Powershot",
+      "description": "Die ersten Schüsse in jedem Raum sind automatisch verstärkt: doppelt so schnell, +2 Abpraller",
+      "tag": "reactive",
+      "rarity": "rare",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "perRoom": 1,
+      "bonusRicochets": 2,
+      "speedFactor": 2,
+      "symbol": "✨"
+    },
+    "doppelrohr": {
+      "id": "doppelrohr",
+      "name": "Doppelrohr",
+      "description": "Jeder Schuss feuert zwei Kugeln im Spreizwinkel — doppelte Wirkung, doppeltes Abpraller-Risiko",
+      "tag": "weapon",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 3,
+      "spreadRad": 0.09,
+      "symbol": "⑈"
+    },
+    "feuerleitzentrale": {
+      "id": "feuerleitzentrale",
+      "name": "Feuerleitzentrale",
+      "description": "Verengt den Spreizwinkel des Doppelrohrs — beide Kugeln treffen dichter beieinander",
+      "tag": "scaling",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [
+        "doppelrohr"
+      ],
+      "minRoom": 5,
+      "spreadMult": 0.65,
+      "symbol": "🎚️"
+    },
+    "flak": {
+      "id": "flak",
+      "name": "Flak",
+      "description": "Jeder Schuss ist eine Flakgranate: platzt schon nach kurzer Reichweite in der Luft und beschädigt alles im Radius",
+      "tag": "weapon",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 3,
+      "burstRangePx": 220,
+      "radiusPx": 50,
+      "symbol": "🎆"
+    },
+    "radar": {
+      "id": "radar",
+      "name": "Radar",
+      "description": "Markiert alle Gegner — auch unsichtbare und hinter Wänden",
+      "tag": "information",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "📶"
+    },
+    "ballistikrechner": {
+      "id": "ballistikrechner",
+      "name": "Ballistikrechner",
+      "description": "Ziellinie zeigt zwei Abpraller vorher statt nur einem",
+      "tag": "information",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "previewBounces": 2,
+      "symbol": "📐"
+    },
+    "pluenderer": {
+      "id": "pluenderer",
+      "name": "Plünderer",
+      "description": "+1 Schrott pro geräumtem Raum",
+      "tag": "resource",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "scrapPerLevel": 1,
+      "symbol": "💰"
+    },
+    "beutejagd": {
+      "id": "beutejagd",
+      "name": "Beutejagd",
+      "description": "Der erste Kill in jedem Raum gibt sofort zusätzlichen Schrott",
+      "tag": "resource",
+      "rarity": "common",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "scrapPerLevel": 2,
+      "symbol": "🏹"
+    },
+    "nachtsicht": {
+      "id": "nachtsicht",
+      "name": "Nachtsicht",
+      "description": "Nebel- und Dunkelheit-Raummodifikatoren schränken deine Sicht nicht mehr ein",
+      "tag": "information",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌙"
+    },
+    "sappeur": {
+      "id": "sappeur",
+      "name": "Sappeur",
+      "description": "Rissige Wände halten pro Stufe einen Treffer weniger aus",
+      "tag": "terrain",
+      "rarity": "common",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "hitsPerLevel": 1,
+      "symbol": "⛏️"
+    },
+    "steinbruch": {
+      "id": "steinbruch",
+      "name": "Steinbruch",
+      "description": "Jede eingerissene Wand lässt Schrott zurück",
+      "tag": "terrain",
+      "rarity": "common",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "scrapPerLevel": 1,
+      "symbol": "🧰"
+    },
+    "minenspuerer": {
+      "id": "minenspuerer",
+      "name": "Minenspürer",
+      "description": "Auch gegnerische Minen zeigen ihre Restzeit und ihren Explosionsradius",
+      "tag": "information",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔎"
+    },
+    "gefahrensinn": {
+      "id": "gefahrensinn",
+      "name": "Gefahrensinn",
+      "description": "Gegner, die dich gerade im Rohr haben, bekommen einen Warnring",
+      "tag": "information",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚠️"
+    },
+    "abprallschock": {
+      "id": "abprallschock",
+      "name": "Abprallschock",
+      "description": "Deine Kugel betäubt beim Wandabpraller nahe Gegner kurz",
+      "tag": "control",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 2,
+      "radiusPxPerLevel": 46,
+      "stunS": 0.7,
+      "symbol": "💫"
+    },
+    "doppelschlag": {
+      "id": "doppelschlag",
+      "name": "Doppelschlag",
+      "description": "Jeder Trickshot-Kill lädt einen verstärkten Schuss nach (doppelt so schnell, +2 Abpraller)",
+      "tag": "synergy",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 2,
+      "chargesPerTrickshot": 1,
+      "maxCharges": 3,
+      "symbol": "⏫"
+    },
+    "nachladeschild": {
+      "id": "nachladeschild",
+      "name": "Nachladeschild",
+      "description": "Dein Schild lädt sich nach kurzer Zeit von selbst neu — auch ohne neues Leben",
+      "tag": "defense",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [
+        "schild"
+      ],
+      "minRoom": 1,
+      "regenS": 20,
+      "symbol": "🔄"
+    },
+    "meisterschuetze": {
+      "id": "meisterschuetze",
+      "name": "Meisterschütze",
+      "description": "Trickshot-Belohnung verdoppelt",
+      "tag": "synergy",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "scrapMult": 2,
+      "symbol": "🏅"
+    },
+    "erschuetterungsdash": {
+      "id": "erschuetterungsdash",
+      "name": "Erschütterungsdash",
+      "description": "Dein Dash stößt nahe Gegner weg und betäubt sie kurz — unabhängig von der Sekundärwaffe",
+      "tag": "control",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [
+        "dash"
+      ],
+      "minRoom": 3,
+      "radiusPx": 80,
+      "pushPx": 60,
+      "stunS": 0.5,
+      "symbol": "〰️"
+    },
+    "sprengmunition": {
+      "id": "sprengmunition",
+      "name": "Sprengmunition",
+      "description": "Alle Kugeln explodieren (auch durch Wände), Magazin auf 3 — dafür keine Minen mehr",
+      "tag": "reactive",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "radiusPx": 60,
+      "symbol": "☄️"
+    },
+    "glaskanone": {
+      "id": "glaskanone",
+      "name": "Glaskanone",
+      "description": "Kugeln doppelt so schnell und explosiv — aber du behältst nur 1 Leben",
+      "tag": "scaling",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "speedMult": 2,
+      "radiusPx": 40,
+      "symbol": "🔮"
+    },
+    "streuschuss": {
+      "id": "streuschuss",
+      "name": "Streuschuss",
+      "description": "Feuert 3 Kugeln im Fächer — dafür ohne Abpraller",
+      "tag": "stat",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "count": 3,
+      "spreadRad": 0.2,
+      "symbol": "🔱"
+    },
+    "nachbrenner": {
+      "id": "nachbrenner",
+      "name": "Nachbrenner",
+      "description": "Nach jedem Schuss kurzer Tempo-Schub",
+      "tag": "mobility",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "boostMult": 1.6,
+      "boostS": 0.6,
+      "symbol": "🔥"
+    },
+    "aasgeier": {
+      "id": "aasgeier",
+      "name": "Aasgeier",
+      "description": "Jeder Abschuss gibt dir das volle Magazin zurück — schon fliegende Kugeln zählen nicht mehr dagegen (töten aber weiter)",
+      "tag": "reactive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🦅"
+    },
+    "kamikaze": {
+      "id": "kamikaze",
+      "name": "Kamikaze",
+      "description": "Bei deinem Tod explodierst du und reißt nahe Gegner mit",
+      "tag": "reactive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "radiusPx": 72,
+      "symbol": "💀"
+    },
+    "schild": {
+      "id": "schild",
+      "name": "Schild",
+      "description": "Fängt einen Treffer ab — lädt sich einmal pro Leben wieder auf",
+      "tag": "defense",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🛡️"
+    },
+    "emergency_shield": {
+      "id": "emergency_shield",
+      "name": "Notschild",
+      "description": "+1 Schildladung — fängt einen Treffer ab, raumübergreifend, keine Regeneration (max. 3)",
+      "tag": "defense",
+      "rarity": "rare",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "chargesPerStack": 1,
+      "symbol": "🧿"
+    },
+    "dash": {
+      "id": "dash",
+      "name": "Ausweich-Dash",
+      "description": "Kurzer Sprung mit Unverwundbarkeit (Umschalt / B-Taste / Dash-Button)",
+      "tag": "mobility",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "distancePx": 64,
+      "iframeS": 0.3,
+      "cooldownS": 2.2,
+      "symbol": "💨"
+    },
+    "berserker": {
+      "id": "berserker",
+      "name": "Berserker",
+      "description": "Je weniger Leben, desto schneller feuerst und fährst du",
+      "tag": "scaling",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "firePerLife": 0.82,
+      "speedPerLife": 1.12,
+      "maxStacksEffect": 3,
+      "symbol": "😤"
+    },
+    "fernzuender": {
+      "id": "fernzuender",
+      "name": "Fernzünder",
+      "description": "Minen zünden nicht von selbst — Minen-Taste erneut drücken sprengt alle",
+      "tag": "control",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "📡",
+      "exclusions": ["c_necro"]
+    },
+    "streumine": {
+      "id": "streumine",
+      "name": "Streumine",
+      "description": "Deine Minen schleudern beim Explodieren 4 sofort scharfe Splitterminen",
+      "tag": "reactive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "sub": 4,
+      "symbol": "🌰",
+      "exclusions": ["c_necro"]
+    },
+    "schockwelle": {
+      "id": "schockwelle",
+      "name": "Schockwelle",
+      "description": "Beim Minenlegen werden nahe Gegner weggestoßen — betäubt sie kurz",
+      "tag": "control",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "radiusPx": 80,
+      "pushPx": 52,
+      "stunS": 0.6,
+      "symbol": "🌊",
+      "exclusions": ["c_necro"]
+    },
+    "annaeherungsmine": {
+      "id": "annaeherungsmine",
+      "name": "Annäherungsmine",
+      "description": "Deine Minen sind nach 0,1 s scharf und lösen schon aus der Ferne aus",
+      "tag": "control",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "armS": 0.1,
+      "triggerRadiusPx": 22,
+      "symbol": "📍",
+      "exclusions": ["c_necro"]
+    },
+    "kettenblitz": {
+      "id": "kettenblitz",
+      "name": "Kettenblitz",
+      "description": "Jeder Abschuss löst eine kleine Explosion aus — Kettenkills!",
+      "tag": "reactive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "radiusPx": 34,
+      "symbol": "🔌"
+    },
+    "blutrausch": {
+      "id": "blutrausch",
+      "name": "Blutrausch",
+      "description": "Nach jedem getöteten Gegner ein Tempo-Schub und ein kurzer Unverwundbarkeits-Moment",
+      "tag": "reactive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "durationS": 1.4,
+      "speedMult": 1.3,
+      "iframeS": 0.35,
+      "symbol": "🩸"
+    },
+    "schrapnell": {
+      "id": "schrapnell",
+      "name": "Schrapnell",
+      "description": "Deine Explosionen schleudern 6 Splitterkugeln in alle Richtungen",
+      "tag": "reactive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "count": 6,
+      "bulletSpeed": 150,
+      "symbol": "🌟"
+    },
+    "raketenantrieb": {
+      "id": "raketenantrieb",
+      "name": "Raketenantrieb",
+      "description": "Jeder Schuss stößt dich zurück — nutze den Rückstoß zum Ausweichen",
+      "tag": "mobility",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "recoilPx": 15,
+      "symbol": "🚀"
+    },
+    "konterschild": {
+      "id": "konterschild",
+      "name": "Konterschild",
+      "description": "Nur in Elite-, Verflucht- und Bossräumen: fängt dort einen Treffer ab (1× pro Leben) und feuert einen Kugelkranz",
+      "tag": "defense",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "count": 10,
+      "eliteOnly": true,
+      "symbol": "✳️"
+    },
+    "ueberladung": {
+      "id": "ueberladung",
+      "name": "Überladung",
+      "description": "Alle deine Explosionen (Schüsse, Minen, Kettenblitz) +30 % Radius",
+      "tag": "synergy",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "mult": 1.3,
+      "symbol": "🔆"
+    },
+    "turbo": {
+      "id": "turbo",
+      "name": "Turbo",
+      "description": "+45 % Bewegungstempo",
+      "tag": "mobility",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "speedMult": 1.45,
+      "symbol": "🏁"
+    },
+    "scharfschuetze": {
+      "id": "scharfschuetze",
+      "name": "Scharfschütze",
+      "description": "Nur 2 Kugeln gleichzeitig — dafür 3× Tempo, halber Cooldown, +2 Abpraller",
+      "tag": "stat",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "speedMult": 3,
+      "cooldownMult": 0.5,
+      "ricochetsBonus": 2,
+      "magazineFixed": 2,
+      "symbol": "🎯"
+    },
+    "uebermacht": {
+      "id": "uebermacht",
+      "name": "Übermacht",
+      "description": "+2 Kugeln im Magazin für jeden noch lebenden Gegner",
+      "tag": "scaling",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "perEnemy": 2,
+      "symbol": "📊"
+    },
+    "klebemine": {
+      "id": "klebemine",
+      "name": "Klebemine",
+      "description": "Deine Minen haften aus kurzer Distanz am Gegner und zünden nach 0,6 s — sicherer Treffer",
+      "tag": "control",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "stickDelayS": 0.6,
+      "stickRadiusPx": 42,
+      "symbol": "🩹",
+      "exclusions": ["c_necro"]
+    },
+    "trophaee": {
+      "id": "trophaee",
+      "name": "Trophäe",
+      "description": "Elite-Beute: +1 Schildladung, dauerhaft",
+      "tag": "elite",
+      "rarity": "rare",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "shieldCharges": 1,
+      "symbol": "🏆"
+    },
+    "kriegsmaschine": {
+      "id": "kriegsmaschine",
+      "name": "Kriegsmaschine",
+      "description": "Elite-Beute: +2 Kugeln im Magazin und schnellere Nachladung",
+      "tag": "elite",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "magazineBonus": 2,
+      "cooldownMult": 0.85,
+      "symbol": "🛠️"
+    },
+    "kriegsbeute": {
+      "id": "kriegsbeute",
+      "name": "Kriegsbeute",
+      "description": "Elite-Beute: sofort +5 Schrott",
+      "tag": "elite",
+      "rarity": "rare",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "scrapBonus": 5,
+      "symbol": "💎"
+    },
+    "emp_mine": {
+      "id": "emp_mine",
+      "name": "EMP-Mine",
+      "description": "Gadget: legt eine blaue Mine, die betäubt statt zu töten — Gegner drehen den Turm nicht, blockieren aber weiter Geschosse",
+      "tag": "gadget",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔵",
+      "exclusions": ["c_necro"]
+    },
+    "hook": {
+      "id": "hook",
+      "name": "Enterhaken",
+      "description": "Gadget: zieht dich zur getroffenen Wand",
+      "tag": "gadget",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🪝",
+      "exclusions": ["c_necro"]
+    },
+    "deflector": {
+      "id": "deflector",
+      "name": "Deflektor",
+      "description": "Gadget: 1,5 s aktiv, reflektiert den nächsten Treffer in deine Blickrichtung",
+      "tag": "gadget",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🪞",
+      "exclusions": ["c_necro"]
+    },
+    "smoke": {
+      "id": "smoke",
+      "name": "Rauchgranate",
+      "description": "Gadget: unterbricht Sichtlinien für 4 s",
+      "tag": "gadget",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌫️",
+      "exclusions": ["c_necro"]
+    },
+    "trap_wall": {
+      "id": "trap_wall",
+      "name": "Sperrmauer",
+      "description": "Gadget: errichtet eine Wand, die 3 Schüsse hält — eigene Bankshot-Winkel",
+      "tag": "gadget",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧱",
+      "exclusions": ["c_necro"]
+    },
+    "core_damage_c": {
+      "id": "core_damage_c",
+      "name": "Panzerbrechend",
+      "description": "+1 Schaden pro Treffer",
+      "tag": "damage",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 1
+      }
+    },
+    "core_damage_r": {
+      "id": "core_damage_r",
+      "name": "Wuchtgeschoss",
+      "description": "+3 Schaden pro Treffer",
+      "tag": "damage",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 3
+      }
+    },
+    "core_damage_l": {
+      "id": "core_damage_l",
+      "name": "Durchschlag",
+      "description": "+6 Schaden pro Treffer",
+      "tag": "damage",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 6
+      }
+    },
+    "core_reload_c": {
+      "id": "core_reload_c",
+      "name": "Schnelllader",
+      "description": "Nachladen −6 %",
+      "tag": "reload",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⏱",
+      "core": {
+        "reloadMult": 0.94
+      }
+    },
+    "core_reload_r": {
+      "id": "core_reload_r",
+      "name": "Doppelhänder",
+      "description": "Nachladen −15 %",
+      "tag": "reload",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⏱",
+      "core": {
+        "reloadMult": 0.85
+      }
+    },
+    "core_reload_l": {
+      "id": "core_reload_l",
+      "name": "Trommelmagazin",
+      "description": "Nachladen −30 %",
+      "tag": "reload",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⏱",
+      "core": {
+        "reloadMult": 0.7
+      }
+    },
+    "core_speed_c": {
+      "id": "core_speed_c",
+      "name": "Laufwerk",
+      "description": "Fahrtempo +8 %",
+      "tag": "speed",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "speedMult": 1.08
+      }
+    },
+    "core_speed_r": {
+      "id": "core_speed_r",
+      "name": "Rennkette",
+      "description": "Fahrtempo +15 %",
+      "tag": "speed",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "speedMult": 1.15
+      }
+    },
+    "core_speed_l": {
+      "id": "core_speed_l",
+      "name": "Düsenantrieb",
+      "description": "Fahrtempo +35 %",
+      "tag": "speed",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "speedMult": 1.35
+      }
+    },
+    "core_hp_c": {
+      "id": "core_hp_c",
+      "name": "Panzerplatte",
+      "description": "+10 Lebenspunkte",
+      "tag": "health",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❤",
+      "core": {
+        "hpAdd": 10
+      }
+    },
+    "core_hp_r": {
+      "id": "core_hp_r",
+      "name": "Verbundpanzerung",
+      "description": "+25 Lebenspunkte",
+      "tag": "health",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❤",
+      "core": {
+        "hpAdd": 25
+      }
+    },
+    "core_hp_l": {
+      "id": "core_hp_l",
+      "name": "Bunkerstahl",
+      "description": "+50 Lebenspunkte",
+      "tag": "health",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❤",
+      "core": {
+        "hpAdd": 50
+      }
+    },
+    "core_mag_c": {
+      "id": "core_mag_c",
+      "name": "Magazin",
+      "description": "+1 gleichzeitige Kugel",
+      "tag": "magazine",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔢",
+      "core": {
+        "magAdd": 1
+      }
+    },
+    "core_mag_r": {
+      "id": "core_mag_r",
+      "name": "Doppelmagazin",
+      "description": "+1 gleichzeitige Kugel",
+      "tag": "magazine",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔢",
+      "core": {
+        "magAdd": 1
+      }
+    },
+    "core_mag_l": {
+      "id": "core_mag_l",
+      "name": "Endlosgurt",
+      "description": "+2 gleichzeitige Kugeln",
+      "tag": "magazine",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔢",
+      "core": {
+        "magAdd": 2
+      }
+    },
+    "core_ric_c": {
+      "id": "core_ric_c",
+      "name": "Abpraller",
+      "description": "+1 Wandabpraller",
+      "tag": "ricochet",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "↩",
+      "core": {
+        "ricochetAdd": 1
+      }
+    },
+    "core_ric_r": {
+      "id": "core_ric_r",
+      "name": "Querschläger",
+      "description": "+1 Wandabpraller",
+      "tag": "ricochet",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "↩",
+      "core": {
+        "ricochetAdd": 1
+      }
+    },
+    "core_ric_l": {
+      "id": "core_ric_l",
+      "name": "Billardkugel",
+      "description": "+2 Wandabpraller",
+      "tag": "ricochet",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "↩",
+      "core": {
+        "ricochetAdd": 2
+      }
+    },
+    "core_crit_c": {
+      "id": "core_crit_c",
+      "name": "Zielfernrohr",
+      "description": "Kritchance +3 %",
+      "tag": "crit",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.03
+      }
+    },
+    "core_crit_r": {
+      "id": "core_crit_r",
+      "name": "Schwachstellenscanner",
+      "description": "Kritchance +6 %",
+      "tag": "crit",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.06
+      }
+    },
+    "core_crit_l": {
+      "id": "core_crit_l",
+      "name": "Präzisionskern",
+      "description": "Kritchance +12 %",
+      "tag": "crit",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.12
+      }
+    },
+    "core_scrap_c": {
+      "id": "core_scrap_c",
+      "name": "Sammler",
+      "description": "+1 Schrott pro Raum",
+      "tag": "scavenge",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 1
+      }
+    },
+    "core_scrap_r": {
+      "id": "core_scrap_r",
+      "name": "Verwerter",
+      "description": "+2 Schrott pro Raum",
+      "tag": "scavenge",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 2
+      }
+    },
+    "core_scrap_l": {
+      "id": "core_scrap_l",
+      "name": "Schrottmagnet",
+      "description": "+4 Schrott pro Raum",
+      "tag": "scavenge",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 4
+      }
+    },
+    "core_mine_c": {
+      "id": "core_mine_c",
+      "name": "Minenvorrat",
+      "description": "+1 gleichzeitige Mine",
+      "tag": "mines",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💣",
+      "core": {
+        "mineAdd": 1
+      }
+    },
+    "core_mine_r": {
+      "id": "core_mine_r",
+      "name": "Minengürtel",
+      "description": "+2 gleichzeitige Minen",
+      "tag": "mines",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💣",
+      "core": {
+        "mineAdd": 2
+      }
+    },
+    "core_mine_l": {
+      "id": "core_mine_l",
+      "name": "Minenleger",
+      "description": "+3 gleichzeitige Minen",
+      "tag": "mines",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💣",
+      "core": {
+        "mineAdd": 3
+      }
+    },
+    "core_dodge_c": {
+      "id": "core_dodge_c",
+      "name": "Ausweichschritt",
+      "description": "Schaltet den Dash frei (Umschalt / B)",
+      "tag": "dodge",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💨",
+      "core": {
+        "dashGrant": true,
+        "dashCdMult": 1.0
+      }
+    },
+    "core_dodge_r": {
+      "id": "core_dodge_r",
+      "name": "Seitwärtsroller",
+      "description": "Dash freigeschaltet, Abklingzeit −30 %",
+      "tag": "dodge",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💨",
+      "core": {
+        "dashGrant": true,
+        "dashCdMult": 0.7
+      }
+    },
+    "core_dodge_l": {
+      "id": "core_dodge_l",
+      "name": "Phasensprung",
+      "description": "Dash freigeschaltet, Abklingzeit −50 %",
+      "tag": "dodge",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💨",
+      "core": {
+        "dashGrant": true,
+        "dashCdMult": 0.5
+      }
+    },
+    "phys_ap": {
+      "id": "phys_ap",
+      "name": "Panzerbrechend",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "phys_scope": {
+      "id": "phys_scope",
+      "name": "Feinvisier",
+      "description": "Kritchance +4 %",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.04
+      }
+    },
+    "phys_pressure": {
+      "id": "phys_pressure",
+      "name": "Hochdruck",
+      "description": "Kugeltempo +12 %",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💨",
+      "core": {
+        "bulletSpeedMult": 1.12
+      }
+    },
+    "phys_spin": {
+      "id": "phys_spin",
+      "name": "Drall",
+      "description": "+1 Wandabpraller",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "common",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "↩",
+      "core": {
+        "ricochetAdd": 1
+      }
+    },
+    "phys_execute": {
+      "id": "phys_execute",
+      "name": "Fangschuss",
+      "description": "+40 % Schaden gegen Gegner unter 30 % LP",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔪",
+      "core": {
+        "executeThreshold": 0.3,
+        "executeMult": 1.4
+      }
+    },
+    "phys_coldshot": {
+      "id": "phys_coldshot",
+      "name": "Kaltschütze",
+      "description": "Gebandete Schüsse sind immer kritisch",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "critOnBounce": true
+      }
+    },
+    "phys_splinter": {
+      "id": "phys_splinter",
+      "name": "Splittergeschoss",
+      "description": "Kritische Treffer machen +0,5× Schaden",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "critMultBonus": 0.5
+      }
+    },
+    "phys_heavy": {
+      "id": "phys_heavy",
+      "name": "Schwere Munition",
+      "description": "Schaden ×1,2",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "damageMult": 1.2
+      }
+    },
+    "phys_railgun": {
+      "id": "phys_railgun",
+      "name": "Railgun",
+      "description": "Magazin 1 — dafür Schaden ×3",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🚄",
+      "core": {
+        "magazineFixed": 1,
+        "damageMult": 3
+      }
+    },
+    "phys_headshot": {
+      "id": "phys_headshot",
+      "name": "Kopfschuss",
+      "description": "Ein kritischer Treffer tötet einen Nicht-Boss sofort",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "critExecute": true
+      }
+    },
+    "phys_ricochetking": {
+      "id": "phys_ricochetking",
+      "name": "Abprallkönig",
+      "description": "+2 Abpraller, gebandete Schüsse doppelter Schaden",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎱",
+      "core": {
+        "ricochetAdd": 2,
+        "bounceDamageBonus": 1.0
+      }
+    },
+    "phys_arsenal": {
+      "id": "phys_arsenal",
+      "name": "Arsenal",
+      "description": "+4 Schaden, +2 Magazin, +10 % Krit",
+      "tag": "physical",
+      "damageType": "physical",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔫",
+      "core": {
+        "damageAdd": 4,
+        "magAdd": 2,
+        "critAdd": 0.1
+      }
+    },
+    "expl_radius": {
+      "id": "expl_radius",
+      "name": "Sprengkraft II",
+      "description": "Explosionsradius +12 % (Schuss & Mine)",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "explosionRadiusMult": 1.12
+      }
+    },
+    "expl_power": {
+      "id": "expl_power",
+      "name": "Nitro",
+      "description": "Explosionsschaden +12 %",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧨",
+      "core": {
+        "explosionDamageMult": 1.12
+      }
+    },
+    "expl_ammo": {
+      "id": "expl_ammo",
+      "name": "Sprengladung",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "expl_fuse": {
+      "id": "expl_fuse",
+      "name": "Minengürtel II",
+      "description": "+1 gleichzeitige Mine",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💣",
+      "core": {
+        "mineAdd": 1
+      }
+    },
+    "expl_shots": {
+      "id": "expl_shots",
+      "name": "Sprengmunition II",
+      "description": "Deine Schüsse explodieren beim Aufschlag",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "allExplosive": true,
+        "shotExplosionRadius": 50
+      }
+    },
+    "expl_cluster": {
+      "id": "expl_cluster",
+      "name": "Splitterbombe",
+      "description": "Explosionen schleudern 4 Splitterkugeln",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "✳️",
+      "core": {
+        "schrapnellCount": 4
+      }
+    },
+    "expl_bigblast": {
+      "id": "expl_bigblast",
+      "name": "Fassbombe",
+      "description": "Explosionsradius +25 %, Explosionsschaden +20 %",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🛢️",
+      "core": {
+        "explosionRadiusMult": 1.25,
+        "explosionDamageMult": 1.2
+      }
+    },
+    "expl_minefield": {
+      "id": "expl_minefield",
+      "name": "Minenfeld",
+      "description": "+2 Minen, Explosionsradius +20 %",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🕳️",
+      "core": {
+        "mineAdd": 2,
+        "explosionRadiusMult": 1.2
+      }
+    },
+    "expl_nuke": {
+      "id": "expl_nuke",
+      "name": "Sprengkopf",
+      "description": "Explosive Schüsse mit +60 % Radius und +50 % Schaden",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☢️",
+      "core": {
+        "allExplosive": true,
+        "shotExplosionRadius": 50,
+        "explosionRadiusMult": 1.6,
+        "explosionDamageMult": 1.5
+      }
+    },
+    "expl_barrage": {
+      "id": "expl_barrage",
+      "name": "Sperrfeuer",
+      "description": "Explosive Schüsse, +3 Magazin, Nachladen −30 %",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎆",
+      "core": {
+        "allExplosive": true,
+        "shotExplosionRadius": 50,
+        "magAdd": 3,
+        "reloadMult": 0.7
+      }
+    },
+    "expl_clusterbomb": {
+      "id": "expl_clusterbomb",
+      "name": "Streubombe",
+      "description": "Explosive Schüsse schleudern 8 Splitterkugeln",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎇",
+      "core": {
+        "allExplosive": true,
+        "shotExplosionRadius": 50,
+        "schrapnellCount": 8
+      }
+    },
+    "expl_arsenal": {
+      "id": "expl_arsenal",
+      "name": "Sprengarsenal",
+      "description": "Explosive Schüsse: +30 % Radius, +30 % Schaden, 4 Splitter",
+      "tag": "explosive",
+      "damageType": "explosive",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💼",
+      "core": {
+        "allExplosive": true,
+        "shotExplosionRadius": 50,
+        "explosionRadiusMult": 1.3,
+        "explosionDamageMult": 1.3,
+        "schrapnellCount": 4
+      }
+    },
+    "fire_dur": {
+      "id": "fire_dur",
+      "name": "Zündstoff",
+      "description": "Branddauer +20 %",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "statusDurationMult": 1.2
+      }
+    },
+    "fire_tick": {
+      "id": "fire_tick",
+      "name": "Brandbeschleuniger",
+      "description": "Brandschaden +15 %",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "statusTickMult": 1.15
+      }
+    },
+    "fire_ammo": {
+      "id": "fire_ammo",
+      "name": "Brandmunition",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "fire_ember": {
+      "id": "fire_ember",
+      "name": "Glutkern",
+      "description": "Kritchance +4 %",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.04
+      }
+    },
+    "fire_napalm": {
+      "id": "fire_napalm",
+      "name": "Napalm",
+      "description": "Jeder Treffer legt +1 Brandstufe",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "statusStackBonus": 1
+      }
+    },
+    "fire_spread": {
+      "id": "fire_spread",
+      "name": "Brandherd",
+      "description": "Ein Treffer entzündet nahe Gegner",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "fireSpreadRadius": 70
+      }
+    },
+    "fire_hellfire": {
+      "id": "fire_hellfire",
+      "name": "Höllenglut",
+      "description": "Brand-Höchststufe 3 → 5",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "statusMaxStacksBonus": 2
+      }
+    },
+    "fire_bomb": {
+      "id": "fire_bomb",
+      "name": "Brandbombe",
+      "description": "Brandschaden +40 %",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "statusTickMult": 1.4
+      }
+    },
+    "fire_inferno": {
+      "id": "fire_inferno",
+      "name": "Inferno",
+      "description": "+2 Brandstufen je Treffer, Höchststufe +3, Branddauer +50 %",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌋",
+      "core": {
+        "statusStackBonus": 2,
+        "statusMaxStacksBonus": 3,
+        "statusDurationMult": 1.5
+      }
+    },
+    "fire_pyro": {
+      "id": "fire_pyro",
+      "name": "Pyromane",
+      "description": "Brandschaden ×2, Branddauer +50 %",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "statusTickMult": 2.0,
+        "statusDurationMult": 1.5
+      }
+    },
+    "fire_firestorm": {
+      "id": "fire_firestorm",
+      "name": "Feuersturm",
+      "description": "Treffer entzünden weite Umgebung, +1 Brandstufe",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌪️",
+      "core": {
+        "fireSpreadRadius": 130,
+        "statusStackBonus": 1
+      }
+    },
+    "fire_arsenal": {
+      "id": "fire_arsenal",
+      "name": "Brandarsenal",
+      "description": "+1 Brandstufe, Brandschaden +30 %, Höchststufe +2, +3 Schaden",
+      "tag": "fire",
+      "damageType": "fire",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💼",
+      "core": {
+        "statusStackBonus": 1,
+        "statusTickMult": 1.3,
+        "statusMaxStacksBonus": 2,
+        "damageAdd": 3
+      }
+    },
+    "frost_slow": {
+      "id": "frost_slow",
+      "name": "Kältegrad",
+      "description": "Frost-Verlangsamung stärker (+10 %)",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "frostSlowBonus": 0.1
+      }
+    },
+    "frost_dur": {
+      "id": "frost_dur",
+      "name": "Dauerfrost",
+      "description": "Frostdauer +20 %",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "statusDurationMult": 1.2
+      }
+    },
+    "frost_ammo": {
+      "id": "frost_ammo",
+      "name": "Frostmunition",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "frost_shard": {
+      "id": "frost_shard",
+      "name": "Eissplitter",
+      "description": "Kritchance +4 %",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.04
+      }
+    },
+    "frost_deep": {
+      "id": "frost_deep",
+      "name": "Tiefkühlung",
+      "description": "Einfrieren schon bei 2 statt 3 Stufen",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧊",
+      "core": {
+        "frostFreezeReduction": 1
+      }
+    },
+    "frost_stack": {
+      "id": "frost_stack",
+      "name": "Frostschock",
+      "description": "Jeder Treffer legt +1 Froststufe",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "statusStackBonus": 1
+      }
+    },
+    "frost_hold": {
+      "id": "frost_hold",
+      "name": "Vereisung",
+      "description": "Einfrieren hält +1 s länger",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧊",
+      "core": {
+        "frostFreezeDurationBonus": 1.0
+      }
+    },
+    "frost_shatter": {
+      "id": "frost_shatter",
+      "name": "Splittern",
+      "description": "+50 % Schaden gegen erstarrte Gegner",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💠",
+      "core": {
+        "shatterMult": 0.5
+      }
+    },
+    "frost_blizzard": {
+      "id": "frost_blizzard",
+      "name": "Blizzard",
+      "description": "Einfrieren schon ab der ersten Stufe, +1 s Dauer",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌨️",
+      "core": {
+        "frostFreezeReduction": 2,
+        "frostFreezeDurationBonus": 1.0
+      }
+    },
+    "frost_zero": {
+      "id": "frost_zero",
+      "name": "Absoluter Nullpunkt",
+      "description": "Verlangsamung fast bis zum Stillstand, Einfrieren +2 s",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "frostSlowBonus": 0.4,
+        "frostFreezeDurationBonus": 2.0
+      }
+    },
+    "frost_breaker": {
+      "id": "frost_breaker",
+      "name": "Frostbrecher",
+      "description": "Doppelter Schaden gegen erstarrte Gegner, +1 Froststufe",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💠",
+      "core": {
+        "shatterMult": 1.0,
+        "statusStackBonus": 1
+      }
+    },
+    "frost_arsenal": {
+      "id": "frost_arsenal",
+      "name": "Frostarsenal",
+      "description": "+20 % Verlangsamung, +1 Stufe, Höchststufe +2, +3 Schaden",
+      "tag": "frost",
+      "damageType": "frost",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💼",
+      "core": {
+        "frostSlowBonus": 0.2,
+        "statusStackBonus": 1,
+        "statusMaxStacksBonus": 2,
+        "damageAdd": 3
+      }
+    },
+    "poison_dur": {
+      "id": "poison_dur",
+      "name": "Toxin",
+      "description": "Giftdauer +20 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusDurationMult": 1.2
+      }
+    },
+    "poison_tick": {
+      "id": "poison_tick",
+      "name": "Ätzmittel",
+      "description": "Giftschaden +15 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusTickMult": 1.15
+      }
+    },
+    "poison_ammo": {
+      "id": "poison_ammo",
+      "name": "Giftmunition",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🗡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "poison_fang": {
+      "id": "poison_fang",
+      "name": "Giftzahn",
+      "description": "Kritchance +4 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.04
+      }
+    },
+    "poison_stack": {
+      "id": "poison_stack",
+      "name": "Nervengift",
+      "description": "Jeder Treffer legt +1 Giftstufe",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusStackBonus": 1
+      }
+    },
+    "poison_cap": {
+      "id": "poison_cap",
+      "name": "Überdosis",
+      "description": "Gift-Höchststufe 5 → 7",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusMaxStacksBonus": 2
+      }
+    },
+    "poison_plaguecard": {
+      "id": "poison_plaguecard",
+      "name": "Seuche",
+      "description": "Ein Treffer vergiftet nahe Gegner",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☣️",
+      "core": {
+        "poisonSpreadRadius": 70
+      }
+    },
+    "poison_conc": {
+      "id": "poison_conc",
+      "name": "Konzentrat",
+      "description": "Giftschaden +50 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusTickMult": 1.5
+      }
+    },
+    "poison_pandemic": {
+      "id": "poison_pandemic",
+      "name": "Pandemie",
+      "description": "+2 Giftstufen, Höchststufe +5, Giftdauer +50 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧫",
+      "core": {
+        "statusStackBonus": 2,
+        "statusMaxStacksBonus": 5,
+        "statusDurationMult": 1.5
+      }
+    },
+    "poison_bomb": {
+      "id": "poison_bomb",
+      "name": "Toxinbombe",
+      "description": "Giftschaden ×2, Giftdauer +50 %",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "statusTickMult": 2.0,
+        "statusDurationMult": 1.5
+      }
+    },
+    "poison_contagion": {
+      "id": "poison_contagion",
+      "name": "Kontamination",
+      "description": "Treffer vergiften weite Umgebung, +1 Giftstufe",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☣️",
+      "core": {
+        "poisonSpreadRadius": 130,
+        "statusStackBonus": 1
+      }
+    },
+    "poison_arsenal": {
+      "id": "poison_arsenal",
+      "name": "Giftarsenal",
+      "description": "+1 Giftstufe, Giftschaden +30 %, Höchststufe +2, +3 Schaden",
+      "tag": "poison",
+      "damageType": "poison",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💼",
+      "core": {
+        "statusStackBonus": 1,
+        "statusTickMult": 1.3,
+        "statusMaxStacksBonus": 2,
+        "damageAdd": 3
+      }
+    },
+    "light_dmg": {
+      "id": "light_dmg",
+      "name": "Hochspannung",
+      "description": "+2 Schaden pro Treffer",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "damageAdd": 2
+      }
+    },
+    "light_range": {
+      "id": "light_range",
+      "name": "Leitfähigkeit",
+      "description": "Blitz-Sprungreichweite +30",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningRangeBonus": 30
+      }
+    },
+    "light_ion": {
+      "id": "light_ion",
+      "name": "Ionisator",
+      "description": "Kritchance +4 %",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.04
+      }
+    },
+    "light_fast": {
+      "id": "light_fast",
+      "name": "Blitzgeschwindigkeit",
+      "description": "Kugeltempo +12 %",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💨",
+      "core": {
+        "bulletSpeedMult": 1.12
+      }
+    },
+    "light_chain": {
+      "id": "light_chain",
+      "name": "Kettenreaktion",
+      "description": "Blitz springt auf +1 Ziel",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningBonusTargets": 1
+      }
+    },
+    "light_amp": {
+      "id": "light_amp",
+      "name": "Verstärker",
+      "description": "Blitz verliert weniger Schaden je Sprung",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningFalloffBonus": 0.2
+      }
+    },
+    "light_stun": {
+      "id": "light_stun",
+      "name": "Überschlag",
+      "description": "Kettenglieder werden kurz betäubt",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningStun": 0.4
+      }
+    },
+    "light_heavy": {
+      "id": "light_heavy",
+      "name": "Starkstrom",
+      "description": "Schaden ×1,2",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "damageMult": 1.2
+      }
+    },
+    "light_storm": {
+      "id": "light_storm",
+      "name": "Gewittersturm",
+      "description": "Blitz springt auf +3 Ziele, +60 Reichweite",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌩️",
+      "core": {
+        "lightningBonusTargets": 3,
+        "lightningRangeBonus": 60
+      }
+    },
+    "light_super": {
+      "id": "light_super",
+      "name": "Supraleiter",
+      "description": "Blitz verliert fast keinen Schaden je Sprung, +1 Ziel",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningFalloffBonus": 0.28,
+        "lightningBonusTargets": 1
+      }
+    },
+    "light_bolt": {
+      "id": "light_bolt",
+      "name": "Donnerkeil",
+      "description": "Schaden ×1,5, Kettenglieder länger betäubt",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "damageMult": 1.5,
+        "lightningStun": 0.6
+      }
+    },
+    "light_arsenal": {
+      "id": "light_arsenal",
+      "name": "Blitzarsenal",
+      "description": "+2 Kettenziele, +40 Reichweite, +3 Schaden, +5 % Krit",
+      "tag": "lightning",
+      "damageType": "lightning",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💼",
+      "core": {
+        "lightningBonusTargets": 2,
+        "lightningRangeBonus": 40,
+        "damageAdd": 3,
+        "critAdd": 0.05
+      }
+    },
+    "sig_std_drill": {
+      "id": "sig_std_drill",
+      "name": "Grundausbildung",
+      "description": "+2 Schaden und -5% Nachladzeit pro Stufe",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎖",
+      "core": {
+        "damageAdd": 2,
+        "reloadMult": 0.95
+      }
+    },
+    "sig_std_manoever": {
+      "id": "sig_std_manoever",
+      "name": "Manöver",
+      "description": "+8% Fahrtempo und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎖",
+      "core": {
+        "speedMult": 1.08,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_std_gefechtsdrill": {
+      "id": "sig_std_gefechtsdrill",
+      "name": "Gefechtsdrill",
+      "description": "+1 Magazin und +5% Kritchance pro Stufe",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎖",
+      "core": {
+        "magAdd": 1,
+        "critAdd": 0.05
+      }
+    },
+    "sig_std_wanne": {
+      "id": "sig_std_wanne",
+      "name": "Verstärkte Wanne",
+      "description": "+30 LP und +1 Abpraller pro Stufe",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎖",
+      "core": {
+        "hpAdd": 30,
+        "ricochetAdd": 1
+      }
+    },
+    "sig_std_alleskoenner": {
+      "id": "sig_std_alleskoenner",
+      "name": "Alleskönner",
+      "description": "+6 Schaden, -12% Nachladen, +8% Tempo, +20 LP pro Stufe",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "epic",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏅",
+      "core": {
+        "damageAdd": 6,
+        "reloadMult": 0.88,
+        "speedMult": 1.08,
+        "hpAdd": 20
+      }
+    },
+    "sig_std_gardist": {
+      "id": "sig_std_gardist",
+      "name": "Gardist",
+      "description": "+8 Schaden, +2 Magazin und +40 LP",
+      "tag": "signature",
+      "signatureClass": "player",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏅",
+      "core": {
+        "damageAdd": 8,
+        "magAdd": 2,
+        "hpAdd": 40
+      }
+    },
+    "sig_blast_zuender": {
+      "id": "sig_blast_zuender",
+      "name": "Zünder",
+      "description": "+1 Bombe und +8% Explosionsradius pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧨",
+      "core": {
+        "mineAdd": 1,
+        "explosionRadiusMult": 1.08
+      }
+    },
+    "sig_blast_kompression": {
+      "id": "sig_blast_kompression",
+      "name": "Kompression",
+      "description": "+6% Explosionsschaden und -6% Nachladen pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧨",
+      "core": {
+        "explosionDamageMult": 1.06,
+        "reloadMult": 0.94
+      }
+    },
+    "sig_blast_splittermantel": {
+      "id": "sig_blast_splittermantel",
+      "name": "Splittermantel",
+      "description": "+2 Splitter und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧨",
+      "core": {
+        "schrapnellCount": 2,
+        "damageAdd": 4
+      }
+    },
+    "sig_blast_druckwelle": {
+      "id": "sig_blast_druckwelle",
+      "name": "Druckwelle",
+      "description": "+15% Explosionsradius und +10% Explosionsschaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧨",
+      "core": {
+        "explosionRadiusMult": 1.15,
+        "explosionDamageMult": 1.1
+      }
+    },
+    "sig_blast_sprengmeister": {
+      "id": "sig_blast_sprengmeister",
+      "name": "Sprengmeister",
+      "description": "Jeder Schuss zündet, +10% Explosionsradius, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "allExplosive": true,
+        "explosionRadiusMult": 1.1,
+        "damageAdd": 8
+      }
+    },
+    "sig_blast_arsenal": {
+      "id": "sig_blast_arsenal",
+      "name": "Sprengarsenal",
+      "description": "+2 Bomben, +3 Splitter und +12% Explosionsschaden",
+      "tag": "signature",
+      "signatureClass": "c_blast",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "mineAdd": 2,
+        "schrapnellCount": 3,
+        "explosionDamageMult": 1.12
+      }
+    },
+    "sig_frost_kaeltekammer": {
+      "id": "sig_frost_kaeltekammer",
+      "name": "Kältekammer",
+      "description": "+8% Verlangsamung und +3 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "frostSlowBonus": 0.08,
+        "damageAdd": 3
+      }
+    },
+    "sig_frost_raureif": {
+      "id": "sig_frost_raureif",
+      "name": "Raureif",
+      "description": "+8% Froststdauer und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "statusDurationMult": 1.08,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_frost_tiefkuehlung": {
+      "id": "sig_frost_tiefkuehlung",
+      "name": "Tiefkühlung",
+      "description": "Einfrieren eine Stufe früher, längeres Einfrieren",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "frostFreezeReduction": 1,
+        "frostFreezeDurationBonus": 0.5
+      }
+    },
+    "sig_frost_splitterfrost": {
+      "id": "sig_frost_splitterfrost",
+      "name": "Splitterfrost",
+      "description": "+50% Schaden gegen erstarrte Ziele und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "❄",
+      "core": {
+        "shatterMult": 0.5,
+        "damageAdd": 4
+      }
+    },
+    "sig_frost_blizzard": {
+      "id": "sig_frost_blizzard",
+      "name": "Blizzard",
+      "description": "+15% Verlangsamung, +1 Froststufe je Treffer, längeres Einfrieren",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧊",
+      "core": {
+        "frostSlowBonus": 0.15,
+        "statusStackBonus": 1,
+        "frostFreezeDurationBonus": 1.0
+      }
+    },
+    "sig_frost_nullpunkt": {
+      "id": "sig_frost_nullpunkt",
+      "name": "Absoluter Nullpunkt",
+      "description": "Einfrieren eine Stufe früher, +100% Schaden gegen Erstarrte, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_frost",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧊",
+      "core": {
+        "shatterMult": 1.0,
+        "frostFreezeReduction": 1,
+        "damageAdd": 8
+      }
+    },
+    "sig_tesla_leitwerk": {
+      "id": "sig_tesla_leitwerk",
+      "name": "Leitwerk",
+      "description": "+40 Blitz-Sprungreichweite und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningRangeBonus": 40,
+        "damageAdd": 4
+      }
+    },
+    "sig_tesla_kondensator": {
+      "id": "sig_tesla_kondensator",
+      "name": "Kondensator",
+      "description": "Schwächerer Blitzabfall und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningFalloffBonus": 0.08,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_tesla_kettenreaktion": {
+      "id": "sig_tesla_kettenreaktion",
+      "name": "Kettenreaktion",
+      "description": "+1 Blitzziel und +20 Sprungreichweite pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningBonusTargets": 1,
+        "lightningRangeBonus": 20
+      }
+    },
+    "sig_tesla_ueberschlag": {
+      "id": "sig_tesla_ueberschlag",
+      "name": "Überschlag",
+      "description": "Blitzsprünge betäuben und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚡",
+      "core": {
+        "lightningStun": 0.4,
+        "damageAdd": 4
+      }
+    },
+    "sig_tesla_gewitter": {
+      "id": "sig_tesla_gewitter",
+      "name": "Gewittersturm",
+      "description": "+2 Blitzziele, +40 Sprungreichweite, schwächerer Abfall",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌩",
+      "core": {
+        "lightningBonusTargets": 2,
+        "lightningRangeBonus": 40,
+        "lightningFalloffBonus": 0.1
+      }
+    },
+    "sig_tesla_supraleiter": {
+      "id": "sig_tesla_supraleiter",
+      "name": "Supraleiter",
+      "description": "+1 Blitzziel, Blitzsprünge betäuben, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_tesla",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌩",
+      "core": {
+        "lightningBonusTargets": 1,
+        "lightningStun": 0.6,
+        "damageAdd": 8
+      }
+    },
+    "sig_toxic_verseuchung": {
+      "id": "sig_toxic_verseuchung",
+      "name": "Verseuchung",
+      "description": "+8% Giftdauer und +3 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☢",
+      "core": {
+        "statusDurationMult": 1.08,
+        "damageAdd": 3
+      }
+    },
+    "sig_toxic_konzentrat": {
+      "id": "sig_toxic_konzentrat",
+      "name": "Konzentrat",
+      "description": "+10% Gift-Tickschaden und +5% Kritchance pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☢",
+      "core": {
+        "statusTickMult": 1.1,
+        "critAdd": 0.05
+      }
+    },
+    "sig_toxic_nervengift": {
+      "id": "sig_toxic_nervengift",
+      "name": "Nervengift",
+      "description": "+1 Giftstufe je Treffer und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☢",
+      "core": {
+        "statusStackBonus": 1,
+        "damageAdd": 4
+      }
+    },
+    "sig_toxic_seuche": {
+      "id": "sig_toxic_seuche",
+      "name": "Seuche",
+      "description": "Gift breitet sich auf nahe Gegner aus, +20 LP",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☢",
+      "core": {
+        "poisonSpreadRadius": 80,
+        "hpAdd": 20
+      }
+    },
+    "sig_toxic_pandemie": {
+      "id": "sig_toxic_pandemie",
+      "name": "Pandemie",
+      "description": "Giftdeckel +2 (5→7), +1 Giftstufe je Treffer, +10% Tickschaden",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☣",
+      "core": {
+        "statusMaxStacksBonus": 2,
+        "statusStackBonus": 1,
+        "statusTickMult": 1.1
+      }
+    },
+    "sig_toxic_kontamination": {
+      "id": "sig_toxic_kontamination",
+      "name": "Kontamination",
+      "description": "Weite Gift-Ausbreitung, +20% Giftdauer, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_toxic",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☣",
+      "core": {
+        "poisonSpreadRadius": 110,
+        "statusDurationMult": 1.2,
+        "damageAdd": 8
+      }
+    },
+    "sig_flame_brandbeschleuniger": {
+      "id": "sig_flame_brandbeschleuniger",
+      "name": "Brandbeschleuniger",
+      "description": "+10% Branddauer und +3 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "fireDurationMult": 1.1,
+        "damageAdd": 3
+      }
+    },
+    "sig_flame_glutkern": {
+      "id": "sig_flame_glutkern",
+      "name": "Glutkern",
+      "description": "+10% Brand-Tickschaden und +5% Kritchance pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "statusTickMult": 1.1,
+        "critAdd": 0.05
+      }
+    },
+    "sig_flame_napalm": {
+      "id": "sig_flame_napalm",
+      "name": "Napalm",
+      "description": "+1 Brandstufe je Treffer und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "statusStackBonus": 1,
+        "damageAdd": 4
+      }
+    },
+    "sig_flame_brandherd": {
+      "id": "sig_flame_brandherd",
+      "name": "Brandherd",
+      "description": "Feuer breitet sich auf nahe Gegner aus, +20 LP",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔥",
+      "core": {
+        "fireSpreadRadius": 80,
+        "hpAdd": 20
+      }
+    },
+    "sig_flame_inferno": {
+      "id": "sig_flame_inferno",
+      "name": "Inferno",
+      "description": "Branddeckel +2 (3→5), +1 Brandstufe je Treffer, +15% Branddauer",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌋",
+      "core": {
+        "statusMaxStacksBonus": 2,
+        "statusStackBonus": 1,
+        "fireDurationMult": 1.15
+      }
+    },
+    "sig_flame_feuersturm": {
+      "id": "sig_flame_feuersturm",
+      "name": "Feuersturm",
+      "description": "Weite Feuer-Ausbreitung, +20% Tickschaden, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_flame",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌋",
+      "core": {
+        "fireSpreadRadius": 110,
+        "statusTickMult": 1.2,
+        "damageAdd": 8
+      }
+    },
+    "sig_ric_kalibrierung": {
+      "id": "sig_ric_kalibrierung",
+      "name": "Kalibrierung",
+      "description": "+3 Schaden und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "damageAdd": 3,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_ric_bandenschlag": {
+      "id": "sig_ric_bandenschlag",
+      "name": "Bandenschlag",
+      "description": "+10% Schaden auf abgeprallte Schüsse pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "bounceDamageBonus": 0.1
+      }
+    },
+    "sig_ric_schnellfeuer": {
+      "id": "sig_ric_schnellfeuer",
+      "name": "Schnellfeuer",
+      "description": "-6% Nachladen und +1 Magazin pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "reloadMult": 0.94,
+        "magAdd": 1
+      }
+    },
+    "sig_ric_praezision": {
+      "id": "sig_ric_praezision",
+      "name": "Präzision",
+      "description": "+5% Kritchance und +3 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critAdd": 0.05,
+        "damageAdd": 3
+      }
+    },
+    "sig_ric_konterschlag": {
+      "id": "sig_ric_konterschlag",
+      "name": "Konterschlag",
+      "description": "Abgeprallte Schüsse sind kritisch, +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critOnBounce": true,
+        "damageAdd": 4
+      }
+    },
+    "sig_ric_wuchtgeschoss": {
+      "id": "sig_ric_wuchtgeschoss",
+      "name": "Wuchtgeschoss",
+      "description": "+20% Schaden auf abgeprallte Schüsse pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "bounceDamageBonus": 0.2
+      }
+    },
+    "sig_ric_zusatzabpraller": {
+      "id": "sig_ric_zusatzabpraller",
+      "name": "Zusatzabpraller",
+      "description": "+1 Abpraller und +20 LP",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "rare",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "ricochetAdd": 1,
+        "hpAdd": 20
+      }
+    },
+    "sig_ric_verstaerker": {
+      "id": "sig_ric_verstaerker",
+      "name": "Verstärker",
+      "description": "+0,5× Kritfaktor und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "critMultBonus": 0.5,
+        "damageAdd": 4
+      }
+    },
+    "sig_ric_trickmeister": {
+      "id": "sig_ric_trickmeister",
+      "name": "Trickmeister",
+      "description": "Abgeprallte Schüsse kritisch, +0,5× Kritfaktor, +6 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💫",
+      "core": {
+        "critOnBounce": true,
+        "critMultBonus": 0.5,
+        "damageAdd": 6
+      }
+    },
+    "sig_ric_kettenbank": {
+      "id": "sig_ric_kettenbank",
+      "name": "Kettenbank",
+      "description": "+50% Schaden je Wandabpraller des Schusses",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💫",
+      "core": {
+        "bounceRampPerBounce": 0.5
+      }
+    },
+    "sig_ric_querschlaeger": {
+      "id": "sig_ric_querschlaeger",
+      "name": "Querschläger",
+      "description": "+1 Abpraller und +25% Schaden auf abgeprallte Schüsse",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💫",
+      "core": {
+        "ricochetAdd": 1,
+        "bounceDamageBonus": 0.25
+      }
+    },
+    "sig_ric_kanonade": {
+      "id": "sig_ric_kanonade",
+      "name": "Kanonade",
+      "description": "+8 Schaden, +2 Magazin und -12% Nachladen",
+      "tag": "signature",
+      "signatureClass": "c_ricochet",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💫",
+      "core": {
+        "damageAdd": 8,
+        "magAdd": 2,
+        "reloadMult": 0.88
+      }
+    },
+    "sig_scrap_sammler": {
+      "id": "sig_scrap_sammler",
+      "name": "Sammler",
+      "description": "+1 Schrott je Raum und +2 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 1,
+        "damageAdd": 2
+      }
+    },
+    "sig_scrap_verwerter": {
+      "id": "sig_scrap_verwerter",
+      "name": "Verwerter",
+      "description": "+3% Schaden je 100 Schrott und +2 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapDamageBonus": 0.03,
+        "damageAdd": 2
+      }
+    },
+    "sig_scrap_recycling": {
+      "id": "sig_scrap_recycling",
+      "name": "Recycling",
+      "description": "+1 Schrott je Raum und +10 LP pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 1,
+        "hpAdd": 10
+      }
+    },
+    "sig_scrap_werkbank": {
+      "id": "sig_scrap_werkbank",
+      "name": "Werkbank",
+      "description": "-6% Nachladen und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "reloadMult": 0.94,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_scrap_kopfgeld": {
+      "id": "sig_scrap_kopfgeld",
+      "name": "Kopfgeld",
+      "description": "+3 Schrott je Raum und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapAdd": 3,
+        "damageAdd": 4
+      }
+    },
+    "sig_scrap_investition": {
+      "id": "sig_scrap_investition",
+      "name": "Investition",
+      "description": "+6% Schaden je 100 Schrott pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "scrapDamageBonus": 0.06
+      }
+    },
+    "sig_scrap_panzerung": {
+      "id": "sig_scrap_panzerung",
+      "name": "Schrottpanzerung",
+      "description": "+30 LP und +2 Schrott je Raum pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "hpAdd": 30,
+        "scrapAdd": 2
+      }
+    },
+    "sig_scrap_nachschub": {
+      "id": "sig_scrap_nachschub",
+      "name": "Nachschub",
+      "description": "+2 Magazin und +5% Kritchance pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "magAdd": 2,
+        "critAdd": 0.05
+      }
+    },
+    "sig_scrap_mogul": {
+      "id": "sig_scrap_mogul",
+      "name": "Schrottmogul",
+      "description": "+5 Schrott je Raum und +6 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏆",
+      "core": {
+        "scrapAdd": 5,
+        "damageAdd": 6
+      }
+    },
+    "sig_scrap_hochfinanz": {
+      "id": "sig_scrap_hochfinanz",
+      "name": "Hochfinanz",
+      "description": "+12% Schaden je 100 Schrott",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏆",
+      "core": {
+        "scrapDamageBonus": 0.12
+      }
+    },
+    "sig_scrap_juggernaut": {
+      "id": "sig_scrap_juggernaut",
+      "name": "Schrottjuggernaut",
+      "description": "+40 LP, +8 Schaden und +2 Magazin",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏆",
+      "core": {
+        "hpAdd": 40,
+        "damageAdd": 8,
+        "magAdd": 2
+      }
+    },
+    "sig_scrap_goldrausch": {
+      "id": "sig_scrap_goldrausch",
+      "name": "Goldrausch",
+      "description": "+4 Schrott je Raum und +8% Schaden je 100 Schrott",
+      "tag": "signature",
+      "signatureClass": "c_scrap",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏆",
+      "core": {
+        "scrapAdd": 4,
+        "scrapDamageBonus": 0.08
+      }
+    },
+    "sig_necro_geisterkern": {
+      "id": "sig_necro_geisterkern",
+      "name": "Geisterkern",
+      "description": "+15 LP pro Geisterpanzer pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost"],
+      "signatureClass": "c_necro",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostHpAdd": 15
+      }
+    },
+    "sig_necro_seelenkanone": {
+      "id": "sig_necro_seelenkanone",
+      "name": "Seelenkanone",
+      "description": "+2 Schaden pro Geisterpanzer pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost"],
+      "signatureClass": "c_necro",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "ghostDamageAdd": 2
+      }
+    },
+    "sig_necro_unruhigeseelen": {
+      "id": "sig_necro_unruhigeseelen",
+      "name": "Unruhige Seelen",
+      "description": "+10% Fahrtempo der Geisterpanzer pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost"],
+      "signatureClass": "c_necro",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostSpeedMult": 1.1
+      }
+    },
+    "sig_necro_rastlosegeister": {
+      "id": "sig_necro_rastlosegeister",
+      "name": "Rastlose Geister",
+      "description": "-10% Nachladezeit der Geisterpanzer pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost"],
+      "signatureClass": "c_necro",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostFireMult": 0.9
+      }
+    },
+    "sig_necro_seelenruf": {
+      "id": "sig_necro_seelenruf",
+      "name": "Seelenruf",
+      "description": "+1 maximal aktiver Geisterpanzer pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost", "swarm", "quantity"],
+      "signatureClass": "c_necro",
+      "rarity": "common",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "core": {
+        "ghostMaxAdd": 1
+      }
+    },
+    "sig_necro_rudelgeist": {
+      "id": "sig_necro_rudelgeist",
+      "name": "Rudelgeist",
+      "description": "+8% Schaden je weiterem lebenden Geisterpanzer pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost", "swarm"],
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostPackDamagePerAlly": 0.08
+      }
+    },
+    "sig_necro_seelensog": {
+      "id": "sig_necro_seelensog",
+      "name": "Seelensog",
+      "description": "Heilt 10% des Kill-Schadens eines Geisterpanzers als eigene LP pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost", "sustain", "kill"],
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostLifestealPct": 0.1
+      }
+    },
+    "sig_necro_seelenketten": {
+      "id": "sig_necro_seelenketten",
+      "name": "Seelenketten",
+      "description": "Jeder Treffer eines Geisterpanzers betäubt kurz — +0,3 s pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost", "control"],
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostStunOnHit": 0.3
+      }
+    },
+    "sig_necro_seelenkonzentration": {
+      "id": "sig_necro_seelenkonzentration",
+      "name": "Seelenkonzentration",
+      "description": "+15% Schaden und +15% LP der Geisterpanzer pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost", "elite"],
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostDamageMult": 1.15,
+        "ghostHpMult": 1.15
+      }
+    },
+    "sig_necro_letzterwille": {
+      "id": "sig_necro_letzterwille",
+      "name": "Letzter Wille",
+      "description": "Ein sterbender Geisterpanzer reißt Gegner in seiner Nähe mit — Radius und Schaden pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost", "resurrection", "death"],
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostDeathZoneRadius": 60,
+        "ghostDeathZoneDamage": 15
+      }
+    },
+    "sig_necro_wiederkehr": {
+      "id": "sig_necro_wiederkehr",
+      "name": "Wiederkehr",
+      "description": "Ein sterbender Geisterpanzer hat eine Chance, sofort mit vollen LP zurückzukehren — +25% pro Stufe",
+      "tag": "signature",
+      "tags": ["ghost", "resurrection", "death"],
+      "signatureClass": "c_necro",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💀",
+      "_todo": "balance",
+      "core": {
+        "ghostReviveChance": 0.25
+      }
+    },
+    "sig_necro_geisterlegion": {
+      "id": "sig_necro_geisterlegion",
+      "name": "Geisterlegion",
+      "description": "+2 maximal aktive Geisterpanzer",
+      "tag": "signature",
+      "tags": ["ghost", "swarm", "quantity"],
+      "signatureClass": "c_necro",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": ["sig_necro_seelenruf"],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "ghostMaxAdd": 2
+      }
+    },
+    "sig_necro_geisterkommandant": {
+      "id": "sig_necro_geisterkommandant",
+      "name": "Geisterkommandant",
+      "description": "Immer genau ein Geisterpanzer ist ein weit stärkerer Kommandant",
+      "tag": "signature",
+      "tags": ["ghost", "elite", "single_unit"],
+      "signatureClass": "c_necro",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "ghostCommander": true
+      }
+    },
+    "sig_necro_phylakterium": {
+      "id": "sig_necro_phylakterium",
+      "name": "Phylakterium",
+      "description": "Der Geisterkommandant übersteht einmal pro Raum einen tödlichen Treffer",
+      "tag": "signature",
+      "tags": ["ghost", "elite"],
+      "signatureClass": "c_necro",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": ["sig_necro_geisterkommandant"],
+      "minRoom": 1,
+      "symbol": "☠",
+      "core": {
+        "ghostCommanderShield": true
+      }
+    },
+    "sig_necro_unsterblicheseele": {
+      "id": "sig_necro_unsterblicheseele",
+      "name": "Unsterbliche Seele",
+      "description": "Wiederkehr kann pro Geisterpanzer bis zu dreimal statt einmal auslösen",
+      "tag": "signature",
+      "tags": ["ghost", "resurrection"],
+      "signatureClass": "c_necro",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": ["sig_necro_wiederkehr"],
+      "minRoom": 1,
+      "symbol": "☠",
+      "_todo": "balance",
+      "core": {
+        "ghostReviveMaxUses": 3
+      }
+    },
+    "sig_necro_lichpanzer": {
+      "id": "sig_necro_lichpanzer",
+      "name": "Lich-Panzer",
+      "description": "Der Geisterkommandant wird noch einmal deutlich stärker",
+      "tag": "signature",
+      "tags": ["ghost", "elite", "single_unit"],
+      "signatureClass": "c_necro",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": ["sig_necro_geisterkommandant"],
+      "minRoom": 1,
+      "symbol": "☠",
+      "_todo": "balance",
+      "core": {
+        "ghostCommanderMultBonus": 0.75
+      }
+    },
+    "sig_necro_ewigewiederkehr": {
+      "id": "sig_necro_ewigewiederkehr",
+      "name": "Ewige Wiederkehr",
+      "description": "Jede Wiederkehr desselben Geisterpanzers macht ihn dauerhaft stärker — +20% LP und Schaden je Wiedergeburt",
+      "tag": "signature",
+      "tags": ["ghost", "resurrection"],
+      "signatureClass": "c_necro",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": ["sig_necro_wiederkehr"],
+      "minRoom": 1,
+      "symbol": "☠",
+      "_todo": "balance",
+      "core": {
+        "ghostReviveGrowth": 0.2
+      }
+    },
+    "sig_necro_armeedertoten": {
+      "id": "sig_necro_armeedertoten",
+      "name": "Armee der Toten",
+      "description": "+2 maximal aktive Geisterpanzer und +5% Schaden je weiterem lebenden Geisterpanzer",
+      "tag": "signature",
+      "tags": ["ghost", "swarm", "quantity"],
+      "signatureClass": "c_necro",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠",
+      "_todo": "balance",
+      "core": {
+        "ghostMaxAdd": 2,
+        "ghostPackDamagePerAlly": 0.05
+      }
+    },
+    "sig_eng_werkzeugkasten": {
+      "id": "sig_eng_werkzeugkasten",
+      "name": "Werkzeugkasten",
+      "description": "+2 Schaden und +1 Bombe pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "damageAdd": 2,
+        "mineAdd": 1
+      }
+    },
+    "sig_eng_verstaerkung": {
+      "id": "sig_eng_verstaerkung",
+      "name": "Verstärkung",
+      "description": "+20 LP und -5% Nachladen pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "hpAdd": 20,
+        "reloadMult": 0.95
+      }
+    },
+    "sig_eng_sprengfalle": {
+      "id": "sig_eng_sprengfalle",
+      "name": "Sprengfalle",
+      "description": "+8% Explosionsradius und +2 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "explosionRadiusMult": 1.08,
+        "damageAdd": 2
+      }
+    },
+    "sig_eng_praezisionsbau": {
+      "id": "sig_eng_praezisionsbau",
+      "name": "Präzisionsbau",
+      "description": "+5% Kritchance und +8% Geschosstempo pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "common",
+      "maxStacks": 3,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "critAdd": 0.05,
+        "bulletSpeedMult": 1.08
+      }
+    },
+    "sig_eng_bunker": {
+      "id": "sig_eng_bunker",
+      "name": "Bunker",
+      "description": "+25% Sperrmauer-Haltbarkeit und +30 LP pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "builtHpBonus": 0.25,
+        "hpAdd": 30
+      }
+    },
+    "sig_eng_minenfeld": {
+      "id": "sig_eng_minenfeld",
+      "name": "Minenfeld",
+      "description": "+2 Bomben und +10% Explosionsschaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "mineAdd": 2,
+        "explosionDamageMult": 1.1
+      }
+    },
+    "sig_eng_splitterladung": {
+      "id": "sig_eng_splitterladung",
+      "name": "Splitterladung",
+      "description": "+2 Splitter und +4 Schaden pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "schrapnellCount": 2,
+        "damageAdd": 4
+      }
+    },
+    "sig_eng_feldwerkstatt": {
+      "id": "sig_eng_feldwerkstatt",
+      "name": "Feldwerkstatt",
+      "description": "+1 Magazin und -8% Nachladen pro Stufe",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "rare",
+      "maxStacks": 2,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔧",
+      "core": {
+        "magAdd": 1,
+        "reloadMult": 0.92
+      }
+    },
+    "sig_eng_festung": {
+      "id": "sig_eng_festung",
+      "name": "Festung",
+      "description": "+50% Sperrmauer-Haltbarkeit und +40 LP",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏗",
+      "core": {
+        "builtHpBonus": 0.5,
+        "hpAdd": 40
+      }
+    },
+    "sig_eng_grosskaliber": {
+      "id": "sig_eng_grosskaliber",
+      "name": "Großkaliber",
+      "description": "+12% Explosionsradius, +15% Explosionsschaden, +8 Schaden",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "unique",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏗",
+      "core": {
+        "explosionRadiusMult": 1.12,
+        "explosionDamageMult": 1.15,
+        "damageAdd": 8
+      }
+    },
+    "sig_eng_pionierarsenal": {
+      "id": "sig_eng_pionierarsenal",
+      "name": "Pionierarsenal",
+      "description": "+3 Bomben und +3 Splitter",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "legendary",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏗",
+      "core": {
+        "mineAdd": 3,
+        "schrapnellCount": 3
+      }
+    },
+    "sig_eng_chefingenieur": {
+      "id": "sig_eng_chefingenieur",
+      "name": "Chefingenieur",
+      "description": "+8 Schaden, +2 Magazin und +40 LP",
+      "tag": "signature",
+      "signatureClass": "c_engineer",
+      "rarity": "epic",
+      "maxStacks": 1,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏗",
+      "core": {
+        "damageAdd": 8,
+        "magAdd": 2,
+        "hpAdd": 40
+      }
+    }
+  },
+  "fallback": {
+    "name": "+1 Leben",
+    "description": "Ein zusätzliches Leben",
+    "tag": "stat",
+    "rarity": "common",
+    "symbol": "❤️"
+  }
+}
