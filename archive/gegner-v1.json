@@ -1,0 +1,38 @@
+{
+  "_comment": "Archiviert in Phase 0 (Grundsteinumbau v3) am 2026-08-17. Zwei getrennte Faelle: (1) t_prism wird in Phase 1 VOLLSTAENDIG aus dem Spiel entfernt (data/tanks.json:types UND data/difficulty.json:danger) -- Grund: sein gesamtes Konzept (bounceDamageTakenMult, 3x Schaden bei einem Wandabpraller) haengt am Bandenschuss, der in Phase 1 komplett wegfaellt. (2) t_green BLEIBT als Panzertyp im Spiel, wird aber in Phase 3 vom Bankshot-Schuetzen zum Moerserschuetzen umgebaut (requiresBounceShot faellt, weapon wird \"mortar\"). Der hier abgelegte t_green-Eintrag ist die VOR Phase 1/3 gueltige Fassung, reine Referenz fuer \"wie hat es vorher funktioniert\" -- KEIN Restaurierungsziel (der Mortar-Umbau ist gewollt und bleibt auch bei einem Rueckbau des Umbaus die neue Basis). Zum Zurueckholen von t_prism: Eintrag unter \"t_prism\" wieder in data/tanks.json:types, danger-Eintrag wieder in data/difficulty.json:danger einfuegen, armor.js:armorBlocks() nutzt bounceDamageTakenMult direkt aus der Trefferschleife (state.js) mit \"bounced ? cfg.bounceDamageTakenMult : 1\" -- siehe archive/bandenschuss.md fuer die genaue Stelle.",
+  "t_prism": {
+    "speed": "slow",
+    "magazine": 1,
+    "ricochets": 1,
+    "mines": 0,
+    "weapon": "bullet",
+    "role": "sapper",
+    "aggression": 0.17,
+    "accuracy": 0.2,
+    "bounceDamageTakenMult": 3,
+    "label": "Prisma",
+    "maxHp": 40,
+    "damage": 25,
+    "desc": "Nimmt normalen Schaden — aber ein an einer Wand abgeprallter Schuss trifft ihn dreifach statt doppelt. Der Bankshot lohnt sich, ist aber nicht mehr Pflicht."
+  },
+  "t_prism_danger": {
+    "points": 7,
+    "unlockRoom": 6,
+    "maxPerRoom": 1
+  },
+  "t_green_pre_phase1_und_3_referenz": {
+    "speed": "fix",
+    "magazine": 2,
+    "ricochets": 2,
+    "mines": 0,
+    "weapon": "rocket",
+    "role": "guardian",
+    "accuracy": 0.9,
+    "label": "Grüner",
+    "maxHp": 40,
+    "damage": 25,
+    "desc": "Steht fest und rechnet Abprallwinkel aus: schießt fast nur Bankshots mit 2 Abprallern — lädt 2 s pro Schuss nach.",
+    "fireRate": 2,
+    "requiresBounceShot": true
+  }
+}
