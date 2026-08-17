@@ -27,7 +27,6 @@ import {
   buyShopCard,
   buyShopSecondary,
   buyShopLife,
-  rerollSecondElement,
   ROOM_TYPE_INFO,
 } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
@@ -399,16 +398,15 @@ async function init() {
     touch.setGadgetLabel(run.equippedGadget ? tanksData.secondaries?.[run.equippedGadget]?.label || 'GADGET' : '');
   }
 
-  // Phase 17: "Elemente: Feuer + Frost" -- Primaer- + Zweitelement der Klasse,
-  // Anzeigenamen aus status.json. Zeigt das Zweitelement nur, wenn es sich vom
-  // Primaerelement unterscheidet.
+  // "Element: Feuer" -- Primaerelement der Klasse, Anzeigename aus status.json.
+  // Grundsteinumbau Phase 4: das Zweitelement-System (UMBAUPLAN-LP Phase 17)
+  // ist entfernt (archive/systeme-v1.md Abschnitt 2) -- nur noch die reine
+  // Primaerelement-Zeile bleibt als Info stehen.
   function elementLineFor(run) {
     const dt = tanksData.status?.damageTypes || {};
     const nameOf = (id) => dt[id]?.name || id;
     const primary = tanksData.types[run.starterTank]?.damageType || 'physical';
-    const second = run.secondElement;
-    if (!second || second === primary) return `Element: ${nameOf(primary)}`;
-    return `Elemente: ${nameOf(primary)} + ${nameOf(second)}`;
+    return `Element: ${nameOf(primary)}`;
   }
 
   function launchRun(seed, modeKey, resume) {
@@ -776,13 +774,10 @@ async function init() {
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shopLife', amount: costs.shopLife });
           return ok;
         },
-        // Phase 17: Zweitelement gegen Schrott neu wuerfeln.
-        getSecondElement: () => tanksData.status?.damageTypes?.[run.secondElement]?.name || run.secondElement || '—',
-        onRerollElement: () => {
-          const ok = rerollSecondElement(run);
-          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'rerollElement', amount: costs.rerollElement });
-          return ok;
-        },
+        // Grundsteinumbau Phase 4: Zweitelement-Reroll entfernt (Zweitelement-
+        // System selbst ist weg, archive/systeme-v1.md Abschnitt 2) --
+        // roomscreens.js zeigt die Shop-Sektion nur bei gesetztem
+        // onRerollElement, ohne den Callback bleibt sie unsichtbar.
         onDrop: (id) => {
           const ok = dropUpgrade(run, id);
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'drop', amount: -refund });

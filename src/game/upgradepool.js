@@ -14,8 +14,8 @@
 //  - Tags `weapon` und `elite` sind hier ausgeschlossen, bis auf die Karten
 //    in WEAPON_ALLOWLIST (Phase 18: doppelrohr, flak).
 //  - Verbannte ids (Phase 3, Schrott-Aktion) werden uebersprungen.
-//  - Reichen die gueltigen Karten nicht fuer N, wird mit stat-Fallback
-//    ("+1 Leben") aufgefuellt, statt zu crashen.
+//  - Reichen die gueltigen Karten nicht fuer N, gibt es sauber WENIGER als N
+//    Angebote (Grundsteinumbau Phase 4: kein Fallback-Auffuellen mehr).
 //  - Upgradepool-v2 Phase 3: Karten mit passenden tags[] (Synergie-Tags aus
 //    Phase 2) werden anhand von opts.synergyTags (run.synergyTags) hoeher
 //    gewichtet -- gedeckelt, schliesst nie eine Karte aus, s. makeSynergyWeight().
@@ -68,15 +68,11 @@ export function weightedPick(list, rng, weights, elementWeight = () => 1) {
   return list[list.length - 1];
 }
 
-// Faktor je Karte fuer die Element-Gewichtung. Karten OHNE damageType
-// (Kernpool/Alt) und Karten des Primaerelements: 1; Karten des Zweitelements:
-// secondWeight. opts.secondElement/secondWeight kommen aus run.js: poolOpts.
-function makeElementWeight(opts) {
-  const second = opts.secondElement;
-  const secondWeight = opts.secondWeight ?? 0.5;
-  if (!second) return () => 1;
-  return (d) => (d.damageType === second ? secondWeight : 1);
-}
+// Grundsteinumbau Phase 4: die Element-Gewichtung (Zweitelement,
+// UMBAUPLAN-LP Phase 17) ist mit den damageType-Karten aus dem Pool
+// entfernt -- ohne eine einzige damageType-Karte im 5-Karten-Sockel waere
+// sie wirkungslos gewesen. Details/Wiederanschlusspunkt: ARCHIV.md,
+// archive/systeme-v1.md Abschnitt 2.
 
 // Upgradepool-v2 Phase 3: Synergiegewichtung. opts.synergyTags ist die
 // laufende Tag-Bilanz der GEWAEHLTEN Karten (run.synergyTags, ueber tags[] --
@@ -101,14 +97,13 @@ function makeSynergyWeight(opts) {
   };
 }
 
-// Element- und Synergiegewicht MULTIPLIZIEREN sich zu einem einzigen Faktor
-// je Karte -- weightedPick() normiert diesen Faktor pro Seltenheitsstufe
-// (s. Kopfkommentar dort), die Rarity-Verteilung bleibt dadurch unangetastet,
-// egal wie stark Element/Synergie eine einzelne Karte gewichten.
+// Grundsteinumbau Phase 4: hiess bis dahin makeCombinedWeight() und
+// multiplizierte Element- und Synergiegewicht -- das Elementgewicht ist mit
+// dem Zweitelement-System entfallen (s. o.), makeSynergyWeight() bleibt als
+// alleiniger Gewichtungsfaktor bestehen. weightedPick() normiert ihn weiter
+// pro Seltenheitsstufe (s. Kopfkommentar dort).
 function makeCombinedWeight(opts) {
-  const elementWeight = makeElementWeight(opts);
-  const synergyWeight = makeSynergyWeight(opts);
-  return (d) => elementWeight(d) * synergyWeight(d);
+  return makeSynergyWeight(opts);
 }
 
 function makeOffer(def, chosen) {
@@ -121,7 +116,6 @@ function makeOffer(def, chosen) {
     rarity: def.rarity,
     level: (chosen[def.id] || 0) + 1,
     maxStacks: def.maxStacks,
-    fallback: false,
   };
 }
 
@@ -139,27 +133,13 @@ function dedupeKey(d) {
   return d.signatureClass ? `sig:${d.id}` : d.tag;
 }
 
-function fallbackOffer(upgradesData) {
-  const f = upgradesData.fallback;
-  return {
-    id: null,
-    name: f.name,
-    description: f.description,
-    tag: f.tag || 'stat',
-    rarity: f.rarity || 'common',
-    level: 0,
-    maxStacks: 0,
-    fallback: true,
-  };
-}
-
 // Alle aktuell gueltigen Upgrade-Definitionen (ohne Tag-/Slot-Regel).
 // Zusatz-Optionen (Phase 4, Elite-/Treasure-Belohnung):
 //   includeTag     -- nur dieser Tag (umgeht die EXCLUDED_TAGS, z. B. 'elite')
 //   onlyRarity     -- nur diese Seltenheit (z. B. 'legendary' fuer Treasure)
 //   bypassRoomGate -- minRoom + rarityGates ignorieren
 function buildCandidates(upgradesData, opts) {
-  const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate, elements, starterTank } = opts;
+  const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate, starterTank } = opts;
   // Upgradepool-v2 Phase 1: generischer Ersatz fuer das fruehere einzelne
   // legendary.minRoom -- jede Stufe in rarityGates bekommt ihr eigenes
   // globales Mindestraum-Gate (common/rare haben keinen Eintrag -> kein Gate).
@@ -172,12 +152,11 @@ function buildCandidates(upgradesData, opts) {
     if (includeTag) {
       if (def.tag !== includeTag) continue; // nur dieser Tag (bypass EXCLUDED)
     } else if (EXCLUDED_TAGS.has(def.tag) && !(def.tag === 'weapon' && WEAPON_ALLOWLIST.has(id))) continue;
-    // UMBAUPLAN-LP Phase 11: typgebundene Karten nur, wenn ihr damageType zum
-    // Element (Primaer + spaeter Zweit) der Klasse passt. Karten OHNE damageType
-    // (Kernpool, Altkarten) sind universell und bleiben immer sichtbar. Der
-    // Filter greift nur beim normalen Angebot (elements gesetzt) -- Elite-/
-    // Treasure-Belohnungen (includeTag/onlyRarity) lassen ihn bewusst aus.
-    if (elements && def.damageType && !elements.includes(def.damageType)) continue;
+    // Grundsteinumbau Phase 4: der Element-Filter (UMBAUPLAN-LP Phase 11,
+    // "typgebundene Karten nur bei passendem Klassen-Element") ist mit den
+    // damageType-Karten aus dem Pool entfernt -- ARCHIV.md,
+    // archive/systeme-v1.md Abschnitt 3. signatureClass (klassengebunden,
+    // NICHT elementgebunden) bleibt als Pipeline-Baustein bestehen, s. u.
     // UMBAUPLAN-LP Phase 18 (Signaturtoepfe): eine Karte mit signatureClass
     // gehoert genau EINER Klasse und erscheint nur, wenn diese Klasse gespielt
     // wird. Karten OHNE signatureClass sind universell (unveraendert). Ohne
@@ -236,15 +215,18 @@ export function rollOffers(upgradesData, opts) {
     pool = pool.filter((d) => d.id !== pick.id);
   }
 
-  // Auffuellen (Crash-Schutz). Der stat-Fallback ist die dokumentierte
-  // Ausnahme von der Tag-Regel -- nur wenn echte Karten fehlen.
-  while (offers.length < n) offers.push(fallbackOffer(upgradesData));
+  // Grundsteinumbau Phase 4: kein Fallback-Karten-Auffuellen mehr -- ist der
+  // Pool erschoepft (5-Karten-Sockel, hoechstens 20 Gesamtstufen), gibt es
+  // sauber WENIGER als n Angebote statt einer aufgefuellten "+1 Leben"-Karte
+  // (ARCHIV.md). Aufrufer muessen ein leeres/kuerzeres Array vertragen --
+  // run.js tut das seit dieser Phase (Sicherheitsnetz bei rollReward()).
   return offers;
 }
 
 // Zieht EINE zusaetzliche/ersetzende Karte, deren Tag noch nicht in
 // avoidTags vorkommt und deren id nicht in avoidIds ist (Phase-3-Aktionen
-// "Verbannen" und "Vierte Karte"). Kein Kandidat -> stat-Fallback.
+// "Verbannen" und "Vierte Karte"). Kein Kandidat -> null (Grundsteinumbau
+// Phase 4: kein Fallback mehr, s. rollOffers()).
 export function drawOne(upgradesData, opts, avoidTags, avoidIds) {
   const { chosen = {}, rng, balance } = opts;
   const weights = balance.rarity;
@@ -253,6 +235,6 @@ export function drawOne(upgradesData, opts, avoidTags, avoidIds) {
   const eligible = buildCandidates(upgradesData, opts).filter(
     (d) => !at.has(d.tag) && !ai.has(d.id),
   );
-  if (!eligible.length) return fallbackOffer(upgradesData);
+  if (!eligible.length) return null;
   return makeOffer(weightedPick(eligible, rng, weights, makeCombinedWeight(opts)), chosen);
 }

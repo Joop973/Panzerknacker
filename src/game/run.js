@@ -47,10 +47,14 @@ const BOSS_ENEMY_TYPES = {
 export const ROOM_TYPE_INFO = {
   combat: { name: 'Kampf', symbol: '⚔️', desc: 'Ein normaler Gefechtsraum.' },
   elite: { name: 'Elite', symbol: '★', desc: 'Härtere Gegner mit Affix · doppelter Schrott · Elite-Belohnung.' },
-  treasure: { name: 'Schatz', symbol: '💎', desc: 'Keine Gegner · 1 Legendär — kostet 1 Leben.' },
+  // Grundsteinumbau Phase 4: der Sockel hat keine einzige legendaere Karte
+  // mehr -- treasure/cursed geben deshalb ein Schrottpaket statt einer
+  // Kartenwahl (grantTreasureScrap()). rollReward()s onlyRarity:'legendary'-
+  // Zweig bleibt als Wiederanschlusspunkt bestehen (archive/systeme-v1.md).
+  treasure: { name: 'Schatz', symbol: '💎', desc: 'Keine Gegner · Schrottpaket — kostet 1 Leben.' },
   workshop: { name: 'Shop', symbol: '🛒', desc: 'Keine Gegner · Karten, Schild, Sekundärwaffe, Leben kaufen · Upgrade ablegen.' },
   event: { name: 'Ereignis', symbol: '❓', desc: 'Keine Gegner · eine Entscheidung.' },
-  cursed: { name: 'Verflucht', symbol: '☠️', desc: 'Gegner mit zusätzlichem Affix · garantiertes Legendär.' },
+  cursed: { name: 'Verflucht', symbol: '☠️', desc: 'Gegner mit zusätzlichem Affix · Schrottpaket-Belohnung.' },
 };
 
 // Kauft Gegner vom Gefahrenbudget (nur freigeschaltete Typen, max. 8).
@@ -236,8 +240,6 @@ export function runSnapshot(run) {
     seed: run.seed,
     modeKey: run.modeKey,
     starterTank: run.starterTank, // Phase 9: die Klasse gehoert in die Seed-Wiedergabe
-    secondElement: run.secondElement, // Phase 17: aktuelles Zweitelement (nach Rerolls)
-    elementRerolls: run.elementRerolls || 0,
     roomIndex: run.roomIndex,
     roomType: run.roomType,
     mapCurrentId: run.mapCurrentId, // Phase 12: Position auf der Karte (Wahl, nicht ableitbar)
@@ -477,14 +479,41 @@ function rollRoomHazard(run) {
   return type;
 }
 
+// Grundsteinumbau Phase 4: Schatzkammer/Verflucht gaben vorher ein
+// garantiertes Legendaer (Tag-Regel aus). Der Sockel hat aktuell keine
+// einzige legendaere Karte -- ein "Legendaer"-Angebot waere ein leeres
+// Angebot mit Kartenscreen und keinem Weg, ihn zu verlassen (dieselbe
+// Fehlerklasse wie der fruehere Kartenscreen-Blocker, siehe CLAUDE.md:
+// "Bugfix: Kartenscreen blockierte den Run"). Bewusst NICHT geloescht:
+// rollReward()s onlyRarity:'legendary'-Zweig bleibt unangetastet als
+// Wiederanschlusspunkt fuer kuenftige Klassenpools mit Legendaries
+// (archive/systeme-v1.md, Abschnitt 4 "Nicht loeschen, nur umleiten").
+// Bis dahin gibt es ein Schrottpaket (balance.json: scrap.treasure) OHNE
+// Kartenscreen.
+function grantTreasureScrap(run) {
+  const amount = run.data.balance.scrap.treasure ?? 0;
+  run.scrap += amount;
+  run.scrapThisRoom += amount;
+  const st = run.state;
+  if (st?.player) {
+    st.texts.push({
+      x: st.player.x,
+      y: st.player.y - 30,
+      text: `+${amount} Schrott`,
+      age: 0,
+      life: 1.2,
+      color: '#e0c860',
+    });
+  }
+}
+
 // Nicht-Kampf-Raum: kein neuer Arena-Zustand -- der Vorraum bleibt Kulisse.
 function startNonCombatRoom(run, type) {
   if (type === 'treasure') {
     // Kostet beim Betreten Leben (nie toedlich -- Tuer war ab 1 Leben gesperrt).
     run.lives = Math.max(1, run.lives - run.difficulty.treasure.lifeCost);
-    run.rewardKind = 'treasure';
-    run.pendingOffers = rollReward(run);
-    run.phase = 'upgrade';
+    grantTreasureScrap(run);
+    afterRoomDone(run);
   } else if (type === 'workshop') {
     // Shop (Phase 13): Kartenregal EINMAL beim Betreten ziehen, damit es
     // sich beim Neu-Rendern nach jeder Aktion nicht neu mischt. Beim
@@ -665,21 +694,11 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
   // GANZEN Run unveraendert -- "vollstaendig vorab einsehbar" (PLAN.md).
   run.map = generateMap(run.seed, difficulty);
   run.mapCurrentId = run.map.layers[0][0].id; // Startknoten (Raum 1)
-  // Zweitelement (UMBAUPLAN-LP Phase 17): beim Runstart deterministisch aus dem
-  // Seed gezogen (eigener run-weiter Strom), im Shop gegen Schrott neu
-  // wuerfelbar (elementRerolls zaehlt hoch -> anderer Strom, weiter
-  // deterministisch). Wird mit halber Gewichtung in die Angebote gemischt.
-  run.elementRerolls = 0;
-  run.secondElement = drawSecondElement(run.seed, primaryElementOf(run), run.elementRerolls);
   // Fortsetzen: Zustand vor dem Raumbau einspielen, damit startRoom()
   // denselben Raum wie beim Abbruch erzeugt (Seed + Raumnummer genuegen).
   if (opts.resume) {
     const r = opts.resume;
     run.starterTank = r.starterTank || run.starterTank; // Phase 9: Klasse aus dem Snapshot
-    // Phase 17: Zweitelement aus dem Snapshot (nach evtl. Shop-Rerolls). Fehlt
-    // es (Altstand), aus Seed + Reroll-Index deterministisch nachziehen.
-    run.elementRerolls = r.elementRerolls || 0;
-    run.secondElement = r.secondElement || drawSecondElement(run.seed, primaryElementOf(run), run.elementRerolls);
     run.roomIndex = r.roomIndex;
     run.lives = r.lives;
     run.shieldCharges = (r.shieldCharges || []).slice();
@@ -867,10 +886,32 @@ export function stepRun(run, cmd, dt) {
       finishRun(run, true);
       return;
     }
-    // Belohnung: Eliteraeume ziehen aus dem Elite-Pool, Verflucht (Phase 12)
-    // gibt ein garantiertes Legendaer wie eine Schatzkammer, sonst normal.
-    run.rewardKind = run.roomType === 'elite' ? 'elite' : run.roomType === 'cursed' ? 'cursed' : 'normal';
-    run.pendingOffers = rollReward(run);
+    // Belohnung: Eliteraeume ziehen aus dem Elite-Pool. Verflucht (Phase 12)
+    // gab vorher ein garantiertes Legendaer wie eine Schatzkammer -- der
+    // Sockel hat keins mehr, also dasselbe Schrottpaket wie treasure
+    // (Grundsteinumbau Phase 4, grantTreasureScrap() oben).
+    if (run.roomType === 'cursed') {
+      grantTreasureScrap(run);
+      afterRoomDone(run);
+      return;
+    }
+    run.rewardKind = run.roomType === 'elite' ? 'elite' : 'normal';
+    const offers = rollReward(run);
+    if (!offers.length) {
+      // Sicherheitsnetz (Grundsteinumbau Phase 4, proaktiv -- kein
+      // Auftragstext dazu): der Sockel hat nur 5 Karten mit begrenzten
+      // maxStacks (max. 20 Stufen insgesamt). Ein hinreichend langer Run
+      // (v. a. Endlos) kann den Pool leerziehen -- rollReward()/rollOffers()
+      // liefern dann bewusst ein KUERZERES statt eines aufgefuellten Arrays
+      // (kein Fallback mehr, s. upgradepool.js). Ohne dieses Netz bliebe
+      // run.phase auf 'upgrade' mit 0 Angeboten haengen, ohne Weiter-Knopf --
+      // derselbe Fehlerklasse wie der fruehere Kartenscreen-Blocker
+      // (CLAUDE.md: "Bugfix: Kartenscreen blockierte den Run").
+      run.rewardKind = null;
+      afterRoomDone(run);
+      return;
+    }
+    run.pendingOffers = offers;
     run.phase = 'upgrade';
   }
 }
@@ -884,14 +925,9 @@ function poolOpts(run) {
     balance: run.data.balance,
     count: run.upgradesData.offersPerScreen,
     banned: run.bannedUpgrades,
-    // UMBAUPLAN-LP Phase 11: Element-Filter. Typgebundene Karten (damageType)
-    // erscheinen nur, wenn ihr Typ zum Element der gewaehlten Klasse passt --
-    // ein Frostpanzer sieht keine reinen Feuerkarten. Phase 17: das
-    // Zweitelement kommt mit halber Gewichtung dazu (secondElement + weight).
-    elements: elementsOf(run),
-    secondElement: run.secondElement && run.secondElement !== primaryElementOf(run) ? run.secondElement : null,
-    secondWeight: run.data.balance.upgrades?.secondElementWeight ?? 0.5,
-    // Phase 18: Signaturkarten der gewaehlten Klasse (signatureClass-Filter).
+    // Phase 18: Signaturkarten der gewaehlten Klasse (signatureClass-Filter,
+    // bleibt als Pipeline-Baustein bestehen -- der Sockel setzt aktuell
+    // keine signatureClass, s. archive/systeme-v1.md Abschnitt 3).
     starterTank: run.starterTank,
     // Upgradepool-v2 Phase 3: laufende Synergie-Tag-Bilanz fuer die
     // Angebotsgewichtung (makeSynergyWeight in upgradepool.js).
@@ -899,55 +935,26 @@ function poolOpts(run) {
   };
 }
 
-// Alle Schadenstypen (Elemente), aus denen ein Zweitelement gezogen werden
-// kann. Reihenfolge fest, damit die Seed-Wiedergabe stabil bleibt.
-const ELEMENTS = ['physical', 'explosive', 'fire', 'frost', 'poison', 'lightning'];
-
-// Das Primaerelement der gewaehlten Klasse.
-function primaryElementOf(run) {
-  return run.data.types[run.starterTank]?.damageType || 'physical';
-}
-
-// Ein zufaelliges Zweitelement (!= Primaerelement), deterministisch aus Seed +
-// Reroll-Index (Phase 17). idx 0 = Runstart, jeder Shop-Reroll erhoeht ihn.
-function drawSecondElement(seed, primary, idx = 0) {
-  const rng = rngForRun(seed, `element_${idx}`);
-  const pool = ELEMENTS.filter((e) => e !== primary);
-  return pool[Math.floor(rng() * pool.length)];
-}
-
-// Die Schadenstypen, deren typgebundene Karten die Klasse ziehen darf: das
-// Primaerelement (volle Gewichtung) + das Zweitelement (halb, s. poolOpts).
-function elementsOf(run) {
-  const primary = primaryElementOf(run);
-  const els = [primary];
-  if (run.secondElement && run.secondElement !== primary) els.push(run.secondElement);
-  return els;
-}
-
-// Schrott-Reroll des Zweitelements im Shop (Phase 17). Aendert den Pool sofort
-// fuer das naechste Angebot.
-export function rerollSecondElement(run) {
-  const cost = run.data.balance.scrap.cost.rerollElement;
-  if (run.scrap < cost) return false;
-  run.scrap -= cost;
-  run.elementRerolls = (run.elementRerolls || 0) + 1;
-  run.secondElement = drawSecondElement(run.seed, primaryElementOf(run), run.elementRerolls);
-  return true;
-}
+// Grundsteinumbau Phase 4: das Zweitelement-System (UMBAUPLAN-LP Phase 17)
+// und der Element-Filter (Phase 11) sind mit den damageType-Karten aus dem
+// Sockel entfernt -- ELEMENTS/primaryElementOf/drawSecondElement/
+// elementsOf/rerollSecondElement sind ersatzlos geloescht. Details/
+// Wiederanschlusspunkt: ARCHIV.md, archive/systeme-v1.md Abschnitt 2.
 
 // Belohnungs-Angebote je nach Raumtyp (Seed-RNG -> deterministisch):
-//   normal   = Standardpool (Tag-Regel, Rarity, maxStacks/requires/minRoom)
-//   elite    = normale Dreierauswahl BLEIBT, zusaetzlich automatisch (ohne
-//              Schrottkosten) eine 4. Karte aus Tag 'elite' (Phase 9,
-//              v3-Review-Korrektur: die alte Variante ERSETZTE die normale
-//              Auswahl komplett -- bei nur 2-3 Elite-Karten die schlechtere
-//              Wahl als eine normale Runde)
-//   treasure = nur Legendaries (Tag-Regel aus, Raumgrenzen aus)
-//   cursed   = dieselbe Nur-Legendaries-Regel wie treasure (Phase 12) --
-//              der garantierte Fund ist der Ausgleich fuer den erzwungenen
-//              Affix, kostet aber (anders als treasure) kein Leben
-// Fehlende Slots fuellt der Pool mit "+1 Leben" auf.
+//   normal = Standardpool (Tag-Regel, Rarity, maxStacks/requires/minRoom)
+//   elite  = normale Dreierauswahl BLEIBT, zusaetzlich automatisch (ohne
+//            Schrottkosten) eine 4. Karte aus Tag 'elite' (Phase 9,
+//            v3-Review-Korrektur: die alte Variante ERSETZTE die normale
+//            Auswahl komplett -- bei nur 2-3 Elite-Karten die schlechtere
+//            Wahl als eine normale Runde)
+// Grundsteinumbau Phase 4: 'treasure'/'cursed' rufen rollReward() nicht mehr
+// auf (grantTreasureScrap() ersetzt sie) -- der onlyRarity:'legendary'-Zweig
+// bleibt trotzdem stehen (Wiederanschlusspunkt, s. o.). rollOffers()/drawOne()
+// fuellen ein erschoepftes Angebot seit dieser Phase nicht mehr mit einer
+// Fallback-Karte auf -- Aufrufer hier vertragen ein kuerzeres/leeres Array
+// (rerollOffers(), die Elite-4.-Karte hier, der Sicherheitsnetz-Zweig in
+// stepRun()).
 function rollReward(run) {
   const base = poolOpts(run);
   if (run.rewardKind === 'treasure' || run.rewardKind === 'cursed') {
@@ -960,17 +967,18 @@ function rollReward(run) {
   }
   if (run.rewardKind === 'elite') {
     const offers = rollFromPool(run.upgradesData, base);
-    const avoidTags = new Set(offers.filter((o) => !o.fallback).map((o) => o.tag));
-    const avoidIds = new Set(offers.filter((o) => !o.fallback).map((o) => o.id));
+    const avoidTags = new Set(offers.map((o) => o.tag));
+    const avoidIds = new Set(offers.map((o) => o.id));
     const eliteCard = drawOne(
       run.upgradesData,
       { ...base, includeTag: 'elite', bypassRoomGate: true },
       avoidTags,
       avoidIds,
     );
-    // Elite-Pool erschoepft (alle 3 Karten maxStacks erreicht) -> keine
-    // 4. Karte statt eines redundanten zweiten Fallbacks.
-    if (!eliteCard.fallback) offers.push(eliteCard);
+    // Elite-Pool erschoepft (alle Elite-Karten maxStacks erreicht, oder --
+    // wie im Sockel aktuell -- gar keine Karte mit Tag 'elite' vorhanden)
+    // -> keine 4. Karte statt eines Platzhaltereintrags.
+    if (eliteCard) offers.push(eliteCard);
     return offers;
   }
   return rollFromPool(run.upgradesData, base);
@@ -984,8 +992,12 @@ export function rerollOffers(run) {
   if (run.phase !== 'upgrade' || !run.pendingOffers) return false;
   const cost = run.data.balance.scrap.cost.reroll;
   if (run.scrap < cost) return false;
+  const offers = rollReward(run); // gleicher Belohnungs-Typ
+  // Grundsteinumbau Phase 4: Pool erschoepft -> kein Reroll moeglich, kein
+  // Schrott verloren (vor dem Abzug geprueft statt danach).
+  if (!offers.length) return false;
   run.scrap -= cost;
-  run.pendingOffers = rollReward(run); // gleicher Belohnungs-Typ
+  run.pendingOffers = offers;
   return true;
 }
 
@@ -994,15 +1006,19 @@ export function rerollOffers(run) {
 export function banOffer(run, index) {
   if (run.phase !== 'upgrade' || !run.pendingOffers) return false;
   const offer = run.pendingOffers[index];
-  if (!offer || offer.fallback) return false; // Fallback ist nicht verbannbar
+  if (!offer) return false;
   const cost = run.data.balance.scrap.cost.ban;
   if (run.scrap < cost) return false;
   run.scrap -= cost;
   run.bannedUpgrades.add(offer.id);
   const kept = run.pendingOffers.filter((_, i) => i !== index);
-  const avoidTags = new Set(kept.filter((o) => !o.fallback).map((o) => o.tag));
-  const avoidIds = new Set(kept.filter((o) => !o.fallback).map((o) => o.id));
-  run.pendingOffers[index] = drawOne(run.upgradesData, poolOpts(run), avoidTags, avoidIds);
+  const avoidTags = new Set(kept.map((o) => o.tag));
+  const avoidIds = new Set(kept.map((o) => o.id));
+  const replacement = drawOne(run.upgradesData, poolOpts(run), avoidTags, avoidIds);
+  // Grundsteinumbau Phase 4: kein Fallback mehr -- ist der Pool erschoepft,
+  // faellt die verbannte Karte ersatzlos weg statt eines Platzhaltereintrags.
+  if (replacement) run.pendingOffers[index] = replacement;
+  else run.pendingOffers.splice(index, 1);
   return true;
 }
 
@@ -1013,10 +1029,10 @@ export function buyFourthCard(run) {
   if (run.pendingOffers.length >= 4) return false;
   const cost = run.data.balance.scrap.cost.fourthCard;
   if (run.scrap < cost) return false;
-  const avoidTags = new Set(run.pendingOffers.filter((o) => !o.fallback).map((o) => o.tag));
-  const avoidIds = new Set(run.pendingOffers.filter((o) => !o.fallback).map((o) => o.id));
+  const avoidTags = new Set(run.pendingOffers.map((o) => o.tag));
+  const avoidIds = new Set(run.pendingOffers.map((o) => o.id));
   const extra = drawOne(run.upgradesData, poolOpts(run), avoidTags, avoidIds);
-  if (extra.fallback) return false; // nichts Sinnvolles mehr -> kein Kauf
+  if (!extra) return false; // nichts Sinnvolles mehr -> kein Kauf
   run.scrap -= cost;
   run.pendingOffers.push(extra);
   return true;
@@ -1091,46 +1107,62 @@ export function buyShopLife(run) {
 // Bewusst ohne Raumfluss/Kosten -- die Aufrufer entscheiden, was danach
 // passiert: chooseUpgrade() zieht weiter, buyShopCard() (Phase 13) bleibt
 // im Shop. So gibt es die Sonderfaelle (Sekundärslot, Glaskanone,
-// Notschild, Trophäe, Kriegsbeute) nur EINMAL im Code.
+// Notschild, Trophäe, Kriegsbeute, Ersatzpanzer) nur EINMAL im Code.
+//
+// Grundsteinumbau Phase 4: der fruehere `offer.fallback`-Zweig ("+1 Leben"
+// ohne echte Karte) ist entfallen -- rollOffers()/drawOne() liefern seit
+// dieser Phase nie mehr eine Fallback-Karte (s. upgradepool.js), jeder
+// `offer` hier ist also immer eine echte Sockelkarte.
 function applyUpgradeChoice(run, offer) {
-  if (offer.fallback) {
-    run.lives++;
-  } else {
-    run.upgrades[offer.id] = (run.upgrades[offer.id] || 0) + 1;
-    // Gadgetslot (P4): eine neue Gadgetkarte ersetzt das aktive Gadget --
-    // die alte Karte bleibt in run.upgrades stehen (maxStacks 1 verhindert
-    // ein erneutes Ziehen), ist aber nicht mehr ausgeruestet. Die Bombe
-    // liegt seit P4 im eigenen, festen Slot und kann nie verloren gehen.
-    if (offer.tag === 'gadget') run.equippedGadget = offer.id;
-    // Glaskanone: reduziert die Leben dauerhaft auf 1 (starker Trade-off).
-    if (offer.id === 'glaskanone') run.lives = 1;
-    // Notschild: jede Stufe gibt chargesPerStack Ladungen (raumuebergreifend).
-    if (offer.id === 'emergency_shield') {
-      const cps = run.upgradesData.upgrades.emergency_shield.chargesPerStack || 1;
-      addShieldCharges(run, cps);
-    }
-    // Trophäe (Elite): +Schildladung(en), dauerhaft.
-    if (offer.id === 'trophaee') {
-      addShieldCharges(run, run.upgradesData.upgrades.trophaee.shieldCharges || 1);
-    }
-    // Kriegsbeute (Elite, Phase 9): sofortiger Schrott-Bonus.
-    if (offer.id === 'kriegsbeute') {
-      run.scrap += run.upgradesData.upgrades.kriegsbeute.scrapBonus || 5;
-    }
+  run.upgrades[offer.id] = (run.upgrades[offer.id] || 0) + 1;
+  // Gadgetslot (P4): eine neue Gadgetkarte ersetzt das aktive Gadget --
+  // die alte Karte bleibt in run.upgrades stehen (maxStacks 1 verhindert
+  // ein erneutes Ziehen), ist aber nicht mehr ausgeruestet. Die Bombe
+  // liegt seit P4 im eigenen, festen Slot und kann nie verloren gehen.
+  if (offer.tag === 'gadget') run.equippedGadget = offer.id;
+  // Glaskanone: reduziert die Leben dauerhaft auf 1 (starker Trade-off).
+  if (offer.id === 'glaskanone') run.lives = 1;
+  // Notschild: jede Stufe gibt chargesPerStack Ladungen (raumuebergreifend).
+  if (offer.id === 'emergency_shield') {
+    const cps = run.upgradesData.upgrades.emergency_shield.chargesPerStack || 1;
+    addShieldCharges(run, cps);
+  }
+  // Trophäe (Elite): +Schildladung(en), dauerhaft.
+  if (offer.id === 'trophaee') {
+    addShieldCharges(run, run.upgradesData.upgrades.trophaee.shieldCharges || 1);
+  }
+  // Kriegsbeute (Elite, Phase 9): sofortiger Schrott-Bonus.
+  if (offer.id === 'kriegsbeute') {
+    run.scrap += run.upgradesData.upgrades.kriegsbeute.scrapBonus || 5;
+  }
+  // Ersatzpanzer (Sockelkarte, Grundsteinumbau Phase 4): einzige Sockelkarte
+  // ohne core-Schluessel in der generischen cfg.js-Kernpool-Schleife --
+  // core.extraLifeAdd wirkt auf run.maxLives UND run.lives (echtes
+  // Zusatzleben, kein Heilen bis zum bisherigen Maximum).
+  const extraLife = run.upgradesData.upgrades[offer.id]?.core?.extraLifeAdd;
+  if (extraLife) {
+    run.maxLives += extraLife;
+    run.lives += extraLife;
   }
   run.upgradeChoices++;
   // Phase 7b: eigene Bestaetigung fuer die Kartenwahl -- bis dahin war der
   // Upgrade-Screen der einzige Belohnungsmoment ganz ohne Ton.
   run.state?.sounds.push('upgrade');
-  // Tags weiter zaehlen (Telemetrie + Transformationen, Phase 17).
-  if (!offer.fallback && offer.tag) {
+  // Tags weiter zaehlen (Telemetrie). Grundsteinumbau Phase 4: die
+  // Transformations-Freischaltung (unlockTransformation()) wird bewusst
+  // NICHT mehr aufgerufen -- der Sockel hat keine drei Karten desselben
+  // Transformations-Tags mehr (die fuenf Sockel-Tags sind absichtlich
+  // andere als terrain/mobility/information/defense/control, s.
+  // data/upgrades.json: _comment_sockel). unlockTransformation() selbst UND
+  // data/transformations.json bleiben unangetastet stehen
+  // (Wiederanschlusspunkt, archive/systeme-v1.md Abschnitt 1).
+  if (offer.tag) {
     run.tagCounts[offer.tag] = (run.tagCounts[offer.tag] || 0) + 1;
-    unlockTransformation(run, offer.tag);
   }
   // Upgradepool-v2 Phase 3: Synergie-Tags separat bilanzieren (tags[] aus
   // Phase 2, eigenstaendige Achse neben der Hauptkategorie `tag` oben).
   // Speist ausschliesslich die Angebotsgewichtung, keine Transformationen.
-  if (!offer.fallback && offer.tags && offer.tags.length) {
+  if (offer.tags && offer.tags.length) {
     for (const t of offer.tags) {
       run.synergyTags[t] = (run.synergyTags[t] || 0) + 1;
     }
@@ -1141,6 +1173,11 @@ function applyUpgradeChoice(run, offer) {
 // dauerhaften Bonus frei (nur die 5 Tags, die tatsaechlich 3x stapelbar
 // sind -- data/transformations.json). run.newTransformation haelt die
 // zuletzt freigeschaltete fuer eine kurze Text-Einblendung (main.js).
+//
+// Grundsteinumbau Phase 4: die Funktion bleibt UNANGETASTET stehen, wird
+// aber von applyUpgradeChoice() nicht mehr aufgerufen -- der Sockel hat
+// keine drei Karten desselben Transformations-Tags mehr (Wiederanschluss-
+// punkt, archive/systeme-v1.md Abschnitt 1).
 function unlockTransformation(run, tag) {
   const threshold = run.data.transformations?.threshold ?? 3;
   if (run.tagCounts[tag] < threshold) return;

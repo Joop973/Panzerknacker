@@ -85,6 +85,7 @@
       "minRoom": 9
     }
   },
+  "_comment_scrap": "treasure (Grundsteinumbau Phase 4, _todo: balance): Schrottpaket fuer Schatzkammer/Verflucht-Raeume -- ersetzt das fruehere garantierte Legendaer, das der Sockel (5 Karten, keine legendary) nicht mehr liefern kann. run.js: grantTreasureScrap().",
   "scrap": {
     "perRoom": [
       1,
@@ -92,6 +93,7 @@
     ],
     "eliteMult": 2,
     "dropRefund": 2,
+    "treasure": 12,
     "cost": {
       "reroll": 2,
       "ban": 1,
@@ -99,13 +101,11 @@
       "shieldCharge": 4,
       "shopCard": 5,
       "shopSecondary": 6,
-      "shopLife": 12,
-      "rerollElement": 4
+      "shopLife": 12
     }
   },
-  "_comment_upgrades": "UMBAUPLAN-LP Phase 17: secondElementWeight ist die Gewichtung, mit der die Karten des zufaelligen Zweitelements gegenueber dem Primaerelement in den Angeboten erscheinen (0.5 = halb so oft). Universelle Karten (Kernpool, Altkarten ohne damageType) bleiben voll gewichtet. Upgradepool-v2 Phase 3: synergyStep ist der Gewichtsaufschlag PRO bereits gewaehlter Karte mit einem passenden tags[]-Eintrag (0.5 = +50 % je Treffer, mehrere passende Tags summieren sich), synergyCap deckelt den Gesamtfaktor (2.0 = hoechstens doppelt so wahrscheinlich) -- der Faktor ist immer >= 1, schliesst also nie eine Karte aus.",
+  "_comment_upgrades": "Upgradepool-v2 Phase 3: synergyStep ist der Gewichtsaufschlag PRO bereits gewaehlter Karte mit einem passenden tags[]-Eintrag (0.5 = +50 % je Treffer, mehrere passende Tags summieren sich), synergyCap deckelt den Gesamtfaktor (2.0 = hoechstens doppelt so wahrscheinlich) -- der Faktor ist immer >= 1, schliesst also nie eine Karte aus. Grundsteinumbau Phase 4: secondElementWeight (Zweitelement-Gewichtung, UMBAUPLAN-LP Phase 17) ist mit dem Zweitelement-System entfernt.",
   "upgrades": {
-    "secondElementWeight": 0.5,
     "synergyStep": 0.5,
     "synergyCap": 2.0
   },
