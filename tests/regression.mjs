@@ -6359,6 +6359,375 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 54. Grundsteinumbau Phase 10: Abnahme -------------------------------
+// Schlussabnahme des ganzen Grundsteinumbaus. Die 21 Pruefpunkte des
+// Auftrags sind ueberwiegend schon in fruegeren Phasen-Abschnitten (47-53)
+// sowie den bestehenden UMBAUPLAN-LP-/Upgradepool-v2-Abschnitten gedeckt --
+// dieser Abschnitt deckt NUR die dabei gefundenen echten Luecken ab, jede
+// mit Gegenprobe. Zuordnungstabelle (Auftrag-Nummer -> Fundort):
+//   1  kein Abpraller jemals            -> HIER (c), NEU
+//   2  Flankenwinkel eigene Zahlen      -> Abschnitt 47(b)
+//   3  Frontpanzerung reflektiert+ownB. -> HIER (d), NEU
+//   4  Bosse ohne Flankenmultiplikator  -> Abschnitt 47(c)
+//   5  Exekution toetet auch bei 1 Sch. -> Abschnitt 47(e)
+//   6  Vorhaltemarkierung korrekt       -> HIER (e), NEU
+//   7  shotsFired/shotsHit/magBlocked   -> Abschnitt 47(i)+(j) + HIER (f), NEU (real)
+//   8  Granate ueberfliegt Waende       -> Abschnitt 48(e)
+//   9  Radius-Grenze, Spieler+Gegner    -> HIER (g), NEU
+//   10 minRangePx + Deflektor wirkungslos -> Abschnitt 48(f)+(g)
+//   11 Boss-LP folgt bossHpMult         -> HIER (h), NEU
+//   12 Gegner ab Akt im Pool            -> Abschnitt 50(d)
+//   13 +1 Leben nach Akt 1/2, gedeckelt -> Abschnitt 50 (End-zu-Ende-Run)
+//   14 Kartenregeln (Rast/Elite/Schatz) -> Abschnitt 50(e)
+//   15 Fortsetzen ueber eine Aktgrenze  -> HIER (i), NEU
+//   16 Sockel exakt 5, maxStacks-Deckel -> HIER (a), NEU + Abschnitt 39(19)
+//   17 keine archiv. Karte/Klasse/Prisma -> HIER (a)+(b), NEU
+//   18 Karten nur Kampf/Elite/Flucht/Ereignis -> Abschnitt 53(b)-(f)
+//   19 Aufwertungsstufe + Speichern     -> Abschnitt 51
+//   20 Schatz: 1 Leben, Schrottpaket    -> HIER (k), NEU
+//   21 Determinismus (inkl. 3 Aktkarten) -> Abschnitt 4 (Akt 1) + HIER (j), NEU
+{
+  const { stepState } = await import('../src/game/state.js');
+  const { createBullet, updateBullet } = await import('../src/game/bullet.js');
+  const { drawLeadMarkers } = await import('../src/render/effects.js');
+  const { fireMortar, updateMortars } = await import('../src/game/mortar.js');
+  const { generateMap } = await import('../src/game/run.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  // Hilfsfunktion (Muster wie Abschnitt 51/52/53): einen Knoten eines Typs
+  // direkt ansteuern, Vorzustand (Leben/Schrott) mit zurueckgeben.
+  function enterRoomType(type, maxSeed = 60) {
+    for (let seed = 1; seed <= maxSeed; seed++) {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
+      let parentId = null;
+      let targetId = null;
+      for (const node of run.map.byId.values()) {
+        const hit = node.next.find((id) => run.map.byId.get(id)?.type === type);
+        if (hit != null) {
+          parentId = node.id;
+          targetId = hit;
+          break;
+        }
+      }
+      if (parentId == null) continue;
+      run.mapCurrentId = parentId;
+      run.phase = 'map';
+      const before = { lives: run.lives, scrap: run.scrap };
+      if (chooseMapNode(run, targetId)) return { run, before };
+    }
+    return null;
+  }
+
+  // (a) Punkt 16+17: der Sockel hat GENAU die fuenf bekannten Karten -- keine
+  //     mehr, keine weniger. Schliesst archivierte Karten strukturell aus
+  //     (geschlossene Welt: rollFromPool()/drawOne() koennen nur ids liefern,
+  //     die in upgradesData.upgrades stehen).
+  {
+    const expected = ['sockel_ersatzpanzer', 'sockel_ladeautomat', 'sockel_magazin', 'sockel_motor', 'sockel_panzerung'];
+    const actual = Object.keys(upgradesData.upgrades).sort();
+    check(actual.length === 5, `Phase 10: Pool hat ${actual.length} Karten statt 5`);
+    check(actual.join(',') === expected.join(','), `Phase 10: Pool enthaelt unerwartete/fehlende ids: ${actual.join(',')}`);
+  }
+
+  // (b) Punkt 17: das Prisma existiert nirgends mehr -- weder als Typ noch
+  //     als kaufbarer Gegner.
+  {
+    check(!tanksData.types.t_prism, 'Phase 10: t_prism existiert noch in data/tanks.json');
+    check(diffData.danger.t_prism === undefined, 'Phase 10: t_prism ist noch als Gegner kaufbar (difficulty.danger)');
+  }
+
+  // (c) Punkt 1: kein Geschoss prallt jemals von einer Wand ab -- weder
+  //     strukturell (kein wallBounces/ricochetsLeft-Feld) noch im Verhalten
+  //     (ein Wandkontakt toetet sofort, die Kugel bewegt sich danach nicht
+  //     mehr weiter, auch nicht in eine "reflektierte" Richtung).
+  {
+    const b0 = createBullet(0, 0, 0, { speed: 100, radius: 3, owner: null, kind: 'bullet', damage: 1 });
+    check(
+      b0.wallBounces === undefined && b0.ricochetsLeft === undefined && b0.ricochetsStart === undefined,
+      'Phase 10: ein Geschoss traegt noch Abpraller-Felder (wallBounces/ricochetsLeft/ricochetsStart)',
+    );
+    const wall = { x: 100, y: 0, w: 20, h: 200, type: 'solid' };
+    const shadow = { walls: [wall], laserWalls: [], tanks: [], data: tanksData };
+    const b = createBullet(50, 50, 0, { speed: 200, radius: 3, owner: null, kind: 'bullet', damage: 1 });
+    const dt = 1 / 60;
+    let steps = 0;
+    while (!b.dead && steps++ < 60) updateBullet(b, shadow, dt);
+    check(b.dead, 'Phase 10: die Kugel stirbt nicht am Wandkontakt');
+    check(steps < 60, 'Phase 10: Testaufbau -- die Kugel erreicht die Wand nicht');
+    const xNachTod = b.x;
+    const yNachTod = b.y;
+    updateBullet(b, shadow, dt);
+    updateBullet(b, shadow, dt);
+    check(b.x === xNachTod && b.y === yNachTod, 'Phase 10: eine tote Kugel bewegt sich weiter (Abpraller ueberlebt intern)');
+  }
+
+  // (d) Punkt 3: Frontpanzerung reflektiert weiterhin (E3); die reflektierte
+  //     Kugel kann den Schuetzen treffen (ownBullet greift) und stirbt an
+  //     der naechsten Wand wie jede andere Kugel (kein zweiter Abpraller).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+    const st = run.state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    const player = st.player;
+    // Bekannte wandfreie Zone in Seed 42 Raum 1 (empirisch geprueft): x in
+    // [240,380], y=250. z bei 200 waere selbst eine Wand -- die Kugel darf
+    // NICHT darauf liegen, deshalb 40 px versetzt wie in Abschnitt 47.
+    player.x = 370; player.y = 250; player.prevX = 370; player.prevY = 250;
+    player.hp = 9999; player.cfg.maxHp = 9999; player.protect = 0; player.shieldReady = false;
+    player.deflectorCharges = 0;
+    st.tanks.push(player);
+    const z = {
+      ...proto, x: 200, y: 250, prevX: 200, prevY: 250, heading: 0,
+      alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+      cfg: { ...proto.cfg, role: 'guardian', maxHp: 9999, armor: { arc: 120, reflects: true }, requiresRicochet: false },
+    };
+    st.tanks.push(z);
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    const b = createBullet(202, 250, Math.PI, { speed: 1, radius: 3, owner: player, kind: 'bullet', damage: 10 });
+    b.age = 5;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+    check(z.hp === 9999, `Phase 10: Frontpanzerung laesst trotzdem Schaden durch (hp=${z.hp})`);
+    check(b.reflected === true, 'Phase 10: die Frontpanzerung reflektiert die Kugel nicht');
+    check(b.owner === player, 'Phase 10: eine reflektierte Kugel wechselt faelschlich den Besitzer');
+    check(!b.dead, 'Phase 10: die reflektierte Kugel ist faelschlich schon tot');
+
+    // Zum Schuetzen "teleportieren" (Muster wie Abschnitt 47: direkte
+    // Positionierung statt vollstaendiger Flugsimulation) -- Immunitaets-
+    // fenster und Geschwindigkeit fuer diesen Schritt ausschalten, damit die
+    // Bewegungsphase sie nicht wieder aus der Ueberlappung traegt.
+    b.reflectImmuneT = 0;
+    b.vx = 0; b.vy = 0;
+    b.x = player.x - 2; b.y = player.y;
+    const hpVorher = player.hp;
+    stepState(st, CMD0, 1 / 60);
+    const erwarteterSchaden = tanksData.balance.damage.ownBullet;
+    check(
+      hpVorher - player.hp === erwarteterSchaden,
+      `Phase 10: eine reflektierte Kugel schadet dem Schuetzen um ${hpVorher - player.hp} statt ${erwarteterSchaden} (ownBullet)`,
+    );
+    check(b.dead, 'Phase 10: die reflektierte Kugel ueberlebt den Treffer auf den Schuetzen');
+
+    // Isoliert: eine frische, bereits reflektierte Kugel stirbt am naechsten
+    // Wandkontakt wie jede andere -- kein Sonderfall fuer einen "zweiten
+    // Abpraller" mehr.
+    const wall = { x: 200, y: -50, w: 20, h: 100, type: 'solid' };
+    const shadow = { walls: [wall], laserWalls: [], tanks: [], data: tanksData };
+    const b2 = createBullet(180, 0, 0, { speed: 300, radius: 3, owner: player, kind: 'bullet', damage: 10 });
+    b2.reflected = true;
+    let steps = 0;
+    while (!b2.dead && steps++ < 60) updateBullet(b2, shadow, 1 / 60);
+    check(b2.dead, 'Phase 10: eine reflektierte Kugel stirbt nicht an der naechsten Wand');
+  }
+
+  // (e) Punkt 6: Vorhaltemarkierung -- bei konstanter Zielgeschwindigkeit
+  //     liegt der gezeichnete Punkt nahe der rechnerisch korrekten Abfang-
+  //     position (analytische Loesung derselben Aufgabe, unabhaengig von der
+  //     iterativen Naeherung in effects.js nachgerechnet). Toleranz 15 px --
+  //     empirisch ermittelt: die 3-Schritt-Naeherung weicht bei realistischen
+  //     Zielgeschwindigkeiten (40-140 px/s) hoechstens ~8 px vom analytischen
+  //     Optimum ab, 15 px laesst Spielraum ohne die Pruefung wirkungslos zu
+  //     machen.
+  {
+    const makeCtx = () => {
+      const calls = [];
+      return {
+        calls,
+        strokeStyle: '', lineWidth: 1,
+        beginPath() {}, stroke() {}, moveTo() {}, lineTo() {},
+        arc(...args) { calls.push(args); },
+      };
+    };
+    // Analytische Abfangzeit: |Ziel(t) - Schuetze| = speed * t.
+    const analyticIntercept = (px, py, speed, tx, ty, vx, vy) => {
+      const dx0 = tx - px;
+      const dy0 = ty - py;
+      const a = vx * vx + vy * vy - speed * speed;
+      const b = 2 * (dx0 * vx + dy0 * vy);
+      const c = dx0 * dx0 + dy0 * dy0;
+      const disc = b * b - 4 * a * c;
+      if (disc < 0) return null;
+      const sq = Math.sqrt(disc);
+      const roots = [(-b + sq) / (2 * a), (-b - sq) / (2 * a)].filter((t) => t > 0).sort((x, y) => x - y);
+      if (!roots.length) return null;
+      const t = roots[0];
+      return { ex: tx + vx * t, ey: ty + vy * t };
+    };
+    const cases = [
+      { px: 0, py: 0, speed: 450, tx: 300, ty: 0, vx: 100, vy: 0 },
+      { px: 0, py: 0, speed: 450, tx: 500, ty: 200, vx: 140, vy: -140 },
+      { px: 0, py: 0, speed: 450, tx: 100, ty: 100, vx: 40, vy: 10 },
+    ];
+    for (const c of cases) {
+      const state = {
+        player: { alive: true, cfg: { bulletSpeed: c.speed }, x: c.px, y: c.py },
+        tanks: [{ alive: true, x: c.tx, y: c.ty, vx: c.vx, vy: c.vy }],
+      };
+      state.tanks.push(state.player);
+      const ctx = makeCtx();
+      drawLeadMarkers(ctx, state);
+      const arcCall = ctx.calls.find((a) => a.length >= 2);
+      check(!!arcCall, 'Phase 10: drawLeadMarkers() zeichnet keinen Punkt fuer ein bewegtes Ziel');
+      if (arcCall) {
+        const [ex, ey] = arcCall;
+        const analytic = analyticIntercept(c.px, c.py, c.speed, c.tx, c.ty, c.vx, c.vy);
+        const err = Math.hypot(ex - analytic.ex, ey - analytic.ey);
+        check(err < 15, `Phase 10: Vorhaltemarkierung weicht ${err.toFixed(1)} px von der rechnerischen Abfangposition ab (Toleranz 15)`);
+      }
+    }
+  }
+
+  // (f) Punkt 7 (Ergaenzung zu Abschnitt 47i/j): ein simulierter Raum MIT DEN
+  //     ECHTEN 450er-Kugeln haelt magBlockedTime nahe null bei Dauerfeuer --
+  //     nicht nur der isolierte Mechanismus mit einem kuenstlichen 1er-
+  //     Magazin. Gezielt an die leere Raummitte (keine Gegner getroffen,
+  //     jede Kugel stirbt an der ersten Wand).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+    const st = run.state;
+    const p = st.player;
+    check(p.cfg.bulletSpeed === 450, `Phase 10: Testaufbau -- Spielerkugel ${p.cfg.bulletSpeed} statt 450`);
+    const totalS = 8;
+    const dt = 1 / 60;
+    const cmdFire = { move: { x: 0, y: 0 }, aim: { x: p.x, y: p.y - 1 }, fire: true, firePressed: true, mine: false, dash: false };
+    let elapsed = 0;
+    while (elapsed < totalS) {
+      stepState(st, cmdFire, dt);
+      elapsed += dt;
+    }
+    const anteil = st.magBlockedTime / totalS;
+    check(anteil < 0.05, `Phase 10: magBlockedTime betraegt ${(anteil * 100).toFixed(1)} % der Spielzeit bei Dauerfeuer -- deutlich mehr als "nahe null"`);
+  }
+
+  // (g) Punkt 9: Moerser-Explosion -- ausserhalb des Radius kein Schaden,
+  //     innerhalb Schaden an SPIELER UND GEGNER (nicht nur an einem von
+  //     beiden).
+  {
+    const mkTank = (x, y) => ({ x, y, cooldown: 0, alive: true, protect: 0, hp: 999, cfg: { magazine: 2, fireCooldown: 2, radius: 12, maxHp: 999 } });
+    const mkState = (mortarCfg, player, tanks) => ({
+      player,
+      mortars: [],
+      tanks,
+      walls: [],
+      mines: [],
+      explosions: [],
+      sounds: [],
+      particles: [],
+      data: { balance: { mortar: mortarCfg, damage: { explosion: 999 } }, limits: {}, transform: {} },
+      transform: {},
+      spawnParticles() {},
+      addShake() {},
+      applyDamage(tank, amount) {
+        tank.hp -= amount;
+        if (tank.hp <= 0) tank.alive = false;
+      },
+      destroyWall() {},
+    });
+
+    const M = { flightTimeS: 1, radiusPx: 30, damage: 8, leadPct: 0, minRangePx: 0 };
+    const player = mkTank(0, 0);
+    const enemy = mkTank(20, 0); // innerhalb 30 px Radius vom Einschlag
+    const weit = mkTank(200, 0); // weit ausserhalb
+    const st = mkState(M, player, [player, enemy, weit]);
+    fireMortar(mkTank(-50, 0), st);
+    st.mortars[0].tx = 0; st.mortars[0].ty = 0; // Einschlag exakt auf dem Spieler
+    updateMortars(st, 1);
+    check(player.hp === 999 - 8, `Phase 10: die Explosion schadet dem Spieler nicht (hp ${player.hp} statt ${999 - 8})`);
+    check(enemy.hp === 999 - 8, `Phase 10: die Explosion schadet einem Gegner innerhalb des Radius nicht (hp ${enemy.hp} statt ${999 - 8})`);
+    check(weit.hp === 999, `Phase 10: die Explosion schadet ausserhalb des Radius (hp ${weit.hp} statt 999)`);
+  }
+
+  // (h) Punkt 11: Boss-LP folgt wirklich acts[].bossHpMult -- gemessen an
+  //     zwei ECHTEN Bossraeumen (Akt 1 bossHpMult 1.0, Akt 2 bossHpMult 1.4),
+  //     nicht nur am Vorhandensein des Konfigurationsfelds (Abschnitt 50a).
+  {
+    function enterBossRoom(actIndex) {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+      if (actIndex > 1) {
+        run.actIndex = actIndex - 1;
+        run.phase = 'actComplete';
+        advanceAct(run);
+      }
+      const bossNode = [...run.map.byId.values()].find((n) => n.isBoss);
+      const parent = [...run.map.byId.values()].find((n) => n.next.includes(bossNode.id));
+      run.mapCurrentId = parent.id;
+      run.phase = 'map';
+      chooseMapNode(run, bossNode.id);
+      return run;
+    }
+    const perRoom = diffData.hpScaling.perRoom;
+    for (const actIndex of [1, 2]) {
+      const run = enterBossRoom(actIndex);
+      const boss = run.state.tanks.find((t) => t.type === 't_black');
+      check(!!boss, `Phase 10: Testaufbau -- kein t_black-Platzhalterboss in Akt ${actIndex} gefunden`);
+      if (boss) {
+        const actCfg = diffData.acts[actIndex - 1];
+        const roomIndex = run.roomIndex; // akt-lokal, Bossraum = letzte Ebene
+        const erwartet = Math.round(
+          tanksData.types.t_black.maxHp * (1 + perRoom * (roomIndex - 1)) * (actCfg.bossHpMult ?? 1),
+        );
+        check(
+          Math.abs(boss.cfg.maxHp - erwartet) <= 1,
+          `Phase 10: Akt-${actIndex}-Boss hat ${boss.cfg.maxHp} LP statt ${erwartet} (bossHpMult ${actCfg.bossHpMult})`,
+        );
+      }
+    }
+  }
+
+  // (i) Punkt 15: Spielstand ueber eine Aktgrenze laden -- Akt, Karte,
+  //     Leben, Stufen, Stacks stimmen nach dem Fortsetzen.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 777);
+    run.upgrades.sockel_motor = 2;
+    run.upgradeLevels.sockel_motor = 1;
+    run.scrap = 17;
+    run.lives = Math.max(1, run.maxLives - 1);
+    run.actIndex = 1;
+    run.phase = 'actComplete';
+    advanceAct(run); // -> Akt 2, frische Karte, Raum 1
+    check(run.actIndex === 2, `Phase 10: Testaufbau -- Akt ist ${run.actIndex} statt 2`);
+    const snap = runSnapshot(run);
+    check(snap.actIndex === 2, `Phase 10: runSnapshot() traegt Akt ${snap.actIndex} statt 2`);
+    const resumed = createRun(tanksData, tilesData, diffData, upgradesData, run.seed, run.modeKey, { resume: snap });
+    check(resumed.actIndex === 2, `Phase 10: Fortsetzen liefert Akt ${resumed.actIndex} statt 2`);
+    check(resumed.roomIndex === run.roomIndex, `Phase 10: Fortsetzen liefert Raum ${resumed.roomIndex} statt ${run.roomIndex}`);
+    const mapOf = (r) => JSON.stringify(r.map.layers.map((l) => l.map((n) => [n.id, n.type, n.next])));
+    check(mapOf(resumed) === mapOf(run), 'Phase 10: Fortsetzen baut nicht dieselbe Akt-2-Karte');
+    check(resumed.lives === run.lives, `Phase 10: Fortsetzen liefert ${resumed.lives} Leben statt ${run.lives}`);
+    check(resumed.scrap === 17, `Phase 10: Fortsetzen liefert ${resumed.scrap} Schrott statt 17`);
+    check(resumed.upgrades.sockel_motor === 2, `Phase 10: Fortsetzen liefert Stapel ${resumed.upgrades.sockel_motor} statt 2`);
+    check(resumed.upgradeLevels.sockel_motor === 1, `Phase 10: Fortsetzen liefert Stufe ${resumed.upgradeLevels.sockel_motor} statt 1`);
+  }
+
+  // (j) Punkt 21 (Ergaenzung zu Abschnitt 4, das nur Akt 1 prueft): Akt-2-
+  //     und Akt-3-Karten sind bei gleichem Seed ebenfalls deterministisch --
+  //     jeder Akt hat seit Phase 6 seinen eigenen Kartenstrom.
+  {
+    const ser = (m) => JSON.stringify(m.layers.map((l) => l.map((n) => [n.id, n.type, n.next])));
+    for (const act of [1, 2, 3]) {
+      const m1 = generateMap(9191, diffData, act);
+      const m2 = generateMap(9191, diffData, act);
+      check(ser(m1) === ser(m2), `Phase 10: Akt-${act}-Karte ist bei gleichem Seed nicht deterministisch`);
+    }
+  }
+
+  // (k) Punkt 20: die Schatzkammer kostet exakt 1 Leben und gibt exakt das
+  //     konfigurierte Schrottpaket.
+  {
+    const found = enterRoomType('treasure');
+    check(!!found, 'Phase 10: Testaufbau -- keine Schatzkammer gefunden');
+    if (found) {
+      const { run, before } = found;
+      const erwarteteLeben = before.lives - diffData.treasure.lifeCost;
+      check(run.lives === erwarteteLeben, `Phase 10: die Schatzkammer kostet ${before.lives - run.lives} Leben statt ${diffData.treasure.lifeCost}`);
+      const erwarteterSchrott = before.scrap + tanksData.balance.scrap.treasure;
+      check(run.scrap === erwarteterSchrott, `Phase 10: die Schatzkammer gibt ${run.scrap - before.scrap} Schrott statt ${tanksData.balance.scrap.treasure}`);
+    }
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);
