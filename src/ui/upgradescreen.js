@@ -98,10 +98,13 @@ export function createUpgradeScreen() {
       card.dataset.navcard = '1';
       card.tabIndex = 0;
       const lvl = o.fallback ? '' : ` (Stufe ${o.level}/${o.maxStacks})`;
+      // Grundsteinumbau Phase 7: "+"-Suffix je Rastplatz-Stufe (stufe kommt
+      // von main.js: getOffers(), nicht von der Karte selbst).
+      const plus = '+'.repeat(o.stufe || 0);
       const meta = o.fallback
         ? ''
         : `<span class="cardmeta">${o.tag} · ${RARITY[o.rarity] || o.rarity}</span>`;
-      card.innerHTML = `<strong>${o.name}${lvl}</strong><span>${o.description}</span>${meta}`;
+      card.innerHTML = `<strong>${o.name}${plus}${lvl}</strong><span>${o.description}</span>${meta}`;
       card.addEventListener('click', () => {
         el.classList.add('hidden');
         ctx.onPick(i);

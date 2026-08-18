@@ -129,7 +129,7 @@ function applyAffixByIndex(t, index, eliteAffixes) {
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
-    destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses,
+    destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses, upgradeLevels, levelBalance,
     starterTank = 'player', starterScrap = 0 } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
@@ -176,7 +176,15 @@ export function createState(data, tiles, opts) {
     applyRoomContext(
       applyRoomModifier(
         applyScrapDamage(
-          applyUpgrades(resolveCfg(data, starterTank), playerUpgrades, upgradesData, equippedSecondary, equippedGadget),
+          applyUpgrades(
+          resolveCfg(data, starterTank),
+          playerUpgrades,
+          upgradesData,
+          equippedSecondary,
+          equippedGadget,
+          upgradeLevels,
+          levelBalance,
+        ),
           starterScrap,
         ),
         modifier,
@@ -233,6 +241,8 @@ export function createState(data, tiles, opts) {
     tiles,
     playerUpgrades,
     upgradesData,
+    upgradeLevels, // Grundsteinumbau Phase 7: fuer respawnPlayer()
+    levelBalance,
     equippedSecondary: equippedSecondary || 'mine', // Phase 6: fuer respawnPlayer()
     equippedGadget: equippedGadget || null, // P4: zweiter Slot, ebenfalls fuer respawnPlayer()
     starterTank, // Phase 9: gewaehlte Klasse -- respawnPlayer() baut denselben Panzer
@@ -732,6 +742,8 @@ function respawnPlayer(state) {
             state.upgradesData,
             state.equippedSecondary,
             state.equippedGadget,
+            state.upgradeLevels,
+            state.levelBalance,
           ),
           state.starterScrap,
         ),

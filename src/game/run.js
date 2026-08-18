@@ -60,10 +60,11 @@ export const ROOM_TYPE_INFO = {
   workshop: { name: 'Shop', symbol: '🛒', desc: 'Keine Gegner · Karten, Schild, Sekundärwaffe, Leben kaufen · Upgrade ablegen.' },
   event: { name: 'Ereignis', symbol: '❓', desc: 'Keine Gegner · eine Entscheidung.' },
   cursed: { name: 'Verflucht', symbol: '☠️', desc: 'Gegner mit zusätzlichem Affix · Schrottpaket-Belohnung.' },
-  // Grundsteinumbau Phase 6: neuer Knotentyp, nur im Generator angelegt --
-  // der eigentliche Inhalt (Leben zurück oder Upgrade aufwerten) kommt in
-  // Phase 7. Bis dahin ein leerer Durchgangsraum mit Platzhaltertext.
-  rest: { name: 'Rastplatz', symbol: '🏕️', desc: 'Kein Inhalt (Platzhalter) — kommt in Phase 7.' },
+  // Grundsteinumbau Phase 7: Reparaturtrupp (+1 Leben) ODER Werkbank (ein
+  // vorhandenes Upgrade eine Stufe aufwerten) -- genau eine der beiden
+  // Aktionen, danach ist der Raum sofort zu Ende (kein Kartenscreen danach,
+  // s. roomscreens.js: createRestScreen()).
+  rest: { name: 'Rastplatz', symbol: '🏕️', desc: 'Eine Verschnaufpause · ein Leben zurück oder ein Upgrade verbessern.' },
 };
 
 // Kauft Gegner vom Gefahrenbudget (nur freigeschaltete Typen, max. 8).
@@ -359,6 +360,7 @@ export function runSnapshot(run) {
     shieldCharges: run.shieldCharges.slice(), // mit Restlaufzeit je Ladung
     scrap: run.scrap,
     upgrades: { ...run.upgrades },
+    upgradeLevels: { ...run.upgradeLevels }, // Grundsteinumbau Phase 7
     equippedSecondary: run.equippedSecondary,
     equippedGadget: run.equippedGadget,
     banned: [...run.bannedUpgrades],
@@ -496,6 +498,8 @@ function buildCombatRoom(run, type, isFinal) {
     starterScrap: run.scrap, // Phase 9: Schrottpanzer-Passiv (pro Raum gebacken)
     playerUpgrades: run.upgrades,
     upgradesData: run.upgradesData,
+    upgradeLevels: run.upgradeLevels, // Grundsteinumbau Phase 7: am Rastplatz aufgewertete Stufen
+    levelBalance: run.data.balance.upgradeLevel,
     equippedSecondary: run.equippedSecondary,
     equippedGadget: run.equippedGadget,
     shieldCharges: run.shieldCharges, // raumuebergreifende Notschild-Ladungen
@@ -662,18 +666,78 @@ function startNonCombatRoom(run, type) {
     run.currentEvent = evs[Math.floor(run.rng.events() * evs.length)];
     run.phase = 'event';
   } else if (type === 'rest') {
-    // Grundsteinumbau Phase 6: der Rastplatz ist hier nur ein leerer
-    // Durchgangsraum mit Platzhaltertext (roomscreens.js: createRestScreen)
-    // -- der eigentliche Inhalt (Leben zurueck ODER Upgrade aufwerten) kommt
-    // erst in Phase 7. leaveRest() ist der einzige Ausgang.
+    // Grundsteinumbau Phase 7: zwei Optionen, eine Wahl (repairAtRest()/
+    // upgradeCardAtRest() weiter unten) -- roomscreens.js: createRestScreen()
+    // zeigt beide, keine dritte "nur verlassen"-Aktion (anders als der Shop).
+    // Sicherheitsnetz (Muster: "Bugfix: Kartenscreen blockierte den Run",
+    // CLAUDE.md): `rest` ist ein normal gewichteter Kartenknotentyp
+    // (data/difficulty.json: map.nodeWeights) und kann mehrfach pro Akt
+    // auftauchen, waehrend Stufen-Deckel (maxLevel) x aufwertbare Karten
+    // begrenzt sind -- bei vollen Leben UND keiner aufwertbaren Karte waere
+    // der Raum sonst ein Screen ganz ohne moegliche Wahl. Automatisch
+    // weiterziehen statt darin haengenzubleiben.
+    if (run.lives >= run.maxLives && restWorkbenchOptions(run).length === 0) {
+      afterRoomDone(run);
+      return;
+    }
     run.phase = 'rest';
   }
 }
 
-// Rastplatz verlassen -> naechste Tuer (Platzhalter, s. o.).
-export function leaveRest(run) {
-  if (run.phase !== 'rest') return;
+// Rastplatz, Option 1: Reparaturtrupp. +1 Leben, gedeckelt auf run.maxLives
+// -- bei vollem Stand lehnt die Funktion ab (false), die UI zeigt die
+// Option dafuer ausgegraut statt versteckt (Auftrag: "der Spieler soll die
+// Regel lernen"). Eine gewaehlte Reparatur beendet den Raum sofort, wie
+// Testschritt 1 verlangt -- anders als der Shop gibt es hier kein
+// "Verlassen" danach.
+export function repairAtRest(run) {
+  if (run.phase !== 'rest') return false;
+  if (run.lives >= run.maxLives) return false;
+  run.lives += 1;
   afterRoomDone(run);
+  return true;
+}
+
+function upgradeLevelBalance(run) {
+  return run.data.balance.upgradeLevel || { bonusPct: 0, maxLevel: 0 };
+}
+
+// Rastplatz, Option 2 (Vorschau fuer die UI): eigene Karten, die sich am
+// Rastplatz noch aufwerten lassen -- besessen (Stapel > 0), nicht per
+// upgradable:false gesperrt (sockel_ersatzpanzer), noch unter maxLevel.
+export function restWorkbenchOptions(run) {
+  const maxLevel = upgradeLevelBalance(run).maxLevel ?? 0;
+  const defs = run.upgradesData.upgrades;
+  return Object.keys(run.upgrades)
+    .filter((id) => (run.upgrades[id] || 0) > 0)
+    .map((id) => defs[id])
+    .filter((def) => def && def.upgradable !== false)
+    .filter((def) => (run.upgradeLevels[def.id] || 0) < maxLevel)
+    .map((def) => ({
+      id: def.id,
+      name: def.name,
+      description: def.description,
+      symbol: def.symbol,
+      stufe: run.upgradeLevels[def.id] || 0,
+      maxLevel,
+    }));
+}
+
+// Rastplatz, Option 2: Werkbank. Eine besessene, noch nicht am Deckel
+// stehende Karte eine Stufe aufwerten -- cfg.js: applyUpgrades() liest
+// run.upgradeLevels danach bei jedem Raumaufbau/Respawn neu. Beendet den
+// Raum sofort (dieselbe "eine Wahl, Raum zu Ende"-Regel wie Reparatur).
+export function upgradeCardAtRest(run, id) {
+  if (run.phase !== 'rest') return false;
+  if ((run.upgrades[id] || 0) <= 0) return false;
+  const def = run.upgradesData.upgrades[id];
+  if (!def || def.upgradable === false) return false;
+  const maxLevel = upgradeLevelBalance(run).maxLevel ?? 0;
+  const cur = run.upgradeLevels[id] || 0;
+  if (cur >= maxLevel) return false;
+  run.upgradeLevels[id] = cur + 1;
+  afterRoomDone(run);
+  return true;
 }
 
 // Tatsaechlich zum Zielknoten wechseln: naechster Raum, Kartenposition
@@ -809,7 +873,12 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     modeKey,
     budgetMult: mode.budgetMult,
     starterTank: opts.starterTank || 'player', // Phase 9: gewaehlte Klasse (Default: Standard). Gehoert in die Seed-Wiedergabe.
-    upgrades: {}, // gewaehlte Upgrade-Level {id: stufe}. Die Bombe ist seit P4 keine Karte mehr, sondern fester Slot.
+    upgrades: {}, // gewaehlte Upgrade-Stapel {id: anzahl}. Die Bombe ist seit P4 keine Karte mehr, sondern fester Slot.
+    // Grundsteinumbau Phase 7 (Rastplatz: Werkbank): {id: stufe}, getrennt von
+    // den Stapeln oben -- eine Karte kann mehrfach gezogen UND separat am
+    // Rastplatz aufgewertet sein. cfg.js: applyUpgrades() skaliert damit die
+    // core-Effekte der Karte (1 + stufe*balance.upgradeLevel.bonusPct).
+    upgradeLevels: {},
     equippedSecondary: 'mine', // Phase 6/P4: fester Bombenslot, nicht tauschbar
     equippedGadget: null, // P4: zweiter, tauschbarer Slot -- Start: keines
     upgradeChoices: 0,
@@ -884,6 +953,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     run.shieldCharges = (r.shieldCharges || []).slice();
     run.scrap = r.scrap || 0;
     run.upgrades = { ...(r.upgrades || {}) };
+    run.upgradeLevels = { ...(r.upgradeLevels || {}) }; // Phase 7: aeltere Zwischenstaende kennen das Feld noch nicht
     run.equippedSecondary = r.equippedSecondary || 'mine';
     run.equippedGadget = r.equippedGadget || null;
     run.bannedUpgrades = new Set(r.banned || []);

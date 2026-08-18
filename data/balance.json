@@ -109,6 +109,11 @@
     "synergyStep": 0.5,
     "synergyCap": 2.0
   },
+  "_comment_upgradeLevel": "Grundsteinumbau Phase 7 (Rastplatz: Werkbank): run.upgradeLevels haelt pro Karte eine Stufe (0..maxLevel), am Rastplatz erhoehbar. cfg.js: applyUpgrades() multipliziert die *Add/*Bonus/*Mult-Kernschluessel einer Karte mit 1 + stufe*bonusPct (additiv direkt skaliert, bei *Mult nur die Abweichung von 1 -- ein 1.08x-Effekt wird bei Stufe 1 zu 1.12x, nicht zu 1.62x). Karten mit upgradable:false (aktuell nur sockel_ersatzpanzer) bleiben unskaliert. _todo: balance.",
+  "upgradeLevel": {
+    "bonusPct": 0.5,
+    "maxLevel": 2
+  },
   "shop": {
     "cardChoices": 5
   },

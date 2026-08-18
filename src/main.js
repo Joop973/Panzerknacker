@@ -27,7 +27,9 @@ import {
   buyShopCard,
   buyShopSecondary,
   buyShopLife,
-  leaveRest,
+  repairAtRest,
+  restWorkbenchOptions,
+  upgradeCardAtRest,
   advanceAct,
   ROOM_TYPE_INFO,
 } from './game/run.js';
@@ -162,7 +164,7 @@ async function init() {
   const upgradeScreen = createUpgradeScreen();
   const eventScreen = createEventScreen();
   const workshopScreen = createShopScreen();
-  const restScreen = createRestScreen(); // Grundsteinumbau Phase 6 (Platzhalter)
+  const restScreen = createRestScreen(); // Grundsteinumbau Phase 7 (Reparaturtrupp/Werkbank)
   const actCompleteScreen = createActCompleteScreen(); // Grundsteinumbau Phase 6
   const preview = createPreview();
   const mapScreen = createMapScreen();
@@ -645,7 +647,11 @@ async function init() {
               : kind === 'cursed'
                 ? 'Ein garantiertes Legendär (Gegner hatten einen zusätzlichen Affix).'
                 : null,
-        getOffers: () => run.pendingOffers,
+        // Grundsteinumbau Phase 7: "+"-Suffix je Rastplatz-Stufe, auch im
+        // Angebot (Auftrag: "im Angebot wie in der Inventarliste") --
+        // run.pendingOffers selbst bleibt unangetastet, onPick/onBan indizieren
+        // weiterhin direkt hinein.
+        getOffers: () => run.pendingOffers?.map((o) => ({ ...o, stufe: run.upgradeLevels[o.id] || 0 })),
         getScrap: () => run.scrap,
         canFourth: () => run.pendingOffers.length < 4,
         // Transformationen (Phase 17): Fortschrittsanzeige im Screen.
@@ -734,7 +740,8 @@ async function init() {
         dropRefund: refund,
         getScrap: () => run.scrap,
         getUpgrades: () => run.upgrades,
-        getOffers: () => run.shopOffers,
+        // Grundsteinumbau Phase 7: "+"-Suffix auch im Shop-Regal.
+        getOffers: () => run.shopOffers?.map((o) => ({ ...o, stufe: run.upgradeLevels[o.id] || 0 })),
         getEquippedSecondary: () => run.equippedGadget, // P4: der Shop tauscht Gadgets
         // Nutzerwunsch: der Nekromant hat keinen Gadget-Slot -- die Sektion
         // "Gadget tauschen" soll fuer ihn erst gar nicht angezeigt werden
@@ -829,13 +836,25 @@ async function init() {
       });
     }
 
-    // Rastplatz (Grundsteinumbau Phase 6, Platzhalter -- Inhalt kommt in Phase 7).
+    // Rastplatz (Grundsteinumbau Phase 7): Reparaturtrupp ODER Werkbank --
+    // beide Aktionen beenden den Raum selbst (repairAtRest()/
+    // upgradeCardAtRest() rufen afterRoomDone() auf), der Screen schliesst
+    // sich nur bei Erfolg (Rueckgabewert true, Muster wie mapscreen.js).
     if (run.phase === 'rest' && !restShown) {
       restShown = true;
       restScreen.show({
-        onLeave: () => {
-          leaveRest(run);
-          restShown = false;
+        lives: run.lives,
+        maxLives: run.maxLives,
+        options: restWorkbenchOptions(run),
+        onRepair: () => {
+          const ok = repairAtRest(run);
+          if (ok) restShown = false;
+          return ok;
+        },
+        onUpgrade: (id) => {
+          const ok = upgradeCardAtRest(run, id);
+          if (ok) restShown = false;
+          return ok;
         },
       });
     }
@@ -867,6 +886,8 @@ async function init() {
           return {
             name: def?.name || id,
             level: l,
+            // Grundsteinumbau Phase 7: "+"-Suffix auch in der Inventarliste.
+            stufe: run.upgradeLevels[id] || 0,
             description: def?.description || '',
             symbol: def?.symbol || '•',
           };

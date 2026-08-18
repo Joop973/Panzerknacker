@@ -34,9 +34,13 @@ export function createPreview() {
     for (const u of upgrades) {
       const row = document.createElement('div');
       row.className = 'pv-uprow';
+      // Grundsteinumbau Phase 7: "+"-Suffix je Rastplatz-Stufe direkt am
+      // Namen, getrennt von der bestehenden "Stufe N"-Anzeige (die zaehlt
+      // Kartenstapel, nicht die Rastplatz-Aufwertung).
+      const plus = '+'.repeat(u.stufe || 0);
       row.innerHTML =
         `<span class="pv-sym">${u.symbol || '•'}</span>` +
-        `<span class="pv-upname">${u.name}${u.level > 1 ? ` <em>Stufe ${u.level}</em>` : ''}</span>` +
+        `<span class="pv-upname">${u.name}${plus}${u.level > 1 ? ` <em>Stufe ${u.level}</em>` : ''}</span>` +
         `<span class="pv-updesc">${u.description || ''}</span>`;
       list.appendChild(row);
     }

@@ -78,8 +78,10 @@ export function createShopScreen() {
         return;
       }
       const lvl = o.fallback ? '' : ` (Stufe ${o.level}/${o.maxStacks})`;
+      // Grundsteinumbau Phase 7: "+"-Suffix je Rastplatz-Stufe.
+      const plus = '+'.repeat(o.stufe || 0);
       card.innerHTML =
-        `<strong>${o.name}${lvl}</strong><span>${o.description}</span>` +
+        `<strong>${o.name}${plus}${lvl}</strong><span>${o.description}</span>` +
         `<span class="price">${ctx.costs.shopCard}⚙</span>`;
       if (scrap < ctx.costs.shopCard) {
         card.classList.add('tooexpensive');
@@ -236,31 +238,75 @@ export function createShopScreen() {
   };
 }
 
-// ---- Rastplatz (Grundsteinumbau Phase 6, Platzhalter) ------------------
-// Der Knotentyp ist ab dieser Phase auf der Karte sichtbar/waehlbar, hat
-// aber noch keinen eigenen Inhalt (Leben zurueck ODER Upgrade aufwerten
-// kommt in Phase 7) -- ein leerer Durchgangsraum mit Platzhaltertext, EIN
-// "Weiter"-Knopf.
+// ---- Rastplatz (Grundsteinumbau Phase 7) --------------------------------
+// Zwei Optionen, eine Wahl -- anders als der Shop gibt es kein separates
+// "Verlassen": die gewaehlte Aktion (onRepair/onUpgrade) beendet den Raum
+// selbst (run.js: repairAtRest()/upgradeCardAtRest() rufen afterRoomDone()
+// auf) und liefert true zurueck, dann schliesst der Screen sich SELBST
+// (Muster wie mapscreen.js/preview.js -- sonst bliebe das Overlay bei einer
+// abgelehnten Aktion faelschlich offen oder bei einer angenommenen faelschlich
+// liegen).
 export function createRestScreen() {
   const el = makeOverlay('rest');
   return {
-    show({ onLeave }) {
+    show({ lives, maxLives, options, onRepair, onUpgrade }) {
       el.innerHTML = '';
       const h = document.createElement('h1');
       h.textContent = 'Rastplatz';
       el.appendChild(h);
       const p = document.createElement('p');
       p.className = 'eventtext';
-      p.textContent = 'Hier gibt es noch nichts zu tun — das kommt in einer späteren Ausbaustufe.';
+      p.textContent = 'Eine Verschnaufpause. Wähle eine der beiden Möglichkeiten.';
       el.appendChild(p);
-      const btn = document.createElement('button');
-      btn.className = 'leavebtn';
-      btn.textContent = 'Weiter →';
-      btn.addEventListener('click', () => {
-        el.classList.add('hidden');
-        onLeave();
+
+      // Option 1: Reparaturtrupp -- bei vollen Leben ausgegraut angezeigt,
+      // nicht versteckt (Auftrag: "der Spieler soll die Regel lernen").
+      const repairSection = document.createElement('div');
+      repairSection.className = 'restoption';
+      const repairBtn = document.createElement('button');
+      repairBtn.className = 'restbtn';
+      const atFullLives = lives >= maxLives;
+      repairBtn.innerHTML = atFullLives
+        ? `🛠 Reparaturtrupp <span class="reststate">Leben bereits voll (${lives}/${maxLives})</span>`
+        : `🛠 Reparaturtrupp <span class="reststate">+1 Leben (${lives} → ${lives + 1})</span>`;
+      repairBtn.disabled = atFullLives;
+      repairBtn.addEventListener('click', () => {
+        if (onRepair() !== false) el.classList.add('hidden');
       });
-      el.appendChild(btn);
+      repairSection.appendChild(repairBtn);
+      el.appendChild(repairSection);
+
+      // Option 2: Werkbank -- eine besessene, aufwertbare Karte waehlen.
+      const workSection = document.createElement('div');
+      workSection.className = 'restoption';
+      const workHeader = document.createElement('p');
+      workHeader.className = 'workshophint';
+      workHeader.textContent = 'Werkbank — ein Upgrade eine Stufe aufwerten:';
+      workSection.appendChild(workHeader);
+      if (!options.length) {
+        const empty = document.createElement('p');
+        empty.className = 'eventtext';
+        empty.textContent = 'Keine aufwertbare Karte vorhanden.';
+        workSection.appendChild(empty);
+      } else {
+        const list = document.createElement('div');
+        list.className = 'droplist';
+        for (const o of options) {
+          const b = document.createElement('button');
+          b.className = 'dropbtn';
+          const plus = '+'.repeat(o.stufe);
+          b.innerHTML =
+            `${o.symbol || '•'} ${o.name}${plus} <span class="reststate">${o.description}</span>`;
+          b.title = `Stufe ${o.stufe} → ${o.stufe + 1} (Deckel ${o.maxLevel})`;
+          b.addEventListener('click', () => {
+            if (onUpgrade(o.id) !== false) el.classList.add('hidden');
+          });
+          list.appendChild(b);
+        }
+        workSection.appendChild(list);
+      }
+      el.appendChild(workSection);
+
       el.classList.remove('hidden');
     },
     hide() {

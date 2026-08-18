@@ -111,9 +111,52 @@ export function applyScrapDamage(cfg, scrap) {
 // Upgrade-Level auf das Spieler-cfg anwenden (Spec Abschnitt 8 +
 // Erweiterungen). Die Stellwerte der neuen Upgrades kommen aus
 // upgrades.json (upsData).
-export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadget) {
+//
+// Grundsteinumbau Phase 7 (Rastplatz: Werkbank): upgradeLevels ist
+// run.upgradeLevels ({id: stufe}, 0..levelBalance.maxLevel), am Rastplatz
+// erhoehbar. stufeMultFor(id) liefert 1 + stufe*bonusPct (1, wenn keine
+// Stufe/kein levelBalance/upgradable:false) -- scaleCore() wendet das auf
+// die *Add/*Bonus/*Mult-Kernschluessel EINER Karte an, bevor der generische
+// core-Loop weiter unten sie liest. Additive Schluessel (Add/Bonus) werden
+// direkt skaliert; multiplikative (Mult) skalieren nur die Abweichung von 1
+// (ein 1.08x-Effekt wird bei Stufe 1 + 50% zu 1.12x, nicht 1.62x) -- so ist
+// eine Stufe unabhaengig von der Karten-Semantik gleich stark. Bekannte
+// Ausnahme: `shatterMult` (Frost-Topf) endet auf "Mult", wird aber additiv
+// verrechnet (`cfg.shatterMult += c.shatterMult*lvl`) -- bewusst von der
+// Mult-Erkennung ausgenommen. Schluessel ohne Add/Bonus/Mult-Suffix
+// (Schwellen/Maxima/Booleans wie magazineFixed, executeThreshold,
+// ghostCommander) bleiben unskaliert -- ein Stufen-Bonus auf einen
+// Deckelwert braucht Karten-eigene Semantik, keine generische Regel. Nur
+// die Sockelkarten (data/upgrades.json) sind aktuell erreichbar -- sie
+// nutzen ausschliesslich hpAdd/speedMult/magAdd/reloadMult, alle vier
+// korrekt additiv bzw. multiplikativ erfasst.
+export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadget, upgradeLevels, levelBalance) {
   if (!ups) return cfg;
   const l = (k) => ups[k] || 0;
+  const bonusPct = levelBalance?.bonusPct ?? 0;
+  const maxLevel = levelBalance?.maxLevel ?? 0;
+  function stufeMultFor(id) {
+    if (!bonusPct || upsData?.upgrades?.[id]?.upgradable === false) return 1;
+    const stufe = Math.min(upgradeLevels?.[id] || 0, maxLevel);
+    return 1 + stufe * bonusPct;
+  }
+  function scaleCore(core, sm) {
+    if (sm === 1) return core;
+    const out = {};
+    for (const k in core) {
+      const v = core[k];
+      if (typeof v !== 'number') {
+        out[k] = v;
+      } else if (k.endsWith('Mult') && k !== 'shatterMult') {
+        out[k] = 1 + (v - 1) * sm;
+      } else if (k.endsWith('Add') || k.endsWith('Bonus')) {
+        out[k] = v * sm;
+      } else {
+        out[k] = v;
+      }
+    }
+    return out;
+  }
   cfg.magazine += 2 * l('magazin');
   // Grundsteinumbau Phase 1: die Karte 'abpraller' (Bandenschuss) ist ohne
   // Wirkung -- data/upgrades.json bleibt bis Phase 4 unangetastet, ihr
@@ -370,9 +413,10 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   let ghostDmgMult = 1;
   let ghostHpMultAcc = 1;
   for (const id in U) {
-    const c = U[id].core;
+    const raw = U[id].core;
     const lvl = l(id);
-    if (!c || !lvl) continue;
+    if (!raw || !lvl) continue;
+    const c = scaleCore(raw, stufeMultFor(id));
     if (c.damageAdd) cfg.damage += c.damageAdd * lvl;
     if (c.reloadMult) cfg.fireCooldown *= Math.pow(c.reloadMult, lvl);
     if (c.speedMult) cfg.speed *= Math.pow(c.speedMult, lvl);
@@ -480,6 +524,11 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;
   if (magFixed != null) cfg.magazine = magFixed; // Railgun: nach magAdd, gewinnt
+  // Grundsteinumbau Phase 7: magAdd/mineAdd koennen durch die Stufen-
+  // Skalierung (scaleCore) fraktional werden (z. B. magAdd 1 -> 1.5 bei
+  // Stufe 1) -- Magazin/Minenzahl sind Stueckzahlen, deshalb hier gerundet.
+  cfg.magazine = Math.round(cfg.magazine);
+  cfg.mines = Math.round(cfg.mines);
   // Sprengstoff-Topf: Schuesse zuenden lassen (Basisradius setzen, falls noch
   // keiner steht), dann Radius/Schaden multiplizieren (gilt fuer Schuss UND
   // Mine -- mineRadiusMult wurde oben schon gesetzt). explosionDamageMult liest

@@ -23,7 +23,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, leaveRest, advanceAct } from '../src/game/run.js';
+import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, repairAtRest, restWorkbenchOptions, upgradeCardAtRest, advanceAct, runSnapshot } from '../src/game/run.js';
 import { traceTrajectory } from '../src/game/bullet.js';
 import { validateArenas } from '../src/game/generator.js';
 import { createMine, updateMines } from '../src/game/mine.js';
@@ -52,6 +52,17 @@ function check(ok, msg) {
   if (ok) return;
   failures++;
   console.error('FEHLER:', msg);
+}
+
+// Grundsteinumbau Phase 7: Ersatz fuer das entfernte leaveRest() in den
+// Playthrough-Schleifen weiter unten -- probiert Reparatur zuerst (faellt
+// bei vollen Leben auf false zurueck), sonst die erste aufwertbare Karte an
+// der Werkbank. Beide Aktionen beenden den Raum selbst (afterRoomDone()).
+function passRest(run) {
+  if (run.phase !== 'rest') return;
+  if (repairAtRest(run)) return;
+  const opts = restWorkbenchOptions(run);
+  if (opts.length) upgradeCardAtRest(run, opts[0].id);
 }
 
 // ---- 1. Ziellinie gegen alle Spezial-Wandtypen (Schatten-State) ----------
@@ -1884,7 +1895,7 @@ function check(ok, msg) {
       else if (run.phase === 'map') {
         const c = run.map.byId.get(run.mapCurrentId);
         for (const id of c?.next || []) if (chooseMapNode(run, id)) break;
-      } else if (run.phase === 'rest') leaveRest(run);
+      } else if (run.phase === 'rest') passRest(run);
       else if (run.phase === 'actComplete') advanceAct(run);
       else if (run.phase === 'workshop') leaveWorkshop(run);
       else if (run.phase === 'event') chooseEventOption(run, 0);
@@ -2778,7 +2789,7 @@ for (const seed of SEEDS) {
       chooseEventOption(run, 0);
     } else if (run.phase === 'rest') {
       // Grundsteinumbau Phase 6: Platzhalter-Durchgangsraum, ein "Weiter".
-      leaveRest(run);
+      passRest(run);
     } else if (run.phase === 'actComplete') {
       // Grundsteinumbau Phase 6: Akt-Uebergangsbildschirm nach dem Bosskill.
       advanceAct(run);
@@ -2881,7 +2892,7 @@ for (const seed of SEEDS) {
         else if (run.phase === 'map') pickMapNode(run);
         else if (run.phase === 'workshop') leaveWorkshop(run);
         else if (run.phase === 'event') chooseEventOption(run, 0);
-        else if (run.phase === 'rest') leaveRest(run);
+        else if (run.phase === 'rest') passRest(run);
         else if (run.phase === 'actComplete') advanceAct(run);
         else break;
       }
@@ -3239,7 +3250,7 @@ for (const seed of SEEDS) {
       } else if (run.phase === 'map') pickMapNode(run);
       else if (run.phase === 'workshop') leaveWorkshop(run);
       else if (run.phase === 'event') chooseEventOption(run, 0);
-      else if (run.phase === 'rest') leaveRest(run);
+      else if (run.phase === 'rest') passRest(run);
       else if (run.phase === 'actComplete') advanceAct(run);
       else return false;
     }
@@ -3304,7 +3315,7 @@ for (const seed of SEEDS) {
 // alten Systems weg sein -- reine Struktur- und Verhaltensnachweise, keine
 // neue Spielmechanik.
 {
-  const { createRun, stepRun: sr, chooseUpgrade: cu, enterRoom: er, leaveWorkshop: lw, chooseEventOption: ceo, leaveRest: lr, advanceAct: aa } = await import('../src/game/run.js');
+  const { createRun, stepRun: sr, chooseUpgrade: cu, enterRoom: er, leaveWorkshop: lw, chooseEventOption: ceo, advanceAct: aa } = await import('../src/game/run.js');
   const U = upgradesData.upgrades;
 
   // (a) Struktur: die Karte ghost_crew existiert nicht mehr; kein Kern-
@@ -3357,7 +3368,7 @@ for (const seed of SEEDS) {
       else if (run.phase === 'map') pickMapNode(run);
       else if (run.phase === 'workshop') lw(run);
       else if (run.phase === 'event') ceo(run, 0);
-      else if (run.phase === 'rest') lr(run);
+      else if (run.phase === 'rest') passRest(run);
       else if (run.phase === 'actComplete') aa(run);
       else break;
     }
@@ -5794,7 +5805,7 @@ for (const seed of SEEDS) {
       else if (run.phase === 'map') pickMapNode(run);
       else if (run.phase === 'workshop') leaveWorkshop(run);
       else if (run.phase === 'event') chooseEventOption(run, 0);
-      else if (run.phase === 'rest') leaveRest(run);
+      else if (run.phase === 'rest') passRest(run);
       else if (run.phase === 'actComplete') {
         transitions++;
         const expected = diffData.acts[run.actIndex - 1].lifeReward;
@@ -5806,6 +5817,198 @@ for (const seed of SEEDS) {
     check(guard > 0, 'Phase 6: End-to-End-Run haengt (Iterationslimit)');
     check(run.phase === 'victory', `Phase 6: End-to-End-Run endet in Phase "${run.phase}" statt "victory"`);
     check(transitions === 2, `Phase 6: ${transitions} Akt-Uebergaenge statt genau 2 (nach Akt 1 und Akt 2)`);
+  }
+}
+
+// ---- 51. Grundsteinumbau Phase 7: Rastplatz und Aufwertung ---------------
+// Der Rastplatz wird ein Raum mit echter Entscheidung (Reparaturtrupp ODER
+// Werkbank), und run.upgradeLevels/cfg.js: applyUpgrades() skalieren damit
+// die core-Effekte einer Karte. Mechanismus mit EIGENEN Zahlen (nicht den
+// echten balance.json-Werten), Gegenprobe fuer jeden Kernpunkt bestanden.
+{
+  // (a) Struktur: balance.upgradeLevel vollstaendig, sockel_ersatzpanzer
+  //     traegt upgradable:false, die vier uebrigen Sockelkarten nicht.
+  {
+    const lb = tanksData.balance.upgradeLevel;
+    check(
+      typeof lb?.bonusPct === 'number' && typeof lb?.maxLevel === 'number',
+      'Phase 7: balance.upgradeLevel fehlt oder ist unvollstaendig',
+    );
+    check(
+      upgradesData.upgrades.sockel_ersatzpanzer.upgradable === false,
+      'Phase 7: sockel_ersatzpanzer ist noch aufwertbar (ein halbes Leben existiert nicht)',
+    );
+    for (const id of ['sockel_panzerung', 'sockel_motor', 'sockel_magazin', 'sockel_ladeautomat']) {
+      check(
+        upgradesData.upgrades[id].upgradable !== false,
+        `Phase 7: ${id} ist faelschlich nicht aufwertbar`,
+      );
+    }
+  }
+
+  // (b) Mechanismus applyUpgrades()-Stufenskalierung mit EIGENEN Zahlen:
+  //     eine synthetische Karte mit hpAdd/speedMult, bonusPct 1.0 (Stufe
+  //     verdoppelt den Effekt je Stufe), maxLevel 5. Additiv (hpAdd) wird
+  //     direkt skaliert, multiplikativ (speedMult) nur die Abweichung von 1.
+  {
+    const synU = { upgrades: { testcard: { core: { hpAdd: 10, speedMult: 1.1 } } } };
+    const base = resolveCfg(tanksData, 'player');
+    const noLevel = applyUpgrades({ ...base }, { testcard: 1 }, synU, 'mine', null, {}, { bonusPct: 1.0, maxLevel: 5 });
+    const withLevel = applyUpgrades({ ...base }, { testcard: 1 }, synU, 'mine', null, { testcard: 2 }, { bonusPct: 1.0, maxLevel: 5 });
+    check(
+      Math.abs(noLevel.maxHp - (base.maxHp + 10)) < 1e-6,
+      `Phase 7: Stufe 0 veraendert hpAdd (${noLevel.maxHp} statt ${base.maxHp + 10})`,
+    );
+    // Stufe 2, bonusPct 1.0 -> sm = 1 + 2*1 = 3 -> hpAdd effektiv 30.
+    check(
+      Math.abs(withLevel.maxHp - (base.maxHp + 30)) < 1e-6,
+      `Phase 7: Stufe 2 skaliert hpAdd nicht auf das 3-fache (${withLevel.maxHp} statt ${base.maxHp + 30})`,
+    );
+    // speedMult 1.1 bei sm=3 -> 1 + (1.1-1)*3 = 1.3 (NICHT 1.1^3 = 1.331 und
+    // NICHT 1.1*3 = 3.3) -- nur die Abweichung von 1 wird skaliert.
+    const expectedSpeed = base.speed * 1.3;
+    check(
+      Math.abs(withLevel.speed - expectedSpeed) < 1e-6,
+      `Phase 7: Stufe 2 skaliert speedMult falsch (${withLevel.speed} statt ${expectedSpeed})`,
+    );
+    // Deckel: Stufe ueber maxLevel wird auf maxLevel geklemmt.
+    const overCap = applyUpgrades({ ...base }, { testcard: 1 }, synU, 'mine', null, { testcard: 99 }, { bonusPct: 1.0, maxLevel: 5 });
+    check(
+      Math.abs(overCap.maxHp - (base.maxHp + 10 * (1 + 5))) < 1e-6,
+      `Phase 7: Stufe 99 wird nicht auf maxLevel 5 geklemmt (${overCap.maxHp})`,
+    );
+    // upgradable:false ignoriert die Stufe komplett (sm bleibt 1).
+    const synU2 = { upgrades: { testcard: { core: { hpAdd: 10 }, upgradable: false } } };
+    const noScale = applyUpgrades({ ...base }, { testcard: 1 }, synU2, 'mine', null, { testcard: 4 }, { bonusPct: 1.0, maxLevel: 5 });
+    check(
+      Math.abs(noScale.maxHp - (base.maxHp + 10)) < 1e-6,
+      `Phase 7: upgradable:false wird trotzdem skaliert (${noScale.maxHp} statt ${base.maxHp + 10})`,
+    );
+    // Magazin/Minen bleiben nach der Skalierung ganzzahlig (magAdd 1, sm 1.5
+    // -> 1.5, gerundet).
+    const synU3 = { upgrades: { testcard: { core: { magAdd: 1 } } } };
+    const magLvl = applyUpgrades({ ...base }, { testcard: 1 }, synU3, 'mine', null, { testcard: 1 }, { bonusPct: 0.5, maxLevel: 2 });
+    check(Number.isInteger(magLvl.magazine), `Phase 7: Magazin ist nach Stufen-Skalierung nicht ganzzahlig (${magLvl.magazine})`);
+  }
+
+  // (c)+(d) Testschritte 1+2: repairAtRest() -- mit fehlendem Leben +1,
+  //     Raum zu Ende; bei vollen Leben abgelehnt, Raum bleibt offen.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 9001);
+    run.phase = 'rest';
+    run.lives = run.maxLives - 1;
+    const before = run.lives;
+    const ok = repairAtRest(run);
+    check(ok === true, 'Phase 7: repairAtRest() lehnt bei fehlendem Leben faelschlich ab');
+    check(run.lives === before + 1, `Phase 7: repairAtRest() gibt ${run.lives - before} statt 1 Leben`);
+    check(run.phase !== 'rest', `Phase 7: repairAtRest() beendet den Raum nicht (Phase "${run.phase}")`);
+
+    const run2 = createRun(tanksData, tilesData, diffData, upgradesData, 9002);
+    run2.phase = 'rest';
+    run2.lives = run2.maxLives; // volle Leben
+    const ok2 = repairAtRest(run2);
+    check(ok2 === false, 'Phase 7: repairAtRest() erlaubt bei vollen Leben faelschlich eine Reparatur');
+    check(run2.lives === run2.maxLives, 'Phase 7: repairAtRest() veraendert die Leben trotz Ablehnung');
+    check(run2.phase === 'rest', 'Phase 7: eine abgelehnte Reparatur beendet den Raum trotzdem');
+  }
+
+  // (e) Testschritt 3: sockel_motor aufwerten -- messbar schnellere Bewegung
+  //     als mit der unaufgewerteten Karte (echte upgradesData/balance.json).
+  {
+    const base = resolveCfg(tanksData, 'player');
+    const lvl0 = applyUpgrades({ ...base }, { sockel_motor: 1 }, upgradesData, 'mine', null, {}, tanksData.balance.upgradeLevel);
+    const lvl1 = applyUpgrades({ ...base }, { sockel_motor: 1 }, upgradesData, 'mine', null, { sockel_motor: 1 }, tanksData.balance.upgradeLevel);
+    check(lvl1.speed > lvl0.speed, `Phase 7: aufgewerteter sockel_motor ist nicht schneller (${lvl1.speed} <= ${lvl0.speed})`);
+  }
+
+  // (f) Testschritt 4: Speichern/Laden -- runSnapshot()/resume erhalten
+  //     run.upgradeLevels UND dessen Wirkung im aufgeloesten cfg.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 9003);
+    run.upgrades.sockel_motor = 1;
+    run.upgradeLevels.sockel_motor = 1;
+    const snap = runSnapshot(run);
+    check(snap.upgradeLevels?.sockel_motor === 1, 'Phase 7: runSnapshot() vergisst run.upgradeLevels');
+    const resumed = createRun(tanksData, tilesData, diffData, upgradesData, run.seed, run.modeKey, { resume: snap });
+    check(resumed.upgradeLevels?.sockel_motor === 1, 'Phase 7: Fortsetzen stellt run.upgradeLevels nicht wieder her');
+    const base = resolveCfg(tanksData, 'player');
+    const lvl0 = applyUpgrades({ ...base }, { sockel_motor: 1 }, upgradesData, 'mine', null, {}, tanksData.balance.upgradeLevel);
+    check(
+      resumed.state.player.cfg.speed > lvl0.speed,
+      'Phase 7: die Wirkung der Stufe fehlt nach dem Fortsetzen im Spieler-cfg',
+    );
+  }
+
+  // (g)+(h) Testschritt 5: restWorkbenchOptions()/upgradeCardAtRest() am
+  //     Deckel -- die Karte verschwindet aus der Liste, ein Aufwerten wird
+  //     abgelehnt; sockel_ersatzpanzer erscheint dort NIE.
+  {
+    const maxLevel = tanksData.balance.upgradeLevel.maxLevel;
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 9004);
+    run.phase = 'rest';
+    run.upgrades = { sockel_motor: 1, sockel_ersatzpanzer: 1 };
+    run.upgradeLevels = { sockel_motor: maxLevel };
+    const opts = restWorkbenchOptions(run);
+    check(
+      !opts.some((o) => o.id === 'sockel_motor'),
+      'Phase 7: eine Karte am Stufen-Deckel erscheint noch in der Werkbank-Liste',
+    );
+    check(
+      !opts.some((o) => o.id === 'sockel_ersatzpanzer'),
+      'Phase 7: sockel_ersatzpanzer erscheint in der Werkbank-Liste',
+    );
+    const okAtCap = upgradeCardAtRest(run, 'sockel_motor');
+    check(okAtCap === false, 'Phase 7: upgradeCardAtRest() erlaubt eine Aufwertung ueber den Deckel hinaus');
+    check(run.upgradeLevels.sockel_motor === maxLevel, 'Phase 7: die Stufe steigt trotz Deckel weiter');
+    check(run.phase === 'rest', 'Phase 7: eine abgelehnte Aufwertung beendet den Raum trotzdem');
+    const okOther = upgradeCardAtRest(run, 'sockel_ersatzpanzer');
+    check(okOther === false, 'Phase 7: sockel_ersatzpanzer laesst sich trotz upgradable:false aufwerten');
+    const okUnowned = upgradeCardAtRest(run, 'sockel_magazin');
+    check(okUnowned === false, 'Phase 7: eine nie gezogene Karte laesst sich am Rastplatz aufwerten');
+
+    // Erfolgsfall daneben: eine besessene, nicht gedeckelte Karte steigt.
+    run.upgrades.sockel_ladeautomat = 1;
+    const ok = upgradeCardAtRest(run, 'sockel_ladeautomat');
+    check(ok === true, 'Phase 7: eine gueltige Aufwertung wird abgelehnt');
+    check(run.upgradeLevels.sockel_ladeautomat === 1, 'Phase 7: die Stufe steigt nach einer gueltigen Aufwertung nicht');
+    check(run.phase !== 'rest', 'Phase 7: upgradeCardAtRest() beendet den Raum nicht');
+  }
+
+  // (i) Sicherheitsnetz: volle Leben UND keine aufwertbare Karte darf den
+  //     Rastplatz nicht zur Sackgasse ohne moegliche Wahl machen -- rest ist
+  //     ab Ebene 3 ein normal gewichteter Kartenknotentyp UND die letzte
+  //     Ebene vor jedem Boss ist immer komplett rest (garantiert erreichbar,
+  //     kein Seed-Suchlauf noetig). run.mapCurrentId wird direkt auf einen
+  //     Elternknoten eines rest-Knotens gesetzt -- chooseMapNode() prueft nur
+  //     "ist nodeId in current.next", nicht WIE der Spieler dorthin kam, also
+  //     testet das denselben startRoom()->startNonCombatRoom()-Pfad wie ein
+  //     echtes Spiel, ohne einen kompletten Kampf-Durchlauf zu simulieren.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+    let parentId = null;
+    let restId = null;
+    for (const node of run.map.byId.values()) {
+      const hit = node.next.find((id) => run.map.byId.get(id)?.type === 'rest');
+      if (hit != null) {
+        parentId = node.id;
+        restId = hit;
+        break;
+      }
+    }
+    check(parentId != null, 'Phase 7: kein Knoten mit erreichbarem rest-Nachbarn gefunden (Testaufbau)');
+    if (parentId != null) {
+      run.mapCurrentId = parentId;
+      run.phase = 'map';
+      // Grenzfall gezielt erzwingen: volle Leben, keine besessene Karte.
+      run.lives = run.maxLives;
+      run.upgrades = {};
+      const ok = chooseMapNode(run, restId);
+      check(ok, 'Phase 7: Sicherheitsnetz-Testaufbau -- rest-Knoten nicht erreichbar');
+      check(
+        run.phase !== 'rest',
+        `Phase 7: Rastplatz ohne moegliche Wahl bleibt in Phase "${run.phase}" haengen statt automatisch weiterzuziehen`,
+      );
+    }
   }
 }
 

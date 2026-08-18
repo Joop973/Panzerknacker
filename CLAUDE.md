@@ -3756,8 +3756,9 @@ eigener Abschnitt weiter unten. **Phase 3 (Der Grüne wird Mörserschütze)
 ist gebaut** — eigener Abschnitt weiter unten. **Phase 4 (Upgrades raus,
 Sockel rein) ist gebaut** — eigener Abschnitt weiter unten. **Phase 5
 (Klassen parken) ist gebaut** — eigener Abschnitt weiter unten. **Phase 6
-(Drei Akte) ist gebaut** — eigener Abschnitt weiter unten. **Nächste
-Sitzung: Phase 7** (Rastplatz und Aufwertung).
+(Drei Akte) ist gebaut** — eigener Abschnitt weiter unten. **Phase 7
+(Rastplatz und Aufwertung) ist gebaut** — eigener Abschnitt weiter unten.
+**Nächste Sitzung: Phase 8** (Shop überarbeiten).
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -4350,7 +4351,105 @@ perRoom`, alle `_todo: balance`) und `danger.<typ>.unlockAct`+
   Raum 1/17", Fortsetzen über einen Reload trägt `actIndex` korrekt weiter,
   keine Konsolenfehler.
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
-  **Nächste Sitzung: Phase 7** (Rastplatz und Aufwertung).
+
+### Grundsteinumbau v3 — Phase 7 (Rastplatz und Aufwertung) — gemergt
+Der Rastplatz wird ein Raum mit echter Entscheidung, und ein neues
+Stufen-System wertet vorhandene Karten auf, statt nur neue zu sammeln.
+- **Zwei Optionen, eine Wahl** (`roomscreens.js: createRestScreen()` komplett
+  neu, ersetzt den Phase-6-Platzhalter): **Reparaturtrupp** (+1 Leben,
+  gedeckelt auf `run.maxLives`, bei vollem Stand ausgegraut statt versteckt
+  — Auftrag: „der Spieler soll die Regel lernen") und **Werkbank** (eine
+  besessene Karte eine Stufe aufwerten). Anders als der Shop gibt es **kein**
+  drittes „Verlassen" — die gewählte Aktion (`run.js: repairAtRest()`/
+  `upgradeCardAtRest()`) ruft selbst `afterRoomDone()` auf und beendet den
+  Raum sofort (Testschritt 1). Beide Funktionen geben `false` zurück, wenn
+  die Aktion ungültig ist (volle Leben bzw. Karte am Deckel/nicht besessen/
+  `upgradable:false`) — der Screen bleibt dann offen (Muster: `mapscreen.js`,
+  schliesst sich nur bei Erfolg).
+- **Stufen-System** (`run.upgradeLevels`, {id: stufe ≥ 0}, im Snapshot):
+  getrennt von `run.upgrades` (Stapelzahl) — eine Karte kann mehrfach
+  gezogen UND separat aufgewertet sein. `data/balance.json: upgradeLevel`
+  (`bonusPct: 0.5`, `maxLevel: 2`, `_todo: balance`).
+- **`cfg.js: applyUpgrades()` skaliert die `core`-Effekte generisch**, ohne
+  die ~100-zeilige Kernschleife selbst anzufassen: eine neue `scaleCore()`
+  ersetzt `U[id].core` durch eine skalierte Kopie, BEVOR die bestehende
+  Schleife sie liest (`const c = scaleCore(raw, stufeMultFor(id))` statt
+  `const c = U[id].core`) — der Rest der Schleife (alle ~50 `if (c.xyz)`-
+  Zweige) ist unverändert. Additive Schlüssel (Suffix `Add`/`Bonus`) werden
+  direkt mit `1 + stufe*bonusPct` skaliert; multiplikative (Suffix `Mult`)
+  skalieren nur die **Abweichung von 1** (`1 + (v-1)*sm`) — ein 1,08×-Effekt
+  wird bei Stufe 1 zu 1,12×, nicht zu 1,62×, sonst wäre eine Stufe bei
+  Prozentkarten unverhältnismässig stärker als bei Fixwert-Karten. Bekannte,
+  bewusste Ausnahme: `shatterMult` (Frost-Topf, archiviert) endet auf
+  „Mult", wird im Code aber **additiv** verrechnet — von der Namens-basierten
+  Erkennung explizit ausgenommen. Schlüssel ohne Add/Bonus/Mult-Suffix
+  (Schwellen/Maxima/Booleans wie `magazineFixed`, `executeThreshold`,
+  `ghostCommander`) bleiben unskaliert — ein Stufen-Bonus auf einen
+  Deckelwert bräuchte Karten-eigene Semantik, keine generische Regel.
+  **Nur die vier aufwertbaren Sockelkarten sind aktuell erreichbar** (alle
+  vier korrekt erfasst: `hpAdd`/`speedMult`/`magAdd`/`reloadMult`) — die
+  ~50 übrigen, archivierten `core`-Schlüssel (Signaturtöpfe etc.) laufen
+  durch dieselbe generische Regel, sobald sie dereinst zurückkehren, ohne
+  dass Phase 7 sie einzeln geprüft hätte.
+- **Magazin/Minenzahl werden nach der Skalierung gerundet**
+  (`cfg.magazine = Math.round(cfg.magazine)`, ebenso `cfg.mines`) — ein
+  `magAdd: 1` wird bei Stufe 1 (`bonusPct 0.5`) sonst zu `1.5`, ein
+  fraktionales Magazin ergäbe keinen Sinn.
+- **`sockel_ersatzpanzer` ist NICHT aufwertbar** (`"upgradable": false`,
+  neues, generisches Opt-out-Feld) — „ein halbes Leben existiert nicht".
+  `stufeMultFor()` liefert für eine solche Karte immer 1 (Stufe wird
+  ignoriert), `restWorkbenchOptions()`/`upgradeCardAtRest()` filtern/
+  verweigern sie zusätzlich auf der Raum-Ebene.
+- **„+"-Suffix je Stufe am Kartennamen**, „im Angebot wie in der
+  Inventarliste" (Auftrag): `main.js` hängt beim Aufruf von
+  `upgradeScreen.show()`/`workshopScreen.show()` ein `stufe`-Feld an jedes
+  Angebotsobjekt (`o.stufe = run.upgradeLevels[o.id] || 0`, eine neue
+  gemappte Kopie — `run.pendingOffers`/`run.shopOffers` selbst bleiben
+  unangetastet, `onPick`/`onBan`/`onBuyCard` indizieren weiterhin direkt
+  hinein) und ebenso in der `preview.js`-Ausrüstungsliste. Die drei
+  Renderstellen (`upgradescreen.js`, `roomscreens.js: renderCards()`,
+  `preview.js: showUpgradePage()`) hängen `'+'.repeat(stufe)` an den Namen
+  — getrennt von der bestehenden „Stufe N"-Anzeige (die zählt Kartenstapel,
+  nicht die Rastplatz-Aufwertung).
+- **Sicherheitsnetz gegen eine ausweglose Wahl** (echter Testfund, nicht im
+  Auftrag vorhergesehen): `rest` ist seit Phase 6 ein normal gewichteter
+  Kartenknotentyp (`data/difficulty.json: map.nodeWeights`, nicht nur die
+  erzwungene Vor-Boss-Ebene) und kann mehrfach pro Akt auftauchen, während
+  `maxLevel × aufwertbare Kartenzahl` begrenzt ist (aktuell 2×4 = 8
+  Stufen-Slots) — bei vollen Leben UND keiner aufwertbaren Karte (alle am
+  Deckel oder noch keine besessen) wäre der Raum ein Screen ganz ohne
+  mögliche Wahl gewesen. `startNonCombatRoom()`s `rest`-Zweig prüft das
+  jetzt VOR dem Setzen von `run.phase = 'rest'` und zieht bei Bedarf über
+  `afterRoomDone()` automatisch weiter — dieselbe Fehlerklasse wie der
+  frühere Kartenscreen-Blocker (s. CLAUDE.md weiter unten). **Ohne dieses
+  Netz hängt die 5-Seed-Regressionssuite nachweislich** (Seed 42 blieb in
+  Phase „rest", Raum 14, fest — per Gegenprobe bestätigt, nicht nur
+  behauptet).
+- **`leaveRest()` ist ersatzlos entfernt** (keine dritte Aktion mehr) —
+  `tests/regression.mjs`s Playthrough-Schleifen riefen es an sechs Stellen
+  auf; ein neuer Testhelfer `passRest(run)` (Reparatur zuerst, sonst die
+  erste aufwertbare Karte) ersetzt es dort einheitlich.
+- **Neuer Testabschnitt 51** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt bestanden — je einzeln absichtlich rot gemacht: Mult-Skalierung
+  entfernt, Add/Bonus-Skalierung entfernt, `upgradable:false`-Ausnahme
+  entfernt, Stufen-Deckel in `stufeMultFor()` entfernt, `repairAtRest()`s
+  Lebensdeckel entfernt, `restWorkbenchOptions()`s Deckel-/upgradable-Filter
+  entfernt, `upgradeCardAtRest()`s Deckel-Prüfung entfernt,
+  `runSnapshot()`s `upgradeLevels`-Feld entfernt, das Sicherheitsnetz selbst
+  entfernt): Struktur (`balance.upgradeLevel`, `upgradable`-Feld auf den
+  fünf Sockelkarten), Skalierungsmechanismus mit **eigenen Zahlen**
+  (synthetische Testkarte, `bonusPct 1.0` statt des echten 0,5 — Stufe 2
+  verdreifacht den additiven Effekt, ein 1,1×-Multiplikator wird zu 1,3×
+  nicht 1,331×, Deckel-Klemmung bei Stufe 99), Testschritte 1–5 wörtlich
+  (Reparatur mit fehlendem/vollem Leben, `sockel_motor`-Aufwertung ist
+  messbar schneller, Snapshot/Fortsetzen erhält Stufe UND Wirkung im
+  aufgelösten cfg, Werkbank-Liste verliert eine Karte am Deckel und zeigt
+  `sockel_ersatzpanzer` nie), plus das Sicherheitsnetz (ein Elternknoten
+  eines garantiert erreichbaren `rest`-Knotens wird direkt angesteuert,
+  ohne einen kompletten Kampf zu simulieren — `chooseMapNode()` prüft nur
+  „ist die Ziel-id in `current.next`", nicht wie der Spieler dorthin kam).
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 8** (Shop überarbeiten).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -4646,3 +4745,7 @@ der Auswahlfilter-Mechanismus, geparkte Klassen lösen weiter fehlerfrei auf).
 `generateMap()`/`buyEnemies()`/`totalRooms()`-Mechanismus mit synthetischen
 Werten, Kartengraph-Regeln über 25 Seeds × 3 Akte, `actRoomKey`-
 Stromtrennung, ein instrumentierter End-to-End-Run mit den Akt-Übergängen).
+**Abschnitt 51** bewacht **Grundsteinumbau Phase 7** (Rastplatz und
+Aufwertung: `cfg.js: applyUpgrades()`s generische Stufen-Skalierung mit
+eigenen Zahlen, Reparaturtrupp/Werkbank-Mechanismus, Snapshot/Fortsetzen,
+das Sicherheitsnetz gegen einen ausweglosen Rastplatz).
