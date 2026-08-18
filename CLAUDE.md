@@ -3760,8 +3760,14 @@ Sockel rein) ist gebaut** — eigener Abschnitt weiter unten. **Phase 5
 (Rastplatz und Aufwertung) ist gebaut** — eigener Abschnitt weiter unten.
 **Phase 8 (Shop überarbeiten) ist gebaut** — eigener Abschnitt weiter unten.
 **Phase 9 (Kartenbelohnung neu verteilen) ist gebaut** — eigener Abschnitt
-weiter unten. **Nächste Sitzung: Phase 10** (Abnahme, letzte Phase des
-Grundsteinumbaus).
+weiter unten. **Phase 10 (Abnahme) ist gebaut** — eigener Abschnitt weiter
+unten. **Damit ist der komplette `AUFTRAG-GRUNDSTEINUMBAU.md` (Phasen 0–10)
+abgearbeitet.** Laut Auftrag Abschnitt 6 „Danach" folgt als nächstes eine
+Anpassung von `AUFTRAG-NEKROMANT-KOMPLETT.md` (Phase 1/2 gegen den 5-Karten-
+Sockel statt der 246 archivierten Karten, Nekromanten-Signaturpool
+18→~45 Karten, Reaktorkampf-Wortlaut veraltet, Schatzraum später wieder
+„1 Legendär" sobald ein Klassenpool Legendaries führt) — ein separater,
+noch nicht beauftragter Folgeauftrag, keine weitere Phase dieses Plans.
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -4571,8 +4577,82 @@ eine Karte als eine Option unter mehreren anbieten.
   Kartenräume je Run über 20 Seeds — Regressionsschutz gegen eine künftige,
   drastische Gewichtsänderung, keine exakte Zahl).
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
-  **Nächste Sitzung: Phase 10** (Abnahme, letzte Phase des
-  Grundsteinumbaus).
+
+### Grundsteinumbau v3 — Phase 10 (Abnahme) — gemergt
+Die Schlussabnahme des ganzen elf-Phasen-Umbaus. **Keine Balance-Werte
+geändert** — alle 21 Prüfpunkte des Auftrags sind am aktuellen Stand grün.
+Ganz überwiegend waren sie schon durch die Abschnitte 47–53 (Phasen 2/3/6)
+sowie ältere UMBAUPLAN-LP-/Upgradepool-v2-Abschnitte gedeckt — **neuer
+Testabschnitt 54** in `tests/regression.mjs` schließt nur die dabei
+gefundenen echten neun Lücken, jede mit Gegenprobe:
+- **(a)+(b) Punkt 16/17 — geschlossene Karten-/Gegnerwelt**: der Sockel hat
+  exakt die fünf bekannten ids (nicht mehr, nicht weniger — schließt
+  archivierte Karten strukturell aus, da `rollFromPool()`/`drawOne()` nur
+  ids aus `upgradesData.upgrades` liefern können), `t_prism` existiert
+  weder als Typ noch als kaufbarer Gegner.
+- **(c) Punkt 1 — kein Abpraller, auch nicht intern**: ein frisches Geschoss
+  trägt keine `wallBounces`/`ricochetsLeft`/`ricochetsStart`-Felder mehr,
+  ein Wandkontakt tötet sofort UND eine tote Kugel bewegt sich in den
+  Folge-Ticks nicht weiter (schließt eine überlebende interne
+  Reflexionsrechnung aus, nicht nur das sichtbare Verhalten).
+- **(d) Punkt 3 — Frontpanzerung reflektiert weiterhin, `ownBullet` greift**:
+  ein isolierter Zwei-Panzer-Aufbau (Muster: Abschnitt 47) zeigt, dass ein
+  Frontschuss abprallt (`b.reflected`, Besitzer bleibt der Schütze, Kugel
+  lebt weiter), die reflektierte Kugel den Schützen nach `ownBullet` (15)
+  schädigt, und danach am nächsten Wandkontakt stirbt wie jede andere Kugel
+  — kein zweiter Abpraller-Sonderfall mehr.
+- **(e) Punkt 6 — Vorhaltemarkierung geometrisch korrekt**: die von
+  `drawLeadMarkers()` gezeichnete Position wird gegen die analytische
+  Lösung derselben Abfang-Aufgabe (quadratische Gleichung) verglichen,
+  Toleranz 15 px (empirisch: die 3-Schritt-Näherung weicht bei
+  realistischen Zielgeschwindigkeiten höchstens ~8 px ab).
+- **(f) Punkt 7 — `magBlockedTime` real, nicht nur mechanismushaft**: ein
+  echter Raum mit den ECHTEN 450er-Kugeln und 8 s Dauerfeuer hält
+  `magBlockedTime` unter 5 % der Spielzeit (gemessen: 0 %) — Ergänzung zum
+  bereits synthetisch geprüften Mechanismus aus Abschnitt 47.
+- **(g) Punkt 9 — Mörser-Explosionsradius, BEIDE Seiten**: außerhalb des
+  Radius kein Schaden, innerhalb Schaden an Spieler UND Gegner gleichermaßen
+  (Abschnitt 48 prüfte bisher nur die Spielerseite).
+- **(h) Punkt 11 — `bossHpMult` real angewendet**: an zwei echten
+  Bossräumen (Akt 1 `bossHpMult 1.0`, Akt 2 `1.4`) gemessen, nicht nur als
+  vorhandenes Konfigurationsfeld (Abschnitt 50 prüfte bisher nur den Typ).
+- **(i) Punkt 15 — Fortsetzen über eine Aktgrenze**: Akt, Karte, Leben,
+  Schrott, Kartenstapel UND Aufwertungsstufe stimmen nach `runSnapshot()` +
+  Wiederaufbau exakt mit dem Stand vor dem Speichern überein.
+- **(j) Punkt 21 — Determinismus für Akt 2/3**: Abschnitt 4 prüfte bisher
+  nur Akt 1 (baut beim `createRun()`); Akt-2/3-Karten entstehen erst später
+  über `enterAct()`/`generateMap()` und brauchten eine eigene Probe.
+- **(k) Punkt 20 — Schatzkammer exakter Preis/Ertrag**: kostet exakt
+  `difficulty.treasure.lifeCost` (1) Leben und gibt exakt
+  `balance.scrap.treasure` (12) Schrott, an einer echten angesteuerten
+  Schatzkammer gemessen.
+- **Ein dokumentierter, bewusst nicht behobener Nebenbefund**:
+  `bullet.js: moveAxis()` enthält seit Phase 1 noch die alte
+  Reflexions-Restrechnung (Geschwindigkeitsumkehr + Positions-Clamp an der
+  Wandkante) im Wandkontakt-Zweig — sie ist nachweislich wirkungslos, weil
+  `updateBullet()` direkt danach `b.dead = true` setzt und jeder weitere
+  Aufruf durch das `if (b.dead) return;` am Funktionsanfang abgefangen wird
+  (Testschritt (c) beweist das über die Positions-Stabilität nach dem Tod).
+  Bewusst nicht aufgeräumt, um in der Abnahme-Phase kein Risiko an der
+  Kernphysik einzugehen, ohne dass der Auftrag das verlangt.
+- Alle Gegenproben aus (a)–(k) einzeln bestanden (Mechanismus jeweils
+  deliberately gebrochen — u. a. Radius-Check auf `true` gesetzt,
+  `bossHpMult` aus der Formel entfernt, `r.actIndex` beim Fortsetzen
+  ignoriert, der Akt-Kartenstrom mit `Math.random()` verrauscht, der
+  Schatzkammer-Schrottbetrag verfälscht —, Fehlermeldung geprüft, danach
+  zurückgesetzt); volle Suite (~7 s) läuft anschließend wieder grün.
+- `sw.js`-Cache auf `v112` erhöht (+ `telemetry.js: GAME_VERSION`
+  mitgezogen) — reiner Meilenstein-Bump zum Abschluss des gesamten
+  Grundsteinumbaus, keine neuen/geänderten Asset-Dateien in dieser Phase.
+- `ARCHIV.md` auf Vollständigkeit geprüft: jeder in Phasen 0–9 entfernte
+  Mechanismus (Bandenschuss, 251-Karten-Pool, Transformationen,
+  Zweitelement-System, Element-Filter, Schatzraum-Legendär, acht Klassen,
+  `t_prism`, alter Extra-Leben-Mechanismus, `everyNRooms`) hat einen
+  Index-Eintrag mit Fundstelle + Rückholweg — keine Lücke gefunden, keine
+  Änderung an `ARCHIV.md` nötig.
+- `tests/gamepad.mjs`, `tests/music.mjs`, `tests/uilayout.mjs`,
+  `tests/viewport.mjs` bleiben grün (keine funktionale Codeänderung in
+  dieser Phase, nur neue Tests + der Versions-Bump).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -4780,7 +4860,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v111`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v112`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
@@ -4881,4 +4961,11 @@ der neu ergänzte `maxLives`-Deckel im Lebenskauf, unterschiedliche Regale
 verteilt: Fluchräume geben wieder eine echte Kartenwahl statt eines
 Schrottpakets, Ereignisse mit `effects.card` öffnen den Angebotsbildschirm,
 `everyNRooms` ist entfernt, plus eine grobe Größenordnungsprüfung der
-Kartenraum-Rechnung).
+Kartenraum-Rechnung). **Abschnitt 54** bewacht **Grundsteinumbau Phase 10**
+(Abnahme, letzte Phase des Grundsteinumbaus: kein Abpraller auch strukturell
+nicht mehr möglich, Frontpanzerung reflektiert weiterhin + `ownBullet`,
+Vorhaltemarkierung gegen die analytische Abfanglösung, `magBlockedTime` real
+bei 450er-Kugeln, Mörser-Radius auf beiden Seiten, `bossHpMult` an zwei
+echten Bossräumen, Fortsetzen über eine Aktgrenze, Akt-2/3-Kartendeterminismus,
+Schatzkammer-Preis/-Ertrag exakt) — damit ist der gesamte
+`AUFTRAG-GRUNDSTEINUMBAU.md` (Phasen 0–10) abgenommen.
