@@ -27,8 +27,9 @@ import {
   buyShopCard,
   buyShopSecondary,
   buyShopLife,
+  buyShopUpgradeLevel,
   repairAtRest,
-  restWorkbenchOptions,
+  workbenchOptions,
   upgradeCardAtRest,
   advanceAct,
   ROOM_TYPE_INFO,
@@ -740,6 +741,9 @@ async function init() {
         dropRefund: refund,
         getScrap: () => run.scrap,
         getUpgrades: () => run.upgrades,
+        // Grundsteinumbau Phase 8: Werkbank im Shop -- dieselbe Filterliste
+        // wie am Rastplatz (run.js: workbenchOptions()).
+        getWorkbenchOptions: () => workbenchOptions(run),
         // Grundsteinumbau Phase 7: "+"-Suffix auch im Shop-Regal.
         getOffers: () => run.shopOffers?.map((o) => ({ ...o, stufe: run.upgradeLevels[o.id] || 0 })),
         getEquippedSecondary: () => run.equippedGadget, // P4: der Shop tauscht Gadgets
@@ -748,6 +752,7 @@ async function init() {
         // (buyShopSecondary() sperrt den Kauf zusaetzlich serverseitig).
         necromancer: !!tanksData.types[run.starterTank]?.necromancer,
         lifeBought: () => run.shopLifeBought,
+        atFullLives: () => run.lives >= run.maxLives, // Grundsteinumbau Phase 8, Testschritt 4
         onBuyCard: (idx) => {
           const offer = run.shopOffers[idx];
           const ok = buyShopCard(run, idx);
@@ -797,10 +802,13 @@ async function init() {
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shopLife', amount: costs.shopLife });
           return ok;
         },
-        // Grundsteinumbau Phase 4: Zweitelement-Reroll entfernt (Zweitelement-
-        // System selbst ist weg, archive/systeme-v1.md Abschnitt 2) --
-        // roomscreens.js zeigt die Shop-Sektion nur bei gesetztem
-        // onRerollElement, ohne den Callback bleibt sie unsichtbar.
+        // Grundsteinumbau Phase 8: Werkbank im Shop, dieselbe Aufwertung wie
+        // am Rastplatz (run.js: raiseUpgradeLevel()), hier gegen Schrott.
+        onUpgradeLevel: (id) => {
+          const ok = buyShopUpgradeLevel(run, id);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'upgradeLevel', amount: costs.upgradeLevel });
+          return ok;
+        },
         onDrop: (id) => {
           const ok = dropUpgrade(run, id);
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'drop', amount: -refund });
@@ -845,7 +853,7 @@ async function init() {
       restScreen.show({
         lives: run.lives,
         maxLives: run.maxLives,
-        options: restWorkbenchOptions(run),
+        options: workbenchOptions(run),
         onRepair: () => {
           const ok = repairAtRest(run);
           if (ok) restShown = false;

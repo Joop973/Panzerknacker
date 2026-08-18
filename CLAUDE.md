@@ -3758,7 +3758,8 @@ Sockel rein) ist gebaut** — eigener Abschnitt weiter unten. **Phase 5
 (Klassen parken) ist gebaut** — eigener Abschnitt weiter unten. **Phase 6
 (Drei Akte) ist gebaut** — eigener Abschnitt weiter unten. **Phase 7
 (Rastplatz und Aufwertung) ist gebaut** — eigener Abschnitt weiter unten.
-**Nächste Sitzung: Phase 8** (Shop überarbeiten).
+**Phase 8 (Shop überarbeiten) ist gebaut** — eigener Abschnitt weiter unten.
+**Nächste Sitzung: Phase 9** (Kartenbelohnung neu verteilen).
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -4398,7 +4399,7 @@ Stufen-System wertet vorhandene Karten auf, statt nur neue zu sammeln.
 - **`sockel_ersatzpanzer` ist NICHT aufwertbar** (`"upgradable": false`,
   neues, generisches Opt-out-Feld) — „ein halbes Leben existiert nicht".
   `stufeMultFor()` liefert für eine solche Karte immer 1 (Stufe wird
-  ignoriert), `restWorkbenchOptions()`/`upgradeCardAtRest()` filtern/
+  ignoriert), `workbenchOptions()`/`upgradeCardAtRest()` filtern/
   verweigern sie zusätzlich auf der Raum-Ebene.
 - **„+"-Suffix je Stufe am Kartennamen**, „im Angebot wie in der
   Inventarliste" (Auftrag): `main.js` hängt beim Aufruf von
@@ -4433,7 +4434,7 @@ Stufen-System wertet vorhandene Karten auf, statt nur neue zu sammeln.
   Kernpunkt bestanden — je einzeln absichtlich rot gemacht: Mult-Skalierung
   entfernt, Add/Bonus-Skalierung entfernt, `upgradable:false`-Ausnahme
   entfernt, Stufen-Deckel in `stufeMultFor()` entfernt, `repairAtRest()`s
-  Lebensdeckel entfernt, `restWorkbenchOptions()`s Deckel-/upgradable-Filter
+  Lebensdeckel entfernt, `workbenchOptions()`s Deckel-/upgradable-Filter
   entfernt, `upgradeCardAtRest()`s Deckel-Prüfung entfernt,
   `runSnapshot()`s `upgradeLevels`-Feld entfernt, das Sicherheitsnetz selbst
   entfernt): Struktur (`balance.upgradeLevel`, `upgradable`-Feld auf den
@@ -4449,7 +4450,56 @@ Stufen-System wertet vorhandene Karten auf, statt nur neue zu sammeln.
   ohne einen kompletten Kampf zu simulieren — `chooseMapNode()` prüft nur
   „ist die Ziel-id in `current.next`", nicht wie der Spieler dorthin kam).
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
-  **Nächste Sitzung: Phase 8** (Shop überarbeiten).
+
+### Grundsteinumbau v3 — Phase 8 (Shop überarbeiten) — gemergt
+Der Shop war auf 246 generische Karten und sechs Schadenstypen ausgelegt —
+beides gibt es seit Phase 4/1 nicht mehr. Kleinere Auffrischung statt Umbau.
+- **`shop.cardChoices` 5 → 4** (`data/balance.json`) — der 5-Karten-Sockel
+  füllte ein 5er-Regal ohnehin fast immer komplett, vier Slots reichen.
+- **Neue Werkbank-Aktion im Shop**: dieselbe Aufwertung wie am Rastplatz
+  (Phase 7), hier gegen Schrott statt kostenlos, und **ohne** den Raum zu
+  beenden (man bleibt im Shop wie bei jeder anderen Aktion dort). Der
+  gemeinsame Kern ist jetzt **eine** Funktion: `run.js: raiseUpgradeLevel()`
+  prüft Besitz/Deckel/`upgradable`, `upgradeCardAtRest()` (Rastplatz, Phase 7)
+  und das neue `buyShopUpgradeLevel()` (Shop, gegen `scrap.cost.upgradeLevel`,
+  Vorschlag 6) rufen sie beide auf — nur Kosten und Raumfluss unterscheiden
+  sich. Die Karten-Vorschauliste selbst ist ebenfalls jetzt **eine**
+  Funktion: `restWorkbenchOptions()` ist zu `workbenchOptions()`
+  umbenannt (Rastplatz UND Shop nutzen dieselbe Filterliste — besessen,
+  nicht `upgradable:false`, unter `maxLevel`).
+- **Echter Fund beim Nachbau von Testschritt 4**: der Lebenskauf im Shop
+  (`buyShopLife()`, seit Phase 13) kannte bisher **keinen** `maxLives`-Deckel
+  — nur die Einmal-pro-Besuch-Sperre. Der Auftrag verlangt ausdrücklich
+  „gedeckelt auf `maxLives`" (Abschnitt „Angebot neu") und Testschritt 4
+  („Leben bei vollem Stand kaufen wollen — gesperrt") hätte das sofort
+  aufgedeckt. Jetzt behält `buyShopLife()` denselben Deckel wie
+  `repairAtRest()` am Rastplatz; die UI zeigt „+1 Leben (Leben bereits
+  voll)" ausgegraut statt versteckt (`ctx.atFullLives()`, Muster wie der
+  Reparaturtrupp-Knopf).
+- **„Raus": Element neu würfeln.** Der Preis (`scrap.cost.rerollElement`)
+  war bereits mit dem Zweitelement-System (Grundsteinumbau Phase 4)
+  archiviert (`archive/systeme-v1.md`, Abschnitt 2) — ein **letztes totes
+  Fragment** stand aber noch in `roomscreens.js: createShopScreen()` (ein
+  `if (ctx.onRerollElement)`-Zweig, der seit Phase 4 nie mehr auslösen
+  konnte, weil `main.js` diese Felder nicht mehr setzt). Jetzt entfernt,
+  Archiv-Eintrag um einen Nachtrag ergänzt.
+- **Entfernen/Schild/Gadget/Leben bleiben unverändert** (Auftrag: „wie
+  bisher") — reine Bestandsfunktionen, keine Änderung nötig.
+- **Neuer Testabschnitt 52** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt bestanden — je einzeln absichtlich rot gemacht:
+  `buyShopUpgradeLevel()`s Kostenprüfung/-abzug entfernt, `buyShopLife()`s
+  neuer `maxLives`-Deckel entfernt, `shop.cardChoices` probeweise auf 3
+  gesetzt): Struktur (`cardChoices` 4, `cost.upgradeLevel` vorhanden),
+  Testschritte 1–5 wörtlich über einen **echten** Shop-Besuch (Kartengraph
+  direkt angesteuert, kein Kampf simuliert, Muster wie das
+  Phase-7-Sicherheitsnetz) — genau `cardChoices` Karten im Regal, Werkbank
+  hebt die Stufe und zieht exakt den Preis ab und lässt den Raum offen, 0
+  Schrott lässt keine Aktion durch und stürzt nicht ab, ein Lebenskauf bei
+  vollen Leben wird abgelehnt, zwei verschiedene Shop-Besuche im selben Run
+  liefern unterschiedliche Regale (deterministisch aus Seed+Raumnummer,
+  nicht dasselbe Array).
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 9** (Kartenbelohnung neu verteilen).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -4626,9 +4676,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   3-Sekunden-Verbündeter) überholt** — maßgeblich ist der Nekromant-Auftrag
   (Anhang A/B).
 - `src/ui/roomscreens.js` — Event- und Shop-Overlay (`createShopScreen`,
-  Phase 13: Kartenregal, Schild, Sekundärtausch, Leben, Ablegen). Seit
-  Grundsteinumbau Phase 6 auch `createRestScreen()` (Rastplatz-Platzhalter,
-  Inhalt kommt Phase 7) und `createActCompleteScreen()` (Akt-Übergang).
+  Phase 13: Kartenregal, Schild, Sekundärtausch, Leben, Ablegen; seit
+  Grundsteinumbau Phase 8 zusätzlich die Werkbank gegen Schrott). Seit
+  Grundsteinumbau Phase 6 auch `createRestScreen()` (Rastplatz: seit Phase 7
+  Reparaturtrupp/Werkbank) und `createActCompleteScreen()` (Akt-Übergang).
 - `src/ui/mapscreen.js` — Kartenscreen (Phase 12): zeigt den ganzen
   Kartengraphen **des aktuellen Akts** (Grundsteinumbau Phase 6: eine Karte
   pro Akt statt einer für den ganzen Run), klickbar nur die von der
@@ -4749,3 +4800,7 @@ Stromtrennung, ein instrumentierter End-to-End-Run mit den Akt-Übergängen).
 Aufwertung: `cfg.js: applyUpgrades()`s generische Stufen-Skalierung mit
 eigenen Zahlen, Reparaturtrupp/Werkbank-Mechanismus, Snapshot/Fortsetzen,
 das Sicherheitsnetz gegen einen ausweglosen Rastplatz).
+**Abschnitt 52** bewacht **Grundsteinumbau Phase 8** (Shop überarbeitet:
+`cardChoices`, Werkbank im Shop gegen Schrott über einen echten Shop-Besuch,
+der neu ergänzte `maxLives`-Deckel im Lebenskauf, unterschiedliche Regale
+über zwei Shop-Besuche im selben Run).

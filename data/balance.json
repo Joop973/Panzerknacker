@@ -85,7 +85,7 @@
       "minRoom": 9
     }
   },
-  "_comment_scrap": "treasure (Grundsteinumbau Phase 4, _todo: balance): Schrottpaket fuer Schatzkammer/Verflucht-Raeume -- ersetzt das fruehere garantierte Legendaer, das der Sockel (5 Karten, keine legendary) nicht mehr liefern kann. run.js: grantTreasureScrap().",
+  "_comment_scrap": "treasure (Grundsteinumbau Phase 4, _todo: balance): Schrottpaket fuer Schatzkammer/Verflucht-Raeume -- ersetzt das fruehere garantierte Legendaer, das der Sockel (5 Karten, keine legendary) nicht mehr liefern kann. run.js: grantTreasureScrap(). Grundsteinumbau Phase 8: cost.upgradeLevel ist der Werkbank-Preis im Shop (dieselbe Aufwertung wie am Rastplatz, hier gekauft statt gerastet) -- cost.rerollElement (Zweitelement-Preis) ist mit dem Zweitelement-System entfallen (archive/systeme-v1.md, Abschnitt 2).",
   "scrap": {
     "perRoom": [
       1,
@@ -101,7 +101,8 @@
       "shieldCharge": 4,
       "shopCard": 5,
       "shopSecondary": 6,
-      "shopLife": 12
+      "shopLife": 12,
+      "upgradeLevel": 6
     }
   },
   "_comment_upgrades": "Upgradepool-v2 Phase 3: synergyStep ist der Gewichtsaufschlag PRO bereits gewaehlter Karte mit einem passenden tags[]-Eintrag (0.5 = +50 % je Treffer, mehrere passende Tags summieren sich), synergyCap deckelt den Gesamtfaktor (2.0 = hoechstens doppelt so wahrscheinlich) -- der Faktor ist immer >= 1, schliesst also nie eine Karte aus. Grundsteinumbau Phase 4: secondElementWeight (Zweitelement-Gewichtung, UMBAUPLAN-LP Phase 17) ist mit dem Zweitelement-System entfernt.",
@@ -114,8 +115,9 @@
     "bonusPct": 0.5,
     "maxLevel": 2
   },
+  "_comment_shop": "Grundsteinumbau Phase 8: cardChoices 5 -> 4 (Auftrag) -- der Sockel hat nur 5 Karten insgesamt, ein Regal mit 5 Slots zeigte praktisch immer alle auf einmal.",
   "shop": {
-    "cardChoices": 5
+    "cardChoices": 4
   },
   "_comment_ghost": "Upgradepool-v2 Phase 6: Geistlimit laut Festgelegte-Entscheidungen-Tabelle auf 3 gesetzt (vorher 4, Rest des alten Systems), OHNE Verdraengung -- am Limit passiert nichts (kein Verbrauch, kein Wurf). spawnChance.necro gilt fuer einen Kill DURCH DEN SPIELER als Nekromant (cfg.necromancer), spawnChance.ghost fuer einen Kill DURCH EINEN GEIST (killer.isGhost) -- state.js: killTank(). Lebensdauer bleibt kein Timer (Phase 7 baut die feste Basiseinheit). commanderHpMult/commanderDamageMult/commanderShieldHealFraction/reviveHealFraction sind Phase-8-Vorschlaege (Signaturkarten Geisterkommandant/Phylakterium/Wiederkehr) -- Anhang B nennt dafuer keine Zahlen, noch nicht am echten Spielgefuehl geprueft. bombCooldownS (Nutzerwunsch): eigene Abklingzeit der Geisterbombe (tank.js: spawnGhostBomb), unabhaengig vom Geistlimit UND vom kill-ausgeloesten Spawnwuerfel -- letzterer bleibt ungedeckelt.",
   "ghost": {
