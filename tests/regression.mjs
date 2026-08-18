@@ -23,7 +23,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption } from '../src/game/run.js';
+import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, leaveRest, advanceAct } from '../src/game/run.js';
 import { traceTrajectory } from '../src/game/bullet.js';
 import { validateArenas } from '../src/game/generator.js';
 import { createMine, updateMines } from '../src/game/mine.js';
@@ -1875,11 +1875,20 @@ function check(ok, msg) {
     const st = run.state;
     for (const t of st.tanks) if (t !== st.player && t.alive) st.killTank(t, 'test');
     g = 0;
-    while (run.phase !== 'upgrade' && run.phase !== 'map' && g++ < 900) stepRun(run, CMD0, 1 / 60);
-    if (run.phase === 'upgrade') chooseUpgrade(run, 0);
-    if (run.phase === 'map') {
-      const c = run.map.byId.get(run.mapCurrentId);
-      for (const id of c?.next || []) if (chooseMapNode(run, id)) break;
+    const nonCombat = new Set(['upgrade', 'map', 'rest', 'actComplete', 'workshop', 'event']);
+    let advanceGuard = 10;
+    while (run.phase !== 'preview' && advanceGuard-- > 0) {
+      let steps = 0;
+      while (!nonCombat.has(run.phase) && run.phase !== 'preview' && steps++ < 900) stepRun(run, CMD0, 1 / 60);
+      if (run.phase === 'upgrade') chooseUpgrade(run, 0);
+      else if (run.phase === 'map') {
+        const c = run.map.byId.get(run.mapCurrentId);
+        for (const id of c?.next || []) if (chooseMapNode(run, id)) break;
+      } else if (run.phase === 'rest') leaveRest(run);
+      else if (run.phase === 'actComplete') advanceAct(run);
+      else if (run.phase === 'workshop') leaveWorkshop(run);
+      else if (run.phase === 'event') chooseEventOption(run, 0);
+      else break;
     }
     if (run.phase === 'preview') enterRoom(run);
     g = 0;
@@ -2767,6 +2776,12 @@ for (const seed of SEEDS) {
       leaveWorkshop(run);
     } else if (run.phase === 'event') {
       chooseEventOption(run, 0);
+    } else if (run.phase === 'rest') {
+      // Grundsteinumbau Phase 6: Platzhalter-Durchgangsraum, ein "Weiter".
+      leaveRest(run);
+    } else if (run.phase === 'actComplete') {
+      // Grundsteinumbau Phase 6: Akt-Uebergangsbildschirm nach dem Bosskill.
+      advanceAct(run);
     } else {
       check(false, `Seed ${seed}: unbekannte Phase "${run.phase}"`);
       break;
@@ -2866,6 +2881,8 @@ for (const seed of SEEDS) {
         else if (run.phase === 'map') pickMapNode(run);
         else if (run.phase === 'workshop') leaveWorkshop(run);
         else if (run.phase === 'event') chooseEventOption(run, 0);
+        else if (run.phase === 'rest') leaveRest(run);
+        else if (run.phase === 'actComplete') advanceAct(run);
         else break;
       }
     }
@@ -3222,6 +3239,8 @@ for (const seed of SEEDS) {
       } else if (run.phase === 'map') pickMapNode(run);
       else if (run.phase === 'workshop') leaveWorkshop(run);
       else if (run.phase === 'event') chooseEventOption(run, 0);
+      else if (run.phase === 'rest') leaveRest(run);
+      else if (run.phase === 'actComplete') advanceAct(run);
       else return false;
     }
     return false;
@@ -3285,7 +3304,7 @@ for (const seed of SEEDS) {
 // alten Systems weg sein -- reine Struktur- und Verhaltensnachweise, keine
 // neue Spielmechanik.
 {
-  const { createRun, stepRun: sr, chooseUpgrade: cu, enterRoom: er, leaveWorkshop: lw, chooseEventOption: ceo } = await import('../src/game/run.js');
+  const { createRun, stepRun: sr, chooseUpgrade: cu, enterRoom: er, leaveWorkshop: lw, chooseEventOption: ceo, leaveRest: lr, advanceAct: aa } = await import('../src/game/run.js');
   const U = upgradesData.upgrades;
 
   // (a) Struktur: die Karte ghost_crew existiert nicht mehr; kein Kern-
@@ -3338,6 +3357,8 @@ for (const seed of SEEDS) {
       else if (run.phase === 'map') pickMapNode(run);
       else if (run.phase === 'workshop') lw(run);
       else if (run.phase === 'event') ceo(run, 0);
+      else if (run.phase === 'rest') lr(run);
+      else if (run.phase === 'actComplete') aa(run);
       else break;
     }
     check(guard > 0, 'Phase 4 (Upgradepool-v2): Nekromant-Run haengt (Iterationslimit)');
@@ -5621,6 +5642,170 @@ for (const seed of SEEDS) {
   {
     const cfg = resolveCfg(tanksData, 'c_necro');
     check(cfg.necromancer === true, 'Phase 5: der Nekromant hat sein Passiv verloren');
+  }
+}
+
+// ---- 50. Grundsteinumbau Phase 6: Drei Akte -------------------------------
+// Aus der 16-Raum-Karte werden drei Akte a 16 Raeume + Bossraum. Mechanismus
+// mit eigenen Zahlen (synthetische diffs/Seeds statt der echten _todo:
+// balance-Werte), Gegenprobe fuer jeden Kernpunkt bestanden.
+{
+  const { generateMap, buyEnemies, totalRooms, createRun: cr2, stepRun: sr2, advanceAct: aa2 } = await import('../src/game/run.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+
+  // (a) Struktur: drei Akte, feste Boss-Reihenfolge Reaktor->Spiegel->Phalanx,
+  //     Lebensbonus nur bei Akt 1/2 (Akt 3 beendet den Run, kein Bonus mehr).
+  {
+    const acts = diffData.acts;
+    check(acts.length === 3, `Phase 6: ${acts.length} Akte statt 3`);
+    check(
+      acts.map((a) => a.boss).join(',') === 'boss_reactor,boss_mirror,boss_phalanx',
+      `Phase 6: Boss-Reihenfolge ${acts.map((a) => a.boss).join(',')} statt Reaktor/Spiegel/Phalanx`,
+    );
+    for (const [i, a] of acts.entries()) {
+      check(
+        typeof a.rooms === 'number' && typeof a.bossHpMult === 'number' &&
+          typeof a.lifeReward === 'number' && typeof a.budget?.base === 'number' && typeof a.budget?.perRoom === 'number',
+        `Phase 6: Akt ${i + 1} hat unvollstaendige Konfiguration`,
+      );
+    }
+    check(acts[2].lifeReward === 0, 'Phase 6: der letzte Akt vergibt noch einen Lebensbonus (der Run ist danach vorbei)');
+  }
+
+  // (b) Struktur: jeder Gegnertyp hat unlockAct/unlockRoomInAct (ersetzt das
+  //     alte einzelne unlockRoom vollstaendig).
+  {
+    for (const [id, d] of Object.entries(diffData.danger)) {
+      check(
+        typeof d.unlockAct === 'number' && typeof d.unlockRoomInAct === 'number' && d.unlockRoom === undefined,
+        `Phase 6: Gegnertyp "${id}" hat kein unlockAct/unlockRoomInAct (oder noch ein altes unlockRoom)`,
+      );
+    }
+  }
+
+  // (c) totalRooms()-MECHANISMUS mit einem synthetischen Akt-Array (nicht
+  //     den echten 16-Raum-Werten) -- Raeume + 1 (Bossraum), je Akt.
+  {
+    const fakeDiff = { acts: [{ rooms: 7 }, { rooms: 20 }] };
+    check(totalRooms(fakeDiff, 1) === 8, `Phase 6: totalRooms(Akt 1) = ${totalRooms(fakeDiff, 1)} statt 8`);
+    check(totalRooms(fakeDiff, 2) === 21, `Phase 6: totalRooms(Akt 2) = ${totalRooms(fakeDiff, 2)} statt 21`);
+  }
+
+  // (d) buyEnemies()-MECHANISMUS mit einem synthetischen danger-Objekt: ein
+  //     Typ, der erst in Akt 2 (bzw. Akt 2 ab Raum 5) freigeschaltet wird,
+  //     darf VOR seiner Freischaltung nie gekauft werden.
+  {
+    const fakeDiff = {
+      maxEnemiesPerRoom: 8,
+      danger: {
+        a: { points: 1, unlockAct: 1, unlockRoomInAct: 1 },
+        b: { points: 1, unlockAct: 2, unlockRoomInAct: 1 },
+        c: { points: 1, unlockAct: 2, unlockRoomInAct: 5 },
+      },
+    };
+    const seenIn = (actIndex, roomIndexInAct) => {
+      const seen = new Set();
+      const rng = mulberry32(1);
+      for (let i = 0; i < 500; i++) {
+        for (const ty of buyEnemies(fakeDiff, rng, actIndex, roomIndexInAct, 10)) seen.add(ty);
+      }
+      return seen;
+    };
+    const act1 = seenIn(1, 16); // spaeter Raum in Akt 1 -- b/c trotzdem gesperrt
+    check(act1.has('a') && !act1.has('b') && !act1.has('c'), `Phase 6: Akt 1 kauft ${[...act1]} statt nur "a"`);
+    const act2fruh = seenIn(2, 1);
+    check(act2fruh.has('a') && act2fruh.has('b') && !act2fruh.has('c'), `Phase 6: Akt 2 Raum 1 kauft ${[...act2fruh]} statt "a"+"b" ohne "c"`);
+    const act2spaet = seenIn(2, 5);
+    check(act2spaet.has('a') && act2spaet.has('b') && act2spaet.has('c'), `Phase 6: Akt 2 Raum 5 kauft ${[...act2spaet]} statt alle drei`);
+  }
+
+  // (e) generateMap()-STRUKTURREGELN ueber viele synthetische Seeds (die
+  //     echte danger/map-Konfiguration ist hier voellig unbeteiligt -- reine
+  //     Graph-Regeln): erste zwei Ebenen erzwungener Kampf, dritte Ebene ohne
+  //     elite/cursed/workshop, letzte Ebene komplett 'rest', genau EIN
+  //     'treasure'-Knoten, keine zwei Rastplaetze in Folge (ausser in die
+  //     erzwungene Rast-Ebene hinein).
+  {
+    const actRooms = diffData.acts[0].rooms;
+    for (let seed = 1; seed <= 25; seed++) {
+      for (const actIndex of [1, 2, 3]) {
+        const map = generateMap(seed * 1000 + actIndex, diffData, actIndex);
+        for (const n of map.layers[0]) check(n.type === 'combat' && !n.isBoss, `Phase 6: Ebene 1 (Seed ${seed}) ist nicht erzwungen Kampf`);
+        for (const n of map.layers[1]) check(n.type === 'combat' && !n.isBoss, `Phase 6: Ebene 2 (Seed ${seed}) ist nicht erzwungen Kampf`);
+        for (const n of map.layers[2]) {
+          check(
+            !['elite', 'cursed', 'workshop'].includes(n.type),
+            `Phase 6: Ebene 3 (Seed ${seed}) hat einen gesperrten Typ "${n.type}"`,
+          );
+        }
+        const restLayer = map.layers[actRooms - 1];
+        for (const n of restLayer) check(n.type === 'rest', `Phase 6: letzte Ebene vor dem Boss (Seed ${seed}) hat "${n.type}" statt "rest"`);
+        const bossLayer = map.layers[map.layers.length - 1];
+        check(bossLayer.length === 1 && bossLayer[0].isBoss && bossLayer[0].type === 'combat', `Phase 6: Bossknoten (Seed ${seed}) falsch aufgebaut`);
+        const treasureCount = [...map.byId.values()].filter((n) => n.type === 'treasure').length;
+        check(treasureCount === 1, `Phase 6: ${treasureCount} Schatzkammer-Knoten (Seed ${seed}) statt genau 1`);
+        for (const layer of map.layers) {
+          for (const node of layer) {
+            if (node.type !== 'rest') continue;
+            for (const nid of node.next) {
+              const target = map.byId.get(nid);
+              check(
+                !(target.type === 'rest' && target.layer !== actRooms),
+                `Phase 6: zwei Rastplaetze in Folge (Seed ${seed}, Ebene ${node.layer}->${target.layer})`,
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // (f) actRoomKey-MECHANISMUS (RNG-Stromtrennung): Akt 1 und Akt 2
+  //     erzeugen bei GLEICHEM Seed unterschiedliche Karten -- sonst wuerden
+  //     Akt-1-Raum-1 und Akt-2-Raum-1 identische Raeume ziehen (derselbe
+  //     Fehler, den actRoomKey() in run.js verhindert).
+  {
+    for (const seed of [11, 22, 33]) {
+      const m1 = generateMap(seed, diffData, 1);
+      const m2 = generateMap(seed, diffData, 2);
+      const sig = (m) => m.layers.map((l) => l.map((n) => n.type).join(',')).join('|');
+      check(sig(m1) !== sig(m2), `Phase 6: Akt 1 und Akt 2 (Seed ${seed}) erzeugen dieselbe Karte -- RNG-Stroeme nicht getrennt`);
+    }
+  }
+
+  // (g) End-to-End: ein kompletter Run durchlaeuft GENAU zwei
+  //     Akt-Uebergaenge (nach Akt 1 und Akt 2), mit dem in acts[].lifeReward
+  //     hinterlegten Bonus, gedeckelt auf maxLives -- und endet nach dem
+  //     dritten (letzten) Boss direkt mit 'victory', OHNE einen dritten
+  //     Uebergang. cheatKillAll haelt den Spieler ueberwiegend bei vollen
+  //     Leben, der Cap wird dadurch in der Praxis mitgeprueft (Lebensbonus
+  //     darf run.maxLives dann nicht ueberschreiten).
+  {
+    const run = cr2(tanksData, tilesData, diffData, upgradesData, 555555);
+    let transitions = 0;
+    let guard = 200000;
+    while (run.phase !== 'victory' && run.phase !== 'gameover' && guard-- > 0) {
+      if (run.phase === 'preview') enterRoom(run);
+      else if (run.phase === 'transition') sr2(run, CMD, STEP);
+      else if (run.phase === 'playing') {
+        cheatKillAll(run.state);
+        sr2(run, CMD, STEP);
+      } else if (run.phase === 'upgrade') chooseUpgrade(run, 0);
+      else if (run.phase === 'map') pickMapNode(run);
+      else if (run.phase === 'workshop') leaveWorkshop(run);
+      else if (run.phase === 'event') chooseEventOption(run, 0);
+      else if (run.phase === 'rest') leaveRest(run);
+      else if (run.phase === 'actComplete') {
+        transitions++;
+        const expected = diffData.acts[run.actIndex - 1].lifeReward;
+        check(run.lastActLifeReward === expected, `Phase 6: Uebergang ${transitions} vergibt ${run.lastActLifeReward} Leben statt ${expected}`);
+        check(run.lives <= run.maxLives, `Phase 6: Uebergang ${transitions} ueberschreitet maxLives (${run.lives} > ${run.maxLives})`);
+        aa2(run);
+      } else break;
+    }
+    check(guard > 0, 'Phase 6: End-to-End-Run haengt (Iterationslimit)');
+    check(run.phase === 'victory', `Phase 6: End-to-End-Run endet in Phase "${run.phase}" statt "victory"`);
+    check(transitions === 2, `Phase 6: ${transitions} Akt-Uebergaenge statt genau 2 (nach Akt 1 und Akt 2)`);
   }
 }
 

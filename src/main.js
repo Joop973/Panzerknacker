@@ -27,10 +27,12 @@ import {
   buyShopCard,
   buyShopSecondary,
   buyShopLife,
+  leaveRest,
+  advanceAct,
   ROOM_TYPE_INFO,
 } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
-import { createEventScreen, createShopScreen } from './ui/roomscreens.js';
+import { createEventScreen, createShopScreen, createRestScreen, createActCompleteScreen } from './ui/roomscreens.js';
 import { createMapScreen } from './ui/mapscreen.js';
 import { validateArenas } from './game/generator.js';
 import { createPreview } from './ui/preview.js';
@@ -160,6 +162,8 @@ async function init() {
   const upgradeScreen = createUpgradeScreen();
   const eventScreen = createEventScreen();
   const workshopScreen = createShopScreen();
+  const restScreen = createRestScreen(); // Grundsteinumbau Phase 6 (Platzhalter)
+  const actCompleteScreen = createActCompleteScreen(); // Grundsteinumbau Phase 6
   const preview = createPreview();
   const mapScreen = createMapScreen();
   const pause = createPause();
@@ -171,6 +175,8 @@ async function init() {
   let eventShown = false;
   let workshopShown = false;
   let mapShown = false;
+  let restShown = false;
+  let actCompleteShown = false;
   let previewShown = false;
   let toast = null;
   let lastSeed = 0;
@@ -386,11 +392,15 @@ async function init() {
     eventScreen.hide();
     workshopScreen.hide();
     mapScreen.hide();
+    restScreen.hide();
+    actCompleteScreen.hide();
     upgradeShown = false;
     previewShown = false;
     eventShown = false;
     workshopShown = false;
     mapShown = false;
+    restShown = false;
+    actCompleteShown = false;
   }
 
   // Sekundärslot (Phase 6): Touch-Button-Beschriftung der aktiven
@@ -451,7 +461,7 @@ async function init() {
       resumeBtn.classList.add('hidden');
       return;
     }
-    resumeBtn.textContent = `Run fortsetzen (Raum ${saved.roomIndex}, ${saved.lives} ❤)`;
+    resumeBtn.textContent = `Run fortsetzen (Akt ${saved.actIndex || 1}, Raum ${saved.roomIndex}, ${saved.lives} ❤)`;
     resumeBtn.classList.remove('hidden');
   }
   resumeBtn.addEventListener('click', () => {
@@ -807,12 +817,40 @@ async function init() {
         lives: run.lives,
         treasureLifeCost: run.difficulty.treasure.lifeCost,
         typeInfo: ROOM_TYPE_INFO,
+        actIndex: run.actIndex, // Grundsteinumbau Phase 6: "Akt X/3"
+        actTotal: run.difficulty.acts.length,
         // Gibt zurueck, ob der Zug gueltig war -- der Kartenscreen schliesst
         // sich nur dann selbst (siehe mapscreen.js).
         onChoose: (nodeId) => {
           const ok = chooseMapNode(run, nodeId);
           if (ok) mapShown = false;
           return ok;
+        },
+      });
+    }
+
+    // Rastplatz (Grundsteinumbau Phase 6, Platzhalter -- Inhalt kommt in Phase 7).
+    if (run.phase === 'rest' && !restShown) {
+      restShown = true;
+      restScreen.show({
+        onLeave: () => {
+          leaveRest(run);
+          restShown = false;
+        },
+      });
+    }
+
+    // Akt-Uebergang (Grundsteinumbau Phase 6): kurzer Zwischenbildschirm
+    // nach einem Aktboss, bevor der naechste Akt beginnt.
+    if (run.phase === 'actComplete' && !actCompleteShown) {
+      actCompleteShown = true;
+      actCompleteScreen.show({
+        actIndex: run.actIndex,
+        actTotal: run.difficulty.acts.length,
+        lifeReward: run.lastActLifeReward,
+        onContinue: () => {
+          advanceAct(run);
+          actCompleteShown = false;
         },
       });
     }
@@ -837,7 +875,7 @@ async function init() {
       for (const [ty, d] of Object.entries(diffData.danger)) dangerByType[ty] = d.points;
       const baseTitle = run.endless
         ? `Endlos-Raum ${run.roomIndex}`
-        : `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`;
+        : `Akt ${run.actIndex}/3 · Raum ${run.roomIndex}/${totalRooms(run.difficulty, run.actIndex)}`;
       const affixSuffix = { elite: ' ★ ELITE', cursed: ' ☠️ VERFLUCHT' }[run.roomType];
       preview.show(
         {
@@ -1009,7 +1047,7 @@ async function init() {
   // das gerade sichtbare Overlay (Prioritaet: die oberste Ausruestungsseite vor
   // der Vorschau darunter). Die Overlays werden von ihren Modulen bei der
   // Initialisierung erzeugt, existieren hier also.
-  const RUN_OVERLAY_IDS = ['previewUpgrades', 'preview', 'upgrade', 'event', 'workshop', 'map'];
+  const RUN_OVERLAY_IDS = ['previewUpgrades', 'preview', 'upgrade', 'event', 'workshop', 'map', 'rest', 'actcomplete'];
   function visibleRunOverlay() {
     for (const id of RUN_OVERLAY_IDS) {
       const el = document.getElementById(id);

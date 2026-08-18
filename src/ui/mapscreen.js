@@ -39,15 +39,18 @@ export function createMapScreen() {
   }
 
   return {
-    // opts: { map, currentId, lives, treasureLifeCost, typeInfo, onChoose }
+    // opts: { map, currentId, lives, treasureLifeCost, typeInfo, actIndex,
+    //         actTotal, onChoose }
     show(opts) {
-      const { map, currentId, lives, treasureLifeCost, typeInfo, onChoose } = opts;
+      const { map, currentId, lives, treasureLifeCost, typeInfo, actIndex, actTotal, onChoose } = opts;
       const current = map.byId.get(currentId);
       const reachable = new Set(current?.next || []);
 
       el.innerHTML = '';
       const h = document.createElement('h1');
-      h.textContent = 'Karte';
+      // Grundsteinumbau Phase 6: "Akt X/3" -- nur angezeigt, wenn main.js die
+      // Werte mitgibt (Rueckwaertskompatibilitaet fuer isolierte Aufrufer).
+      h.textContent = actIndex ? `Karte — Akt ${actIndex}/${actTotal}` : 'Karte';
       el.appendChild(h);
 
       const wrap = document.createElement('div');

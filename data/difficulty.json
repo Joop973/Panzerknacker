@@ -1,52 +1,86 @@
 {
   "lives": 3,
+  "_comment_extraLife": "Grundsteinumbau Phase 6: extraLifeEveryClearedRooms wird NICHT mehr ausgewertet (run.js las das Feld frueher alle 5 geraeumten Raeume aus -- bei ~50 Raeumen ueber drei Akte waeren das +8 bis +10 Leben, der Tod praktisch abgeschafft). Ersetzt durch acts[].lifeReward (+1 nach Akt 1/2, 0 nach Akt 3), gedeckelt auf run.maxLives. Feld bleibt unveraendert stehen als Wiederanschlusspunkt (ARCHIV.md, archive/systeme-v1.md Abschnitt 5) -- NICHT geloescht, nur der Codepfad in run.js entfernt.",
   "extraLifeEveryClearedRooms": 5,
-  "roomsBeforeFinal": 15,
   "maxEnemiesPerRoom": 8,
-  "budget": {
-    "base": 2,
-    "perRoom": 2.2
-  },
+  "_comment_acts": "Grundsteinumbau Phase 6: drei Akte a 16 Raeume + Bossraum (=51 gesamt) ersetzen die alte 16-Raum-Karte (roomsBeforeFinal/finalRoom.bosses/das globale budget sind damit abgeloest, s. u.). Feste Boss-Zuordnung (Nutzerentscheidung): Reaktor zuerst (lesbarstes Puzzle), Spiegel, Phalanx zuletzt (mechanisch anspruchsvollste, rotierende Panzerungsluecke). budget/bossHpMult/lifeReward sind alle _todo: balance -- noch nicht am echten Spielgefuehl geprueft. budget.base/perRoom gilt AKT-LOKAL (Raum 1 jedes Akts startet wieder bei budget.base), genau wie hpScaling.perRoom (data/difficulty.json weiter unten) act-lokal auf run.roomIndex wirkt -- das haelt beides konsistent zur act-eigenen Staffelung statt einer einzigen 51-Raum-Kurve.",
+  "acts": [
+    {
+      "boss": "boss_reactor",
+      "rooms": 16,
+      "bossHpMult": 1.0,
+      "lifeReward": 1,
+      "budget": { "base": 2, "perRoom": 2.2 },
+      "_todo": "balance"
+    },
+    {
+      "boss": "boss_mirror",
+      "rooms": 16,
+      "bossHpMult": 1.4,
+      "lifeReward": 1,
+      "budget": { "base": 6, "perRoom": 2.6 },
+      "_todo": "balance"
+    },
+    {
+      "boss": "boss_phalanx",
+      "rooms": 16,
+      "bossHpMult": 1.8,
+      "lifeReward": 0,
+      "budget": { "base": 10, "perRoom": 3.0 },
+      "_todo": "balance"
+    }
+  ],
+  "_comment_danger": "Grundsteinumbau Phase 6: unlockRoom (galt ueber den ganzen 16-Raum-Run) ist durch unlockAct + unlockRoomInAct ersetzt -- 'eingefuehrt in Akt X, bleibt danach verfuegbar', Feinstaffelung innerhalb des Akts ueber unlockRoomInAct. Gruppierung laut Auftrag (_todo: balance): Akt 1 braun/grau/tuerkis/gelb, Akt 2 +rosa/gepanzert/gruen (Moerser), Akt 3 +lila/weiss/schwarz.",
   "danger": {
     "t_brown": {
       "points": 1,
-      "unlockRoom": 1
+      "unlockAct": 1,
+      "unlockRoomInAct": 1
     },
     "t_grey": {
       "points": 2,
-      "unlockRoom": 1
+      "unlockAct": 1,
+      "unlockRoomInAct": 1
     },
     "t_teal": {
       "points": 4,
-      "unlockRoom": 2
+      "unlockAct": 1,
+      "unlockRoomInAct": 3
     },
     "t_yellow": {
       "points": 3,
-      "unlockRoom": 3
+      "unlockAct": 1,
+      "unlockRoomInAct": 5
     },
     "t_pink": {
       "points": 5,
-      "unlockRoom": 4
+      "unlockAct": 2,
+      "unlockRoomInAct": 1
     },
     "t_armored": {
       "points": 5,
-      "unlockRoom": 4
+      "unlockAct": 2,
+      "unlockRoomInAct": 1
     },
     "t_green": {
       "points": 6,
-      "unlockRoom": 5
+      "unlockAct": 2,
+      "unlockRoomInAct": 4
     },
     "t_purple": {
       "points": 9,
-      "unlockRoom": 7
+      "unlockAct": 3,
+      "unlockRoomInAct": 1
     },
     "t_white": {
       "points": 8,
-      "unlockRoom": 9
+      "unlockAct": 3,
+      "unlockRoomInAct": 3
     },
     "t_black": {
       "points": 12,
-      "unlockRoom": 11
+      "unlockAct": 3,
+      "unlockRoomInAct": 6
     }
   },
   "_comment_hpScaling": "UMBAUPLAN-LP Phase 2: Gegner-LP wachsen pro Raum, Gegnerschaden bewusst NICHT (die Raeume werden zaeher, nicht toedlicher). gegnerLP = maxHp * (1 + perRoom * (raum - 1)), Raum 15 liegt damit bei 1,7x. Bosse sind ausgenommen: ihre 500 LP sind bereits der Endwert fuer die letzte Raumreihe (Plan: 50 Treffer) -- mitskaliert waeren es rund 87 Treffer.",
@@ -54,29 +88,25 @@
     "perRoom": 0.05,
     "skipBosses": true
   },
+  "_comment_finalRoom": "Grundsteinumbau Phase 6: finalRoom.bosses (zufaellige Auswahl aus 3) ist entfallen -- der Boss ist jetzt PRO AKT fest (acts[i].boss oben). supportBudget bleibt global, gilt fuer alle drei Boss-Raeume gleich.",
   "finalRoom": {
-    "bosses": [
-      "boss_reactor",
-      "boss_mirror",
-      "boss_phalanx"
-    ],
     "supportBudget": 12
   },
-  "doors": {
-    "weights": {
-      "combat": 42,
-      "elite": 16,
-      "treasure": 12,
-      "workshop": 14,
-      "event": 16,
-      "cursed": 10
-    }
-  },
+  "_comment_map": "Grundsteinumbau Phase 6: doors.weights (Raumtyp-Gewichte) ist zu map.nodeWeights umgezogen und um 'treasure' verkuerzt -- die Schatzkammer ist kein gewichteter Zufallstyp mehr, sondern GENAU EIN erzwungener Knoten pro Akt in der Mitteltiefe (treasureLayerFraction, run.js: generateMap()). 'workshop' ist der interne Raumtyp-Schluessel der Oberflaeche 'Shop' (seit Phase 13 absichtlich nicht umbenannt, s. CLAUDE.md). Harte Constraints (im Generator, keine Datenfelder): keine elite/cursed/workshop in den ersten 3 Ebenen eines Akts, keine zwei Rastplaetze in Folge auf demselben Pfad, die letzte Ebene vor dem Boss ist komplett 'rest' (STS-Konvention, garantierter Rastplatz).",
   "map": {
     "forcedCombatLayers": 2,
     "minNodesPerLayer": 2,
     "maxNodesPerLayer": 3,
-    "extraEdgeChance": 0.4
+    "extraEdgeChance": 0.4,
+    "treasureLayerFraction": 0.5,
+    "nodeWeights": {
+      "combat": 42,
+      "event": 18,
+      "elite": 13,
+      "rest": 12,
+      "cursed": 8,
+      "workshop": 5
+    }
   },
   "elite": {
     "budgetMult": 1.6,

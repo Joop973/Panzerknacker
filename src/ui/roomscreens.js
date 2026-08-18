@@ -235,3 +235,67 @@ export function createShopScreen() {
     },
   };
 }
+
+// ---- Rastplatz (Grundsteinumbau Phase 6, Platzhalter) ------------------
+// Der Knotentyp ist ab dieser Phase auf der Karte sichtbar/waehlbar, hat
+// aber noch keinen eigenen Inhalt (Leben zurueck ODER Upgrade aufwerten
+// kommt in Phase 7) -- ein leerer Durchgangsraum mit Platzhaltertext, EIN
+// "Weiter"-Knopf.
+export function createRestScreen() {
+  const el = makeOverlay('rest');
+  return {
+    show({ onLeave }) {
+      el.innerHTML = '';
+      const h = document.createElement('h1');
+      h.textContent = 'Rastplatz';
+      el.appendChild(h);
+      const p = document.createElement('p');
+      p.className = 'eventtext';
+      p.textContent = 'Hier gibt es noch nichts zu tun — das kommt in einer späteren Ausbaustufe.';
+      el.appendChild(p);
+      const btn = document.createElement('button');
+      btn.className = 'leavebtn';
+      btn.textContent = 'Weiter →';
+      btn.addEventListener('click', () => {
+        el.classList.add('hidden');
+        onLeave();
+      });
+      el.appendChild(btn);
+      el.classList.remove('hidden');
+    },
+    hide() {
+      el.classList.add('hidden');
+    },
+  };
+}
+
+// ---- Akt-Uebergang (Grundsteinumbau Phase 6) ----------------------------
+// Kurzer Zwischenbildschirm nach einem Aktboss: "Akt X/3 geschafft" +
+// Lebensbonus (falls > 0, Akt 3 hat keinen mehr) + "Weiter" zum naechsten Akt.
+export function createActCompleteScreen() {
+  const el = makeOverlay('actcomplete');
+  return {
+    show({ actIndex, actTotal, lifeReward, onContinue }) {
+      el.innerHTML = '';
+      const h = document.createElement('h1');
+      h.textContent = `Akt ${actIndex}/${actTotal} geschafft`;
+      el.appendChild(h);
+      const p = document.createElement('p');
+      p.className = 'eventtext';
+      p.textContent = lifeReward > 0 ? `+${lifeReward} Leben` : 'Weiter geht es im nächsten Akt.';
+      el.appendChild(p);
+      const btn = document.createElement('button');
+      btn.className = 'leavebtn';
+      btn.textContent = 'Weiter →';
+      btn.addEventListener('click', () => {
+        el.classList.add('hidden');
+        onContinue();
+      });
+      el.appendChild(btn);
+      el.classList.remove('hidden');
+    },
+    hide() {
+      el.classList.add('hidden');
+    },
+  };
+}

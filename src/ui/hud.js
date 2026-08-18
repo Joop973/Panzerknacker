@@ -25,7 +25,9 @@ export function createHud(ctx) {
     ctx.textAlign = 'left';
     ctx.fillStyle = '#e8e4d8';
     ctx.fillText(
-      run.endless ? `Endlos ${run.roomIndex}` : `Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`,
+      run.endless
+        ? `Endlos ${run.roomIndex}`
+        : `Akt ${run.actIndex}/3 · Raum ${run.roomIndex}/${totalRooms(run.difficulty, run.actIndex)}`,
       8,
       16,
     );
@@ -105,7 +107,7 @@ export function createHud(ctx) {
     dim(0.65);
     center(
       [
-        [`Raum ${run.roomIndex}/${totalRooms(run.difficulty)}`, 'bold 32px monospace', '#e8e4d8'],
+        [`Akt ${run.actIndex}/3 · Raum ${run.roomIndex}/${totalRooms(run.difficulty, run.actIndex)}`, 'bold 32px monospace', '#e8e4d8'],
         [`♥ Leben: ${run.lives}`, 'bold 18px monospace', '#ff6a5e'],
       ],
       HEIGHT / 2 - 10,
