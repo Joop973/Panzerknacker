@@ -5561,6 +5561,69 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 49. Grundsteinumbau Phase 5: Klassen parken -------------------------
+// Nur player (Nulllinie) und c_necro bleiben waehlbar; die restlichen acht
+// Klassen sind ueber enabled:false geparkt, NICHT geloescht -- resolveCfg()
+// und ein bereits laufender Spielstand duerfen sie weiterhin auflösen
+// (Testschritt 4 des Auftrags: "Spielstand eines laufenden Runs laden --
+// funktioniert").
+{
+  const { resolveCfg } = await import('../src/game/cfg.js');
+  const T = tanksData.types;
+  const GEPARKT = ['c_blast', 'c_frost', 'c_tesla', 'c_toxic', 'c_scrap', 'c_ricochet', 'c_engineer', 'c_flame'];
+
+  // (a) Struktur: genau die acht namentlich benannten Klassen tragen
+  // enabled:false, player/c_necro sind unangetastet (kein enabled-Feld oder
+  // explizit true) -- ein Tippfehler in einer id waere hier sofort sichtbar.
+  {
+    for (const id of GEPARKT) {
+      check(T[id]?.enabled === false, `Phase 5: Klasse "${id}" ist nicht geparkt (enabled !== false)`);
+    }
+    check(T.player.enabled !== false, 'Phase 5: die Standardklasse ist faelschlich geparkt');
+    check(T.c_necro.enabled !== false, 'Phase 5: der Nekromant ist faelschlich geparkt');
+  }
+
+  // (b) MECHANISMUS der Auswahl-Filterung (src/main.js: playerClasses) --
+  // hier nachgebaut, weil main.js das DOM beim Import verdrahtet und nicht
+  // isoliert importierbar ist. Exakt derselbe Filterausdruck wie im echten
+  // Code (t.player && t.enabled !== false); eine Abweichung hier waere ohne
+  // Aussagekraft, deshalb bewusst wortgleich zu main.js.
+  {
+    const playerClasses = Object.entries(T).filter(([, t]) => t.player && t.enabled !== false);
+    const ids = playerClasses.map(([id]) => id).sort();
+    check(
+      ids.length === 2 && ids.join(',') === 'c_necro,player',
+      `Phase 5: Auswahlfilter liefert [${ids.join(', ')}] statt genau [c_necro, player]`,
+    );
+  }
+
+  // (c) Keine geloeschten Daten: jede geparkte Klasse loest weiterhin ohne
+  // Fehler/NaN in ein Spieler-cfg auf (ein alter Spielstand mit z. B.
+  // starterTank:'c_flame' muss weiter laden -- Testschritt 4).
+  {
+    for (const id of GEPARKT) {
+      let cfg;
+      try {
+        cfg = resolveCfg(tanksData, id);
+      } catch (e) {
+        check(false, `Phase 5: resolveCfg() wirft fuer geparkte Klasse "${id}" (${e.message})`);
+        continue;
+      }
+      check(
+        Number.isFinite(cfg.maxHp) && Number.isFinite(cfg.damage),
+        `Phase 5: geparkte Klasse "${id}" loest nicht mehr sauber auf (maxHp=${cfg.maxHp}, damage=${cfg.damage})`,
+      );
+    }
+  }
+
+  // (d) c_necro ist unveraendert: sein Passiv (Geistermechanik ueber
+  // cfg.necromancer) ist von Phase 5 nicht betroffen.
+  {
+    const cfg = resolveCfg(tanksData, 'c_necro');
+    check(cfg.necromancer === true, 'Phase 5: der Nekromant hat sein Passiv verloren');
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

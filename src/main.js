@@ -179,7 +179,13 @@ async function init() {
   // die Auswahl ueber Sitzungen erhalten bleibt; der laufende Run traegt sie
   // ausserdem im Snapshot (run.js), sodass "Fortsetzen" dieselbe Klasse laedt.
   let starterTank = getPref('starterTank', 'player');
-  if (!tanksData.types[starterTank]?.player) starterTank = 'player';
+  // Grundsteinumbau Phase 5: eine gespeicherte Praeferenz auf eine geparkte
+  // Klasse (enabled:false) faellt beim naechsten Start auf 'player' zurueck
+  // -- sonst koennte ein alter Pref-Wert eine Klasse zurueckholen, die im
+  // Auswahlbildschirm gar nicht mehr angeboten wird.
+  if (!tanksData.types[starterTank]?.player || tanksData.types[starterTank]?.enabled === false) {
+    starterTank = 'player';
+  }
 
   // ---- Telemetrie-Tracking (nur beobachtend, keine Spiellogik) ----
   let teleRoom = 0; // aktuell getimter Raum-Index
@@ -1079,7 +1085,12 @@ async function init() {
   const classScreen = document.getElementById('classScreen');
   const classListEl = document.getElementById('classList');
   const classOpenBtn = document.getElementById('classOpen');
-  const playerClasses = Object.entries(tanksData.types).filter(([, t]) => t.player);
+  // Grundsteinumbau Phase 5: nur player (Nulllinie) und c_necro (laufender
+  // Nekromanten-Auftrag) bleiben waehlbar -- die uebrigen acht Klassen
+  // tragen enabled:false in data/tanks.json (nicht geloescht, s.
+  // archive/klassen-v1.json), dieser Filter ist die einzige Stelle, die das
+  // auswertet.
+  const playerClasses = Object.entries(tanksData.types).filter(([, t]) => t.player && t.enabled !== false);
   const refreshClassBtn = () => {
     classOpenBtn.textContent = `Klasse: ${tanksData.types[starterTank]?.label || 'Standard'} ▸`;
   };
