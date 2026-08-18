@@ -3754,8 +3754,9 @@ mitentfernt. **Phase 2 (Kampfkern: Kugeltempo 200→450, Flanken-/
 Heckschaden, Exekutionsschwelle, Treffer-Rückmeldung) ist gebaut** —
 eigener Abschnitt weiter unten. **Phase 3 (Der Grüne wird Mörserschütze)
 ist gebaut** — eigener Abschnitt weiter unten. **Phase 4 (Upgrades raus,
-Sockel rein) ist gebaut** — eigener Abschnitt weiter unten. **Nächste
-Sitzung: Phase 5** (Klassen parken).
+Sockel rein) ist gebaut** — eigener Abschnitt weiter unten. **Phase 5
+(Klassen parken) ist gebaut** — eigener Abschnitt weiter unten. **Nächste
+Sitzung: Phase 6** (Drei Akte).
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -4192,6 +4193,51 @@ sind Startvorschläge (`_todo: balance`).
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
   **Nächste Sitzung: Phase 5** (Klassen parken).
 
+### Grundsteinumbau v3 — Phase 5 (Klassen parken) — gemergt
+Nur noch **zwei** Klassen sind wählbar: `player` (die Nulllinie) und
+`c_necro` (laufender Nekromanten-Auftrag). Die acht übrigen (`c_blast`,
+`c_frost`, `c_tesla`, `c_toxic`, `c_scrap`, `c_ricochet`, `c_engineer`,
+`c_flame`) sind **geparkt, nicht gelöscht** — sie tragen jetzt zusätzlich
+`"enabled": false` in `data/tanks.json` (Referenz-/Backup-Kopie seit Phase 0:
+`archive/klassen-v1.json`).
+- **`enabled` ist ein reiner UI-Auswahlfilter, keine Engine-Sperre**:
+  einzige Auswertungsstelle ist `src/main.js: playerClasses` (`t.player &&
+  t.enabled !== false`) für die Knopfliste im Klassenscreen, plus derselbe
+  Ausdruck als Fallback-Guard für eine gespeicherte `starterTank`-Präferenz
+  (`getPref('starterTank', ...)` — ein alter Pref-Wert auf eine jetzt
+  geparkte Klasse fällt beim nächsten Start auf `'player'` zurück).
+  `cfg.js: resolveCfg()` liest `enabled` **nicht** — eine geparkte Klasse
+  löst weiterhin korrekt auf. Das ist Absicht (Testschritt 4 des Auftrags:
+  ein laufender Spielstand mit einer inzwischen geparkten Klasse muss ohne
+  Fehler weiterladen) und brauchte deshalb **keine** Änderung an `cfg.js`,
+  obwohl der Auftrag die Datei in seiner Dateiliste nennt.
+- **Ist-Abgleich-Fund**: der Auftrag warnt vor einem „Lochgitter" beim
+  Übergang von zehn auf zwei Klassen — `.classlist` (`style.css`) ist aber
+  bereits ein einfaches `display:flex; flex-direction:column`, keine
+  Rastergrid mit fester Spaltenzahl. Mit zwei statt zehn Einträgen wird die
+  Liste dadurch einfach kürzer, kein CSS-Fix nötig (Playwright-Smoke
+  bestätigt: beide Knöpfe vollständig im Bild).
+- **Nichts an `preview.js`/`roomscreens.js` geändert**: beide Dateien
+  lesen `starterTank`/Klassenwerte nie über eine eigene Iteration aller
+  Klassen (nur punktuelle Einzel-Lookups wie `tanksData.types[type]` für
+  einen bereits feststehenden Panzer) — der Auftrag nennt sie vorsorglich in
+  seiner Dateiliste, ein echter Änderungsbedarf bestand dort nicht.
+- **Neuer Testabschnitt 49** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt bestanden — je einzeln absichtlich rot gemacht: `enabled: false`
+  bei einer der acht Klassen entfernt, `c_necro` fälschlich geparkt, eine
+  Klasse komplett aus `data/tanks.json` gelöscht statt geparkt): Struktur
+  (genau die acht genannten Klassen tragen `enabled: false`, `player`/
+  `c_necro` nicht), der Auswahlfilter-Mechanismus selbst (wortgleich zu
+  `main.js` nachgebaut, liefert exakt `[c_necro, player]`), jede geparkte
+  Klasse löst weiterhin fehlerfrei in ein Spieler-cfg auf (kein
+  `NaN`/Absturz), `c_necro`s Passiv (`cfg.necromancer`) ist unangetastet.
+  Playwright-Smoke bestätigt zusätzlich die drei UI-Testschritte des
+  Auftrags: Klassenscreen zeigt genau `player`/`c_necro`, beide Knöpfe im
+  Bild, ein Run mit jeder der beiden Klassen startet und trägt die
+  richtige Klasse im Snapshot, keine Konsolenfehler.
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 6** (Drei Akte).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -4470,4 +4516,6 @@ Heck-Kill-Zeitlupe, Kampfkern-Telemetrie). **Abschnitt 48** bewacht
 der jetzt archivierten 251-Karten-Pool-Inhalte; Abschnitt 36 behält nur noch
 die kartenunabhängige Raumdauer-Schranke, Transformationen-Freischaltbarkeit
 (vormals Abschnitt 6a) ist ebenfalls archiviert (`ARCHIV.md`/
-`archive/upgrades-v1.json`/`archive/systeme-v1.md`).
+`archive/upgrades-v1.json`/`archive/systeme-v1.md`). **Abschnitt 49** bewacht
+**Grundsteinumbau Phase 5** (Klassen parken: acht Klassen `enabled: false`,
+der Auswahlfilter-Mechanismus, geparkte Klassen lösen weiter fehlerfrei auf).
