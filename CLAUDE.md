@@ -3759,7 +3759,9 @@ Sockel rein) ist gebaut** — eigener Abschnitt weiter unten. **Phase 5
 (Drei Akte) ist gebaut** — eigener Abschnitt weiter unten. **Phase 7
 (Rastplatz und Aufwertung) ist gebaut** — eigener Abschnitt weiter unten.
 **Phase 8 (Shop überarbeiten) ist gebaut** — eigener Abschnitt weiter unten.
-**Nächste Sitzung: Phase 9** (Kartenbelohnung neu verteilen).
+**Phase 9 (Kartenbelohnung neu verteilen) ist gebaut** — eigener Abschnitt
+weiter unten. **Nächste Sitzung: Phase 10** (Abnahme, letzte Phase des
+Grundsteinumbaus).
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -4499,7 +4501,78 @@ beides gibt es seit Phase 4/1 nicht mehr. Kleinere Auffrischung statt Umbau.
   liefern unterschiedliche Regale (deterministisch aus Seed+Raumnummer,
   nicht dasselbe Array).
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
-  **Nächste Sitzung: Phase 9** (Kartenbelohnung neu verteilen).
+
+### Grundsteinumbau v3 — Phase 9 (Kartenbelohnung neu verteilen) — gemergt
+Karten nur dort, wo sie verdient sind: Kampf-, Elite- und Fluchräume geben
+eine Kartenwahl, Ereignis/Shop/Rast/Schatz nicht — Ereignisse dürfen aber
+eine Karte als eine Option unter mehreren anbieten.
+- **Fluchräume (cursed) geben wieder eine echte Kartenwahl.** Phase 4 hatte
+  `cursed` und `treasure` gemeinsam auf ein Schrottpaket umgeleitet
+  (`grantTreasureScrap()`), weil der Sockel keine Legendäre mehr führte —
+  eine Übergangslösung, die laut Auftrag ausdrücklich nur den Schatzraum
+  betreffen sollte. `run.js`: der `if (roomType === 'cursed')`-Sonderzweig
+  vor der eigentlichen Belohnungslogik ist entfernt; cursed läuft jetzt
+  durch dieselbe `rollReward()`-Weiche wie ein Kampfraum (`rewardKind:
+  'cursed'`, aber ohne `onlyRarity`/`bypassRoomGate`/`ignoreTagRule` — der
+  legendäre Sonderpfad bleibt ausschließlich `treasure` vorbehalten, dort
+  weiterhin als Wiederanschlusspunkt). `showActions` (Schrott-Aktionen im
+  Upgrade-Screen) gilt jetzt auch für `cursed`, das Subtitle verliert die
+  Behauptung „garantiertes Legendär" (`main.js`).
+- **Ereignisse mit Kartenoption**: neuer Effekttyp `effects.card: true`
+  (`data/events.json`) — zwei Bestandsereignisse erweitert
+  („Feldwerkstatt"/„Wrackteile-Feld", je eine dritte Option neben den
+  bestehenden zwei). `run.js: chooseEventOption()` öffnet bei dieser Option
+  den normalen Angebotsbildschirm (`rewardKind: 'normal'`, dieselbe
+  `rollReward()`) statt direkt weiterzuziehen — `chooseUpgrade()` beendet
+  den Raum danach selbst. Läuft der Pool bei dieser Gelegenheit leer
+  (Sicherheitsnetz wie beim normalen Belohnungspfad), zieht der Raum sofort
+  weiter statt in einem leeren Screen hängenzubleiben. Die Event-UI
+  (`roomscreens.js: createEventScreen()`) brauchte **keine** Änderung — sie
+  iteriert bereits generisch über `event.options`, eine dritte Option ist
+  für sie nur ein weiterer Knopf.
+- **`everyNRooms` war bereits vor dieser Phase totes Datenfeld** (echter
+  Fund, kein bloßes Aufräumen): `grep -rn` zeigt keine einzige Lesestelle in
+  `src/`. Die tatsächliche Steuerung war schon immer strukturell — der
+  `enemiesLeft === 0`-Block in `stepRun()`, der überhaupt ein Angebot
+  auslöst, existiert nur für Räume, die einen echten Kampfzustand mit
+  Panzern bauen (`combat`/`elite`/`cursed`, über `buildCombatRoom()`).
+  Phase 9 macht diese Regel nur explizit und entfernt das nie gelesene Feld
+  aus `data/upgrades.json` (Archiv: `archive/systeme-v1.md`, Abschnitt 6).
+- **Die „Rechnung" aus dem Auftrag war ungefähr um den Akt-Faktor 3 zu
+  niedrig** (echter Ist-Abgleich-Fund, im Testabschnitt und hier
+  dokumentiert statt stillschweigend übernommen): der Auftrag schätzt „grob
+  20 Kampf-, 6 Elite- und 4 Fluchknoten je Run — also 30 bis 35 Karten".
+  Eine echte Messung über `generateMap()` (40 Seeds × 3 Akte, mit dem
+  echten `map.nodeWeights`-Generator aus Phase 6) ergibt im Mittel
+  **~51 Kampf-, ~11 Elite- und ~8 Fluchknoten — rund 70 garantierte
+  Kartenräume pro vollständigem Run**, nicht 30–35. Die Auftragszahl passt
+  eher zu **einem einzelnen Akt** (gemessen: ~17 Kampf-, ~4 Elite-, ~2
+  Fluchknoten je Akt) — vermutlich fehlte beim Schätzen der Faktor „×3 Akte".
+  Konsequenz: der 5-Karten-Sockel (20 Stufen-Slots gesamt) ist nicht erst
+  „ab Mitte Akt 2", sondern schon **weit vor Ende von Akt 1** leergezogen —
+  das bereits in Phase 4 proaktiv gebaute Sicherheitsnetz (leeres Angebot ⇒
+  sofort weiterziehen) fängt das unverändert ab, nur der Zeitpunkt in der
+  Auftrags-Beschreibung war falsch. Keine Balance-Änderung an
+  `map.nodeWeights` — das war nicht Teil dieser Phase, nur die
+  Angebots-**Routing**-Regel.
+- **Neuer Testabschnitt 53** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt bestanden — je einzeln absichtlich rot gemacht: die
+  `cursed`-Routing-Änderung auf den alten `grantTreasureScrap()`-Zweig
+  zurückgesetzt, die `effects.card`-Auswertung in `chooseEventOption()`
+  ausgebaut, deren Sicherheitsnetz-Zweig entfernt, `everyNRooms` probeweise
+  wieder eingefügt): Struktur (`everyNRooms` entfernt, mindestens ein
+  Ereignis mit Kartenoption als eine von mehreren Optionen), Testschritte
+  1–5 wörtlich (Kampfraum → Angebot; Ereignis/Shop/Rast/Schatz → kein
+  automatisches Angebot; Ereignis-Kartenoption → Angebotsbildschirm, danach
+  normale Weiterfahrt; leergespielter Pool → Raum zieht trotzdem weiter,
+  sowohl beim Kampfraum als auch bei der Ereignis-Kartenoption), dazu der
+  Fluchraum-Mechanismus (`rewardKind: 'cursed'`, echte Karte) und eine grobe
+  Größenordnungsprüfung der Kartenraum-Rechnung (40–100 garantierte
+  Kartenräume je Run über 20 Seeds — Regressionsschutz gegen eine künftige,
+  drastische Gewichtsänderung, keine exakte Zahl).
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 10** (Abnahme, letzte Phase des
+  Grundsteinumbaus).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -4804,3 +4877,8 @@ das Sicherheitsnetz gegen einen ausweglosen Rastplatz).
 `cardChoices`, Werkbank im Shop gegen Schrott über einen echten Shop-Besuch,
 der neu ergänzte `maxLives`-Deckel im Lebenskauf, unterschiedliche Regale
 über zwei Shop-Besuche im selben Run).
+**Abschnitt 53** bewacht **Grundsteinumbau Phase 9** (Kartenbelohnung neu
+verteilt: Fluchräume geben wieder eine echte Kartenwahl statt eines
+Schrottpakets, Ereignisse mit `effects.card` öffnen den Angebotsbildschirm,
+`everyNRooms` ist entfernt, plus eine grobe Größenordnungsprüfung der
+Kartenraum-Rechnung).

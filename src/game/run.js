@@ -53,13 +53,16 @@ export const ROOM_TYPE_INFO = {
   combat: { name: 'Kampf', symbol: '⚔️', desc: 'Ein normaler Gefechtsraum.' },
   elite: { name: 'Elite', symbol: '★', desc: 'Härtere Gegner mit Affix · doppelter Schrott · Elite-Belohnung.' },
   // Grundsteinumbau Phase 4: der Sockel hat keine einzige legendaere Karte
-  // mehr -- treasure/cursed geben deshalb ein Schrottpaket statt einer
-  // Kartenwahl (grantTreasureScrap()). rollReward()s onlyRarity:'legendary'-
-  // Zweig bleibt als Wiederanschlusspunkt bestehen (archive/systeme-v1.md).
+  // mehr -- treasure gibt deshalb ein Schrottpaket statt einer Kartenwahl
+  // (grantTreasureScrap()). rollReward()s onlyRarity:'legendary'-Zweig
+  // bleibt als Wiederanschlusspunkt bestehen (archive/systeme-v1.md).
+  // Grundsteinumbau Phase 9: cursed ist NICHT mehr Teil davon -- Fluchraeume
+  // geben wieder eine normale Kartenwahl (Auftrag: "Kartenangebot nach
+  // Kampf-, Elite- und Fluchraeumen").
   treasure: { name: 'Schatz', symbol: '💎', desc: 'Keine Gegner · Schrottpaket — kostet 1 Leben.' },
   workshop: { name: 'Shop', symbol: '🛒', desc: 'Keine Gegner · Karten, Schild, Sekundärwaffe, Leben kaufen · Upgrade ablegen.' },
   event: { name: 'Ereignis', symbol: '❓', desc: 'Keine Gegner · eine Entscheidung.' },
-  cursed: { name: 'Verflucht', symbol: '☠️', desc: 'Gegner mit zusätzlichem Affix · Schrottpaket-Belohnung.' },
+  cursed: { name: 'Verflucht', symbol: '☠️', desc: 'Gegner mit zusätzlichem Affix · Kartenwahl.' },
   // Grundsteinumbau Phase 7: Reparaturtrupp (+1 Leben) ODER Werkbank (ein
   // vorhandenes Upgrade eine Stufe aufwerten) -- genau eine der beiden
   // Aktionen, danach ist der Raum sofort zu Ende (kein Kartenscreen danach,
@@ -815,6 +818,14 @@ export function leaveWorkshop(run) {
 
 // Event-Option waehlen: Effekte anwenden (Leben/Schrott/Schild, geclamped)
 // -> naechste Tuer. Gibt { event, option } fuer die Telemetrie zurueck.
+//
+// Grundsteinumbau Phase 9: eine Option kann zusaetzlich effects.card:true
+// tragen -- statt direkt weiterzuziehen, oeffnet sie den normalen
+// Angebotsbildschirm (rewardKind 'normal', dieselbe Pool-Logik wie ein
+// Kampfraum). chooseUpgrade() ruft danach selbst afterRoomDone() auf, der
+// Raum endet also erst NACH der Kartenwahl. Faellt der Pool leer aus
+// (Sicherheitsnetz wie beim normalen Belohnungspfad), zieht der Raum
+// trotzdem sofort weiter statt in einem leeren Screen haengenzubleiben.
 export function chooseEventOption(run, index) {
   if (run.phase !== 'event' || !run.currentEvent) return null;
   const ev = run.currentEvent;
@@ -827,6 +838,16 @@ export function chooseEventOption(run, index) {
   else if (e.shield < 0) run.shieldCharges.splice(0, -e.shield);
   const evId = ev.id;
   run.currentEvent = null;
+  if (e.card) {
+    run.rewardKind = 'normal';
+    const offers = rollReward(run);
+    if (offers.length) {
+      run.pendingOffers = offers;
+      run.phase = 'upgrade';
+      return { event: evId, option: index };
+    }
+    run.rewardKind = null;
+  }
   afterRoomDone(run);
   return { event: evId, option: index };
 }
@@ -1160,16 +1181,15 @@ export function stepRun(run, cmd, dt) {
       run.phase = 'actComplete';
       return;
     }
-    // Belohnung: Eliteraeume ziehen aus dem Elite-Pool. Verflucht (Phase 12)
-    // gab vorher ein garantiertes Legendaer wie eine Schatzkammer -- der
-    // Sockel hat keins mehr, also dasselbe Schrottpaket wie treasure
-    // (Grundsteinumbau Phase 4, grantTreasureScrap() oben).
-    if (run.roomType === 'cursed') {
-      grantTreasureScrap(run);
-      afterRoomDone(run);
-      return;
-    }
-    run.rewardKind = run.roomType === 'elite' ? 'elite' : 'normal';
+    // Belohnung: Eliteraeume ziehen aus dem Elite-Pool. Grundsteinumbau
+    // Phase 9: Fluchraeume (cursed) geben jetzt wieder eine echte Kartenwahl
+    // (Auftrag: "Kartenangebot nach Kampf-, Elite- und Fluchraeumen") --
+    // Phase 4s Schrottpaket-Uebergangsloesung (grantTreasureScrap(), damals
+    // fuer treasure UND cursed gemeinsam gebaut, weil der Sockel keine
+    // Legendaere hatte) bleibt NUR fuer treasure bestehen (s. o., eigener
+    // Zweig). Cursed nutzt denselben normalen Pool wie ein Kampfraum --
+    // keine Sonderbehandlung mehr noetig, dieselbe Angebotslogik greift.
+    run.rewardKind = run.roomType === 'elite' ? 'elite' : run.roomType === 'cursed' ? 'cursed' : 'normal';
     const offers = rollReward(run);
     if (!offers.length) {
       // Sicherheitsnetz (Grundsteinumbau Phase 4, proaktiv -- kein
@@ -1222,16 +1242,18 @@ function poolOpts(run) {
 //            v3-Review-Korrektur: die alte Variante ERSETZTE die normale
 //            Auswahl komplett -- bei nur 2-3 Elite-Karten die schlechtere
 //            Wahl als eine normale Runde)
-// Grundsteinumbau Phase 4: 'treasure'/'cursed' rufen rollReward() nicht mehr
-// auf (grantTreasureScrap() ersetzt sie) -- der onlyRarity:'legendary'-Zweig
-// bleibt trotzdem stehen (Wiederanschlusspunkt, s. o.). rollOffers()/drawOne()
-// fuellen ein erschoepftes Angebot seit dieser Phase nicht mehr mit einer
-// Fallback-Karte auf -- Aufrufer hier vertragen ein kuerzeres/leeres Array
-// (rerollOffers(), die Elite-4.-Karte hier, der Sicherheitsnetz-Zweig in
-// stepRun()).
+// Grundsteinumbau Phase 4: 'treasure' ruft rollReward() nicht mehr auf
+// (grantTreasureScrap() ersetzt es) -- der onlyRarity:'legendary'-Zweig
+// bleibt trotzdem stehen (Wiederanschlusspunkt fuer kuenftige Klassenpools
+// mit Legendaeren). Grundsteinumbau Phase 9: 'cursed' ist NICHT mehr Teil
+// dieses Zweigs -- Fluchraeume nutzen den normalen Pool ganz unten (kein
+// eigener Fall noetig), rollOffers()/drawOne() fuellen ein erschoepftes
+// Angebot seit Phase 4 nicht mehr mit einer Fallback-Karte auf -- Aufrufer
+// hier vertragen ein kuerzeres/leeres Array (rerollOffers(), die
+// Elite-4.-Karte hier, der Sicherheitsnetz-Zweig in stepRun()).
 function rollReward(run) {
   const base = poolOpts(run);
-  if (run.rewardKind === 'treasure' || run.rewardKind === 'cursed') {
+  if (run.rewardKind === 'treasure') {
     return rollFromPool(run.upgradesData, {
       ...base,
       onlyRarity: 'legendary',
