@@ -118,3 +118,21 @@ Zum Zurückholen: `extraLifeEveryClearedRooms` steht unverändert in
 `data/difficulty.json` (wird nicht gelöscht, nur der auswertende Codepfad
 in `run.js` entfernt) — der Wert kann direkt wiederverwendet werden, falls
 der Akt-Mechanismus je zurückgebaut wird.
+
+## 6. `everyNRooms` (entfällt mit Phase 9)
+
+`data/upgrades.json: everyNRooms: 1` — sollte laut Namen/Kommentar steuern,
+nach wie vielen Räumen ein Kartenangebot erscheint ("nach jedem Raum").
+
+War aber bereits vor Phase 9 **totes Datenfeld**: keine Stelle in `src/`
+liest `everyNRooms` (per `grep -rn` verifiziert). Die tatsächliche Steuerung
+war schon immer strukturell — der `enemiesLeft === 0`-Block in
+`run.js: stepRun()`, der überhaupt erst ein Angebot auslöst, existiert nur
+für Räume, die einen echten Kampfzustand mit Panzern bauen (`combat`/
+`elite`/`cursed`, über `buildCombatRoom()`). Nicht-Kampfräume (`event`/
+`workshop`/`rest`/`treasure`) laufen nie durch diesen Codepfad. Phase 9
+macht diese bereits bestehende Regel nur explizit (Auftrag: "Kartenangebot
+nach Kampf-, Elite- und Fluchräumen") und entfernt das nie gelesene Feld.
+Zum Zurückholen: reine Datenfeld-Wiederherstellung in `data/upgrades.json`,
+ein tatsächlicher "alle N Räume"-Mechanismus müsste komplett neu gebaut
+werden (gab es so nie).

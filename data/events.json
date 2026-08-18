@@ -6,7 +6,8 @@
       "text": "Eine verlassene Werkstatt. Werkzeug liegt herum, doch die Zeit drängt.",
       "options": [
         { "label": "Panzerung verstärken (+1 Schildladung)", "effects": { "shield": 1 } },
-        { "label": "Ersatzteile verkaufen (+3 Schrott)", "effects": { "scrap": 3 } }
+        { "label": "Ersatzteile verkaufen (+3 Schrott)", "effects": { "scrap": 3 } },
+        { "label": "Werkbank durchsuchen (Kartenwahl)", "effects": { "card": true } }
       ]
     },
     {
@@ -15,7 +16,8 @@
       "text": "Ausgebrannte Wracks, so weit das Auge reicht. Manches ist noch zu gebrauchen.",
       "options": [
         { "label": "Alles verwerten (+5 Schrott)", "effects": { "scrap": 5 } },
-        { "label": "Ersatzpanzer bergen (+1 Leben)", "effects": { "life": 1 } }
+        { "label": "Ersatzpanzer bergen (+1 Leben)", "effects": { "life": 1 } },
+        { "label": "Brauchbare Technik bergen (Kartenwahl)", "effects": { "card": true } }
       ]
     },
     {

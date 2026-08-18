@@ -631,7 +631,11 @@ async function init() {
       const cardOf = (o) => ({ id: o.fallback ? null : o.id, name: o.name, tag: o.tag, rarity: o.rarity });
       upgradeScreen.show({
         costs,
-        showActions: kind === 'normal' || kind == null,
+        // Grundsteinumbau Phase 9: Fluchräume geben jetzt eine normale
+        // Kartenwahl (statt eines Schrottpakets, s. rollReward()) -- die
+        // Schrott-Aktionen (Reroll/Verbannen/4. Karte/Schild) gelten dafuer
+        // genau wie bei einem Kampfraum, keine Sonderrolle mehr.
+        showActions: kind === 'normal' || kind === 'cursed' || kind == null,
         title:
           kind === 'elite'
             ? 'Elite-Beute'
@@ -646,7 +650,7 @@ async function init() {
             : kind === 'treasure'
               ? 'Ein garantiertes Legendär (Betreten kostete 1 Leben).'
               : kind === 'cursed'
-                ? 'Ein garantiertes Legendär (Gegner hatten einen zusätzlichen Affix).'
+                ? 'Die Gegner hatten einen zusätzlichen Affix.'
                 : null,
         // Grundsteinumbau Phase 7: "+"-Suffix je Rastplatz-Stufe, auch im
         // Angebot (Auftrag: "im Angebot wie in der Inventarliste") --

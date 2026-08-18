@@ -6173,6 +6173,192 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 53. Grundsteinumbau Phase 9: Kartenbelohnung neu verteilen ----------
+// Karten nur dort, wo sie verdient sind: Kampf-, Elite- und Fluchraeume
+// (cursed gibt jetzt wieder eine echte Kartenwahl statt eines Schrottpakets,
+// s. run.js: rollReward()); Ereignisse duerfen eine Karte als EINE Option
+// unter mehreren anbieten (effects.card:true). Testschritte 1-5 woertlich,
+// Gegenprobe fuer jeden Kernpunkt bestanden.
+{
+  // Hilfsfunktion: einen Knoten eines bestimmten Typs direkt ansteuern --
+  // Muster wie Abschnitt 51/52 (Elternknoten suchen, chooseMapNode() prueft
+  // nur "ist die Ziel-id in current.next", kein Kampf simuliert fuer
+  // Nicht-Kampfraeume; Kampfraeume (combat/elite/cursed) bauen dabei einen
+  // echten Zustand, den der Aufrufer bei Bedarf noch raeumen muss).
+  function enterRoomType(type, maxSeed = 60) {
+    for (let seed = 1; seed <= maxSeed; seed++) {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
+      let parentId = null;
+      let targetId = null;
+      for (const node of run.map.byId.values()) {
+        const hit = node.next.find((id) => run.map.byId.get(id)?.type === type);
+        if (hit != null) {
+          parentId = node.id;
+          targetId = hit;
+          break;
+        }
+      }
+      if (parentId == null) continue;
+      run.mapCurrentId = parentId;
+      run.phase = 'map';
+      if (chooseMapNode(run, targetId)) return run;
+    }
+    return null;
+  }
+
+  // (a) Struktur: everyNRooms ist aus data/upgrades.json entfernt; mindestens
+  // ein Ereignis bietet effects.card:true als Option unter mehreren an.
+  {
+    check(upgradesData.everyNRooms === undefined, 'Phase 9: everyNRooms steht noch in data/upgrades.json');
+    const cardEvents = tanksData.events.events.filter((ev) => ev.options.some((o) => o.effects?.card));
+    check(cardEvents.length >= 1, 'Phase 9: kein Ereignis bietet eine Kartenoption an');
+    for (const ev of cardEvents) {
+      check(ev.options.length >= 2, `Phase 9: Ereignis "${ev.id}" hat die Kartenoption als EINZIGE Option statt als eine unter mehreren`);
+    }
+  }
+
+  // Raum bis 'playing' durchspielen (Transition abwarten), dann alle Gegner
+  // per Cheat toeten, bis die Belohnungsphase erreicht ist -- Muster wie die
+  // grossen Playthrough-Schleifen weiter oben in dieser Datei.
+  function clearToReward(run) {
+    enterRoom(run);
+    let guard = 200;
+    while (run.phase === 'transition' && guard-- > 0) stepRun(run, CMD, STEP);
+    guard = 10;
+    while (run.phase === 'playing' && guard-- > 0) {
+      cheatKillAll(run.state);
+      stepRun(run, CMD, STEP);
+    }
+  }
+
+  // (b) Testschritt 1: Kampfraum raeumen -- Angebot erscheint.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+    check(run.roomType === 'combat', `Phase 9: Testaufbau -- Raum 1 ist "${run.roomType}" statt combat`);
+    clearToReward(run);
+    check(run.phase === 'upgrade', `Phase 9: nach einem geraeumten Kampfraum ist die Phase "${run.phase}" statt "upgrade"`);
+    check(run.pendingOffers?.length > 0, 'Phase 9: der Kampfraum bietet keine Karte an');
+  }
+
+  // (c) Testschritt 2: Ereignis (ohne Kartenoption), Shop, Rast, Schatz --
+  //     nirgends ein automatisches Angebot.
+  {
+    // Ereignis ohne Kartenoption: die erste Option von "minenguertel" hat
+    // keine effects.card.
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+    const ev = tanksData.events.events.find((e) => e.id === 'minenguertel');
+    check(!!ev, 'Phase 9: Testaufbau -- Ereignis "minenguertel" nicht gefunden');
+    if (ev) {
+      run.phase = 'event';
+      run.currentEvent = ev;
+      chooseEventOption(run, 0);
+      check(run.phase !== 'upgrade', `Phase 9: eine Ereignis-Option ohne Kartenoption oeffnet trotzdem ein Angebot (Phase "${run.phase}")`);
+    }
+
+    const shopRun = enterRoomType('workshop');
+    check(!!shopRun, 'Phase 9: Testaufbau -- kein Shop-Knoten gefunden');
+    if (shopRun) {
+      leaveWorkshop(shopRun);
+      check(shopRun.phase !== 'upgrade', `Phase 9: Shop verlassen oeffnet ein Angebot (Phase "${shopRun.phase}")`);
+    }
+
+    const restRun = enterRoomType('rest');
+    check(!!restRun, 'Phase 9: Testaufbau -- kein Rastplatz gefunden');
+    if (restRun) {
+      restRun.lives = Math.max(1, restRun.maxLives - 1); // Reparatur soll greifen
+      repairAtRest(restRun);
+      check(restRun.phase !== 'upgrade', `Phase 9: der Rastplatz oeffnet ein Angebot (Phase "${restRun.phase}")`);
+    }
+
+    const treasureRun = enterRoomType('treasure');
+    check(!!treasureRun, 'Phase 9: Testaufbau -- keine Schatzkammer gefunden');
+    if (treasureRun) {
+      check(treasureRun.phase !== 'upgrade', `Phase 9: die Schatzkammer oeffnet ein Angebot (Phase "${treasureRun.phase}")`);
+    }
+  }
+
+  // (d) Testschritt 3: ein Ereignis MIT Kartenoption waehlen -- der
+  //     Angebotsbildschirm oeffnet, danach zieht der Raum normal weiter.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+    const ev = tanksData.events.events.find((e) => e.id === 'feldwerkstatt');
+    check(!!ev, 'Phase 9: Testaufbau -- Ereignis "feldwerkstatt" nicht gefunden');
+    if (ev) {
+      const cardIdx = ev.options.findIndex((o) => o.effects?.card);
+      check(cardIdx >= 0, 'Phase 9: Testaufbau -- "feldwerkstatt" hat keine Kartenoption (mehr)');
+      if (cardIdx >= 0) {
+        run.phase = 'event';
+        run.currentEvent = ev;
+        chooseEventOption(run, cardIdx);
+        check(run.phase === 'upgrade', `Phase 9: die Kartenoption oeffnet kein Angebot (Phase "${run.phase}")`);
+        check(run.pendingOffers?.length > 0, 'Phase 9: die Kartenoption liefert ein leeres Angebot');
+        chooseUpgrade(run, 0);
+        check(run.phase !== 'upgrade' && run.phase !== 'event', `Phase 9: nach der Kartenwahl bleibt die Phase "${run.phase}" haengen`);
+      }
+    }
+  }
+
+  // (e) Mechanismus: Fluchraeume (cursed) geben jetzt eine echte Kartenwahl
+  //     (rewardKind 'cursed'), keinen Schrottpaket-Sonderweg mehr.
+  {
+    const run = enterRoomType('cursed');
+    check(!!run, 'Phase 9: Testaufbau -- kein Fluchraum gefunden');
+    if (run) {
+      check(run.roomType === 'cursed', `Phase 9: Testaufbau -- Raum ist "${run.roomType}" statt cursed`);
+      clearToReward(run);
+      check(run.phase === 'upgrade', `Phase 9: ein geraeumter Fluchraum oeffnet kein Angebot (Phase "${run.phase}")`);
+      check(run.rewardKind === 'cursed', `Phase 9: rewardKind ist "${run.rewardKind}" statt "cursed"`);
+      check(run.pendingOffers?.length > 0, 'Phase 9: der Fluchraum bietet keine Karte an');
+    }
+  }
+
+  // (f) Testschritt 5: Pool bewusst leerspielen -- das Spiel laeuft ohne
+  //     Angebot weiter (Sicherheitsnetz, sowohl fuer einen Kampfraum als
+  //     auch fuer die Kartenoption eines Ereignisses).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+    for (const id of Object.keys(upgradesData.upgrades)) run.bannedUpgrades.add(id);
+    clearToReward(run);
+    check(run.phase !== 'upgrade', `Phase 9: ein leergespielter Pool oeffnet trotzdem ein Angebot (Phase "${run.phase}")`);
+
+    const run2 = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+    for (const id of Object.keys(upgradesData.upgrades)) run2.bannedUpgrades.add(id);
+    const ev = tanksData.events.events.find((e) => e.id === 'feldwerkstatt');
+    const cardIdx = ev.options.findIndex((o) => o.effects?.card);
+    run2.phase = 'event';
+    run2.currentEvent = ev;
+    chooseEventOption(run2, cardIdx);
+    check(run2.phase !== 'upgrade', `Phase 9: die Kartenoption oeffnet trotz leergespieltem Pool ein Angebot (Phase "${run2.phase}")`);
+  }
+
+  // (g) Rechnung (Auftrag: "grob 20 Kampf-, 6 Elite- und 4 Fluchknoten je
+  //     Run"): eigene Messung ueber 40 Seeds x 3 Akte zeigt etwa 70
+  //     garantierte Kartenraeume je Run (~51 Kampf + ~11 Elite + ~8 Flucht)
+  //     -- die Auftragsschaetzung war um etwa den Akt-Faktor 3 zu niedrig
+  //     (rechnete offenbar nur mit EINEM Akt, nicht mit dreien). Dokumentiert
+  //     in CLAUDE.md; dieser Test sichert nur GROBE Groessenordnung
+  //     (Regressionsschutz gegen eine kuenftige, drastische Aenderung der
+  //     Kartenknoten-Gewichtung), keine exakte Zahl.
+  {
+    const { generateMap } = await import('../src/game/run.js');
+    let total = 0;
+    const N = 20;
+    for (let seed = 1; seed <= N; seed++) {
+      for (let act = 1; act <= 3; act++) {
+        const map = generateMap(seed, diffData, act);
+        for (const node of map.byId.values()) {
+          if (node.type === 'combat' || node.type === 'elite' || node.type === 'cursed') total++;
+        }
+      }
+    }
+    const avg = total / N;
+    check(
+      avg > 40 && avg < 100,
+      `Phase 9: durchschnittlich ${avg.toFixed(1)} garantierte Kartenraeume je Run -- ausserhalb der erwarteten Groessenordnung (40-100)`,
+    );
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);
