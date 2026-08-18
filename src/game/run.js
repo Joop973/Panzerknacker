@@ -1,13 +1,18 @@
-// Run-Struktur (Spec Abschnitt 8): 15 generierte Raeume + Finalraum,
-// Leben, Gefahrenbudget mit Freischaltkurve, Raum-Neustart bei Tod
-// (getoetete Gegner bleiben tot), Raumuebergangs-Einblendung,
-// Victory/Game-Over mit Statistik und Seed.
+// Run-Struktur (Spec Abschnitt 8, Grundsteinumbau Phase 6): DREI AKTE mit je
+// 16 generierten Raeumen + eigenem Bossraum (~51 Raeume gesamt), Leben,
+// Gefahrenbudget mit Freischaltkurve, Raum-Neustart bei Tod (getoetete
+// Gegner bleiben tot), Raumuebergangs-Einblendung, Akt-Uebergang mit
+// Lebensbonus, Victory/Game-Over mit Statistik und Seed.
 //
-// RNG (Phase 0b): Der Run haelt KEINEN fortlaufenden Zufallszustand mehr.
-// Pro Raum werden benannte Stroeme aus hash(seed, roomIndex, label)
-// abgeleitet (siehe makeRoomStreams). Damit ist ein Run allein aus
-// Seed + Raumnummer reproduzierbar (Fortsetzen, geteilte Seeds, Replays),
-// und eine Aenderung an einem System verschiebt die anderen nicht.
+// RNG (Phase 0b, act-erweitert in Phase 6): Der Run haelt KEINEN
+// fortlaufenden Zufallszustand mehr. Pro Raum werden benannte Stroeme aus
+// hash(seed, actRoomKey, label) abgeleitet (siehe makeRoomStreams/
+// actRoomKey) -- actRoomKey kombiniert Akt- und (akt-lokale) Raumnummer, weil
+// run.roomIndex innerhalb jedes Akts bei 1 neu beginnt (Akt-1-Raum-1 und
+// Akt-2-Raum-1 duerfen NICHT dieselben RNG-Stroeme ziehen). Damit ist ein Run
+// allein aus Seed + Akt + Raumnummer reproduzierbar (Fortsetzen, geteilte
+// Seeds, Replays), und eine Aenderung an einem System verschiebt die anderen
+// nicht.
 
 import { rngFor, rngForRun, hashSeed } from '../core/rng.js';
 import { recordRun, loadStats, saveCurrentRun, clearCurrentRun } from '../core/storage.js';
@@ -55,14 +60,25 @@ export const ROOM_TYPE_INFO = {
   workshop: { name: 'Shop', symbol: '🛒', desc: 'Keine Gegner · Karten, Schild, Sekundärwaffe, Leben kaufen · Upgrade ablegen.' },
   event: { name: 'Ereignis', symbol: '❓', desc: 'Keine Gegner · eine Entscheidung.' },
   cursed: { name: 'Verflucht', symbol: '☠️', desc: 'Gegner mit zusätzlichem Affix · Schrottpaket-Belohnung.' },
+  // Grundsteinumbau Phase 6: neuer Knotentyp, nur im Generator angelegt --
+  // der eigentliche Inhalt (Leben zurück oder Upgrade aufwerten) kommt in
+  // Phase 7. Bis dahin ein leerer Durchgangsraum mit Platzhaltertext.
+  rest: { name: 'Rastplatz', symbol: '🏕️', desc: 'Kein Inhalt (Platzhalter) — kommt in Phase 7.' },
 };
 
 // Kauft Gegner vom Gefahrenbudget (nur freigeschaltete Typen, max. 8).
 // `maxPerRoom` in difficulty.json deckelt einzelne Typen zusaetzlich
 // (Phase 4: hoechstens ein Prisma pro Raum).
-function buyEnemies(diff, genRng, roomIndex, budget) {
+//
+// Grundsteinumbau Phase 6: Freischaltung laeuft jetzt ueber unlockAct +
+// unlockRoomInAct statt eines einzigen unlockRoom ueber den ganzen Run --
+// "eingefuehrt in Akt X, bleibt danach verfuegbar".
+// Exportiert (wie upgradepool.js: weightedPick) fuer direkte
+// Mechanismus-Tests -- buyEnemies() ist eine reine Funktion ohne Run-Objekt.
+export function buyEnemies(diff, genRng, actIndex, roomIndexInAct, budget) {
   const unlocked = Object.entries(diff.danger).filter(
-    ([, d]) => roomIndex >= d.unlockRoom,
+    ([, d]) =>
+      actIndex > d.unlockAct || (actIndex === d.unlockAct && roomIndexInAct >= (d.unlockRoomInAct ?? 1)),
   );
   const types = [];
   const taken = {};
@@ -80,8 +96,12 @@ function buyEnemies(diff, genRng, roomIndex, budget) {
   return types;
 }
 
-function totalRooms(diff) {
-  return diff.roomsBeforeFinal + 1; // 15 + Finalraum
+// Raeume je Akt (inkl. Bossraum) -- fuer die HUD-/Vorschau-Anzeige "Raum
+// N/17". actIndex faellt auf den ersten Akt zurueck (z. B. beim allerersten
+// Aufruf vor createRun()).
+function totalRooms(diff, actIndex = 1) {
+  const actCfg = diff.acts[(actIndex || 1) - 1];
+  return actCfg.rooms + 1; // 16 + Bossraum
 }
 
 // Die alte USP-Garantie "Erzwungene Bankshots" (tauschte ab Raum 6 einen
@@ -138,33 +158,62 @@ function connectLayers(prevNodes, nextNodes, rng, extraEdgeChance) {
   }
 }
 
-// Kartengenerierung (Phase 12): einmalig deterministisch aus dem Seed
-// (eigener Run-weiter Strom statt eines pro-Raum-Stroms, siehe
-// core/rng.js: rngForRun) -- die Karte steht komplett fest, bevor der Run
-// beginnt ("vollstaendig vorab einsehbar", PLAN.md). Raum 1-2 sind je ein
-// einzelner Kampf-Knoten (data/difficulty.json: map.forcedCombatLayers),
-// danach 2-3 Knoten je Reihe mit Typ aus denselben Gewichten, die vorher
-// die unsichtbare Automatik gesteuert haben (doors.weights) -- die
-// Raumtyp-Logik selbst aendert sich durch die Karte nicht (Fund beim
-// v3-Review). Letzte Reihe ist immer der Finalraum (ein Boss-Knoten).
-function generateMap(seed, diff) {
-  const rng = rngForRun(seed, 'map');
+// Grundsteinumbau Phase 6: in den ersten drei Ebenen eines Akts sind
+// elite/cursed/workshop gesperrt (harte Vorgabe des Auftrags, keine
+// Balance-Zahl -- deshalb hier als Konstante, nicht in difficulty.json).
+const EARLY_EXCLUDED_TYPES = new Set(['elite', 'cursed', 'workshop']);
+const EARLY_LAYERS = 3;
+
+// Kartengenerierung (Phase 12, auf drei Akte erweitert in Grundsteinumbau
+// Phase 6): einmalig deterministisch aus dem Seed (eigener Strom PRO AKT --
+// core/rng.js: rngForRun mit dem Label 'map_act'+actIndex, damit Akt 1 und
+// Akt 2 verschiedene Karten ziehen) -- die Karte eines Akts steht komplett
+// fest, sobald er beginnt ("vollstaendig vorab einsehbar", PLAN.md). Die
+// ersten beiden Ebenen sind je ein einzelner Kampf-Knoten
+// (data/difficulty.json: map.forcedCombatLayers), die letzte Ebene vor dem
+// Boss ist komplett 'rest' (garantierter Rastplatz, STS-Konvention),
+// dazwischen 2-3 Knoten je Ebene mit Typ aus map.nodeWeights (elite/cursed/
+// workshop in den ersten drei Ebenen gesperrt). GENAU EIN Knoten in der
+// Mitteltiefe wird zusaetzlich zur Schatzkammer erzwungen (kein gewichteter
+// Zufallstyp mehr, s. data/difficulty.json: _comment_map). Letzte Ebene ist
+// immer der Bossraum (ein Boss-Knoten).
+// Exportiert (wie buyEnemies() oben) fuer direkte Mechanismus-Tests --
+// eine reine Funktion (seed/diff/actIndex -> Graph), kein Run-Objekt noetig.
+export function generateMap(seed, diff, actIndex) {
+  const rng = rngForRun(seed, `map_act${actIndex}`);
   const mapCfg = diff.map || {};
-  const weights = diff.doors.weights;
+  const weights = mapCfg.nodeWeights;
   const types = Object.keys(weights);
+  const earlyTypes = types.filter((t) => !EARLY_EXCLUDED_TYPES.has(t));
+  const noRestTypes = types.filter((t) => t !== 'rest');
   const forcedLayers = mapCfg.forcedCombatLayers ?? 2;
   const minN = mapCfg.minNodesPerLayer ?? 2;
   const maxN = mapCfg.maxNodesPerLayer ?? 3;
   const extraEdgeChance = mapCfg.extraEdgeChance ?? 0.4;
-  const finalIdx = diff.roomsBeforeFinal + 1;
+  const actRooms = diff.acts[actIndex - 1].rooms;
+  const finalIdx = actRooms + 1;
 
   const layers = [];
-  for (let layer = 1; layer <= diff.roomsBeforeFinal; layer++) {
+  for (let layer = 1; layer <= actRooms; layer++) {
     const forced = layer <= forcedLayers;
+    const restLayer = layer === actRooms; // letzte Ebene vor dem Boss
+    // Die Ebene direkt VOR der erzwungenen Rast-Ebene darf selbst kein
+    // zufaelliges 'rest' ziehen -- sonst waere "zwei Rastplaetze in Folge"
+    // an genau dieser Nahtstelle unvermeidbar (der garantierte Rastplatz vor
+    // dem Boss hat Vorrang und wird von der Reparatur weiter unten bewusst
+    // ausgenommen, s. dort).
+    const preRestLayer = layer === actRooms - 1;
     const count = forced ? 1 : minN + Math.floor(rng() * (maxN - minN + 1));
     const nodes = [];
     for (let col = 0; col < count; col++) {
-      const type = forced ? 'combat' : weightedType(types, weights, rng);
+      let type;
+      if (forced) type = 'combat';
+      else if (restLayer) type = 'rest';
+      else {
+        let pool = layer <= EARLY_LAYERS ? earlyTypes : types;
+        if (preRestLayer) pool = pool.filter((t) => t !== 'rest');
+        type = weightedType(pool, weights, rng);
+      }
       nodes.push({ id: layer * 10 + col, layer, col, type, isBoss: false, next: [] });
     }
     layers.push(nodes);
@@ -178,15 +227,68 @@ function generateMap(seed, diff) {
   const byId = new Map();
   for (const layer of layers) for (const n of layer) byId.set(n.id, n);
 
-  // Sicherheitsnetz: `treasure` ist bei zu wenig Leben nicht waehlbar
-  // (chooseMapNode()). Fuehren ALLE Kanten eines Knotens ausschliesslich zu
-  // Schatzkammern, waere der Weg dort bei 1 Leben eine Sackgasse -- die
-  // zufaellige Typwahl kann das (selten) erzeugen. Faerbt in diesem Fall
-  // die erste Alternative auf 'combat' um (immer waehlbar).
+  // Schatzkammer (Phase 6): GENAU EIN Knoten in der Mitteltiefe wird
+  // erzwungen -- deterministisch ueber denselben Strom, nach dem Aufbau der
+  // Ebenen/Kanten (Reihenfolge egal, der Typ eines Knotens beeinflusst keine
+  // andere Ziehung). Layer wird zwischen den erzwungenen Kampf-Ebenen und
+  // der erzwungenen Rast-Ebene geklemmt, sonst koennte treasureLayerFraction
+  // bei kleinen Akten auf eine bereits erzwungene Ebene fallen.
+  let treasureNode = null;
+  {
+    const targetLayer = Math.max(
+      forcedLayers + 1,
+      Math.min(actRooms - 1, Math.round(actRooms * (mapCfg.treasureLayerFraction ?? 0.5))),
+    );
+    const candidates = layers[targetLayer - 1] || [];
+    if (candidates.length) {
+      treasureNode = candidates[Math.floor(rng() * candidates.length)];
+      treasureNode.type = 'treasure';
+    }
+  }
+
+  // Reparatur "keine zwei Rastplaetze in Folge" (Phase 6): erst NACH der
+  // Kantenerzeugung moeglich (die Nachbarschaft ergibt sich aus den Kanten,
+  // nicht aus der Ebenenreihenfolge). Deterministisch in fester Reihenfolge
+  // (Ebene, Knoten, Kante) -- ein Folgeknoten, der durch eine bereits
+  // reparierte Kante schon umgefaerbt wurde, wird nicht doppelt gewuerfelt.
+  // Die erzwungene Rast-Ebene direkt vor dem Boss (restLayer, s. o.) ist
+  // von der Reparatur ausgenommen -- sonst koennte sie hier wieder umgefaerbt
+  // und der garantierte Rastplatz vor dem Boss gebrochen werden.
   for (const layer of layers) {
     for (const node of layer) {
-      if (node.next.length && node.next.every((id) => byId.get(id).type === 'treasure')) {
-        byId.get(node.next[0]).type = 'combat';
+      if (node.type !== 'rest') continue;
+      for (const nid of node.next) {
+        const target = byId.get(nid);
+        if (target.type === 'rest' && target.layer !== actRooms) {
+          const pool = target.layer <= EARLY_LAYERS
+            ? earlyTypes.filter((t) => t !== 'rest')
+            : noRestTypes;
+          target.type = weightedType(pool, weights, rng);
+        }
+      }
+    }
+  }
+
+  // Sicherheitsnetz: `treasure` ist bei zu wenig Leben nicht waehlbar
+  // (chooseMapNode()) -- ein Knoten, dessen EINZIGE Kante zur Schatzkammer
+  // fuehrt, waere bei 1 Leben eine Sackgasse. Anders als im alten System
+  // (mehrere zufaellig verteilte Schatzkammern, "erste Alternative
+  // umfaerben" war dort ein sicherer Fix) gibt es seit Phase 6 nur noch
+  // GENAU EINEN Schatz-Knoten (s. o.) -- ihn umzufaerben wuerde diese
+  // Zusicherung brechen. Der betroffene Knoten bekommt stattdessen eine
+  // zusaetzliche Kante zu einem ANDEREN Knoten derselben Ebene (Fluchtweg
+  // statt Farbwechsel) -- die Ebene hat dank map.minNodesPerLayer >= 2
+  // immer mindestens einen weiteren Knoten (die Schatz-Ebene liegt nie auf
+  // einer erzwungenen Ebene mit nur einem Knoten, s. Klemmung oben).
+  if (treasureNode) {
+    const siblings = layers[treasureNode.layer - 1].filter((n) => n.id !== treasureNode.id);
+    if (siblings.length) {
+      for (const layer of layers) {
+        for (const node of layer) {
+          if (node.next.length === 1 && node.next[0] === treasureNode.id) {
+            node.next.push(siblings[0].id);
+          }
+        }
       }
     }
   }
@@ -202,12 +304,21 @@ function findMapNodeFallback(run, roomIndex, roomType) {
   return (layer.find((n) => n.type === roomType) || layer[0])?.id ?? null;
 }
 
+// Grundsteinumbau Phase 6: run.roomIndex faengt in JEDEM Akt wieder bei 1 an
+// (s. Kopfkommentar) -- ein reiner rngFor(seed, roomIndex, label)-Aufruf
+// wuerde Akt-1-Raum-1 und Akt-2-Raum-1 also identische Stroeme geben. Der
+// kombinierte Schluessel haelt Akt und Raum auseinander; 100 liegt sicher
+// ueber der groessten moeglichen akt-lokalen Raumnummer (16 Raeume + Boss).
+function actRoomKey(run) {
+  return (run.actIndex - 1) * 100 + run.roomIndex;
+}
+
 // Benannte RNG-Stroeme fuer den aktuellen Raum neu ableiten. Getrennte
 // Labels sorgen dafuer, dass z. B. eine geaenderte Upgrade-Logik die
 // Raumlayouts nicht verschiebt.
 function makeRoomStreams(run) {
   const s = run.seed;
-  const i = run.roomIndex;
+  const i = actRoomKey(run);
   run.rng = {
     rooms: rngFor(s, i, 'rooms'), // Layout, Kachelwahl, Spawns
     enemies: rngFor(s, i, 'enemies'), // Gegner-Einkauf + Elite-Affix
@@ -240,7 +351,8 @@ export function runSnapshot(run) {
     seed: run.seed,
     modeKey: run.modeKey,
     starterTank: run.starterTank, // Phase 9: die Klasse gehoert in die Seed-Wiedergabe
-    roomIndex: run.roomIndex,
+    actIndex: run.actIndex, // Grundsteinumbau Phase 6: welcher Akt (1-3)
+    roomIndex: run.roomIndex, // akt-lokal (1..17), faengt pro Akt neu bei 1 an
     roomType: run.roomType,
     mapCurrentId: run.mapCurrentId, // Phase 12: Position auf der Karte (Wahl, nicht ableitbar)
     lives: run.lives,
@@ -272,15 +384,26 @@ function resetRoomCounters(run) {
 }
 
 // Baut einen Raum vom gegebenen Typ (Phase 4). Kampf-/Eliteraeume bauen
-// eine Arena; Nicht-Kampf-Raeume (treasure/workshop/event) behalten den
+// eine Arena; Nicht-Kampf-Raeume (treasure/workshop/event/rest) behalten den
 // geraeumten Vorraum als Kulisse und starten ihre Interaktion.
+//
+// Grundsteinumbau Phase 6: "final" heisst jetzt "Bossraum DIESES Akts", nicht
+// mehr zwingend das Ende des Runs -- run.isActBoss haelt das fest, stepRun()
+// entscheidet anhand von run.actIndex, ob danach der naechste Akt beginnt
+// oder der Run gewonnen ist (nur Akt 3).
 function startRoom(run, type = 'combat') {
   const diff = run.difficulty;
-  const finalIdx = diff.roomsBeforeFinal + 1;
+  const actCfg = diff.acts[run.actIndex - 1];
+  const finalIdx = actCfg.rooms + 1;
+  // !run.endless ist ein reines Sicherheitsnetz: im Endlosmodus (nach Akt 3)
+  // waechst run.roomIndex ueber finalIdx hinaus und traefe die Bedingung nie
+  // wieder von selbst -- der explizite Ausschluss verhindert trotzdem jede
+  // zukuenftige Ueberraschung, falls roomIndex je anders gefuehrt wird.
   const isFinal = !run.endless && run.roomIndex === finalIdx;
-  // Der Finalraum ist immer Kampf (Sicherheitsnetz -- die Karte markiert die
+  // Der Bossraum ist immer Kampf (Sicherheitsnetz -- die Karte markiert die
   // letzte Reihe ohnehin schon als 'combat'-Boss-Knoten, siehe generateMap()).
   if (isFinal) type = 'combat';
+  run.isActBoss = isFinal;
   run.roomType = type;
   run.roomAffix = null;
   run.roomAffixes = [];
@@ -297,6 +420,7 @@ function startRoom(run, type = 'combat') {
 
 function buildCombatRoom(run, type, isFinal) {
   const diff = run.difficulty;
+  const actCfg = diff.acts[run.actIndex - 1];
   // Raum-Modifikator (Phase 10): ab data/modifiers.json.minRoom einer pro
   // Kampf-/Eliteraum, sichtbar in der Vorschau. Der Finalraum bleibt davon
   // ausgenommen -- handgebaute Encounter sollen wie geplant bleiben, gleiches
@@ -310,19 +434,18 @@ function buildCombatRoom(run, type, isFinal) {
   let weights = null;
   let bossRoomSpec = null;
   if (isFinal) {
-    // Boss (Phase 14): 1 von 3 Arenen, deterministisch ueber den enemies-
-    // Strom dieses Raums gewuerfelt -- ein eigener RNG-Strom nur fuer diese
-    // eine Wahl waere ueberdimensioniert (Muster wie roomCharacter oben).
-    // Nutzt die Arena-Weiche aus Phase 0b (fixedLayout) statt des alten
-    // handgebauten run.tiles.finalRoom, das damit entfaellt.
-    const bosses = diff.finalRoom.bosses;
-    const bossName = bosses[Math.floor(run.rng.enemies() * bosses.length)];
+    // Boss (Phase 14, Grundsteinumbau Phase 6: fest statt zufaellig): jeder
+    // Akt hat GENAU einen Boss (acts[i].boss) -- Reaktor->Akt1, Spiegel->Akt2,
+    // Phalanx->Akt3 (Nutzerentscheidung, s. data/difficulty.json). Nutzt die
+    // Arena-Weiche aus Phase 0b (fixedLayout) statt des alten handgebauten
+    // run.tiles.finalRoom, das damit entfaellt.
+    const bossName = actCfg.boss;
     run.bossName = bossName;
     bossRoomSpec = { fixedLayout: bossName };
     const spawnCount = arenaEnemySpawnCount(run.data.arenas, bossName);
     enemyTypes = [
       ...BOSS_ENEMY_TYPES[bossName],
-      ...buyEnemies(diff, run.rng.enemies, run.roomIndex, diff.finalRoom.supportBudget),
+      ...buyEnemies(diff, run.rng.enemies, run.actIndex, run.roomIndex, diff.finalRoom.supportBudget),
     ].slice(0, spawnCount);
     run.roomCharacter = 'Finale';
   } else {
@@ -330,9 +453,12 @@ function buildCombatRoom(run, type, isFinal) {
     // Modifikator "Ueberfuellt" (Phase 10): 50 % mehr Gefahrenbudget -> mehr
     // (bzw. staerkere) Gegner, kompensiert durch aggressionMult in cfg.js.
     const crowdedMult = modifier?.enemyBudgetMult || 1;
+    // Grundsteinumbau Phase 6: budget kommt jetzt aus dem AKT-eigenen
+    // Block (acts[i].budget) und laeuft akt-lokal -- Raum 1 jedes Akts
+    // startet wieder bei budget.base, statt einer einzigen 51-Raum-Kurve.
     const budget =
-      (diff.budget.base + run.roomIndex * diff.budget.perRoom) * run.budgetMult * eliteMult * crowdedMult;
-    enemyTypes = buyEnemies(diff, run.rng.enemies, run.roomIndex, budget);
+      (actCfg.budget.base + run.roomIndex * actCfg.budget.perRoom) * run.budgetMult * eliteMult * crowdedMult;
+    enemyTypes = buyEnemies(diff, run.rng.enemies, run.actIndex, run.roomIndex, budget);
     // Raumcharakter: Kachelgewichte alternieren (Spec Abschnitt 7B).
     const chars = diff.roomCharacters;
     if (chars && chars.length) {
@@ -363,7 +489,7 @@ function buildCombatRoom(run, type, isFinal) {
   run.state = createState(run.data, run.tiles, {
     genRng: run.rng.rooms,
     enemyTypes,
-    aiSeed: hashSeed(run.seed, run.roomIndex, 'ai'),
+    aiSeed: hashSeed(run.seed, actRoomKey(run), 'ai'), // Phase 6: akt-eindeutig, s. actRoomKey()
     fixedRoom,
     weights,
     starterTank: run.starterTank, // Phase 9: gewaehlte Klasse
@@ -395,12 +521,17 @@ function buildCombatRoom(run, type, isFinal) {
     // Raumkontext (Nutzer-Balancerunde): manche Karten wirken nur in
     // bestimmten Raumarten -- aktuell der Konterschild (nur Elite/Boss).
     roomContext: { elite: type === 'elite' || type === 'cursed', boss: !!isFinal },
-    // LP-Skalierung (UMBAUPLAN-LP Phase 2): Raumtiefe mal Elitezuschlag.
-    // Der Gegnerschaden skaliert bewusst NICHT mit -- spaetere Raeume
-    // werden zaeher, nicht toedlicher (Plan: "Gegnerschaden konstant").
+    // LP-Skalierung (UMBAUPLAN-LP Phase 2): Raumtiefe (akt-lokal) mal
+    // Elitezuschlag. Der Gegnerschaden skaliert bewusst NICHT mit --
+    // spaetere Raeume werden zaeher, nicht toedlicher (Plan: "Gegnerschaden
+    // konstant"). Grundsteinumbau Phase 6: im Bossraum kommt zusaetzlich
+    // acts[i].bossHpMult drauf -- gilt bewusst auch fuer den t_black-
+    // Platzhalter (kein isBossCfg()-Flag, hpSkipBosses greift bei ihm nicht),
+    // sonst waere der Akt-3-Boss nicht haerter als der Akt-1-Boss.
     hpScale:
       (1 + (diff.hpScaling?.perRoom || 0) * (run.roomIndex - 1)) *
-      (type === 'elite' || type === 'cursed' ? diff.elite?.hpMult || 1 : 1),
+      (type === 'elite' || type === 'cursed' ? diff.elite?.hpMult || 1 : 1) *
+      (isFinal ? actCfg.bossHpMult ?? 1 : 1),
     hpSkipBosses: diff.hpScaling?.skipBosses !== false,
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
@@ -530,7 +661,19 @@ function startNonCombatRoom(run, type) {
     const evs = run.data.events.events;
     run.currentEvent = evs[Math.floor(run.rng.events() * evs.length)];
     run.phase = 'event';
+  } else if (type === 'rest') {
+    // Grundsteinumbau Phase 6: der Rastplatz ist hier nur ein leerer
+    // Durchgangsraum mit Platzhaltertext (roomscreens.js: createRestScreen)
+    // -- der eigentliche Inhalt (Leben zurueck ODER Upgrade aufwerten) kommt
+    // erst in Phase 7. leaveRest() ist der einzige Ausgang.
+    run.phase = 'rest';
   }
+}
+
+// Rastplatz verlassen -> naechste Tuer (Platzhalter, s. o.).
+export function leaveRest(run) {
+  if (run.phase !== 'rest') return;
+  afterRoomDone(run);
 }
 
 // Tatsaechlich zum Zielknoten wechseln: naechster Raum, Kartenposition
@@ -620,6 +763,35 @@ export function enterRoom(run) {
   run.transitionTimer = TRANSITION_S;
 }
 
+// Grundsteinumbau Phase 6: nur die Kartengenerierung + Akt-Zuweisung, OHNE
+// Seiteneffekt auf roomIndex/mapCurrentId/phase -- gebraucht sowohl fuer
+// einen frischen Akt (enterAct(), s. u.) als auch beim Fortsetzen (die Karte
+// muss deterministisch aus Seed+actIndex neu entstehen, roomIndex/
+// mapCurrentId kommen dort aber aus dem Snapshot, nicht bei 1).
+function buildActMap(run, actIndex) {
+  run.actIndex = actIndex;
+  run.map = generateMap(run.seed, run.difficulty, actIndex);
+}
+
+// Einen (neuen) Akt beginnen: frische Karte, Position auf den Startknoten,
+// erster Raum ist wie gehabt automatisch Kampf (die ersten beiden Ebenen
+// sind ohnehin forced-combat, s. generateMap()).
+function enterAct(run, actIndex) {
+  buildActMap(run, actIndex);
+  run.roomIndex = 1;
+  run.mapCurrentId = run.map.layers[0][0].id;
+  startRoom(run, 'combat');
+}
+
+// Vom "Weiter"-Knopf des Akt-Uebergangsbildschirms aufgerufen (Testschritt 2
+// des Auftrags: "Uebergang zur Akt-2-Karte mit Zwischenbildschirm"). Der
+// Lebensbonus ist zu diesem Zeitpunkt schon vergeben (stepRun() traegt ihn
+// beim Bosskill ein, s. dort) -- hier nur noch der Kartenwechsel selbst.
+export function advanceAct(run) {
+  if (run.phase !== 'actComplete') return;
+  enterAct(run, run.actIndex + 1);
+}
+
 // opts.roomSpec: optionales Raumspec, z. B. { fixedLayout: 'test_arena' }
 // -> alle Kampfraeume nutzen dann das feste Layout (Testweg fuer die Weiche).
 export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey = 'normal', opts = {}) {
@@ -669,6 +841,9 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     roomModifier: null, // Raum-Modifikator-Objekt aus data/modifiers.json (Phase 10)
     roomHazard: null, // {type,name,desc} aus data/tiles.json: hazards (Phase 15)
     bossName: null, // Boss-Arena des Finalraums (Phase 14), erst dort gesetzt
+    actIndex: 1, // Grundsteinumbau Phase 6: welcher Akt (1-3), s. enterAct()
+    isActBoss: false, // true, waehrend der aktuelle Raum der Bossraum DIESES Akts ist
+    lastActLifeReward: 0, // fuer den Akt-Uebergangsbildschirm (main.js)
     killsByType: {}, // Statistik fuer die Endscreens
     shotsFired: 0, // Spieler-Abzuege ueber den ganzen Run (Trefferquote)
     combo: 0, // laufende Kill-Combo
@@ -689,16 +864,21 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     state: null,
     finalStats: null,
   };
-  // Karte (Phase 12): einmalig deterministisch aus dem Seed erzeugt (eigener
-  // Run-weiter Strom statt eines pro-Raum-Stroms) und bleibt fuer den
-  // GANZEN Run unveraendert -- "vollstaendig vorab einsehbar" (PLAN.md).
-  run.map = generateMap(run.seed, difficulty);
-  run.mapCurrentId = run.map.layers[0][0].id; // Startknoten (Raum 1)
+  // Karte (Phase 12, Grundsteinumbau Phase 6: eine pro Akt): einmalig
+  // deterministisch aus dem Seed erzeugt (eigener Strom PRO AKT statt eines
+  // pro-Raum-Stroms) und bleibt fuer die Dauer des Akts unveraendert --
+  // "vollstaendig vorab einsehbar" (PLAN.md), jetzt akt-weise statt fuer den
+  // ganzen Run auf einmal (drei Akte a 16 Raeume waeren sonst eine einzige,
+  // extrem lange Karte).
   // Fortsetzen: Zustand vor dem Raumbau einspielen, damit startRoom()
-  // denselben Raum wie beim Abbruch erzeugt (Seed + Raumnummer genuegen).
+  // denselben Raum wie beim Abbruch erzeugt (Seed + Akt + Raumnummer
+  // genuegen).
   if (opts.resume) {
     const r = opts.resume;
     run.starterTank = r.starterTank || run.starterTank; // Phase 9: Klasse aus dem Snapshot
+    // Aeltere Zwischenstaende (vor Phase 6) kennen actIndex noch nicht --
+    // sie waren immer "Akt 1" (es gab nur einen), bestmoegliches Fallback.
+    buildActMap(run, r.actIndex || 1);
     run.roomIndex = r.roomIndex;
     run.lives = r.lives;
     run.shieldCharges = (r.shieldCharges || []).slice();
@@ -721,7 +901,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     startRoom(run, r.roomType || 'combat');
     return run;
   }
-  startRoom(run);
+  enterAct(run, 1);
   return run;
 }
 
@@ -878,12 +1058,25 @@ export function stepRun(run, cmd, dt) {
       life: 1.2,
       color: '#e0c860',
     });
-    // Extraleben alle 5 geschaffte Raeume.
-    if (run.roomsCleared % run.difficulty.extraLifeEveryClearedRooms === 0) {
-      run.lives++;
-    }
-    if (!run.endless && run.roomIndex >= totalRooms(run.difficulty)) {
-      finishRun(run, true);
+    // Grundsteinumbau Phase 6: das alte "Extraleben alle 5 geschaffte
+    // Raeume" (extraLifeEveryClearedRooms) ist entfallen -- bei ~50 Raeumen
+    // ueber drei Akte waeren das +8 bis +10 Leben gewesen (archive/
+    // systeme-v1.md Abschnitt 5). Ersetzt durch acts[].lifeReward, nur beim
+    // Bosskill vergeben (s. u.).
+    if (run.isActBoss) {
+      const actCfg = run.difficulty.acts[run.actIndex - 1];
+      const reward = actCfg.lifeReward || 0;
+      run.lastActLifeReward = reward;
+      if (reward) run.lives = Math.min(run.maxLives, run.lives + reward);
+      if (run.actIndex >= run.difficulty.acts.length) {
+        // Letzter Akt (Phalanx) geschafft -> Run gewonnen, kein Uebergang mehr.
+        finishRun(run, true);
+        return;
+      }
+      // Akt 1/2 geschafft: Zwischenbildschirm statt der normalen
+      // Belohnungsauswahl (der alte Finalraum bot ohnehin keine Karte an --
+      // dieselbe Stelle prüfte früher direkt gegen totalRooms()).
+      run.phase = 'actComplete';
       return;
     }
     // Belohnung: Eliteraeume ziehen aus dem Elite-Pool. Verflucht (Phase 12)

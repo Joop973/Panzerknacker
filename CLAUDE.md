@@ -3755,8 +3755,9 @@ Heckschaden, Exekutionsschwelle, Treffer-Rückmeldung) ist gebaut** —
 eigener Abschnitt weiter unten. **Phase 3 (Der Grüne wird Mörserschütze)
 ist gebaut** — eigener Abschnitt weiter unten. **Phase 4 (Upgrades raus,
 Sockel rein) ist gebaut** — eigener Abschnitt weiter unten. **Phase 5
-(Klassen parken) ist gebaut** — eigener Abschnitt weiter unten. **Nächste
-Sitzung: Phase 6** (Drei Akte).
+(Klassen parken) ist gebaut** — eigener Abschnitt weiter unten. **Phase 6
+(Drei Akte) ist gebaut** — eigener Abschnitt weiter unten. **Nächste
+Sitzung: Phase 7** (Rastplatz und Aufwertung).
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -4238,6 +4239,119 @@ Nur noch **zwei** Klassen sind wählbar: `player` (die Nulllinie) und
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
   **Nächste Sitzung: Phase 6** (Drei Akte).
 
+### Grundsteinumbau v3 — Phase 6 (Drei Akte) — gemergt
+Aus der 16-Raum-Karte werden **drei Akte** à 16 Räume + eigenem Bossraum
+(≈ 51 Räume gesamt). Jeder Akt hat einen **festen** Boss (Reaktor→Akt 1,
+Spiegel→Akt 2, Phalanx→Akt 3 — weiterhin über den `t_black`-Platzhalter aus
+"Bosse (Platzhalter)", unverändert), eine eigene Kartengraph-Generierung und
+ein eigenes Gefahrenbudget. `data/difficulty.json` bekommt dafür einen neuen
+`acts[]`-Block (`boss`/`rooms`/`bossHpMult`/`lifeReward`/`budget.base+
+perRoom`, alle `_todo: balance`) und `danger.<typ>.unlockAct`+
+`unlockRoomInAct` statt des alten `unlockRoom`.
+- **`run.roomIndex` bleibt AKT-LOKAL** (fängt in jedem Akt wieder bei 1 an,
+  bewusste Design-Entscheidung): dadurch funktionieren `hpScaling.perRoom`,
+  `elite.affixRules`, `modifiers.minRoom`, `hazards.minRoom` und die
+  Rarity-`rarityGates` unverändert weiter — sie staffeln sich jetzt pro Akt
+  neu, passend dazu, dass auch `acts[].budget` pro Akt bei `budget.base`
+  neu anfängt statt einer einzigen 51-Raum-Kurve. Eine neue, akt-*globale*
+  Statistik gibt es bewusst nicht (`run.roomsCleared` zählt weiterhin über
+  den ganzen Run).
+- **`actRoomKey(run)`** (`run.js`, neu): `(actIndex-1)*100 + roomIndex`.
+  Reiner RNG-Streaming-Fix: `makeRoomStreams()`/die KI-Seed-Ableitung
+  (`hashSeed(seed, roomIndex, 'ai')`) nutzten bisher `run.roomIndex` direkt
+  als Hash-Index — da der jetzt pro Akt neu bei 1 anfängt, hätten Akt-1-
+  Raum-1 und Akt-2-Raum-1 sonst exakt dieselben Ströme gezogen (identisches
+  Layout, identische Gegner, identische Angebote). `actRoomKey()` hält Akt
+  und Raumnummer auseinander, ohne `roomIndex` selbst umzudeuten.
+- **Kartengenerierung pro Akt** (`run.js: generateMap(seed, diff, actIndex)`,
+  jetzt exportiert wie `upgradepool.js: weightedPick` für direkte
+  Mechanismus-Tests): eigener Strom je Akt (`rngForRun(seed, 'map_act'+
+  actIndex)`), gebaut beim Akt-Eintritt (`enterAct()`) bzw. beim Fortsetzen
+  (`buildActMap()`, ohne die Seiteneffekte von `enterAct()` — der Snapshot
+  bringt `roomIndex`/`mapCurrentId` schon mit). `doors.weights` ist zu
+  `map.nodeWeights` umgezogen (`workshop` statt `shop`, s. Phase-13-
+  Namenskonvention) und um `treasure` verkürzt — die Schatzkammer ist kein
+  gewichteter Zufallstyp mehr, sondern **genau ein** erzwungener Knoten pro
+  Akt in der Mitteltiefe (`map.treasureLayerFraction`). Harte Constraints
+  (Konstanten im Code, keine Balance-Zahlen): `EARLY_EXCLUDED_TYPES`
+  (elite/cursed/workshop) für die ersten drei Ebenen, die letzte Ebene vor
+  dem Boss ist komplett `'rest'` erzwungen (STS-Konvention), die Ebene davor
+  darf selbst kein zufälliges `'rest'` ziehen (sonst wäre die Naht zur
+  erzwungenen Rast-Ebene unvermeidbar "zwei in Folge"), eine Reparatur-Passage
+  nach dem Kantenaufbau färbt jedes andere zufällig entstandene
+  "Rastplatz→Rastplatz" um.
+- **Echter Testfund beim Bau der Schatzkammer-Regel**: der alte
+  Sackgassen-Schutz aus Phase 12 ("führen ALLE Kanten eines Knotens
+  ausschließlich zu Schatzkammern, färbe die erste Alternative um") war für
+  ein System mit *vielen* zufällig verteilten Schatzkammern geschrieben —
+  dort war "die erste Alternative" fast nie die Schatzkammer selbst. Mit
+  **genau einem** Schatz-Knoten pro Akt ist "die erste Alternative" eines
+  Knotens mit nur einer Kante aber sehr oft GENAU der Schatz-Knoten, und der
+  alte Schutz hat ihn dann auf `combat` umgefärbt — der Akt hatte danach
+  **null** Schatzkammern. Gemessen: 47 von 75 Seed/Akt-Kombinationen
+  betroffen (60er-Bereich), nicht "selten". Fix: der Sackgassen-Schutz färbt
+  nicht mehr um, sondern gibt dem betroffenen Knoten eine zusätzliche Kante
+  zu einem Geschwisterknoten derselben Ebene (Fluchtweg statt Farbwechsel) —
+  der Schatz-Knoten bleibt garantiert bestehen. Ohne den neuen Testabschnitt
+  50(e) (Gegenprobe siehe unten) wäre das unbemerkt geblieben.
+- **Fester statt zufälliger Boss**: `buildCombatRoom()` liest `actCfg.boss`
+  direkt (kein `run.rng.enemies()`-Wurf mehr) — `diff.finalRoom.bosses`
+  (Array mit Zufallsauswahl) ist entfallen, `diff.finalRoom.supportBudget`
+  bleibt global (gilt für alle drei Bossräume gleich).
+- **`bossHpMult` wirkt bewusst auch auf den `t_black`-Platzhalter**: er trägt
+  kein `isBossCfg()`-Flag (kein `bossInvincible`/`mirrorBoss`/`phalanx`),
+  `hpSkipBosses` greift bei ihm also nicht — er würde sonst in jedem Akt
+  gleich zäh sein. `hpScale` im Bossraum ist deshalb
+  `normale Formel × (isFinal ? actCfg.bossHpMult : 1)`.
+- **Der alte Lebensbonus ist abgebaut, nicht der neue "erfunden"**: Phase 0
+  hatte `extraLifeEveryClearedRooms`-Entfernung schon vorab in
+  `archive/systeme-v1.md` (Abschnitt 5) geplant — genau danach umgesetzt:
+  das Feld bleibt unverändert in `data/difficulty.json` stehen
+  (Wiederanschlusspunkt), nur der auswertende Codepfad in `run.js` ist raus.
+  Ersetzt durch `acts[].lifeReward`, vergeben **nur** beim Bosskill
+  (`run.isActBoss`), gedeckelt auf `run.maxLives`.
+- **Akt-Übergang statt Rundenende**: `run.isActBoss` (in `startRoom()`
+  gesetzt) ersetzt den alten `!run.endless && run.roomIndex >= totalRooms()`-
+  Vergleich. Akt 1/2: `run.phase = 'actComplete'` (neuer Zwischenbildschirm,
+  `roomscreens.js: createActCompleteScreen()`, "Akt X/3 geschafft" + Bonus),
+  „Weiter" ruft `advanceAct()` → `enterAct(run, actIndex+1)`. Akt 3:
+  `finishRun(run, true)` wie bisher (kein Bonus mehr, `lifeReward: 0`).
+- **Rastplatz (`rest`) ist in dieser Phase bewusst ein reiner Platzhalter**
+  (`roomscreens.js: createRestScreen()`, ein "Weiter"-Knopf, kein Inhalt) —
+  der eigentliche Effekt (Leben zurück ODER Upgrade aufwerten) ist
+  Phase 7. `startNonCombatRoom()`/`leaveRest()` sind trotzdem schon die
+  vollständige Infrastruktur, Phase 7 muss nur noch den Inhalt einhängen.
+- **Ist-Abgleich-Fund**: `src/core/storage.js` brauchte **keine** Änderung
+  (war in der Auftrags-Dateiliste genannt) — es ist ein reiner generischer
+  Key-Value-Wrapper (`saveCurrentRun`/`loadCurrentRun`), kennt keine
+  Run-Feldstruktur. Der neue Snapshot-Schlüssel `actIndex` läuft einfach mit
+  durch. `cfg.js` brauchte ebenfalls keine Änderung.
+- **Anzeige**: HUD (`hud.js`) und Raumvorschau (`main.js`) zeigen jetzt
+  „Akt X/3 · Raum N/17" statt nur „Raum N/16"; `mapscreen.js` zeigt „Karte —
+  Akt X/3" in der Überschrift (der Bossknoten trägt sein Symbol bereits seit
+  Phase 12/14, brauchte keine Änderung). Der „Run fortsetzen"-Knopf im
+  Startmenü nennt jetzt ebenfalls den Akt.
+- **Neuer Testabschnitt 50** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt bestanden — je einzeln absichtlich rot gemacht: `totalRooms()`-
+  Offset, `buyEnemies()`-Freischaltungsfilter, erzwungene Rast-Ebene,
+  Früh-Sperre in Ebene 3, `actRoomKey`-Trennung im Kartenlabel, Lebensbonus-
+  Deckel, Akt-3-Grenze — die letzte Gegenprobe crasht sogar hart statt nur
+  einen Check zu röten, das ist ebenfalls ein gültiges Rot): Struktur
+  (`acts[]`, `danger.*` komplett auf unlockAct/unlockRoomInAct umgestellt),
+  `totalRooms()`- und `buyEnemies()`-Mechanismus mit **synthetischen**
+  Werten (nicht den echten `_todo: balance`-Zahlen), `generateMap()`-
+  Graphregeln über 25 synthetische Seeds × 3 Akte (erzwungene Ebenen,
+  Früh-Sperre, garantierter Rastplatz, genau ein Schatz-Knoten, keine zwei
+  Rastplätze in Folge), `actRoomKey`-Stromtrennung (Akt 1 ≠ Akt 2 bei
+  gleichem Seed), und ein instrumentierter End-to-End-Run: genau zwei
+  Akt-Übergänge mit dem richtigen `lifeReward`-Betrag (gedeckelt auf
+  `maxLives`), danach direkt `victory` ohne einen dritten Übergang.
+  Playwright-Smoke bestätigt zusätzlich: die Raumvorschau zeigt „Akt 1/3 ·
+  Raum 1/17", Fortsetzen über einen Reload trägt `actIndex` korrekt weiter,
+  keine Konsolenfehler.
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 7** (Rastplatz und Aufwertung).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -4294,10 +4408,15 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - **Fixed-Timestep-Loop** 60 Hz mit Akkumulator + Render-Interpolation (`alpha`).
   `src/core/loop.js`.
 - **Deterministisch**: gesäter RNG (Mulberry32, `src/core/rng.js`). Kein
-  laufender Zustand — pro Raum benannte Ströme aus `hash(seed, roomIndex,
-  label)` (`rooms`/`enemies`/`upgrades`/`scrap`/`doors`/`events`/`modifiers`
-  + `ai`). Gleicher Seed + Raumnummer → gleicher Raum, unabhängig vom
-  Spielverlauf.
+  laufender Zustand — pro Raum benannte Ströme aus `hash(seed, actRoomKey,
+  label)` (`rooms`/`enemies`/`upgrades`/`scrap`/`events`/`modifiers`/
+  `hazards` + `ai`). Grundsteinumbau Phase 6: `actRoomKey` (`run.js`)
+  kombiniert Akt- und akt-lokale Raumnummer, weil `run.roomIndex` pro Akt bei
+  1 neu anfängt — reines `roomIndex` allein würde Akt-1-Raum-1 und
+  Akt-2-Raum-1 sonst identische Ströme geben. Gleicher Seed + Akt + Raumnummer
+  → gleicher Raum, unabhängig vom Spielverlauf. Die Kartengraphen selbst
+  kommen aus einem eigenen Strom **pro Akt** (`rngForRun(seed,
+  'map_act'+actIndex)`, ersetzt den alten `doors`-Namensraum).
 - **Datengetrieben**: ALLE Balance-Werte in `data/*.json`
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
   `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`,
@@ -4408,10 +4527,14 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   3-Sekunden-Verbündeter) überholt** — maßgeblich ist der Nekromant-Auftrag
   (Anhang A/B).
 - `src/ui/roomscreens.js` — Event- und Shop-Overlay (`createShopScreen`,
-  Phase 13: Kartenregal, Schild, Sekundärtausch, Leben, Ablegen).
+  Phase 13: Kartenregal, Schild, Sekundärtausch, Leben, Ablegen). Seit
+  Grundsteinumbau Phase 6 auch `createRestScreen()` (Rastplatz-Platzhalter,
+  Inhalt kommt Phase 7) und `createActCompleteScreen()` (Akt-Übergang).
 - `src/ui/mapscreen.js` — Kartenscreen (Phase 12): zeigt den ganzen
-  Kartengraphen, klickbar nur die von der aktuellen Position erreichbaren
-  Knoten der nächsten Reihe.
+  Kartengraphen **des aktuellen Akts** (Grundsteinumbau Phase 6: eine Karte
+  pro Akt statt einer für den ganzen Run), klickbar nur die von der
+  aktuellen Position erreichbaren Knoten der nächsten Reihe, Überschrift
+  „Karte — Akt X/3".
 - `src/render/renderer.js` — zeichnet alles (interpoliert). Nutzt Sprites,
   fällt auf prozedurale Formen zurück, falls Grafik fehlt/lädt.
 - `src/render/sprites.js` — lädt die PNG-Sprites (async, mit Fallback).
@@ -4519,3 +4642,7 @@ die kartenunabhängige Raumdauer-Schranke, Transformationen-Freischaltbarkeit
 `archive/upgrades-v1.json`/`archive/systeme-v1.md`). **Abschnitt 49** bewacht
 **Grundsteinumbau Phase 5** (Klassen parken: acht Klassen `enabled: false`,
 der Auswahlfilter-Mechanismus, geparkte Klassen lösen weiter fehlerfrei auf).
+**Abschnitt 50** bewacht **Grundsteinumbau Phase 6** (drei Akte:
+`generateMap()`/`buyEnemies()`/`totalRooms()`-Mechanismus mit synthetischen
+Werten, Kartengraph-Regeln über 25 Seeds × 3 Akte, `actRoomKey`-
+Stromtrennung, ein instrumentierter End-to-End-Run mit den Akt-Übergängen).
