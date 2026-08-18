@@ -23,7 +23,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, repairAtRest, restWorkbenchOptions, upgradeCardAtRest, advanceAct, runSnapshot } from '../src/game/run.js';
+import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, repairAtRest, workbenchOptions, upgradeCardAtRest, advanceAct, runSnapshot, buyShopCard, buyShopLife, buyShopUpgradeLevel, buyShieldCharge } from '../src/game/run.js';
 import { traceTrajectory } from '../src/game/bullet.js';
 import { validateArenas } from '../src/game/generator.js';
 import { createMine, updateMines } from '../src/game/mine.js';
@@ -61,7 +61,7 @@ function check(ok, msg) {
 function passRest(run) {
   if (run.phase !== 'rest') return;
   if (repairAtRest(run)) return;
-  const opts = restWorkbenchOptions(run);
+  const opts = workbenchOptions(run);
   if (opts.length) upgradeCardAtRest(run, opts[0].id);
 }
 
@@ -5112,13 +5112,16 @@ for (const seed of SEEDS) {
         dropRefund: tanksData.balance.scrap.dropRefund,
         getScrap: () => 999,
         getUpgrades: () => ({}),
+        getWorkbenchOptions: () => [],
         getOffers: () => [],
         getEquippedSecondary: () => null,
         lifeBought: () => false,
+        atFullLives: () => false,
         onBuyCard: () => false,
         onBuyShield: () => false,
         onBuySecondary: () => false,
         onBuyLife: () => false,
+        onUpgradeLevel: () => false,
         onDrop: () => false,
         onLeave: () => {},
       };
@@ -5939,7 +5942,7 @@ for (const seed of SEEDS) {
     );
   }
 
-  // (g)+(h) Testschritt 5: restWorkbenchOptions()/upgradeCardAtRest() am
+  // (g)+(h) Testschritt 5: workbenchOptions()/upgradeCardAtRest() am
   //     Deckel -- die Karte verschwindet aus der Liste, ein Aufwerten wird
   //     abgelehnt; sockel_ersatzpanzer erscheint dort NIE.
   {
@@ -5948,7 +5951,7 @@ for (const seed of SEEDS) {
     run.phase = 'rest';
     run.upgrades = { sockel_motor: 1, sockel_ersatzpanzer: 1 };
     run.upgradeLevels = { sockel_motor: maxLevel };
-    const opts = restWorkbenchOptions(run);
+    const opts = workbenchOptions(run);
     check(
       !opts.some((o) => o.id === 'sockel_motor'),
       'Phase 7: eine Karte am Stufen-Deckel erscheint noch in der Werkbank-Liste',
@@ -6008,6 +6011,164 @@ for (const seed of SEEDS) {
         run.phase !== 'rest',
         `Phase 7: Rastplatz ohne moegliche Wahl bleibt in Phase "${run.phase}" haengen statt automatisch weiterzuziehen`,
       );
+    }
+  }
+}
+
+// ---- 52. Grundsteinumbau Phase 8: Shop ueberarbeitet ---------------------
+// Der Shop war auf 246 generische Karten und sechs Schadenstypen ausgelegt,
+// beides gibt es nicht mehr: cardChoices 5->4, neue Werkbank-Aktion (gegen
+// Schrott dieselbe Aufwertung wie am Rastplatz), der Lebenskauf bekommt den
+// im Auftrag verlangten maxLives-Deckel (fehlte bisher -- echter Fund).
+// Testschritte 1-5 des Auftrags wörtlich, Gegenprobe fuer jeden Kernpunkt
+// bestanden.
+{
+  // Hilfsfunktion: einen echten Shop-Raum betreten, ueber den Kartengraphen
+  // (kein Kampf simuliert) -- Muster wie das Phase-7-Sicherheitsnetz: ein
+  // Elternknoten eines 'workshop'-Knotens wird direkt angesteuert,
+  // chooseMapNode() prueft nur "ist die Ziel-id in current.next". `workshop`
+  // ist mit Gewicht 5 von ~98 selten (Phase 6: map.nodeWeights) und in den
+  // ersten drei Ebenen ausgeschlossen -- ueber mehrere Seeds gesucht, statt
+  // sich auf einen einzigen zu verlassen.
+  function enterWorkshop(maxSeed = 60) {
+    for (let seed = 1; seed <= maxSeed; seed++) {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
+      let parentId = null;
+      let shopId = null;
+      for (const node of run.map.byId.values()) {
+        const hit = node.next.find((id) => run.map.byId.get(id)?.type === 'workshop');
+        if (hit != null) {
+          parentId = node.id;
+          shopId = hit;
+          break;
+        }
+      }
+      if (parentId == null) continue;
+      run.mapCurrentId = parentId;
+      run.phase = 'map';
+      const ok = chooseMapNode(run, shopId);
+      if (ok && run.phase === 'workshop') return run;
+    }
+    return null;
+  }
+
+  // (a) Struktur: cardChoices 4, cost.upgradeLevel eine Zahl.
+  {
+    check(tanksData.balance.shop?.cardChoices === 4, `Phase 8: shop.cardChoices ist ${tanksData.balance.shop?.cardChoices} statt 4`);
+    check(
+      typeof tanksData.balance.scrap.cost.upgradeLevel === 'number',
+      'Phase 8: scrap.cost.upgradeLevel fehlt oder ist keine Zahl',
+    );
+  }
+
+  // (b) Testschritt 1: ein echter Shop-Besuch zieht GENAU cardChoices (4)
+  //     Karten -- der 5-Karten-Sockel liefert das noch vollstaendig.
+  {
+    const run = enterWorkshop();
+    check(!!run, 'Phase 8: Testaufbau -- kein Shop-Knoten unter 60 Seeds gefunden');
+    if (run) {
+      check(
+        run.shopOffers.length === tanksData.balance.shop.cardChoices,
+        `Phase 8: Shop-Regal zeigt ${run.shopOffers.length} statt ${tanksData.balance.shop.cardChoices} Karten`,
+      );
+    }
+  }
+
+  // (c) Testschritt 2: Werkbank im Shop -- Stufe steigt, Schrott sinkt exakt
+  //     um cost.upgradeLevel, der Raum bleibt offen (anders als am
+  //     Rastplatz, wo dieselbe Aktion den Raum beendet).
+  {
+    const run = enterWorkshop();
+    check(!!run, 'Phase 8: Testaufbau -- kein Shop-Knoten unter 60 Seeds gefunden');
+    if (run) {
+      run.upgrades.sockel_motor = 1;
+      run.upgradeLevels.sockel_motor = 0;
+      const cost = tanksData.balance.scrap.cost.upgradeLevel;
+      run.scrap = cost + 3;
+      const ok = buyShopUpgradeLevel(run, 'sockel_motor');
+      check(ok === true, 'Phase 8: buyShopUpgradeLevel() lehnt eine gueltige Aufwertung ab');
+      check(run.upgradeLevels.sockel_motor === 1, `Phase 8: Stufe steigt nicht (${run.upgradeLevels.sockel_motor})`);
+      check(run.scrap === 3, `Phase 8: Schrott sinkt nicht um genau ${cost} (Rest ${run.scrap} statt 3)`);
+      check(run.phase === 'workshop', `Phase 8: die Werkbank-Aktion beendet den Shop-Raum (Phase "${run.phase}")`);
+
+      // Deckel/Besitz-Ablehnung (dieselbe raiseUpgradeLevel()-Pruefung wie
+      // upgradeCardAtRest, Abschnitt 51) -- Schrott wird bei Ablehnung NICHT
+      // abgezogen.
+      const scrapBefore = run.scrap;
+      const okUnowned = buyShopUpgradeLevel(run, 'sockel_magazin');
+      check(okUnowned === false, 'Phase 8: eine nie gezogene Karte laesst sich im Shop aufwerten');
+      check(run.scrap === scrapBefore, 'Phase 8: Schrott sinkt trotz abgelehnter Aufwertung (unbesessene Karte)');
+    }
+  }
+
+  // (d) Testschritt 3: 0 Schrott -- keine der Shop-Aktionen greift, kein
+  //     Absturz, kein negativer Schrottstand.
+  {
+    const run = enterWorkshop();
+    check(!!run, 'Phase 8: Testaufbau -- kein Shop-Knoten unter 60 Seeds gefunden');
+    if (run) {
+      run.upgrades.sockel_motor = 1;
+      run.scrap = 0;
+      let crashed = false;
+      try {
+        check(buyShopCard(run, 0) === false, 'Phase 8: buyShopCard() kauft trotz 0 Schrott');
+        check(buyShieldCharge(run) === false, 'Phase 8: buyShieldCharge() kauft trotz 0 Schrott');
+        check(buyShopUpgradeLevel(run, 'sockel_motor') === false, 'Phase 8: buyShopUpgradeLevel() kauft trotz 0 Schrott');
+        check(buyShopLife(run) === false, 'Phase 8: buyShopLife() kauft trotz 0 Schrott');
+      } catch (e) {
+        crashed = true;
+        check(false, `Phase 8: eine Shop-Aktion bei 0 Schrott stuerzt ab (${e.message})`);
+      }
+      check(!crashed && run.scrap === 0, `Phase 8: Schrott ist nach abgelehnten Aktionen ${run.scrap} statt 0`);
+    }
+  }
+
+  // (e) Testschritt 4: Leben bei vollem Stand kaufen wollen -- gesperrt
+  //     (echter Fund: buyShopLife() kannte bisher KEINEN maxLives-Deckel,
+  //     nur die Einmal-pro-Besuch-Sperre).
+  {
+    const run = enterWorkshop();
+    check(!!run, 'Phase 8: Testaufbau -- kein Shop-Knoten unter 60 Seeds gefunden');
+    if (run) {
+      run.lives = run.maxLives;
+      run.scrap = tanksData.balance.scrap.cost.shopLife + 10;
+      const ok = buyShopLife(run);
+      check(ok === false, 'Phase 8: buyShopLife() erlaubt einen Kauf bei vollen Leben');
+      check(run.lives === run.maxLives, 'Phase 8: die Leben aendern sich trotz Ablehnung');
+      check(!run.shopLifeBought, 'Phase 8: shopLifeBought wird trotz abgelehntem Kauf gesetzt');
+    }
+  }
+
+  // (f) Testschritt 5: Shop verlassen und einen spaeteren Shop betreten --
+  //     neues Regal (deterministisch aus Seed+Raumnummer, nicht dasselbe
+  //     Array wie beim ersten Besuch).
+  {
+    let found = null;
+    for (let seed = 1; seed <= 30 && !found; seed++) {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
+      const shopNodes = [...run.map.byId.values()].filter((n) => n.type === 'workshop');
+      if (shopNodes.length >= 2) found = { seed, ids: shopNodes.map((n) => n.id) };
+    }
+    check(!!found, 'Phase 8: kein Seed mit zwei Shop-Knoten unter 30 Seeds gefunden (Testaufbau)');
+    if (found) {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, found.seed);
+      const shops = [];
+      for (const id of found.ids) {
+        // Jeden Shop-Knoten unabhaengig direkt ansteuern (wie enterWorkshop()),
+        // ohne den ersten Besuch fortzusetzen -- das genuegt, um zwei
+        // UNTERSCHIEDLICHE Regale (verschiedene Raumnummern -> verschiedener
+        // upgrades-Strom) zu vergleichen.
+        const node = [...run.map.byId.values()].find((n) => n.next.includes(id));
+        if (!node) continue;
+        run.mapCurrentId = node.id;
+        run.phase = 'map';
+        chooseMapNode(run, id);
+        if (run.phase === 'workshop') shops.push(run.shopOffers.map((o) => o.id).join(','));
+      }
+      check(shops.length >= 2, `Phase 8: Testaufbau -- nur ${shops.length} von ${found.ids.length} Shop-Knoten liefern ein Regal`);
+      if (shops.length >= 2) {
+        check(shops[0] !== shops[1], `Phase 8: zwei verschiedene Shop-Raeume liefern dasselbe Regal (${shops[0]})`);
+      }
     }
   }
 }

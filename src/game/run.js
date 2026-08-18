@@ -676,7 +676,7 @@ function startNonCombatRoom(run, type) {
     // begrenzt sind -- bei vollen Leben UND keiner aufwertbaren Karte waere
     // der Raum sonst ein Screen ganz ohne moegliche Wahl. Automatisch
     // weiterziehen statt darin haengenzubleiben.
-    if (run.lives >= run.maxLives && restWorkbenchOptions(run).length === 0) {
+    if (run.lives >= run.maxLives && workbenchOptions(run).length === 0) {
       afterRoomDone(run);
       return;
     }
@@ -702,10 +702,12 @@ function upgradeLevelBalance(run) {
   return run.data.balance.upgradeLevel || { bonusPct: 0, maxLevel: 0 };
 }
 
-// Rastplatz, Option 2 (Vorschau fuer die UI): eigene Karten, die sich am
-// Rastplatz noch aufwerten lassen -- besessen (Stapel > 0), nicht per
-// upgradable:false gesperrt (sockel_ersatzpanzer), noch unter maxLevel.
-export function restWorkbenchOptions(run) {
+// Werkbank-Vorschau fuer die UI: eigene Karten, die sich noch aufwerten
+// lassen -- besessen (Stapel > 0), nicht per upgradable:false gesperrt
+// (sockel_ersatzpanzer), noch unter maxLevel. Grundsteinumbau Phase 8:
+// dieselbe Funktion fuer Rastplatz UND Shop, "dieselbe Mechanik, hier
+// gekauft statt gerastet" (Auftrag) -- ein Ort fuer die Filterregeln.
+export function workbenchOptions(run) {
   const maxLevel = upgradeLevelBalance(run).maxLevel ?? 0;
   const defs = run.upgradesData.upgrades;
   return Object.keys(run.upgrades)
@@ -723,12 +725,12 @@ export function restWorkbenchOptions(run) {
     }));
 }
 
-// Rastplatz, Option 2: Werkbank. Eine besessene, noch nicht am Deckel
-// stehende Karte eine Stufe aufwerten -- cfg.js: applyUpgrades() liest
-// run.upgradeLevels danach bei jedem Raumaufbau/Respawn neu. Beendet den
-// Raum sofort (dieselbe "eine Wahl, Raum zu Ende"-Regel wie Reparatur).
-export function upgradeCardAtRest(run, id) {
-  if (run.phase !== 'rest') return false;
+// Gemeinsamer Kern: eine besessene, noch nicht am Deckel stehende Karte eine
+// Stufe aufwerten (Besitz-/Deckel-/upgradable-Pruefung). Weder Kosten noch
+// Raumfluss -- das entscheiden die beiden Aufrufer (Rastplatz: kostenlos +
+// Raum-Ende; Shop: gegen Schrott, Raum bleibt offen), Muster wie
+// applyUpgradeChoice()/buyShopCard() teilen sich denselben Kern.
+function raiseUpgradeLevel(run, id) {
   if ((run.upgrades[id] || 0) <= 0) return false;
   const def = run.upgradesData.upgrades[id];
   if (!def || def.upgradable === false) return false;
@@ -736,6 +738,15 @@ export function upgradeCardAtRest(run, id) {
   const cur = run.upgradeLevels[id] || 0;
   if (cur >= maxLevel) return false;
   run.upgradeLevels[id] = cur + 1;
+  return true;
+}
+
+// Rastplatz, Option 2: Werkbank. cfg.js: applyUpgrades() liest
+// run.upgradeLevels danach bei jedem Raumaufbau/Respawn neu. Beendet den
+// Raum sofort (dieselbe "eine Wahl, Raum zu Ende"-Regel wie Reparatur).
+export function upgradeCardAtRest(run, id) {
+  if (run.phase !== 'rest') return false;
+  if (!raiseUpgradeLevel(run, id)) return false;
   afterRoomDone(run);
   return true;
 }
@@ -1358,11 +1369,28 @@ export function buyShopSecondary(run, id) {
 // wird beim Betreten des Raums zurueckgesetzt).
 export function buyShopLife(run) {
   if (run.phase !== 'workshop' || run.shopLifeBought) return false;
+  // Grundsteinumbau Phase 8: Testschritt 4 verlangt "bei vollem Stand
+  // gesperrt" -- fehlte bisher (Phase 13 kannte nur die Einmal-pro-Besuch-
+  // Sperre). Reparaturtrupp am Rastplatz hat denselben Deckel schon laenger
+  // (repairAtRest()).
+  if (run.lives >= run.maxLives) return false;
   const cost = run.data.balance.scrap.cost.shopLife;
   if (run.scrap < cost) return false;
   run.scrap -= cost;
   run.lives++;
   run.shopLifeBought = true;
+  return true;
+}
+
+// Werkbank im Shop (Grundsteinumbau Phase 8): dieselbe Aufwertung wie am
+// Rastplatz (raiseUpgradeLevel()), hier gegen Schrott statt kostenlos --
+// und ohne Raumfluss, man bleibt im Shop wie bei jeder anderen Aktion hier.
+export function buyShopUpgradeLevel(run, id) {
+  if (run.phase !== 'workshop') return false;
+  const cost = run.data.balance.scrap.cost.upgradeLevel ?? 0;
+  if (run.scrap < cost) return false;
+  if (!raiseUpgradeLevel(run, id)) return false;
+  run.scrap -= cost;
   return true;
 }
 

@@ -62,6 +62,11 @@ Karten, die es nutzen, ist wirkungslos. Zum Zurückholen: erst den
 Klassenpool mit `damageType`-Karten wiederherstellen (s.
 `archive/klassen-v1.json`), dann diese Codepfade.
 
+**Nachtrag (Grundsteinumbau Phase 8):** ein letztes Fragment stand noch in
+`roomscreens.js: createShopScreen()` — ein `if (ctx.onRerollElement)`-Zweig,
+der seit Phase 4 nie mehr auslöste (`main.js` setzt `onRerollElement`/
+`getSecondElement` nicht mehr). Toter, unerreichbarer Code, jetzt entfernt.
+
 ## 3. Schadenstypen-Angebot / Element-Filter (entfällt mit Phase 4)
 
 Der `elements`-Filter in `upgradepool.js: buildCandidates()` (Zeile ~180):

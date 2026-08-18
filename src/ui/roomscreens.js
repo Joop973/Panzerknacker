@@ -116,27 +116,50 @@ export function createShopScreen() {
     actions.appendChild(
       mk('Schildladung', ctx.costs.shieldCharge, scrap >= ctx.costs.shieldCharge, ctx.onBuyShield),
     );
-    // Zweitelement neu wuerfeln (Phase 17): aendert den Angebots-Pool sofort.
-    if (ctx.onRerollElement) {
-      actions.appendChild(
-        mk(
-          `Zweitelement (${ctx.getSecondElement()}) neu`,
-          ctx.costs.rerollElement,
-          scrap >= ctx.costs.rerollElement,
-          ctx.onRerollElement,
-        ),
-      );
-    }
-    // Leben: teuer und nur einmal pro Shop -- danach dauerhaft ausgegraut.
+    // Leben: teuer, nur einmal pro Shop und gedeckelt auf maxLives (Phase 8,
+    // Testschritt 4) -- danach dauerhaft ausgegraut, nicht versteckt (Muster
+    // wie der Reparaturtrupp am Rastplatz).
+    const atFullLives = ctx.atFullLives();
     actions.appendChild(
       mk(
-        ctx.lifeBought() ? '+1 Leben (gekauft)' : '+1 Leben',
+        ctx.lifeBought() ? '+1 Leben (gekauft)' : atFullLives ? '+1 Leben (Leben bereits voll)' : '+1 Leben',
         ctx.costs.shopLife,
-        !ctx.lifeBought() && scrap >= ctx.costs.shopLife,
+        !ctx.lifeBought() && !atFullLives && scrap >= ctx.costs.shopLife,
         ctx.onBuyLife,
       ),
     );
     el.appendChild(actions);
+  }
+
+  // Werkbank (Grundsteinumbau Phase 8): dieselbe Aufwertung wie am
+  // Rastplatz (run.js: workbenchOptions()/buyShopUpgradeLevel()), hier
+  // gegen Schrott -- der Shop bleibt dabei offen, anders als der Rastplatz.
+  function renderWorkbench(scrap) {
+    const options = ctx.getWorkbenchOptions();
+    el.appendChild(
+      sectionTitle(
+        options.length
+          ? `Werkbank — Upgrade aufwerten (${ctx.costs.upgradeLevel}⚙):`
+          : 'Werkbank — keine aufwertbare Karte vorhanden.',
+      ),
+    );
+    if (!options.length) return;
+    const list = document.createElement('div');
+    list.className = 'droplist';
+    for (const o of options) {
+      const b = document.createElement('button');
+      b.className = 'dropbtn';
+      const plus = '+'.repeat(o.stufe);
+      b.innerHTML =
+        `${o.symbol || '•'} ${o.name}${plus} <span class="price">${ctx.costs.upgradeLevel}⚙</span>`;
+      b.title = `Stufe ${o.stufe} → ${o.stufe + 1} (Deckel ${o.maxLevel})`;
+      b.disabled = scrap < ctx.costs.upgradeLevel;
+      b.addEventListener('click', () => {
+        if (ctx.onUpgradeLevel(o.id)) render();
+      });
+      list.appendChild(b);
+    }
+    el.appendChild(list);
   }
 
   function renderSecondaries(scrap) {
@@ -211,6 +234,7 @@ export function createShopScreen() {
 
     renderCards(scrap);
     renderActions(scrap);
+    renderWorkbench(scrap);
     renderSecondaries(scrap);
     renderDrops();
 
