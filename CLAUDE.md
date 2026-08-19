@@ -3768,6 +3768,9 @@ Sockel statt der 246 archivierten Karten, Nekromanten-Signaturpool
 18→~45 Karten, Reaktorkampf-Wortlaut veraltet, Schatzraum später wieder
 „1 Legendär" sobald ein Klassenpool Legendaries führt) — ein separater,
 noch nicht beauftragter Folgeauftrag, keine weitere Phase dieses Plans.
+**Überholt:** `AUFTRAG-NEKROMANT-KOMPLETT.md` ist nie eingetroffen — an
+seiner Stelle kam `AUFTRAG-NEKROMANT-V2.md` mit dem 105-Karten-Pool aus
+`Geisterpanzer_105_Upgrades_v2.xlsx`, s. eigener Abschnitt weiter unten.
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -4654,6 +4657,69 @@ gefundenen echten neun Lücken, jede mit Gegenprobe:
   `tests/viewport.mjs` bleiben grün (keine funktionale Codeänderung in
   dieser Phase, nur neue Tests + der Versions-Bump).
 
+### Nekromant-V2 — Phase 0 (Import, Validierung, Archivierung) — gemergt
+**Neu eingegangen: `AUFTRAG-NEKROMANT-V2.md`** — vollständiger Neubau der
+Nekromantenklasse mit dem Signaturpool aus `Geisterpanzer_105_Upgrades_v2.xlsx`
+(Blatt „Upgrades", 105 Zeilen). Ersetzt `AUFTRAG-NEKROMANT-KOMPLETT.md` und
+`AUFTRAG-NEKROMANT-105.md` vollständig (beide nie als Repo-Datei eingetroffen,
+s. `ARCHIV.md`). **Voraussetzung des Auftrags — der Grundsteinumbau — ist
+erfüllt** (alle 11 Phasen gemergt, s. o.); vor dem Start dieser Sitzung wurde
+das gegen `git log`/den Repo-Stand verifiziert und dem Nutzer gemeldet, statt
+stillschweigend Phase 0 des (bereits abgeschlossenen) Fundament-Auftrags
+erneut zu bearbeiten.
+- **`data/upgrades_necro.json` (neu, 105 Karten)**: aus der xlsx importiert
+  (Spaltenzuordnung exakt nach Auftrag Phase 0 — `ID`→`id`, `Name`→`name`,
+  `Pfad`+`Tags`→`tags[]` gemergt, `Typ`→`tag`, `Seltenheit`→`rarity`
+  (`Gewöhnlich/Ungewöhnlich/Selten/Episch/Legendär` →
+  `common/uncommon/rare/epic/legendary`), `Stapelgrenze`→`maxStacks`,
+  `Angebotsgewicht`→`weight`, `Voraussetzung`→`requires[]` (Kartenname auf
+  ID aufgelöst), `Exakter Effekt`→`description`, `Buildrolle`+
+  `Balance-Hinweis`→`_note` (reine Dokumentation)). Alle Karten
+  `signatureClass: "c_necro"`, `core: {"_todo": "effect"}` als Platzhalter —
+  **noch keine Karte ist spielbar**, die Datei ist nirgends in
+  `upgradepool.js`/`run.js` eingehängt (per `grep` verifiziert).
+- **`tag`-Zuordnung** (Spalte „Typ", 31 deutsche Rohwerte): auf Kategorie-
+  Slugs abgebildet, dokumentiert als `_comment_tag` in der Datei selbst.
+  Fünf Kategorien wiederverwendet, weil inhaltlich deckungsgleich mit
+  bestehenden `KNOWN_TAGS`-Werten (`crit`, `defense`, `scaling`, `elite`,
+  `gadget`); der Rest ist neu (`keystone`, `hybrid`, `revival`, `shield`,
+  `fusion`, `champion`, `aoe`, `runscaling` u. a.). Da die Datei getrennt von
+  `data/upgrades.json` liegt, greift die bestehende `KNOWN_TAGS`-Prüfung
+  (Abschnitt 38) hier nicht — die Phase-0-Checkliste des Auftrags verlangt
+  auch keine solche Prüfung für diesen Pool.
+- **`requires`-Struktur geprüft**: nur 4 der 105 Karten haben eine
+  Voraussetzung (`ghost_023`→`ghost_014`, `ghost_072`/`ghost_073`/
+  `ghost_085`→`ghost_071` „Einziger Thron"), keine Kette (beide Ziele haben
+  selbst kein `requires`), höchstens 3 Karten hängen an derselben Karte
+  („Einziger Thron", genau 3 — die Auftragsgrenze).
+- **Ist-Abgleich „Was aus dem Pool an Engine gebraucht wird" (Auftrag
+  Abschnitt 4)** gegen den Code geprüft, Details in `ARCHIV.md`: vorhanden
+  bestätigt (Krit, `cfg.homing`, `cfg.bulletRadius`, `tank.gadgetCooldown`,
+  `run.eliteAffixes`, `mine.js: explodeAt()`, Flanken-/Heckschaden und
+  Exekutionsschwelle aus dem Grundsteinumbau); fehlend bestätigt wie im
+  Auftrag angenommen (Schadensresistenz, Schildpunktepool getrennt von
+  `run.shieldCharges`, Durchschlag) — keiner der drei existiert aktuell im
+  Code, Phase 2 des Auftrags baut sie.
+- **Neuer Testabschnitt 55** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt einzeln bestanden — je absichtlich rot gemacht: doppelte
+  Objektschlüssel-ID, ungültige Seltenheit, `legendary` mit `maxStacks: 2`,
+  unauflösbares `requires`, `requires`-Kette, ein 4. Abhängiger an einer
+  Karte, verbotenes Wort „Meter" im Text, fehlendes Pfad-Tag, falsche
+  `signatureClass`): 105 eindeutige IDs, gültige Seltenheit, `requires`
+  löst auf, keine Ketten, höchstens 3 Abhängige je Karte, jede Karte hat
+  `maxStacks` (legendär davon immer `1`), jede Karte trägt mindestens ein
+  Pfad-Tag (`allgemein`/`opfer`/`legion`/`alpha`), kein Kartentext enthält
+  „Meter" oder „Abprall" (Reste der überholten Fassung-1-Spec bzw. des
+  entfernten Bandenschusses).
+- `ARCHIV.md` um einen neuen Abschnitt „Nekromant-V2 — Phase 0" ergänzt: die
+  drei ersetzten Dokumente (`docs/specs/geisterpanzer.md`,
+  `AUFTRAG-NEKROMANT-KOMPLETT.md`, `AUFTRAG-NEKROMANT-105.md`) sind als nie
+  eingecheckte Repo-Dateien vermerkt — nichts zu verschieben, nur die
+  Ablösung dokumentiert.
+- Kein `sw.js`-Bump (reine Datenänderung, kein Asset, keine live spielbare
+  Änderung). **Nächste Sitzung: Phase 1** (Seltenheitsachse und
+  Pool-Pipeline).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -4723,7 +4789,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   (`tanks.json`, `upgrades.json`, `tiles.json`, `difficulty.json`,
   `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`,
   `transformations.json`, `secondaries.json`, `modifiers.json`,
-  `limits.json`, `sounds.json`, `status.json`).
+  `limits.json`, `sounds.json`, `status.json`). `data/upgrades_necro.json`
+  (Nekromant-V2 Phase 0) liegt bewusst daneben, nicht darin — 105 Karten für
+  den künftigen Nekromant-Signaturpool, noch nicht in die Angebots-Pipeline
+  eingehängt.
   `balance.json` enthält auch Rarity-Gewichte,
   `legendary.minRoom` + die `scrap`-Werte; `difficulty.json` die `doors`/
   `elite`/`treasure`-Konfiguration (Phase 4).

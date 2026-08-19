@@ -36,6 +36,7 @@ const tanksData = load('tanks');
 const tilesData = load('tiles');
 const diffData = load('difficulty');
 const upgradesData = load('upgrades');
+const necroData = load('upgrades_necro'); // Nekromant-V2 Phase 0: 105-Karten-Signaturpool, noch nicht in die Angebots-Pipeline eingehaengt
 tanksData.balance = load('balance');
 tanksData.events = load('events');
 tanksData.arenas = load('arenas');
@@ -6726,6 +6727,70 @@ for (const seed of SEEDS) {
       check(run.scrap === erwarteterSchrott, `Phase 10: die Schatzkammer gibt ${run.scrap - before.scrap} Schrott statt ${tanksData.balance.scrap.treasure}`);
     }
   }
+}
+
+// ---- 55. Nekromant-V2 Phase 0: Import + Validierung des 105-Karten-Pools --
+// Reiner Datenimport (data/upgrades_necro.json aus der xlsx-Vorlage) -- die
+// Datei ist NICHT in die Angebots-Pipeline eingehaengt (kein rollOffers()-
+// Zugriff, kein upgradepool.js-Import hier), deshalb pruefen wir nur die
+// Struktur der Datei selbst. "Keine Karte ist spielbar" (Auftrag Phase 0).
+{
+  const U = necroData.upgrades;
+  const PATH_TAGS = new Set(['allgemein', 'opfer', 'legion', 'alpha']);
+  const RARITIES = new Set(['common', 'uncommon', 'rare', 'epic', 'legendary']);
+
+  // (a) 105 eindeutige IDs, Objektschluessel === id.
+  const ids = Object.keys(U);
+  check(ids.length === 105, `Phase 0 (Nekromant-V2): ${ids.length} Karten statt 105`);
+  check(new Set(ids).size === ids.length, 'Phase 0 (Nekromant-V2): doppelte ID im Pool');
+  let badKey = 0;
+  for (const k in U) if (U[k].id !== k) badKey++;
+  check(badKey === 0, `Phase 0 (Nekromant-V2): ${badKey} Karte(n), deren id vom Objektschluessel abweicht`);
+
+  // (b) gueltige Seltenheit; legendaere Karten haben maxStacks 1; jede Karte
+  //     hat ueberhaupt ein maxStacks-Feld.
+  let badRarity = 0, badLegendary = 0, badMaxStacks = 0, badSigClass = 0, badSpread = 0;
+  for (const k in U) {
+    const d = U[k];
+    if (!RARITIES.has(d.rarity)) badRarity++;
+    if (!(Number.isInteger(d.maxStacks) && d.maxStacks >= 1)) badMaxStacks++;
+    if (d.rarity === 'legendary' && d.maxStacks !== 1) badLegendary++;
+    if (d.signatureClass !== 'c_necro') badSigClass++;
+    if (!Array.isArray(d.tags) || !d.tags.some((t) => PATH_TAGS.has(t))) badSpread++;
+  }
+  check(badRarity === 0, `Phase 0 (Nekromant-V2): ${badRarity} Karte(n) mit ungueltiger Seltenheit`);
+  check(badMaxStacks === 0, `Phase 0 (Nekromant-V2): ${badMaxStacks} Karte(n) ohne gueltiges maxStacks`);
+  check(badLegendary === 0, `Phase 0 (Nekromant-V2): ${badLegendary} legendaere Karte(n) mit maxStacks != 1`);
+  check(badSigClass === 0, `Phase 0 (Nekromant-V2): ${badSigClass} Karte(n) ohne signatureClass "c_necro"`);
+  check(badSpread === 0, `Phase 0 (Nekromant-V2): ${badSpread} Karte(n) ohne mindestens ein Pfad-Tag (allgemein/opfer/legion/alpha)`);
+
+  // (c) requires loest auf; keine Ketten (eine Voraussetzung hat selbst kein
+  //     eigenes requires); hoechstens 3 Karten haengen an derselben Karte.
+  let unresolved = 0, chained = 0;
+  const dependents = {};
+  for (const k in U) {
+    for (const r of U[k].requires || []) {
+      if (!U[r]) unresolved++;
+      else {
+        if ((U[r].requires || []).length > 0) chained++;
+        dependents[r] = (dependents[r] || 0) + 1;
+      }
+    }
+  }
+  check(unresolved === 0, `Phase 0 (Nekromant-V2): ${unresolved} requires-Eintraege loesen nicht auf eine echte ID auf`);
+  check(chained === 0, `Phase 0 (Nekromant-V2): ${chained} requires-Kette(n) (eine Voraussetzung hat selbst ein requires)`);
+  const overCrowded = Object.values(dependents).filter((n) => n > 3).length;
+  check(overCrowded === 0, `Phase 0 (Nekromant-V2): ${overCrowded} Karte(n) mit mehr als 3 abhaengigen Karten`);
+
+  // (d) kein Kartentext enthaelt Reste der ueberholten Fassung-1-Spec
+  //     ("Meter" -- alte Ring-/Radius-Einheit, "Abprall" -- Bandenschuss,
+  //     seit Grundsteinumbau Phase 1 komplett entfernt).
+  let forbidden = 0;
+  for (const k in U) {
+    const text = `${U[k].name} ${U[k].description}`;
+    if (/Meter|Abprall/i.test(text)) forbidden++;
+  }
+  check(forbidden === 0, `Phase 0 (Nekromant-V2): ${forbidden} Kartentext(e) enthalten "Meter" oder "Abprall"`);
 }
 
 if (failures) {
