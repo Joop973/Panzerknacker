@@ -55,6 +55,10 @@
     "roomLifetime": 3,
     "absorb": 40
   },
+  "_comment_resist": "Nekromant-V2 Phase 2: Schadensresistenz als Rechenweg (Auftrag Abschnitt 4a), keine Obergrenze -- genommenerSchaden = Schaden / (1 + resistSumme / divisor). divisor ist die einzige Formelkonstante (100 Punkte = Halbierung, 200 = Drittelung usw.), kein Balancewert im engeren Sinn, aber trotzdem in JSON statt im Code (Hausregel 'keine Balancezahl im Code'). cfg.resist selbst kommt ausschliesslich aus Karten (core.resistAdd) -- keine Karte setzt ihn vor Nekromant-V2 Phase 6+, der Wert ist bis dahin ueberall 0 (No-op).",
+  "resist": {
+    "divisor": 100
+  },
   "reflect": {
     "speedMult": 1,
     "pushPx": 2,

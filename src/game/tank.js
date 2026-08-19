@@ -52,6 +52,15 @@ export function createTank(type, cfg, x, y) {
     // Absorber-Punkte des Spieler-Schilds (Phase 8). Bei Gegnern ungenutzt
     // (deren Schild faengt einen Treffer ab, siehe state.js: applyDamage).
     shieldHp: (cfg && (cfg.shield || cfg.counterShield)) ? (cfg.shieldAbsorb || 0) : 0,
+    // Nekromant-V2 Phase 2: NEUER, generischer Schild-Punktepool -- gilt fuer
+    // JEDEN Panzer (Spieler, Gegner, kuenftig auch Untertanen/Geister ueber
+    // ghost.js), unabhaengig von shieldReady. NICHT dasselbe Feld wie
+    // shieldHp (das ist der aeltere, nur-Spieler-Absorber der schild-Karte
+    // aus UMBAUPLAN-LP Phase 8) -- beide bleiben nebeneinander bestehen und
+    // sind im HUD getrennt sichtbar (Auftrag: "Namenskollision beachten").
+    // Startet voll (cfg.shieldMax), aktuell ueberall 0, bis eine Karte ihn
+    // gewaehrt.
+    shield: (cfg && cfg.shieldMax) || 0,
     // Powershot-Ladungen (Phase 5): frisch pro Raum, weil createTank() bei
     // jedem neuen Raum (und Respawn) ohnehin neu aufgerufen wird -- kein
     // eigener "Raum betreten"-Hook noetig.
@@ -323,6 +332,7 @@ export function fireBullet(tank, state, pressed) {
         damage: tank.cfg.damage,
         damageType: tank.cfg.damageType,
         crit: isCrit,
+        pierce: tank.cfg.pierce || 0, // Nekromant-V2 Phase 2: Durchschlag
       }),
     );
     // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.

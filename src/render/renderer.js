@@ -693,6 +693,25 @@ export function createRenderer(ctx) {
       ctx.fillRect(bx, by, Math.max(1, Math.round(w * frac)), 3);
     }
 
+    // Schild-Punktepool (Nekromant-V2 Phase 2): eigene, andersfarbige Leiste
+    // DIREKT UEBER der Lebensleiste, sichtbar sobald ueberhaupt ein Pool
+    // existiert (cfg.shieldMax > 0) -- "die zweite Leiste leert sich
+    // zuerst" muss in Echtzeit sichtbar sein, nicht nur beim Schaden. Eigene
+    // Farbe (tuerkis), unterscheidet sich bewusst von der helleren
+    // shieldReady-Ringfarbe oben und vom Notschild-Ring -- alle drei
+    // Schild-Mechaniken bleiben im HUD/Renderer getrennt lesbar. Sitzt
+    // zwischen den Affix-Punkten (r+26) und der Lebensleiste (r+18).
+    if (t.cfg.shieldMax > 0) {
+      const w = Math.round(r * (istSpieler ? 2.6 : 2));
+      const bx = Math.round(x - w / 2);
+      const by = Math.round(y - r - 22);
+      const frac = Math.max(0, Math.min(1, (t.shield || 0) / t.cfg.shieldMax));
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(bx - 1, by - 1, w + 2, 5);
+      ctx.fillStyle = '#7fe6c8';
+      ctx.fillRect(bx, by, Math.max(1, Math.round(w * frac)), 3);
+    }
+
     // Statuseffekte (UMBAUPLAN-LP Phase 5): kleine Farbkacheln UNTER der
     // Lebensleiste, hoechstens drei (visibleStatus() kuerzt und sortiert
     // nach Dominanz). Bewusst Farbflaechen statt Emoji-Symbole: die
@@ -992,6 +1011,19 @@ export function createRenderer(ctx) {
         ctx.fillStyle = 'rgba(0,0,0,0.55)';
         ctx.fillRect(bx - 1, by - 1, w + 2, 5);
         ctx.fillStyle = TANK_COLORS.ghost_tank || '#ffffff';
+        ctx.fillRect(bx, by, Math.max(1, Math.round(w * frac)), 3);
+      }
+      // Schild-Punktepool (Nekromant-V2 Phase 2): "Untertanen" sind
+      // ausdruecklich mitgemeint. Gleiche Farbe/Anordnung wie bei echten
+      // Panzern -- direkt ueber der Lebensleiste.
+      if (g.cfg.shieldMax > 0) {
+        const w = Math.round(r * 2);
+        const bx = Math.round(x - w / 2);
+        const by = Math.round(y - r - 18);
+        const frac = Math.max(0, Math.min(1, (g.shield || 0) / g.cfg.shieldMax));
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(bx - 1, by - 1, w + 2, 5);
+        ctx.fillStyle = '#7fe6c8';
         ctx.fillRect(bx, by, Math.max(1, Math.round(w * frac)), 3);
       }
     }

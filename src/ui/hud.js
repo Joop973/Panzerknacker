@@ -236,6 +236,13 @@ export function createHud(ctx) {
     }
     if (p.cfg.dash) rows.push(['Dash', `${p.cfg.dash.cooldown.toFixed(1)} s Abklingzeit`]);
     if (st.shieldCharges?.length) rows.push(['Schild', `${st.shieldCharges.length} Ladung(en)`]);
+    // Nekromant-V2 Phase 2: Resistenz/Durchschlag/Schildpool -- eigene
+    // Zeilen, damit "Schild" (Notschild-Ladung) und "Schildpool" (der neue
+    // Punktepool) im HUD getrennt lesbar bleiben (Auftrag: "Namenskollision
+    // beachten"). Nur sichtbar, wenn tatsaechlich ein Wert gesetzt ist.
+    if (p.cfg.resist) rows.push(['Resistenz', `${p.cfg.resist} Punkte`]);
+    if (p.cfg.pierce) rows.push(['Durchschlag', `${p.cfg.pierce}`]);
+    if (p.cfg.shieldMax) rows.push(['Schildpool', `${Math.round(p.shield || 0)}/${p.cfg.shieldMax}`]);
     // Raum-Modifikator sichtbar machen: er veraendert genau diese Zahlen und
     // ist sonst nur in der Vorschau zu sehen.
     if (st.modifier?.name) rows.push(['Raum', st.modifier.name]);
