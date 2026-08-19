@@ -4851,8 +4851,94 @@ nicht nur künftige Nekromantenkarten.
   Testkarte (der Sockel hat aktuell keine): Eintragung, Snapshot-Erhalt,
   Fortsetzen, Rekonstruktion bei einem älteren Zwischenstand ohne das Feld.
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
-  **Nächste Sitzung: Phase 2** (Engine-Lücken: Resistenz, Schild,
-  Durchschlag).
+
+### Nekromant-V2 — Phase 2 (Engine-Lücken: Resistenz, Schild, Durchschlag) — gemergt
+**Widerspruch im Auftrag gefunden und nach der übergeordneten Regel
+aufgelöst, nicht stillschweigend interpretiert:** Abschnitt 4a verlangt für
+Schadensresistenz wörtlich „ohne Obergrenze … ein `Math.min(…, 0.6)` … ist
+ausdrücklich verboten", Phase 2s eigener Testschritt 2 sagt aber „Resistenz
+über den Deckel treiben — bleibt bei 60 %". Das sind zwei sich
+widersprechende Vorgaben im selben Dokument. `STARTHIER.md` erklärt „Keine
+Caps für nicht einzigartige Upgrades" zur Regel, die „über allen
+Balanceüberlegungen steht" und wiederholt „keinen Ersatzdeckel einführen" —
+diese Instanz ist damit eindeutig zugunsten von Abschnitt 4a entschieden:
+**kein Deckel gebaut**, der Testschritt-Wortlaut ist vermutlich ein Rest
+einer früheren Fassung, in der Resistenz noch eine feste Obergrenze hatte.
+- **`cfg.resist`** (Punkte, additiv): `state.js: applyResistToAmount()` —
+  `genommenerSchaden = max(1, round(Schaden / (1 + resistSumme/divisor)))`,
+  `divisor` aus `data/balance.json: resist.divisor` (100, reine
+  Formelkonstante, kein Balancewert im engeren Sinn, aber trotzdem in JSON
+  statt im Code). Das `max(1, …)` ist eine bewusste, im Auftrag nicht
+  explizit vorgeschriebene Ergänzung: ohne sie würde `Math.round()` bei
+  astronomisch hoher Resistenzsumme rechnerisch auf 0 runden — „nie null"
+  (Abschnitt 4a) wird damit auch bei extremen Werten wörtlich eingehalten,
+  ohne die lineare Skalierung im normalen Wertebereich zu beeinträchtigen.
+  Wirkt in `applyDamage()` **vor** der DOT-Weiche (Phase 5) — Resistenz
+  reduziert ausdrücklich auch Schaden über Zeit, anders als alle
+  Schild-Mechaniken darunter.
+- **Schild als Punktepool** (`tank.shield`/`g.shield`, Obergrenze
+  `cfg.shieldMax`, optionale Regeneration `cfg.shieldRegenPerS`): neue,
+  eigenständige Funktionen `applyResistToAmount()`/`absorbWithShieldPool()`
+  in `state.js` (Modulebene, nicht Methode auf `state` — gebraucht von
+  `applyDamage()` UND der getrennten Geister-Kollisionsschleife, da
+  Untertanen nicht durch `state.tanks`/`applyDamage()` laufen). Faengt
+  Schaden **vor** hp ab, überspringt DOT (wie alle anderen Schild-Gatter,
+  Phase 5), wird **vor** den beiden Notschild-Gattern geprüft (für Gegner
+  aktuell die einzige Schild-Option). **Drei getrennte Schild-Konzepte
+  bleiben nebeneinander bestehen** und sind im HUD/Renderer unterscheidbar:
+  `state.shieldCharges` (Notschild, blockt einen ganzen Treffer),
+  `tank.shieldHp`/`shieldReady` (älterer Nur-Spieler-Absorber der
+  `schild`-Karte, UMBAUPLAN-LP Phase 8), `tank.shield`/`cfg.shieldMax`
+  (neu). Regeneration tickt im bestehenden Panzer-Tick-Loop
+  (`state.js`)/`ghost.js: updateGhosts()`.
+- **Durchschlag** (`bullet.pierce`, `bullet.pierceHits`-Set): ein Treffer
+  mit `b.pierce > 0` zählt herunter statt `b.dead` zu setzen; die
+  Trefferliste verhindert, dass ein weiterfliegendes (oder an einem
+  stehenden Ziel klebendes) Geschoss dasselbe Ziel zweimal trifft. Bewusst
+  **nicht** dasselbe Feld wie das ältere, archivierte `phaseWalls`
+  („Durchschlag" im alten Sinn — ignoriert Wände, nicht Ziele) — beide
+  Mechaniken heißen im Deutschen zufällig gleich, sind aber getrennt.
+  Armor-Block/Deflektor-Reflexion bleiben unverändert (stoppen/lenken das
+  Geschoss immer, unabhängig von `pierce`).
+- **`resolveCfg()`/`applyUpgrades()`**: vier neue, generische Basiswerte
+  (`resist`/`pierce`/`shieldMax`/`shieldRegenPerS`, alle 0) + vier neue
+  `core`-Schlüssel (`resistAdd`/`pierceAdd`/`shieldMaxAdd`/`shieldRegenAdd`,
+  additiv wie Abschnitt 4a verlangt — nicht multiplikativ). Folgen dem
+  bestehenden `*Add`-Namensmuster, die Rastplatz-Stufenskalierung
+  (Grundsteinumbau Phase 7) erfasst sie deshalb automatisch mit, ohne
+  Sonderfall in `scaleCore()`.
+- **Noch keine echte Karte setzt diese Werte** (Phase 6+ des Auftrags baut
+  die Karten) — alle drei Systeme sind vollständig verdrahtet, aber aktuell
+  überall 0/inert. `data/tanks.json: types.ghost_tank` bekam ebenfalls die
+  drei neuen Basisfelder (Default 0) in `ghost.js: resolveGhostCfg()`.
+- **Sichtbarkeit** (Fertig-Kriterium „Debug-Overlay zeigt sie" +
+  Testschritt 3/4 „HUD zeigt beides getrennt"): neue, andersfarbige
+  (türkis) Schild-Leiste in `renderer.js: drawTank()`/dem Geister-Renderpfad
+  — direkt über der Lebensleiste, zwischen ihr und den Affix-Punkten,
+  sichtbar sobald `cfg.shieldMax > 0`. `hud.js: drawStats()` bekommt drei
+  neue, bedingte Zeilen (Resistenz/Durchschlag/„Schildpool" — bewusst
+  **nicht** „Schild" genannt, das Wort ist schon für die Notschild-Zeile
+  vergeben). `debug.js: drawPanel()` zeigt alle drei Spielerwerte in einer
+  Zeile.
+- **Neuer Testabschnitt 56** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt einzeln bestanden — je absichtlich rot gemacht: Resist-Transform
+  deaktiviert, ein 60-%-Deckel simuliert, Schildpool-Gate entfernt,
+  Schildpool faelschlich auf DOT angewendet, Regen-Tick entfernt, Regen ohne
+  `Math.min`-Deckel, die vier `core`-Schlüssel entfernt, Durchschlag
+  deaktiviert, Trefferlisten-Prüfung entfernt, Geister-Resistenz/-Schildpool
+  entfernt, Schild-Leiste im Renderer entfernt): Resistenz-Formel mit
+  eigenen Zahlen (100→halbiert, 200→gedrittelt), explizite
+  Kein-Deckel-Zusicherung (5000 Resistenz nimmt nachweislich weniger als 500,
+  extreme Resistenz bleibt ≥1 Schaden), Resistenz wirkt auf DOT,
+  Schildpool-Grundmechanik (voll/teilweise absorbiert), Schildpool
+  überspringt DOT, Namenskollisions-Test (alle drei Schild-Konzepte
+  gleichzeitig, bleiben unabhängig), Schild-Regeneration + ihr Deckel,
+  `cfg.js`-Verdrahtung inkl. Rastplatz-Stufenskalierung, Durchschlag
+  Ende-zu-Ende (zwei Ziele, keins doppelt, stirbt erst ohne verbleibende
+  Ladung), Geister-Kollisionsschleife nutzt dieselbe Resistenz-/
+  Schildpool-Logik, Renderer zeigt/versteckt die neue Leiste korrekt.
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 3** (Geisterpanzer-Basis).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -4941,6 +5027,14 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 
 ### Wichtige Dateien
 - `src/game/state.js` — `stepState`, Treffer, Minen, `killTank`.
+  Nekromant-V2 Phase 2: `applyResistToAmount()`/`absorbWithShieldPool()`
+  (Modulebene, nicht Methoden auf `state`) — Schadensresistenz (additiv,
+  `Schaden/(1+resistSumme/divisor)`, nie 0 dank `max(1,…)`) und der neue
+  Schild-Punktepool (`tank.shield`/`cfg.shieldMax`, überspringt DOT wie alle
+  anderen Schilde). Beide gebraucht von `applyDamage()` (Spieler/Gegner) UND
+  der getrennten Geister-Kollisionsschleife (Untertanen sind ausdrücklich
+  mitgemeint). `bullet.pierce`/`bullet.pierceHits`: Durchschlag statt
+  `b.dead` bei verbleibender Ladung, Trefferliste verhindert Doppeltreffer.
 - `src/game/armor.js` — gerichtete Panzerung (Phase 4): `armorBlocks`,
   `reflectBullet`, `isLive`. Seit Grundsteinumbau Phase 1 ist `isLive(b)`
   nur noch `!!b.reflected` (kein Bandenschuss mehr, `hasWallBounced()` ist

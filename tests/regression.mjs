@@ -6954,6 +6954,264 @@ for (const seed of SEEDS) {
   check(forbidden === 0, `Phase 0 (Nekromant-V2): ${forbidden} Kartentext(e) enthalten "Meter" oder "Abprall"`);
 }
 
+// ---- 56. Nekromant-V2 Phase 2: Engine-Luecken (Resistenz, Schild, Durchschlag) --
+// Drei generische Systeme, die noch keine echte Karte im Pool nutzt (Phase 6+
+// baut die Karten). Mechanismus mit EIGENEN, oft absichtlich extremen Zahlen
+// geprueft (nicht den echten balance.json-Werten -- die sind aktuell ueberall
+// 0/inert), Gegenprobe fuer jeden Kernpunkt bestanden.
+{
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { stepState } = await import('../src/game/state.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  const freshPlayer = () => {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const p = st.player;
+    p.hp = 100;
+    p.cfg.maxHp = 100;
+    p.protect = 0;
+    p.shieldReady = false;
+    p.shield = 0;
+    p.cfg.resist = 0;
+    p.cfg.shieldMax = 0;
+    p.cfg.shieldRegenPerS = 0;
+    p.executing = false;
+    return { st, p };
+  };
+
+  // (a) Resistenz-Formel MIT EIGENEN ZAHLEN: divisor 100 (echter balance-Wert
+  //     -- die Formelkonstante selbst ist kein Balancewert, s. balance.json:
+  //     _comment_resist), aber Resistenz-SUMME und Treffer frei erfunden.
+  //     100 Punkte halbieren, 200 dritteln -- exakt wie im Auftrag vorgerechnet.
+  {
+    const divisor = tanksData.balance.resist.divisor;
+    check(divisor === 100, `Phase 2 (Nekromant-V2): balance.resist.divisor ist ${divisor} statt 100 -- Testannahme unten passt sonst nicht`);
+    {
+      const { st, p } = freshPlayer();
+      p.cfg.resist = 100;
+      st.applyDamage(p, 100, 'test', {});
+      check(p.hp === 50, `Phase 2 (Nekromant-V2): 100 Resistenz halbiert 100 Schaden nicht (hp ${p.hp} statt 50)`);
+    }
+    {
+      const { st, p } = freshPlayer();
+      p.cfg.resist = 200;
+      st.applyDamage(p, 100, 'test', {});
+      check(p.hp === 67, `Phase 2 (Nekromant-V2): 200 Resistenz drittelt 100 Schaden nicht (hp ${p.hp} statt 67, 100/round(3)=33 abgezogen)`);
+    }
+  }
+
+  // (b) KEINE Obergrenze: eine viel hoehere Resistenzsumme nimmt IMMER
+  //     WEITER weniger Schaden, es gibt keinen Punkt, ab dem der genommene
+  //     Schaden stehen bleibt (das waere der verbotene Math.min(...,0.6)-
+  //     Clamp). Trotzdem NIE null -- mindestens 1 Punkt kommt immer durch.
+  {
+    const genommen = (resist) => {
+      const { st, p } = freshPlayer();
+      p.cfg.resist = resist;
+      st.applyDamage(p, 100, 'test', {});
+      return 100 - p.hp;
+    };
+    const bei500 = genommen(500);
+    const bei5000 = genommen(5000);
+    const beiExtrem = genommen(1000000);
+    check(bei5000 < bei500, `Phase 2 (Nekromant-V2): 5000 Resistenz nimmt nicht weniger als 500 (${bei5000} vs ${bei500}) -- sieht nach einem versteckten Deckel aus`);
+    check(beiExtrem >= 1, `Phase 2 (Nekromant-V2): extreme Resistenz macht komplett unverwundbar (genommener Schaden ${beiExtrem}, sollte >=1 sein)`);
+  }
+
+  // (c) Resistenz wirkt AUCH auf Schaden ueber Zeit (DOT) -- anders als alle
+  //     Schild-Gatter, die DOT bewusst ignorieren (Phase 5).
+  {
+    const { st, p } = freshPlayer();
+    p.cfg.resist = 100; // halbiert
+    st.applyDamage(p, 20, 'test', { overTime: true });
+    check(p.hp === 90, `Phase 2 (Nekromant-V2): Resistenz wirkt nicht auf Schaden ueber Zeit (hp ${p.hp} statt 90)`);
+  }
+
+  // (d) Schild-Punktepool: faengt Schaden VOR hp ab, Rest faellt durch.
+  {
+    const { st, p } = freshPlayer();
+    p.cfg.shieldMax = 30;
+    p.shield = 30;
+    st.applyDamage(p, 50, 'test', {});
+    check(p.shield === 0, `Phase 2 (Nekromant-V2): Schildpool nicht komplett verbraucht (${p.shield} statt 0)`);
+    check(p.hp === 80, `Phase 2 (Nekromant-V2): Restschaden (50-30) nicht von hp abgezogen (hp ${p.hp} statt 80)`);
+  }
+
+  // (e) Ein kleinerer Treffer wird GANZ abgefangen, der Pool behaelt seinen Rest.
+  {
+    const { st, p } = freshPlayer();
+    p.cfg.shieldMax = 30;
+    p.shield = 30;
+    st.applyDamage(p, 10, 'test', {});
+    check(p.hp === 100, `Phase 2 (Nekromant-V2): kleiner Treffer nicht ganz vom Schildpool abgefangen (hp ${p.hp})`);
+    check(p.shield === 20, `Phase 2 (Nekromant-V2): Schildpool-Rest ${p.shield} statt 20`);
+  }
+
+  // (f) Schild-Punktepool ueberspringt DOT (wie alle anderen Schild-Gatter,
+  //     Phase 5) -- nur die Resistenz wirkt auf DOT (s. (c)).
+  {
+    const { st, p } = freshPlayer();
+    p.cfg.shieldMax = 50;
+    p.shield = 50;
+    st.applyDamage(p, 20, 'test', { overTime: true });
+    check(p.shield === 50, `Phase 2 (Nekromant-V2): Schildpool faengt faelschlich einen DOT-Tick ab (${p.shield} statt 50)`);
+    check(p.hp === 80, `Phase 2 (Nekromant-V2): DOT zieht bei ignoriertem Schildpool nicht die volle Zahl ab (hp ${p.hp} statt 80)`);
+  }
+
+  // (g) Namenskollision-Test: der neue Pool ist von shieldCharges (Notschild)
+  //     UND shieldHp/shieldReady (aeltere schild-Karte) unabhaengig -- alle
+  //     drei bleiben unangetastet nebeneinander bestehen.
+  {
+    const { st, p } = freshPlayer();
+    p.cfg.shieldMax = 20;
+    p.shield = 20;
+    st.shieldCharges = [3];
+    p.shieldReady = true;
+    p.shieldHp = 40;
+    p.cfg.shieldAbsorb = 40;
+    st.applyDamage(p, 5, 'test', {});
+    check(p.shield === 15, `Phase 2 (Nekromant-V2): der neue Pool haette den Treffer abfangen sollen (shield ${p.shield} statt 15)`);
+    check(st.shieldCharges.length === 1, `Phase 2 (Nekromant-V2): Notschild-Ladung faelschlich verbraucht (${st.shieldCharges.length} statt 1)`);
+    check(p.shieldHp === 40, `Phase 2 (Nekromant-V2): aelterer Absorber (shieldHp) faelschlich angefasst (${p.shieldHp} statt 40)`);
+  }
+
+  // (h) Schild-Regeneration: laedt bis shieldMax auf, nie darueber.
+  {
+    const { st, p } = freshPlayer();
+    p.cfg.shieldMax = 50;
+    p.shield = 10;
+    p.cfg.shieldRegenPerS = 20;
+    stepState(st, CMD0, 0.1);
+    check(Math.abs(p.shield - 12) < 1e-6, `Phase 2 (Nekromant-V2): Schildregeneration falsch (${p.shield} statt 12 nach 0.1s bei 20/s)`);
+    p.shield = 45;
+    stepState(st, CMD0, 1);
+    check(p.shield === 50, `Phase 2 (Nekromant-V2): Schildregeneration ueberschreitet shieldMax (${p.shield} statt gedeckelt bei 50)`);
+  }
+
+  // (i) cfg.js: die vier neuen core-Schluessel (resistAdd/pierceAdd/
+  //     shieldMaxAdd/shieldRegenAdd) sind additiv UND werden von der
+  //     Rastplatz-Stufenskalierung (Grundsteinumbau Phase 7) automatisch mit
+  //     erfasst -- kein Sonderfall in scaleCore() noetig, weil sie dem
+  //     bestehenden "*Add"-Namensmuster folgen. EIGENE Zahlen (bonusPct 1.0),
+  //     nicht der echte balance.upgradeLevel-Wert.
+  {
+    const synU = { upgrades: { testcard56: { core: { resistAdd: 5, pierceAdd: 1, shieldMaxAdd: 10, shieldRegenAdd: 2 } } } };
+    const base = resolveCfg(tanksData, 'player');
+    const lvl0 = applyUpgrades({ ...base }, { testcard56: 1 }, synU, 'mine', null, {}, { bonusPct: 1.0, maxLevel: 5 });
+    check(lvl0.resist === 5, `Phase 2 (Nekromant-V2): resistAdd wird nicht uebernommen (${lvl0.resist} statt 5)`);
+    check(lvl0.pierce === 1, `Phase 2 (Nekromant-V2): pierceAdd wird nicht uebernommen (${lvl0.pierce} statt 1)`);
+    check(lvl0.shieldMax === 10, `Phase 2 (Nekromant-V2): shieldMaxAdd wird nicht uebernommen (${lvl0.shieldMax} statt 10)`);
+    check(lvl0.shieldRegenPerS === 2, `Phase 2 (Nekromant-V2): shieldRegenAdd wird nicht uebernommen (${lvl0.shieldRegenPerS} statt 2)`);
+    // Stufe 2, bonusPct 1.0 -> sm = 1 + 2*1 = 3 -> jeder Wert verdreifacht.
+    const lvl2 = applyUpgrades({ ...base }, { testcard56: 1 }, synU, 'mine', null, { testcard56: 2 }, { bonusPct: 1.0, maxLevel: 5 });
+    check(lvl2.resist === 15, `Phase 2 (Nekromant-V2): resistAdd skaliert nicht mit der Rastplatz-Stufe (${lvl2.resist} statt 15)`);
+    check(lvl2.shieldMax === 30, `Phase 2 (Nekromant-V2): shieldMaxAdd skaliert nicht mit der Rastplatz-Stufe (${lvl2.shieldMax} statt 30)`);
+  }
+
+  // (j) Durchschlag: ein Geschoss mit pierce:1 durchschlaegt EIN Ziel, ohne
+  //     zu sterben, trifft ein zweites, und stirbt danach (kein Durchschlag
+  //     mehr) -- die Trefferliste verhindert, dass dasselbe Ziel im
+  //     naechsten Tick (ohne Bewegung) ein zweites Mal getroffen wird.
+  {
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    st.tanks.length = 0;
+    st.tanks.push(st.player);
+    const mk = (x, y) => ({
+      ...proto, x, y, prevX: x, prevY: y, heading: 0,
+      alive: true, hp: 100, protect: 0, shieldReady: false, shield: 0, status: {},
+      cfg: { ...proto.cfg, role: 'guardian', maxHp: 100, armor: null, requiresRicochet: false, resist: 0, shieldMax: 0 },
+    });
+    const z1 = mk(200, 250);
+    const z2 = mk(400, 400);
+    st.tanks.push(z1, z2);
+    const b = createBullet(z1.x, z1.y, 0, {
+      speed: 0, radius: 3, owner: st.player, kind: 'bullet', damage: 10, damageType: 'physical', pierce: 1,
+    });
+    b.age = 5;
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+    check(z1.hp === 90, `Phase 2 (Nekromant-V2): Durchschlag -- erster Treffer fehlt (z1.hp ${z1.hp} statt 90)`);
+    check(!b.dead, 'Phase 2 (Nekromant-V2): Geschoss mit verbleibendem Durchschlag ist trotzdem gestorben');
+    check(b.pierce === 0, `Phase 2 (Nekromant-V2): b.pierce nicht heruntergezaehlt (${b.pierce} statt 0)`);
+    // Erneuter Schritt am selben Ort: die Trefferliste muss einen zweiten
+    // Treffer auf z1 verhindern.
+    stepState(st, CMD0, 1 / 60);
+    check(z1.hp === 90, 'Phase 2 (Nekromant-V2): Durchschlag -- dasselbe Ziel wurde ein zweites Mal getroffen (Trefferliste wirkungslos)');
+    // "Weiterflug" zu z2 simulieren, dann treffen -- kein Durchschlag mehr
+    // uebrig, das Geschoss muss diesmal sterben.
+    b.x = z2.x;
+    b.y = z2.y;
+    b.prevX = z2.x;
+    b.prevY = z2.y;
+    stepState(st, CMD0, 1 / 60);
+    check(z2.hp === 90, `Phase 2 (Nekromant-V2): Durchschlag -- zweiter Treffer fehlt (z2.hp ${z2.hp} statt 90)`);
+    check(b.dead, 'Phase 2 (Nekromant-V2): Geschoss ohne verbleibenden Durchschlag haette sterben muessen');
+  }
+
+  // (k) Untertanen (Geister) sind ausdruecklich mitgemeint: dieselbe
+  //     Resistenz-/Schildpool-Logik wirkt auch in der getrennten
+  //     Geister-Kollisionsschleife.
+  {
+    const { createGhost } = await import('../src/game/ghost.js');
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const enemy = st.tanks.find((t) => t !== st.player && t.alive);
+    const g = createGhost(st, enemy.x, enemy.y, 0);
+    g.cfg.resist = 100; // halbiert
+    g.cfg.shieldMax = 5;
+    g.shield = 5;
+    g.hp = 100;
+    g.cfg.maxHp = 100;
+    st.ghosts.length = 0;
+    st.ghosts.push(g);
+    const b = createBullet(g.x, g.y, 0, {
+      speed: 0, radius: 3, owner: enemy, kind: 'bullet', damage: 30,
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(b);
+    // (30 -> Resistenz halbiert auf 15 -> Schildpool faengt 5 ab -> 10 verbleiben)
+    stepState(st, CMD0, 1 / 60);
+    check(g.shield === 0, `Phase 2 (Nekromant-V2): Geister-Schildpool nicht verbraucht (${g.shield} statt 0)`);
+    check(g.hp === 90, `Phase 2 (Nekromant-V2): Geister-Resistenz/Schildpool falsch verrechnet (g.hp ${g.hp} statt 90)`);
+  }
+
+  // (l) Renderer: die neue Schild-Leiste erscheint nur, wenn cfg.shieldMax
+  //     gesetzt ist, und ist ein ZUSAETZLICHER 3px-fillRect gegenueber der
+  //     Lebensleiste -- Muster wie der bestehende Lebensleisten-Renderpfad-
+  //     Test (Abschnitt 2f), derselbe aufzeichnende Canvas aus domstub.mjs.
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { createRenderer } = await import('../src/render/renderer.js');
+      const { createTracks } = await import('../src/render/tracks.js');
+      const ctx = document.createElement('canvas').getContext('2d');
+      const renderer = createRenderer(ctx);
+      const tracks = createTracks();
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, 42);
+      const st = run.state;
+      const balken = () => {
+        ctx.calls.length = 0;
+        renderer.render(st, 0, tracks, null, null);
+        return ctx.calls.filter((c) => c.fn === 'fillRect' && c.args[3] === 3).length;
+      };
+      const ohne = balken();
+      st.player.cfg.shieldMax = 40;
+      st.player.shield = 20;
+      const mit = balken();
+      check(mit === ohne + 1, `Phase 2 (Nekromant-V2): Schild-Leiste erscheint nicht als zusaetzlicher Balken (${mit} statt ${ohne + 1})`);
+      st.player.cfg.shieldMax = 0;
+      const wiederOhne = balken();
+      check(wiederOhne === ohne, `Phase 2 (Nekromant-V2): Schild-Leiste verschwindet nicht wieder bei shieldMax 0 (${wiederOhne} statt ${ohne})`);
+    } finally {
+      restore();
+    }
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

@@ -82,6 +82,7 @@ export function createDebugOverlay(ctx) {
   function drawPanel(state, fps, timing) {
     const liveTanks = state.tanks.filter((t) => t.alive).length;
     const entities = liveTanks + state.bullets.length + state.mines.length;
+    const p = state.player;
     const lines = [
       `FPS ${fps.toFixed(0)}`,
       `Entities ${entities}`,
@@ -89,6 +90,10 @@ export function createDebugOverlay(ctx) {
       `Bullets ${state.bullets.length}`,
       `Mines ${state.mines.length}`,
       `Cooldown ${state.player.cooldown.toFixed(2)}s`,
+      // Nekromant-V2 Phase 2 (Fertig-Kriterium: "das Debug-Overlay zeigt sie"):
+      // Resistenz, Durchschlag, Schild-Punktepool des Spielers. Alle drei
+      // aktuell 0 -- noch keine Karte gewaehrt sie.
+      `Resist ${p.cfg.resist || 0} · Durchschlag ${p.cfg.pierce || 0} · Schild ${Math.round(p.shield || 0)}/${p.cfg.shieldMax || 0}`,
       ...capLines(state),
     ];
     if (timing) {

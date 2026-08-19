@@ -36,6 +36,7 @@ export function createBullet(
     damage,
     damageType,
     crit,
+    pierce,
   },
 ) {
   return {
@@ -70,6 +71,15 @@ export function createBullet(
     // gewuerfelt -- eine Kugel, die mehrere Ziele streift, bleibt kritisch
     // oder nicht.
     crit: crit || false,
+    // Durchschlag (Nekromant-V2 Phase 2): Anzahl zusaetzlicher Ziele, die
+    // dieses Geschoss durchschlaegt, OHNE zu sterben -- zaehlt beim Treffer
+    // herunter (state.js). NICHT zu verwechseln mit dem aelteren,
+    // archivierten phaseWalls-Feld weiter unten (das ignoriert WAENDE, nicht
+    // Ziele -- beide heissen im Deutschen "Durchschlag", sind aber getrennte
+    // Mechaniken). pierceHits (Set, lazy angelegt in state.js) verhindert,
+    // dass dasselbe Ziel zweimal getroffen wird.
+    pierce: pierce || 0,
+    pierceHits: null,
     detonated: false,
     // Aasgeier (state.js: killTank): true = zaehlt nicht mehr gegen das
     // Magazin des Schuetzen, fliegt und toetet aber normal weiter.

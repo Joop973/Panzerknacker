@@ -65,6 +65,15 @@ function resolveGhostCfg(data, playerCfg) {
     fireRangePx: (data.balance?.bullet?.maxDistance ?? 1200) * (g.rangePct ?? 0.65),
     weapon: g.weapon ?? 'bullet',
     armor: null, // Ruestung 0 (Anhang B S7)
+    // Nekromant-V2 Phase 2 (Engine-Luecken): "Untertanen" sind in der
+    // Resistenz-/Schild-Anforderung ausdruecklich mitgemeint. Vorerst
+    // ueberall 0 -- data/tanks.json: types.ghost_tank setzt sie nicht, keine
+    // Karte gewaehrt sie vor Phase 6+. Bewusst KEINE ghostResistAdd/
+    // ghostShieldMaxAdd-core-Schluessel in dieser Phase: die kommen mit den
+    // Karten, die sie tatsaechlich brauchen (Muster wie ghostHpAdd etc.).
+    resist: g.resist ?? 0,
+    shieldMax: g.shieldMax ?? 0,
+    shieldRegenPerS: g.shieldRegenPerS ?? 0,
   };
 }
 
@@ -101,6 +110,10 @@ export function createGhost(state, x, y, heading = 0) {
     type: 'ghost_tank',
     cfg,
     hp: cfg.maxHp,
+    // Nekromant-V2 Phase 2: derselbe Schild-Punktepool wie bei echten
+    // Panzern (state.js: applyResistToAmount/absorbWithShieldPool) --
+    // startet voll, aktuell ueberall 0.
+    shield: cfg.shieldMax || 0,
     cooldown: 0,
     isGhost: true,
     alive: true,
@@ -221,6 +234,11 @@ export function updateGhosts(state, dt) {
     if (g.hp <= 0) {
       killGhost(state, g);
       continue;
+    }
+    // Nekromant-V2 Phase 2: Schild-Pool-Regeneration, dasselbe Muster wie
+    // bei echten Panzern (state.js, Tank-Tick-Schleife).
+    if (g.cfg.shieldRegenPerS && g.shield < g.cfg.shieldMax) {
+      g.shield = Math.min(g.cfg.shieldMax, (g.shield || 0) + g.cfg.shieldRegenPerS * dt);
     }
     g.prevX = g.x;
     g.prevY = g.y;

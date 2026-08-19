@@ -62,6 +62,42 @@ const DEBRIS_COLORS = {
   t_phalanx: '#9aa6b4',
 };
 
+// Nekromant-V2 Phase 2: Schadensresistenz + Schild-Punktepool als
+// eigenstaendige Funktionen -- gebraucht sowohl von applyDamage() (Spieler/
+// Gegner in state.tanks) als auch von der GETRENNTEN Geister-Kollisions-
+// schleife (Untertanen sind bewusst NICHT in state.tanks, s. Kopfkommentar
+// dort). `entityCfg`/`entity` passen auf Panzer UND Geister gleichermassen
+// (beide tragen `.cfg.resist` bzw. `.shield`/`.x`/`.y`).
+//
+// Rechenweg (Auftrag Abschnitt 4a): additiv gesammelte Punkte, NIE eine
+// Obergrenze, NIE null -- genommenerSchaden = Schaden / (1 + resistSumme/
+// divisor). Ein Math.min(..., 0.6)-Clamp waere genau der versteckte Deckel,
+// den der Auftrag ausdruecklich verbietet.
+function applyResistToAmount(entityCfg, resistBalance, amount) {
+  if (!entityCfg.resist) return amount ?? 1;
+  const divisor = resistBalance?.divisor ?? 100;
+  // Math.max(1, ...): die Formel naehert sich 0 nur an, wird aber durch das
+  // Runden bei astronomisch hohen Resistenzsummen sonst tatsaechlich 0 --
+  // "nie null" (Auftrag Abschnitt 4a) gilt woertlich, ein Treffer bleibt
+  // also IMMER mindestens 1 Punkt wert, egal wie hoch resist steigt.
+  return Math.max(1, Math.round((amount ?? 1) / (1 + entityCfg.resist / divisor)));
+}
+
+// Schild als Punktepool: faengt Schaden VOR hp ab, bis zu 0, Rest faellt
+// durch. NICHT zu verwechseln mit state.shieldCharges (Notschild, blockt
+// einen GANZEN Treffer) oder tank.shieldHp/shieldReady (der AELTERE,
+// nur-Spieler-Absorber der schild-Karte, UMBAUPLAN-LP Phase 8) -- alle drei
+// bleiben nebeneinander bestehen und sind im HUD getrennt sichtbar.
+function absorbWithShieldPool(state, entity, amount) {
+  const have = entity.shield || 0;
+  if (have <= 0) return amount ?? 1;
+  const absorbed = Math.min(have, amount ?? 1);
+  entity.shield -= absorbed;
+  state.sounds.push({ name: 'shield', x: entity.x });
+  state.spawnParticles(entity.x, entity.y, '#7fe6c8', 8, 110);
+  return (amount ?? 1) - absorbed;
+}
+
 function buildWalls(grid, destructibleHits, generatorHits) {
   const walls = [];
   for (let row = 0; row < ROWS; row++) {
@@ -486,6 +522,12 @@ export function createState(data, tiles, opts) {
         state.spawnParticles(tank.x, tank.y, '#ffd23c', 6, 80);
         return;
       }
+      // Schadensresistenz (Nekromant-V2 Phase 2): wirkt GENERISCH auf JEDEN
+      // Schaden, der diesen Panzer ueberhaupt erreicht -- auch auf Schaden
+      // ueber Zeit (ein resistenter Panzer soll auch gegen Brand/Gift zaeher
+      // sein), deshalb VOR der DOT-Weiche unten. Rechenweg + Begruendung:
+      // s. applyResistToAmount() oben.
+      amount = applyResistToAmount(tank.cfg, state.data.balance?.resist, amount);
       // Schaden ueber Zeit (Phase 5) ueberspringt ALLE Schild-Gatter
       // darunter. Ein Schild, der "den naechsten Treffer abfaengt", darf
       // nicht an einem 4-Punkte-Brandtick verpuffen -- sechs Ticks wuerden
@@ -502,6 +544,14 @@ export function createState(data, tiles, opts) {
         state.killTank(tank, cause, meta);
         return;
       }
+      // Schild als Punktepool (Nekromant-V2 Phase 2): faengt Schaden VOR hp
+      // ab -- gilt fuer JEDEN Panzer (Spieler, Gegner; Untertanen ueber die
+      // eigene Ghost-Kollisionsschleife unten). Absichtlich VOR den beiden
+      // Notschild-Gattern geprueft: fuer Gegner ist dieser Pool aktuell die
+      // EINZIGE Schild-Option, ein bereits voll abgefangener Treffer soll
+      // keine der spielerexklusiven Ladungen verbrauchen. s. absorbWithShieldPool() oben.
+      amount = absorbWithShieldPool(state, tank, amount);
+      if (amount <= 0) return;
       // Notschild-Ladung faengt genau einen Treffer ab (raumuebergreifend,
       // keine Regeneration). Kurzer Schutz verhindert Mehrfachverbrauch im
       // selben Explosions-Frame.
@@ -893,6 +943,15 @@ export function stepState(state, cmd, dt) {
         if (t === state.player) t.shieldHp = t.cfg.shieldAbsorb || 0;
       }
     }
+    // Nekromant-V2 Phase 2: der NEUE Schild-Punktepool regeneriert optional
+    // (Auftrag: "ghost_048", noch keine echte Karte -- der Mechanismus
+    // arbeitet trotzdem bereits, sonst muesste eine spaetere Regenerations-
+    // karte hier noch Code aendern statt nur ihren core.shieldRegenAdd zu
+    // setzen). Getrennt vom Regenerierschild-Affix/Nachladeschild oben (die
+    // fuellen shieldHp/shieldReady, nicht tank.shield).
+    if (t.cfg.shieldRegenPerS && t.shield < t.cfg.shieldMax) {
+      t.shield = Math.min(t.cfg.shieldMax, (t.shield || 0) + t.cfg.shieldRegenPerS * dt);
+    }
   }
 
   // Statuseffekte ueber Zeit (Phase 5): eigener Durchlauf NACH der
@@ -1032,6 +1091,11 @@ export function stepState(state, cmd, dt) {
       // Kurzes Fenster nach einer Reflexion: die zurueckgeworfene Kugel
       // darf denselben Panzer nicht sofort wieder treffen.
       if (b.reflectImmune === t && b.reflectImmuneT > 0) continue;
+      // Durchschlag (Nekromant-V2 Phase 2): ein Geschoss mit b.pierce > 0
+      // durchschlaegt getroffene Ziele, statt zu sterben -- die Trefferliste
+      // verhindert, dass ein noch fliegendes Geschoss dasselbe (evtl.
+      // stehende) Ziel im naechsten Tick ein zweites Mal trifft.
+      if (b.pierceHits?.has(t)) continue;
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
         // Sekundärslot "Deflektor" (Phase 6): reflektiert den naechsten
         // Treffer in Blickrichtung.
@@ -1047,7 +1111,14 @@ export function stepState(state, cmd, dt) {
           else b.dead = true;
           break;
         }
-        b.dead = true;
+        // Durchschlag: das Geschoss stirbt nur, wenn keine Ladung mehr da
+        // ist. Trefferliste zuerst befuellen (auch wenn pierce noch reicht),
+        // sonst koennte dasselbe Ziel im selben Tick kein zweites Mal
+        // getroffen werden, aber im naechsten schon.
+        if (!b.pierceHits) b.pierceHits = new Set();
+        b.pierceHits.add(t);
+        if (b.pierce > 0) b.pierce--;
+        else b.dead = true;
         // Todesursache fuer den Game-Over-Screen + Telemetrie.
         const WEAPON_LABEL = { bullet: 'Kugel', rocket: 'Rakete' };
         const own = b.owner === state.player;
@@ -1196,9 +1267,21 @@ export function stepState(state, cmd, dt) {
     if (b.dead || b.owner === state.player || b.owner?.isGhost) continue;
     for (const g of state.ghosts) {
       if (!g.alive) continue;
+      // Durchschlag (Nekromant-V2 Phase 2): dieselbe Trefferliste wie bei
+      // echten Panzern -- ein Geschoss darf denselben Geist nicht zweimal
+      // treffen.
+      if (b.pierceHits?.has(g)) continue;
       if (circlesOverlap(b.x, b.y, b.radius, g.x, g.y, g.cfg.radius)) {
-        b.dead = true;
-        g.hp -= b.damage ?? 1;
+        if (!b.pierceHits) b.pierceHits = new Set();
+        b.pierceHits.add(g);
+        if (b.pierce > 0) b.pierce--;
+        else b.dead = true;
+        // Schadensresistenz + Schild-Punktepool (Nekromant-V2 Phase 2):
+        // "Untertanen" sind ausdruecklich mit gemeint (Auftrag), s.
+        // applyResistToAmount()/absorbWithShieldPool() oben.
+        let dmg = applyResistToAmount(g.cfg, state.data.balance?.resist, b.damage);
+        dmg = absorbWithShieldPool(state, g, dmg);
+        g.hp -= dmg;
         if (g.hp <= 0) killGhost(state, g);
         break;
       }

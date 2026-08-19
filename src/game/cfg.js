@@ -87,6 +87,16 @@ export function resolveCfg(data, type) {
     // Konstante aus balance.json, damit createTank() die shieldHp ohne
     // Balance-Zugriff aus dem cfg fuellen kann.
     shieldAbsorb: data.balance?.shield?.absorb ?? 40,
+    // Nekromant-V2 Phase 2: drei neue, generische Engine-Werte -- vorerst
+    // ueberall 0 (kein Typ in tanks.json setzt sie, keine Karte gewaehrt sie
+    // vor Phase 6+), aber schon vollstaendig ausgewertet (state.js:
+    // applyDamage/bullet.js/tank.js), damit spaetere Nekromant-Karten sie nur
+    // noch ueber core.resistAdd/pierceAdd/shieldMaxAdd/shieldRegenAdd
+    // befuellen muessen (s. applyUpgrades() unten).
+    resist: t.resist ?? 0, // Schadensresistenz in PUNKTEN (additiv, kein Prozentsatz) -- Rechenweg in state.js: applyDamage()
+    pierce: t.pierce ?? 0, // Durchschlag: zusaetzliche Ziele, die EIN Geschoss durchschlaegt, OHNE zu sterben. Nicht zu verwechseln mit dem aelteren, archivierten phaseWalls-Feld (das ignoriert WAENDE, nicht Ziele).
+    shieldMax: t.shieldMax ?? 0, // Obergrenze des NEUEN Schild-Punktepools (tank.shield/g.shield) -- nicht zu verwechseln mit shieldAbsorb/shieldHp (der aeltere, nur-Spieler-Absorber der schild-Karte) oder state.shieldCharges (Notschild-Ladungen, blocken je einen ganzen Treffer)
+    shieldRegenPerS: t.shieldRegenPerS ?? 0, // Punkte/Sekunde, mit denen sich der NEUE Schild-Pool bis shieldMax auflaedt (optional, z. B. kuenftig ghost_048)
     // Boss-Sonderfaelle (Phase 14) -- reine Datenuebernahme, ebenso
     // orthogonal wie armor/miner. bossInvincible gated killTank() (Reaktor);
     // mirrorBoss/phalanx schalten in stepState() auf die Boss-Fahrfunktionen
@@ -520,6 +530,13 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.ghostCommanderMultBonus = (cfg.ghostCommanderMultBonus || 0) + c.ghostCommanderMultBonus * lvl;
     }
     if (c.ghostReviveGrowth) cfg.ghostReviveGrowth = (cfg.ghostReviveGrowth || 0) + c.ghostReviveGrowth * lvl;
+    // Nekromant-V2 Phase 2 (Engine-Luecken): alle vier additiv, wie im
+    // Auftrag Abschnitt 4a gefordert ("Prozentpunkte addieren, nicht
+    // multiplizieren"). Noch keine echte Karte im Pool setzt sie.
+    if (c.resistAdd) cfg.resist = (cfg.resist || 0) + c.resistAdd * lvl;
+    if (c.pierceAdd) cfg.pierce = (cfg.pierce || 0) + c.pierceAdd * lvl;
+    if (c.shieldMaxAdd) cfg.shieldMax = (cfg.shieldMax || 0) + c.shieldMaxAdd * lvl;
+    if (c.shieldRegenAdd) cfg.shieldRegenPerS = (cfg.shieldRegenPerS || 0) + c.shieldRegenAdd * lvl;
   }
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;
@@ -529,6 +546,8 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   // Stufe 1) -- Magazin/Minenzahl sind Stueckzahlen, deshalb hier gerundet.
   cfg.magazine = Math.round(cfg.magazine);
   cfg.mines = Math.round(cfg.mines);
+  // Durchschlag ist ebenfalls eine Stueckzahl (Anzahl zusaetzlicher Ziele).
+  cfg.pierce = Math.round(cfg.pierce || 0);
   // Sprengstoff-Topf: Schuesse zuenden lassen (Basisradius setzen, falls noch
   // keiner steht), dann Radius/Schaden multiplizieren (gilt fuer Schuss UND
   // Mine -- mineRadiusMult wurde oben schon gesetzt). explosionDamageMult liest
