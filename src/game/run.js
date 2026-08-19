@@ -367,6 +367,7 @@ export function runSnapshot(run) {
     equippedSecondary: run.equippedSecondary,
     equippedGadget: run.equippedGadget,
     banned: [...run.bannedUpgrades],
+    selectedUniqueUpgradeIds: [...run.selectedUniqueUpgradeIds], // Nekromant-V2 Phase 1
     tagCounts: { ...run.tagCounts },
     synergyTags: { ...run.synergyTags }, // Upgradepool-v2 Phase 3
     transformations: [...run.transformations],
@@ -920,6 +921,12 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     scrap: 0, // Schrott-Waehrung (Run-State, Phase 3)
     scrapThisRoom: 0, // im aktuellen Raum verdienter Schrott (Telemetrie)
     bannedUpgrades: new Set(), // im Run verbannte Upgrade-ids (nicht persistent)
+    // Nekromant-V2 Phase 1 (Stapelregel): jede tatsaechlich GEWAEHLTE Karte
+    // mit isUnique:true landet hier -- gefiltert aus ALLEN Kartenquellen
+    // (Angebot, Shop, Truhe, Ereignis, Reroll), s. upgradepool.js:
+    // buildCandidates(). Persistiert im Snapshot (im Gegensatz zu
+    // bannedUpgrades, das pro Run frisch ist).
+    selectedUniqueUpgradeIds: new Set(),
     pendingOffers: null,
     shopOffers: null, // Phase 13: Kartenregal des aktuellen Shops
     shopLifeBought: false, // Phase 13: Leben nur einmal pro Shop-Besuch
@@ -989,6 +996,15 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     run.equippedSecondary = r.equippedSecondary || 'mine';
     run.equippedGadget = r.equippedGadget || null;
     run.bannedUpgrades = new Set(r.banned || []);
+    // Nekromant-V2 Phase 1: aeltere Zwischenstaende (vor dieser Phase) kennen
+    // das Feld noch nicht -- Fallback rekonstruiert es aus den bereits
+    // besessenen Karten + dem AKTUELLEN isUnique-Schema (sonst waere eine
+    // laengst gewaehlte, inzwischen als isUnique markierte Karte nach dem
+    // Laden erneut ziehbar).
+    run.selectedUniqueUpgradeIds = new Set(
+      r.selectedUniqueUpgradeIds ||
+        Object.keys(run.upgrades).filter((id) => upgradesData.upgrades[id]?.isUnique),
+    );
     run.tagCounts = { ...(r.tagCounts || {}) };
     run.synergyTags = { ...(r.synergyTags || {}) }; // Upgradepool-v2 Phase 3
     run.transformations = new Set(r.transformations || []);
@@ -1193,9 +1209,13 @@ export function stepRun(run, cmd, dt) {
     const offers = rollReward(run);
     if (!offers.length) {
       // Sicherheitsnetz (Grundsteinumbau Phase 4, proaktiv -- kein
-      // Auftragstext dazu): der Sockel hat nur 5 Karten mit begrenzten
-      // maxStacks (max. 20 Stufen insgesamt). Ein hinreichend langer Run
-      // (v. a. Endlos) kann den Pool leerziehen -- rollReward()/rollOffers()
+      // Auftragstext dazu). Nekromant-V2 Phase 1: seit maxStacks abgeschafft
+      // ist, kann eine nicht-einzigartige Karte den Pool nicht mehr durch
+      // Stapeln leerziehen -- der Sockel (5 Karten, alle isUnique: false)
+      // laeuft dadurch praktisch nie mehr leer. Leer bleibt trotzdem
+      // MOEGLICH (minRoom/rarityGates in einem frueheren Raum,
+      // signatureClass/exclusions ohne passende universelle Karte, ein
+      // requires ohne erfuellte Voraussetzung) -- rollReward()/rollOffers()
       // liefern dann bewusst ein KUERZERES statt eines aufgefuellten Arrays
       // (kein Fallback mehr, s. upgradepool.js). Ohne dieses Netz bliebe
       // run.phase auf 'upgrade' mit 0 Angeboten haengen, ohne Weiter-Knopf --
@@ -1226,6 +1246,9 @@ function poolOpts(run) {
     // Upgradepool-v2 Phase 3: laufende Synergie-Tag-Bilanz fuer die
     // Angebotsgewichtung (makeSynergyWeight in upgradepool.js).
     synergyTags: run.synergyTags,
+    // Nekromant-V2 Phase 1: zusaetzliche Filterquelle fuer isUnique-Karten
+    // (s. upgradepool.js: buildCandidates()).
+    selectedUniqueUpgradeIds: run.selectedUniqueUpgradeIds,
   };
 }
 
@@ -1236,7 +1259,7 @@ function poolOpts(run) {
 // Wiederanschlusspunkt: ARCHIV.md, archive/systeme-v1.md Abschnitt 2.
 
 // Belohnungs-Angebote je nach Raumtyp (Seed-RNG -> deterministisch):
-//   normal = Standardpool (Tag-Regel, Rarity, maxStacks/requires/minRoom)
+//   normal = Standardpool (Tag-Regel, Rarity, isUnique/requires/minRoom)
 //   elite  = normale Dreierauswahl BLEIBT, zusaetzlich automatisch (ohne
 //            Schrottkosten) eine 4. Karte aus Tag 'elite' (Phase 9,
 //            v3-Review-Korrektur: die alte Variante ERSETZTE die normale
@@ -1271,9 +1294,9 @@ function rollReward(run) {
       avoidTags,
       avoidIds,
     );
-    // Elite-Pool erschoepft (alle Elite-Karten maxStacks erreicht, oder --
-    // wie im Sockel aktuell -- gar keine Karte mit Tag 'elite' vorhanden)
-    // -> keine 4. Karte statt eines Platzhaltereintrags.
+    // Elite-Pool erschoepft (alle einzigartigen Elite-Karten schon gewaehlt,
+    // oder -- wie im Sockel aktuell -- gar keine Karte mit Tag 'elite'
+    // vorhanden) -> keine 4. Karte statt eines Platzhaltereintrags.
     if (eliteCard) offers.push(eliteCard);
     return offers;
   }
@@ -1428,10 +1451,18 @@ export function buyShopUpgradeLevel(run, id) {
 // `offer` hier ist also immer eine echte Sockelkarte.
 function applyUpgradeChoice(run, offer) {
   run.upgrades[offer.id] = (run.upgrades[offer.id] || 0) + 1;
-  // Gadgetslot (P4): eine neue Gadgetkarte ersetzt das aktive Gadget --
-  // die alte Karte bleibt in run.upgrades stehen (maxStacks 1 verhindert
-  // ein erneutes Ziehen), ist aber nicht mehr ausgeruestet. Die Bombe
-  // liegt seit P4 im eigenen, festen Slot und kann nie verloren gehen.
+  // Nekromant-V2 Phase 1: einzigartige Karten (isUnique: true) landen zentral
+  // in run.selectedUniqueUpgradeIds -- gefiltert aus jeder Kartenquelle
+  // (upgradepool.js: buildCandidates()). run.upgrades[id] bleibt zusaetzlich
+  // stehen (Anzeige/Level), die Menge ist die maszgebliche Sperre.
+  if (run.upgradesData.upgrades[offer.id]?.isUnique) {
+    run.selectedUniqueUpgradeIds.add(offer.id);
+  }
+  // Gadgetslot (P4): eine neue Gadgetkarte ersetzt das aktive Gadget -- die
+  // alte Karte bleibt in run.upgrades stehen (isUnique verhindert seit Phase 1
+  // ein erneutes Ziehen derselben Karte, s. o.), ist aber nicht mehr
+  // ausgeruestet. Die Bombe liegt seit P4 im eigenen, festen Slot und kann
+  // nie verloren gehen.
   if (offer.tag === 'gadget') run.equippedGadget = offer.id;
   // Glaskanone: reduziert die Leben dauerhaft auf 1 (starker Trade-off).
   if (offer.id === 'glaskanone') run.lives = 1;

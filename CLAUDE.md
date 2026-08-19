@@ -4766,6 +4766,94 @@ ohne Kollateralschaden möglich.
 - Kein `sw.js`-Bump (reine Datenänderung). **Nächste Sitzung: Phase 1**
   (Seltenheitsachse und Pool-Pipeline, `AUFTRAG-NEKROMANT-V2.md`).
 
+### Nekromant-V2 — Phase 1 (Seltenheitsachse und Pool-Pipeline) — gemergt
+**Ist-Abgleich vor Beginn (echter Fund):** `AUFTRAG-FUNDAMENT.md` Phase 4
+verlangte, `maxStacks` global durch `isUnique` +
+`run.selectedUniqueUpgradeIds` zu ersetzen ("Stapelregel gilt für beide
+Aufträge", STARTHIER.md) — der tatsächlich gemergte Code tat das nie: der
+5-Karten-Sockel trug weiterhin `maxStacks` (5/5/3/5/2), `isUnique` kam im
+gesamten Code kein einziges Mal vor. Da Nekromant-V2 Phase 1 genau diese
+Umstellung selbst als Änderungspunkt verlangt ("Kein `maxStacks` mehr"),
+war das die richtige Stelle, die Lücke zu schließen, statt sie zu melden und
+liegen zu lassen — betrifft den GESAMTEN Pool (aktuell nur der Sockel),
+nicht nur künftige Nekromantenkarten.
+- **Seltenheitsachse umbenannt**: `common/rare/epic/unique/legendary` →
+  `common/uncommon/rare/epic/legendary` (`data/balance.json: rarity`,
+  `rarityGates`). Reiner Namenstausch an gleicher Rang-Position — dieselben
+  fünf Gewichte (45/25/15/10/5) und Gates (`rare`:3, `epic`:6, `legendary`:9,
+  vorher an `epic`/`unique`/`legendary` gehängt) bleiben unverändert, nur
+  die vierte Stufe heißt nicht mehr „unique" (das Wort gehört jetzt der
+  GETRENNTEN `isUnique`-Karteneigenschaft) — passend zu
+  `data/upgrades_necro.json` (Phase 0, aus v4 importiert, nutzt exakt diese
+  fünf Namen). `style.css`/`src/ui/upgradescreen.js: RARITY` entsprechend
+  umbenannt (Farben bleiben an derselben Rang-Position: grau→blau→lila→
+  orange+Glow→gold+Glow).
+- **`maxStacks` ist ERSATZLOS abgeschafft**, ersetzt durch `isUnique`
+  (Boolean, auf jeder Karte in `data/upgrades.json` explizit gesetzt — alle
+  fünf Sockelkarten `isUnique: false`, also **unbegrenzt stapelbar**, auch
+  `sockel_ersatzpanzer` (+1 Leben) — das ist wörtliche Auftragsvorgabe
+  ("steht über allen Balanceüberlegungen"), keine ungeprüfte Nebenwirkung.
+  `src/game/upgradepool.js: buildCandidates()`: die alte Zeile
+  `(chosen[id]||0) >= def.maxStacks` ist ersetzt durch
+  `def.isUnique && ((chosen[id]||0) >= 1 || selectedUniqueUpgradeIds?.has(id))`
+  — eine nicht-einzigartige Karte hat dadurch strukturell keine Obergrenze
+  mehr, eine einzigartige verschwindet nach der ersten Wahl.
+- **`run.selectedUniqueUpgradeIds`** (neuer Set, `src/game/run.js`):
+  zentrale, im Snapshot persistierte Menge gewählter einzigartiger
+  Karten-ids. `applyUpgradeChoice()` trägt sie ein, `poolOpts()` reicht sie
+  an `buildCandidates()` als zusätzliche Filterquelle durch (deckt „auch aus
+  bereits vorbereiteten Auswahlen" ab — die primäre Sperre bleibt
+  `chosen[id]>=1`, das bei JEDER Kartenquelle über denselben `buildCandidates()`-
+  Pfad läuft). Ältere Zwischenstände ohne das Feld rekonstruieren es beim
+  Fortsetzen aus `run.upgrades` + dem aktuellen `isUnique`-Schema, statt es
+  stillschweigend leer zu lassen.
+- **Bereits vorher gebaut, nur verifiziert** (Upgradepool-v2 Phase 1–3):
+  `tags[]` neben `tag`, die Dedupe-Regel für Signaturkarten (`dedupeKey()`
+  auf `id` statt `tag`) und die Synergiegewichtung (`makeSynergyWeight()`,
+  `run.synergyTags`) erfüllten die entsprechenden Phase-1-Änderungspunkte
+  bereits vollständig — keine Codeänderung nötig, nur gegengeprüft.
+- **UI**: `upgradescreen.js`/`roomscreens.js` zeigen bei nicht-einzigartigen
+  Karten nur noch „(Stufe N)" (kein „/Y", kein „MAX"), bei einzigartigen gar
+  keine Stufenzahl (die ist ohnehin immer 1).
+- **Zwei bestehende Tests wären durch die `maxStacks`-Abschaffung STILL
+  vakuum geworden, ohne rot zu werden** (echte Funde, nicht nur
+  vorsorglich): (1) Abschnitt 6b's NaN-Sicherheitstest lief
+  `for (let lvl=1; lvl<=def.maxStacks; lvl++)` — mit `def.maxStacks ===
+  undefined` bricht die Schleife für JEDE Karte sofort ab, der Test hätte
+  fortan 0 Stufenkombinationen geprüft und wäre bei jedem künftigen Fehler
+  weiterhin grün geblieben. Ersetzt durch einen festen Stufensatz
+  (`isUnique`: nur 1; sonst 1/2/5/20) + einen neuen Selbstschutz-Check
+  (`geprueft >= Kartenzahl`). (2) Abschnitt 45 „Punkt 24" setzte
+  `chosen[id] = def.maxStacks` (jetzt `undefined`) — `applyUpgrades()` liest
+  eine Karte mit `chosen[id]===undefined` als „nicht gewählt", der Test hätte
+  für jede Karte den reinen No-op-Fall geprüft, ohne das zu bemerken (per
+  Gegenprobe bestätigt: kein einziger Check schlägt fehl). Ersetzt durch
+  einen festen hohen Wert (20, bzw. 1 bei `isUnique`) + einen expliziten
+  `chosen[id] > 0`-Selbstschutz-Check. Abschnitt 45 „Punkt 19" prüfte
+  `chosen[o.id] >= d.maxStacks` (ebenfalls dauerhaft `false` gegen
+  `undefined` gewesen) — ersetzt durch die tatsächlich aktuelle Invariante
+  `d.isUnique && chosen[o.id] >= 1`.
+- **Neuer Testabschnitt 37(a)/(c)/(d)** (`tests/regression.mjs`, Gegenprobe
+  für jeden Kernpunkt einzeln bestanden — je absichtlich rot gemacht:
+  `isUnique`-Filter in `buildCandidates()` deaktiviert, künstlicher
+  5er-Deckel für nicht-einzigartige Karten wieder eingebaut,
+  `applyUpgradeChoice()`s Eintrag in `selectedUniqueUpgradeIds` entfernt,
+  `runSnapshot()`s Feld entfernt, die Fallback-Rekonstruktion beim
+  Fortsetzen entfernt, `isUnique`-Feld auf einer Sockelkarte entfernt,
+  `maxStacks`-Feld künstlich wieder eingefügt): Struktur (gültige Rarity,
+  `isUnique`-Boolean auf jeder Karte, kein `maxStacks` mehr), Rarity-Gate-
+  Mechanismus mit synthetischem Gate-Wert (unverändert vom Umbenennen),
+  Stapelmechanismus mit EIGENEN großen Zahlen (1/10/100/1000 Wahlen bleibt
+  eine nicht-einzigartige Karte im Pool; eine einzigartige verschwindet
+  sowohl über `chosen` als auch über `selectedUniqueUpgradeIds` allein),
+  End-to-End über die echten `run.js`-Funktionen (`createRun`/
+  `chooseUpgrade`/`runSnapshot`) mit einer synthetischen einzigartigen
+  Testkarte (der Sockel hat aktuell keine): Eintragung, Snapshot-Erhalt,
+  Fortsetzen, Rekonstruktion bei einem älteren Zwischenstand ohne das Feld.
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 2** (Engine-Lücken: Resistenz, Schild,
+  Durchschlag).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -4917,21 +5005,29 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `ghostReviveGrowth`/`ghostCommander`+`ghostCommanderShield`+
   `ghostCommanderMultBonus`).
 - `src/game/upgradepool.js` — Auswahl-Pool. Filter in `buildCandidates()`:
-  `rarity` (fünf Stufen + `rarityGates`, Upgradepool-v2 Phase 1), `maxStacks`,
-  `requires`, `minRoom`, Bannliste, `damageType` (Element der Klasse,
-  LP-Phase 11), `signatureClass` (Klassenzugehörigkeit, LP-Phase 18),
-  `exclusions` (Negativliste, Upgradepool-v2 Phase 6). Gewichtung:
-  tier-normiertes `weightedPick` × Zweitelement × Synergie (`tags[]` gegen
-  `run.synergyTags`, Phase 3). `dedupeKey()` dedupt Signaturkarten auf die
-  eigene `id` statt auf den gemeinsamen Tag `signature` (Phase 2) — deshalb
-  dürfen mehrere Signaturkarten derselben Klasse gleichzeitig im Angebot
-  stehen. Elite-/Treasure-Belohnungen umgehen Teile davon über
+  `rarity` (fünf Stufen + `rarityGates`, Upgradepool-v2 Phase 1),
+  `isUnique` (Nekromant-V2 Phase 1: ersetzt `maxStacks` ersatzlos — eine
+  nicht-einzigartige Karte hat KEINE Obergrenze mehr, eine einzigartige
+  fällt raus, sobald `chosen[id]>=1` ODER sie in
+  `opts.selectedUniqueUpgradeIds` steht), `requires`, `minRoom`, Bannliste,
+  `damageType` (Element der Klasse, LP-Phase 11), `signatureClass`
+  (Klassenzugehörigkeit, LP-Phase 18), `exclusions` (Negativliste,
+  Upgradepool-v2 Phase 6). Gewichtung: tier-normiertes `weightedPick` ×
+  Zweitelement × Synergie (`tags[]` gegen `run.synergyTags`, Phase 3).
+  `dedupeKey()` dedupt Signaturkarten auf die eigene `id` statt auf den
+  gemeinsamen Tag `signature` (Phase 2) — deshalb dürfen mehrere
+  Signaturkarten derselben Klasse gleichzeitig im Angebot stehen. Elite-/
+  Treasure-Belohnungen umgehen Teile davon über
   `includeTag`/`onlyRarity`/`bypassRoomGate`/`ignoreTagRule`.
-- **Upgrade-Felder in `data/upgrades.json`** (Stand nach Upgradepool-v2):
-  `id`, `name`, `description`, `tag` (Hauptkategorie, treibt die
+- **Upgrade-Felder in `data/upgrades.json`** (Stand nach Nekromant-V2
+  Phase 1): `id`, `name`, `description`, `tag` (Hauptkategorie, treibt die
   Transformationen über `run.tagCounts`), `tags[]` (Synergie-Tags, treiben die
-  Angebotsgewichtung über `run.synergyTags`), `rarity` (common/rare/epic/
-  unique/legendary), `maxStacks`, `requires[]`, `minRoom`, `symbol`,
+  Angebotsgewichtung über `run.synergyTags`), `rarity` (common/uncommon/rare/
+  epic/legendary — Nekromant-V2 Phase 1: umbenannt von common/rare/epic/
+  unique/legendary, „unique" gehört jetzt dem GETRENNTEN `isUnique`-Feld),
+  `isUnique` (Boolean, ersetzt `maxStacks` — `false`/fehlend heißt
+  unbegrenzt stapelbar, `true` heißt genau einmal pro Run wählbar, verwaltet
+  über `run.selectedUniqueUpgradeIds`), `requires[]`, `minRoom`, `symbol`,
   `core{}` (Effekte), optional `signatureClass`, `damageType`, `exclusions[]`
   und `_todo: "balance"` (Zahlenwert ohne Spec-Beleg, noch nicht am
   Spielgefühl geprüft).
