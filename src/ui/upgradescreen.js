@@ -6,12 +6,16 @@
 // Der Screen rendert sich nach jeder Aktion neu; erst die Kartenwahl
 // schliesst ihn.
 
-// Upgradepool-v2 Phase 1: fuenf statt drei Seltenheitsstufen.
+// Upgradepool-v2 Phase 1: fuenf statt drei Seltenheitsstufen. Nekromant-V2
+// Phase 1: die vierte Stufe heisst jetzt 'uncommon' statt 'unique' (reiner
+// Namenstausch, s. data/balance.json: _comment_rarity) -- "Einzigartig" ist
+// seither die separate isUnique-Eigenschaft einer Karte, keine Seltenheit
+// mehr, s. u. (Stufenanzeige).
 const RARITY = {
   common: 'Gewöhnlich',
+  uncommon: 'Ungewöhnlich',
   rare: 'Selten',
   epic: 'Episch',
-  unique: 'Einzigartig',
   legendary: 'Legendär',
 };
 
@@ -97,7 +101,11 @@ export function createUpgradeScreen() {
       // per Tab erreichbar.
       card.dataset.navcard = '1';
       card.tabIndex = 0;
-      const lvl = o.fallback ? '' : ` (Stufe ${o.level}/${o.maxStacks})`;
+      // Nekromant-V2 Phase 1 (Stapelregel): keine Obergrenze mehr fuer
+      // nicht-einzigartige Karten -- kein "X/Y", kein "MAX", kein
+      // "ausgebaut". Einzigartige Karten haben ohnehin immer Stufe 1, dafuer
+      // gar keine Zahl.
+      const lvl = o.fallback || o.isUnique ? '' : ` (Stufe ${o.level})`;
       // Grundsteinumbau Phase 7: "+"-Suffix je Rastplatz-Stufe (stufe kommt
       // von main.js: getOffers(), nicht von der Karte selbst).
       const plus = '+'.repeat(o.stufe || 0);

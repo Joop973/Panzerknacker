@@ -1,16 +1,27 @@
-// Upgrade-Auswahlpool (Phase 2, erweitert in Phase 3 der Schrott-Waehrung UND
-// in Upgradepool-v2 Phase 3, Synergiegewichtung -- zwei verschiedene "Phase 3").
+// Upgrade-Auswahlpool (Phase 2, erweitert in Phase 3 der Schrott-Waehrung,
+// in Upgradepool-v2 Phase 3, Synergiegewichtung, und in Nekromant-V2 Phase 1,
+// Seltenheitsachse + Stapelregel -- drei verschiedene "Phase 3"/"Phase 1").
 //
 // Zieht die Angebote fuer den Upgrade-Screen aus data/upgrades.json unter
-// Beachtung des Schemas (tag/rarity/maxStacks/requires/minRoom/tags[]).
+// Beachtung des Schemas (tag/rarity/isUnique/requires/minRoom/tags[]).
 // Regeln:
 //  - N Karten (Standard 3), NIE zwei mit demselben Tag -- AUSSER Signatur-
 //    karten (signatureClass gesetzt) untereinander, s. dedupeKey() unten.
-//  - Seltenheitsgewichte aus balance.json (rarity.common/rare/epic/unique/
-//    legendary, Upgradepool-v2 Phase 1: fuenf statt drei Stufen).
-//  - epic/unique/legendary zusaetzlich erst ab balance.rarityGates[stufe]
-//    .minRoom (global, ersetzt das fruehere legendary.minRoom).
-//  - Erreichte maxStacks / unerfuellte requires / zu frueher Raum -> raus.
+//  - Seltenheitsgewichte aus balance.json (rarity.common/uncommon/rare/epic/
+//    legendary, Nekromant-V2 Phase 1: umbenannt von common/rare/epic/
+//    unique/legendary -- reiner Namenstausch, dieselben fuenf Gewichte in
+//    derselben Reihenfolge, "unique" als Seltenheitsstufe entfaellt, weil das
+//    Wort jetzt dem GETRENNTEN isUnique-Feld gehoert, s. u.).
+//  - rare/epic/legendary zusaetzlich erst ab balance.rarityGates[stufe]
+//    .minRoom (global, ersetzt das fruehere legendary.minRoom; common/
+//    uncommon haben keinen globalen Deckel).
+//  - Nekromant-V2 Phase 1 ("Stapelregel gilt fuer beide Auftraege", STARTHIER.md):
+//    `maxStacks` ist ERSATZLOS abgeschafft. Eine nicht-einzigartige Karte
+//    (isUnique: false/fehlt) verlaesst den Pool NIE, egal wie oft sie schon
+//    gewaehlt wurde -- keine Obergrenze. Eine einzigartige Karte
+//    (isUnique: true) ist nach der ersten Wahl fuer den Rest des Runs weg
+//    (chosen[id] >= 1 ODER opts.selectedUniqueUpgradeIds, s. u.).
+//  - unerfuellte requires / zu frueher Raum -> raus.
 //  - Tags `weapon` und `elite` sind hier ausgeschlossen, bis auf die Karten
 //    in WEAPON_ALLOWLIST (Phase 18: doppelrohr, flak).
 //  - Verbannte ids (Phase 3, Schrott-Aktion) werden uebersprungen.
@@ -22,8 +33,8 @@
 //
 // Determinismus: verbraucht ausschliesslich den uebergebenen rng-Strom
 // (run.genRng), damit derselbe Seed denselben Verlauf ergibt. Die Synergie-
-// gewichtung aendert NICHTS an der Anzahl der rng()-Aufrufe (weiterhin genau
-// einer je gezogener Karte in weightedPick()).
+// gewichtung UND die isUnique-Umstellung aendern NICHTS an der Anzahl der
+// rng()-Aufrufe (weiterhin genau einer je gezogener Karte in weightedPick()).
 
 const EXCLUDED_TAGS = new Set(['weapon', 'elite']);
 
@@ -115,7 +126,10 @@ function makeOffer(def, chosen) {
     tags: def.tags || [],
     rarity: def.rarity,
     level: (chosen[def.id] || 0) + 1,
-    maxStacks: def.maxStacks,
+    // Nekromant-V2 Phase 1: maxStacks entfaellt, isUnique geht mit ins Angebot
+    // durch -- die UI zeigt bei isUnique keine Stufenzahl (immer 1), sonst
+    // nur die Stufe selbst ohne Obergrenze (kein "X/Y", kein "MAX").
+    isUnique: !!def.isUnique,
   };
 }
 
@@ -139,10 +153,20 @@ function dedupeKey(d) {
 //   onlyRarity     -- nur diese Seltenheit (z. B. 'legendary' fuer Treasure)
 //   bypassRoomGate -- minRoom + rarityGates ignorieren
 function buildCandidates(upgradesData, opts) {
-  const { chosen = {}, roomIndex = 1, balance, banned, includeTag, onlyRarity, bypassRoomGate, starterTank } = opts;
+  const {
+    chosen = {},
+    roomIndex = 1,
+    balance,
+    banned,
+    includeTag,
+    onlyRarity,
+    bypassRoomGate,
+    starterTank,
+    selectedUniqueUpgradeIds,
+  } = opts;
   // Upgradepool-v2 Phase 1: generischer Ersatz fuer das fruehere einzelne
   // legendary.minRoom -- jede Stufe in rarityGates bekommt ihr eigenes
-  // globales Mindestraum-Gate (common/rare haben keinen Eintrag -> kein Gate).
+  // globales Mindestraum-Gate (common/uncommon haben keinen Eintrag -> kein Gate).
   const rarityGates = balance.rarityGates || {};
   const bannedSet = banned || new Set();
   const defs = upgradesData.upgrades;
@@ -181,7 +205,17 @@ function buildCandidates(upgradesData, opts) {
     // exclusions oben) ist das nicht mehr der Fall.
     // Damit loest sich zugleich Konflikt C aus PLAN-INPUT.md: der Tag
     // `control` haengt nicht mehr an der ausgeruesteten Sekundaerwaffe.
-    if ((chosen[id] || 0) >= def.maxStacks) continue;
+    // Nekromant-V2 Phase 1 (Stapelregel, STARTHIER.md "gilt fuer beide
+    // Auftraege"): eine NICHT einzigartige Karte hat KEINE Obergrenze mehr --
+    // maxStacks ist ersatzlos abgeschafft, `chosen[id]` wird fuer sie gar
+    // nicht mehr geprueft. Eine einzigartige Karte (isUnique: true) faellt
+    // raus, sobald sie schon gewaehlt wurde: primaer ueber `chosen` (wird bei
+    // JEDER Wahl inkrementiert, deckt Angebot/Shop/Truhe/Ereignis/Reroll ab,
+    // weil alle durch buildCandidates() laufen), zusaetzlich ueber die
+    // eigenstaendige run.selectedUniqueUpgradeIds-Menge (falls uebergeben) --
+    // die zweite Pruefung faengt auch bereits vorbereitete Auswahlen ab,
+    // deren `chosen`-Zaehler (noch) nicht aktualisiert wurde.
+    if (def.isUnique && ((chosen[id] || 0) >= 1 || selectedUniqueUpgradeIds?.has(id))) continue;
     if (!bypassRoomGate) {
       if (roomIndex < (def.minRoom || 1)) continue;
       const gate = rarityGates[def.rarity]?.minRoom;

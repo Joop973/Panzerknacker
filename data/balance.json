@@ -66,19 +66,19 @@
     "chainDelay": 0.15,
     "warningTime": 0.5
   },
-  "_comment_rarity": "UMBAUPLAN-Upgradepool-v2 Phase 1: fuenf statt drei Seltenheiten. Gewichte gelten NUR unter den Stufen, die im aktuellen Angebotspool ueberhaupt vertreten sind (weightedPick normiert pro Stufe, s. upgradepool.js) -- ein frueher Raum ohne freigeschaltete legendary-Karten verteilt die 5 automatisch auf common/rare/epic/unique um, keine Sonderbehandlung noetig. rarityGates loest das alte legendary.minRoom ab: common/rare haben keinen globalen Deckel (nur das per-Karte minRoom zaehlt), epic/unique/legendary zusaetzlich einen globalen Mindestraum.",
+  "_comment_rarity": "UMBAUPLAN-Upgradepool-v2 Phase 1: fuenf statt drei Seltenheiten. Nekromant-V2 Phase 1: die fuenfte Stufe heisst jetzt 'uncommon' statt 'unique' -- reiner Namenstausch (dieselben Gewichte 45/25/15/10/5 in derselben Reihenfolge common>...>legendary, nur umbenannt common/rare/epic/unique/legendary -> common/uncommon/rare/epic/legendary), weil 'unique' als Wort jetzt dem GETRENNTEN isUnique-Feld einer Karte gehoert (Stapelregel, STARTHIER.md) und nicht mehr als Seltenheitsname taugt -- passend zu data/upgrades_necro.json (Geisterpanzer_105_Upgrades_v4.xlsx nennt die Stufen exakt so). Gewichte gelten NUR unter den Stufen, die im aktuellen Angebotspool ueberhaupt vertreten sind (weightedPick normiert pro Stufe, s. upgradepool.js) -- ein frueher Raum ohne freigeschaltete legendary-Karten verteilt die 5 automatisch auf common/uncommon/rare/epic um, keine Sonderbehandlung noetig. rarityGates loest das alte legendary.minRoom ab: common/uncommon haben keinen globalen Deckel (nur das per-Karte minRoom zaehlt), rare/epic/legendary zusaetzlich einen globalen Mindestraum.",
   "rarity": {
     "common": 45,
-    "rare": 25,
-    "epic": 15,
-    "unique": 10,
+    "uncommon": 25,
+    "rare": 15,
+    "epic": 10,
     "legendary": 5
   },
   "rarityGates": {
-    "epic": {
+    "rare": {
       "minRoom": 3
     },
-    "unique": {
+    "epic": {
       "minRoom": 6
     },
     "legendary": {

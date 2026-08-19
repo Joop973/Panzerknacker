@@ -77,7 +77,11 @@ export function createShopScreen() {
         shelf.appendChild(card);
         return;
       }
-      const lvl = o.fallback ? '' : ` (Stufe ${o.level}/${o.maxStacks})`;
+      // Nekromant-V2 Phase 1 (Stapelregel): keine Obergrenze mehr fuer
+      // nicht-einzigartige Karten -- kein "X/Y", kein "MAX". Einzigartige
+      // Karten haben immer Stufe 1, dafuer gar keine Zahl (Muster wie im
+      // Upgrade-Screen, src/ui/upgradescreen.js).
+      const lvl = o.fallback || o.isUnique ? '' : ` (Stufe ${o.level})`;
       // Grundsteinumbau Phase 7: "+"-Suffix je Rastplatz-Stufe.
       const plus = '+'.repeat(o.stufe || 0);
       card.innerHTML =

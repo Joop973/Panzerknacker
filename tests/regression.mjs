@@ -169,14 +169,25 @@ function passRest(run) {
 // ---- 6b. Jede Karte loest sauber in ein Spieler-cfg auf -----------------
 // Fängt Karten, die ein Feld benutzen, das eine ANDERE Karte setzt (z. B.
 // Doppelschlag ohne Powershot -> bulletSpeed * undefined = NaN).
+// Nekromant-V2 Phase 1: die Schleife lief urspruenglich bis def.maxStacks --
+// seit das Feld abgeschafft ist, waere `lvl <= undefined` fuer JEDE reale
+// Karte sofort falsch und der gesamte Test liefe fuer KEINE einzige Stufe
+// (Gegenprobe bestaetigt: 0 statt >=5 geprueften Kombinationen). Ersetzt
+// durch einen festen Stufensatz -- fuer isUnique-Karten nur Stufe 1 (mehr
+// kann im echten Spiel nie vorkommen), sonst auch hohe Stufen (die Karten
+// sind jetzt unbegrenzt stapelbar, "20" prueft bewusst ueber jeden bisher
+// realistischen Wert hinaus).
 {
   const numericFields = [
     'speed', 'bulletSpeed', 'fireCooldown', 'magazine', 'mines',
     'radius', 'bulletRadius',
   ];
+  let geprueft = 0;
   for (const id of Object.keys(upgradesData.upgrades)) {
     const def = upgradesData.upgrades[id];
-    for (let lvl = 1; lvl <= def.maxStacks; lvl++) {
+    const levels = def.isUnique ? [1] : [1, 2, 5, 20];
+    for (const lvl of levels) {
+      geprueft++;
       const cfg = applyUpgrades(
         resolveCfg(tanksData, 'player'),
         { [id]: lvl },
@@ -199,6 +210,10 @@ function passRest(run) {
       }
     }
   }
+  check(
+    geprueft >= Object.keys(upgradesData.upgrades).length,
+    `Karten-cfg-Aufloesung: nur ${geprueft} Stufen-Kombinationen geprueft -- die Schleife lief moeglicherweise fuer keine Karte`,
+  );
 }
 
 // ---- 6b2. Jede Karte ist ueberhaupt ziehbar ----------------------------
@@ -2904,31 +2919,37 @@ for (const seed of SEEDS) {
   }
 }
 
-// ---- 37. Upgradepool-v2 Phase 1: fuenf Seltenheitsstufen -----------------
-// Sprung von drei (common/rare/legendary) auf fuenf Stufen (common/rare/
-// epic/unique/legendary). Common/rare bleiben unveraendert, die alten 71
-// legendary-Karten sind auf epic/unique/legendary umgestuft (Umstufungs-
-// tabelle im PR). Diese Sektion prueft die neuen Strukturregeln, die
-// vorherigen Abschnitte (10, 11-16, 18-27, 36) pruefen bereits, dass die
-// gezogene Verteilung je Pool und ueber den echten Pool stimmt.
+// ---- 37. Upgradepool-v2 Phase 1 + Nekromant-V2 Phase 1: fuenf Stufen -----
+// Sprung von drei (common/rare/legendary) auf fuenf Stufen. Nekromant-V2
+// Phase 1 benennt die vierte Stufe von 'unique' auf 'uncommon' um (reiner
+// Namenstausch, gleiche Gewichte/Reihenfolge) -- 'unique' als Wort gehoert
+// jetzt dem GETRENNTEN isUnique-Feld einer Karte (Stapelregel, STARTHIER.md:
+// "gilt fuer beide Auftraege"). maxStacks ist ERSATZLOS abgeschafft: eine
+// nicht-einzigartige Karte (isUnique: false/fehlt) hat keinerlei Obergrenze
+// mehr, eine einzigartige (isUnique: true) ist nach der ersten Wahl weg. Die
+// vorherigen Abschnitte (10, 11-16, 18-27, 36) sind mit den 251 archivierten
+// Karten archiviert -- diese Sektion prueft die aktuellen Strukturregeln
+// gegen den lebenden Pool (data/upgrades.json).
 {
   const { rollOffers } = await import('../src/game/upgradepool.js');
-  const VALID_RARITIES = new Set(['common', 'rare', 'epic', 'unique', 'legendary']);
+  const VALID_RARITIES = new Set(['common', 'uncommon', 'rare', 'epic', 'legendary']);
 
-  // (a) Struktur: jede Karte hat eine der fuenf gueltigen Stufen; unique/
-  //     legendary erzwingen maxStacks 1 (sonst waere eine "einzigartige"
-  //     Karte mehrfach stapelbar -- Widerspruch zur Definition).
+  // (a) Struktur: jede Karte hat eine der fuenf gueltigen Stufen, ein
+  //     gueltiges isUnique-Feld (Boolean), und KEIN maxStacks-Feld mehr.
   {
     const U = upgradesData.upgrades;
     let badRarity = 0;
-    let badMaxStacks = 0;
+    let badIsUnique = 0;
+    let hasMaxStacks = 0;
     for (const id in U) {
       const d = U[id];
       if (!VALID_RARITIES.has(d.rarity)) badRarity++;
-      if ((d.rarity === 'unique' || d.rarity === 'legendary') && d.maxStacks !== 1) badMaxStacks++;
+      if (typeof d.isUnique !== 'boolean') badIsUnique++;
+      if (Object.prototype.hasOwnProperty.call(d, 'maxStacks')) hasMaxStacks++;
     }
-    check(badRarity === 0, `Phase 1 (Upgradepool-v2): ${badRarity} Karte(n) mit ungueltiger rarity`);
-    check(badMaxStacks === 0, `Phase 1 (Upgradepool-v2): ${badMaxStacks} unique/legendary-Karte(n) mit maxStacks != 1`);
+    check(badRarity === 0, `Phase 1 (Upgradepool-v2/Nekromant-V2): ${badRarity} Karte(n) mit ungueltiger rarity`);
+    check(badIsUnique === 0, `Phase 1 (Nekromant-V2): ${badIsUnique} Karte(n) ohne gueltiges isUnique-Feld`);
+    check(hasMaxStacks === 0, `Phase 1 (Nekromant-V2): ${hasMaxStacks} Karte(n) tragen noch ein maxStacks-Feld (abgeschafft)`);
   }
 
   // (b) MECHANISMUS der Raum-Gates (rarityGates): mit einem SYNTHETISCHEN
@@ -2945,11 +2966,11 @@ for (const seed of SEEDS) {
       upgrades: {
         gated_card: {
           id: 'gated_card', name: 'Testkarte', description: 'x', tag: 'testtag',
-          rarity: 'unique', maxStacks: 1, requires: [], minRoom: 1,
+          rarity: 'epic', isUnique: false, requires: [], minRoom: 1,
         },
       },
     };
-    const balance = { rarity: { unique: 100 }, rarityGates: { unique: { minRoom: 5 } } };
+    const balance = { rarity: { epic: 100 }, rarityGates: { epic: { minRoom: 5 } } };
     const before = rollOffers(fakeData, {
       chosen: {}, roomIndex: 4, rng: mulberry32(1), balance, count: 1, banned: new Set(),
     });
@@ -2958,6 +2979,109 @@ for (const seed of SEEDS) {
       chosen: {}, roomIndex: 5, rng: mulberry32(1), balance, count: 1, banned: new Set(),
     });
     check(after[0]?.id === 'gated_card', 'Phase 1 (Upgradepool-v2): rarityGate haelt die Karte auch AB ihrem Mindestraum noch zurueck');
+  }
+
+  // (c) MECHANISMUS der Stapelregel (Nekromant-V2 Phase 1): eine NICHT
+  //     einzigartige Karte bleibt nach 1/10/100/1000 Wahlen weiter im Pool
+  //     (keine Obergrenze, eigene grosse Zahlen statt der echten Sockel-
+  //     Werte); eine einzigartige Karte verschwindet SOFORT nach der ersten
+  //     Wahl -- sowohl ueber `chosen` als auch ueber die eigenstaendige
+  //     `selectedUniqueUpgradeIds`-Menge (auch wenn `chosen` sie (noch)
+  //     nicht kennt -- deckt "bereits vorbereitete Auswahlen" ab).
+  {
+    const { mulberry32 } = await import('../src/core/rng.js');
+    const fakeData = {
+      offersPerScreen: 1,
+      upgrades: {
+        stack_card: {
+          id: 'stack_card', name: 'Stapelkarte', description: 'x', tag: 'testtag_stack',
+          rarity: 'common', isUnique: false, requires: [], minRoom: 1,
+        },
+        uniq_card: {
+          id: 'uniq_card', name: 'Einzigartige Karte', description: 'x', tag: 'testtag_uniq',
+          rarity: 'legendary', isUnique: true, requires: [], minRoom: 1,
+        },
+      },
+    };
+    const balance = { rarity: { common: 100, legendary: 100 }, rarityGates: {} };
+    // Nur stack_card im Pool -- sonst waere das Ergebnis ein Muenzwurf
+    // gegen uniq_card (beide gleich gewichtet, count:1 zieht nur eine Karte).
+    const stackOnlyData = { offersPerScreen: 1, upgrades: { stack_card: fakeData.upgrades.stack_card } };
+    for (const n of [1, 10, 100, 1000]) {
+      const offers = rollOffers(stackOnlyData, {
+        chosen: { stack_card: n }, roomIndex: 1, rng: mulberry32(1), balance, count: 1, banned: new Set(),
+      });
+      check(
+        offers.some((o) => o.id === 'stack_card'),
+        `Phase 1 (Nekromant-V2): nicht-einzigartige Karte verschwindet aus dem Pool nach ${n} Wahlen (maxStacks haette hier gegriffen)`,
+      );
+    }
+    // ueber `chosen` allein bereits gewaehlt:
+    const viaChosen = rollOffers(fakeData, {
+      chosen: { uniq_card: 1 }, roomIndex: 1, rng: mulberry32(1), balance, count: 1, banned: new Set(),
+    });
+    check(
+      !viaChosen.some((o) => o.id === 'uniq_card'),
+      'Phase 1 (Nekromant-V2): einzigartige Karte erscheint erneut, obwohl chosen sie schon zaehlt',
+    );
+    // NUR ueber selectedUniqueUpgradeIds bereits gewaehlt (chosen kennt sie
+    // noch nicht -- "bereits vorbereitete Auswahlen unmittelbar vor der
+    // Anzeige").
+    const viaSet = rollOffers(fakeData, {
+      chosen: {}, roomIndex: 1, rng: mulberry32(1), balance, count: 1, banned: new Set(),
+      selectedUniqueUpgradeIds: new Set(['uniq_card']),
+    });
+    check(
+      !viaSet.some((o) => o.id === 'uniq_card'),
+      'Phase 1 (Nekromant-V2): selectedUniqueUpgradeIds filtert eine bereits gewaehlte einzigartige Karte nicht',
+    );
+  }
+
+  // (d) END-TO-END ueber die echten run.js-Funktionen: eine einzigartige
+  //     Testkarte (der aktuelle 5-Karten-Sockel hat keine) landet nach der
+  //     Wahl in run.selectedUniqueUpgradeIds, ueberlebt runSnapshot()/
+  //     createRun({resume}), und ein AELTERER Zwischenstand ohne das Feld
+  //     rekonstruiert es aus run.upgrades + dem aktuellen isUnique-Schema.
+  {
+    const { createRun, runSnapshot, chooseUpgrade } = await import('../src/game/run.js');
+    const testUpgrades = {
+      ...upgradesData,
+      upgrades: {
+        ...upgradesData.upgrades,
+        test_uniq_37d: {
+          id: 'test_uniq_37d', name: 'Testkrone', description: 'x', tag: 'testtag_37d',
+          rarity: 'legendary', isUnique: true, requires: [], minRoom: 1, core: {},
+        },
+      },
+    };
+    const run = createRun(tanksData, tilesData, diffData, testUpgrades, 777);
+    run.phase = 'upgrade';
+    run.pendingOffers = [{
+      id: 'test_uniq_37d', name: 'Testkrone', description: 'x', tag: 'testtag_37d',
+      tags: [], rarity: 'legendary', level: 1, isUnique: true,
+    }];
+    chooseUpgrade(run, 0);
+    check(
+      run.selectedUniqueUpgradeIds.has('test_uniq_37d'),
+      'Phase 1 (Nekromant-V2): applyUpgradeChoice() traegt eine gewaehlte einzigartige Karte nicht in selectedUniqueUpgradeIds ein',
+    );
+    const snap = runSnapshot(run);
+    check(
+      Array.isArray(snap.selectedUniqueUpgradeIds) && snap.selectedUniqueUpgradeIds.includes('test_uniq_37d'),
+      'Phase 1 (Nekromant-V2): runSnapshot() nimmt selectedUniqueUpgradeIds nicht mit',
+    );
+    const resumed = createRun(tanksData, tilesData, diffData, testUpgrades, run.seed, run.modeKey, { resume: snap });
+    check(
+      resumed.selectedUniqueUpgradeIds.has('test_uniq_37d'),
+      'Phase 1 (Nekromant-V2): selectedUniqueUpgradeIds geht beim Fortsetzen verloren',
+    );
+    const legacySnap = { ...snap };
+    delete legacySnap.selectedUniqueUpgradeIds; // aelterer Zwischenstand vor dieser Phase
+    const legacyResumed = createRun(tanksData, tilesData, diffData, testUpgrades, run.seed, run.modeKey, { resume: legacySnap });
+    check(
+      legacyResumed.selectedUniqueUpgradeIds.has('test_uniq_37d'),
+      'Phase 1 (Nekromant-V2): aeltere Zwischenstaende ohne selectedUniqueUpgradeIds rekonstruieren die Menge nicht aus run.upgrades + isUnique',
+    );
   }
 }
 
@@ -4827,8 +4951,16 @@ for (const seed of SEEDS) {
   // Punkte 19/20/21: die drei Angebots-Invarianten ueber viele echte
   // Angebotsrunden. Bewusst als DURCHGESPIELTE Runs (gewaehlte Karten
   // sammeln sich in `chosen`/`synergyTags` an), nicht als Einzelabfragen --
-  // maxStacks und requires koennen ihre Wirkung erst zeigen, wenn ein Run
+  // isUnique und requires koennen ihre Wirkung erst zeigen, wenn ein Run
   // ueberhaupt Karten besitzt.
+  // Nekromant-V2 Phase 1: Punkt 19 pruefte urspruenglich `d.maxStacks` -- seit
+  // maxStacks ersatzlos abgeschafft ist (jede Karte hat stattdessen
+  // isUnique), waere `chosen[o.id] >= d.maxStacks` mit `d.maxStacks ===
+  // undefined` fuer JEDE reale Karte permanent falsch und damit ein trivial
+  // gruener Test (genau die Falle aus CLAUDE.md: "den Mechanismus mit
+  // eigenen Zahlen pruefen, nicht die aktuelle Datenlage"). Ersetzt durch
+  // die aktuelle Invariante: eine isUnique-Karte darf nie ein zweites Mal
+  // angeboten werden, nachdem sie einmal gewaehlt wurde.
   {
     let vMax = 0;
     let vReq = 0;
@@ -4852,7 +4984,7 @@ for (const seed of SEEDS) {
             if (o.fallback) continue;
             gezogen++;
             const d = U[o.id];
-            if ((chosen[o.id] || 0) >= d.maxStacks) vMax++;
+            if (d.isUnique && (chosen[o.id] || 0) >= 1) vMax++;
             for (const r of d.requires || []) if (!(chosen[r] > 0)) vReq++;
           }
           const pick = offers.find((o) => !o.fallback);
@@ -4864,7 +4996,7 @@ for (const seed of SEEDS) {
       }
     }
     check(runden > 2000 && gezogen > 5000, `Phase 9: zu kleine Pipeline-Stichprobe (${runden} Runden, ${gezogen} Karten)`);
-    check(vMax === 0, `Phase 9 (Punkt 19): ${vMax}x eine Karte angeboten, deren maxStacks schon erreicht war`);
+    check(vMax === 0, `Phase 9 (Punkt 19): ${vMax}x eine einzigartige (isUnique) Karte erneut angeboten, obwohl sie schon gewaehlt war`);
     check(vReq === 0, `Phase 9 (Punkt 20): ${vReq}x eine Karte mit unerfuelltem requires angeboten`);
     check(vDup === 0, `Phase 9 (Punkt 21): ${vDup}x dieselbe Karte mehrfach im selben Angebot`);
   }
@@ -4874,6 +5006,14 @@ for (const seed of SEEDS) {
   // derselben Klasse verglichen: `role`/`miner` sind bei jeder Spielerklasse
   // von Haus aus undefined -- ein pauschaler undefined-Test waere dadurch
   // dauerhaft rot und haette gar nichts geprueft.
+  // Nekromant-V2 Phase 1: `chosen[id] = def.maxStacks` testete urspruenglich
+  // die jeweils HOECHSTE erreichbare Stufe -- seit maxStacks abgeschafft ist,
+  // waere das `undefined`, `applyUpgrades()` laese die Karte damit effektiv
+  // als "nicht gewaehlt" (0 statt der hoechsten Stufe) und der Test haette
+  // fuer JEDE Karte nur den No-op-Fall geprueft. Ersetzt durch einen festen
+  // hohen Wert fuer nicht-einzigartige Karten (unbegrenzt stapelbar) bzw. 1
+  // fuer isUnique-Karten (mehr kann es nie geben); requires-Ziele reichen
+  // mit 1 (nur chosen[r] > 0 wird geprueft).
   {
     const basisCache = {};
     const basis = (k) => (basisCache[k] ||= applyUpgrades(resolveCfg(tanksData, k), {}, upgradesData, 'mine', null));
@@ -4881,8 +5021,15 @@ for (const seed of SEEDS) {
     let geprueft = 0;
     for (const id in U) {
       const def = U[id];
-      const chosen = { [id]: def.maxStacks };
-      for (const r of def.requires || []) chosen[r] = U[r].maxStacks;
+      const chosen = { [id]: def.isUnique ? 1 : 20 };
+      for (const r of def.requires || []) chosen[r] = 1;
+      // Selbstschutz gegen einen genau HIER schon einmal aufgetretenen Fehler
+      // (Nekromant-V2 Phase 1, Gegenprobe): ein undefiniertes chosen[id] wird
+      // von applyUpgrades() als "nicht gewaehlt" gelesen und der Rest der
+      // Schleife prueft dann klaglos gar nichts -- ohne diese Zeile bliebe
+      // ein kuenftiger aehnlicher Bug (z. B. ein erneut entferntes Feld ohne
+      // Ersatzwert) unbemerkt gruen.
+      check(chosen[id] > 0, `Phase 9 (Punkt 24): Testaufbau -- chosen["${id}"] ist ${chosen[id]}, keine positive Stufe`);
       const klass = def.signatureClass || 'player';
       const b = basis(klass);
       const cfg = applyUpgrades(resolveCfg(tanksData, klass), chosen, upgradesData, 'mine', null);

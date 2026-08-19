@@ -248,17 +248,20 @@ html, body {
   opacity: 0.7;
 }
 
-/* Rahmenfarbe nach Seltenheit (Upgradepool-v2 Phase 1: 5 statt 3 Stufen) */
+/* Rahmenfarbe nach Seltenheit (Upgradepool-v2 Phase 1: 5 statt 3 Stufen;
+   Nekromant-V2 Phase 1: 'unique' -> 'uncommon' umbenannt, dieselben fuenf
+   Farben bleiben an derselben Stelle in der Reihenfolge common < uncommon <
+   rare < epic < legendary, s. data/balance.json: _comment_rarity) */
 .cards .card[data-rarity='common'] {
   border-color: #7a8a9a;
 }
-.cards .card[data-rarity='rare'] {
+.cards .card[data-rarity='uncommon'] {
   border-color: #4a9ed8;
 }
-.cards .card[data-rarity='epic'] {
+.cards .card[data-rarity='rare'] {
   border-color: #a35fd8;
 }
-.cards .card[data-rarity='unique'] {
+.cards .card[data-rarity='epic'] {
   border-color: #d8763a;
   box-shadow: 0 0 8px rgba(216, 118, 58, 0.3);
 }
@@ -517,13 +520,13 @@ html, body {
 .shopcards .shopcard[data-rarity='common'] {
   border-color: #7a8a9a;
 }
-.shopcards .shopcard[data-rarity='rare'] {
+.shopcards .shopcard[data-rarity='uncommon'] {
   border-color: #4a9ed8;
 }
-.shopcards .shopcard[data-rarity='epic'] {
+.shopcards .shopcard[data-rarity='rare'] {
   border-color: #a35fd8;
 }
-.shopcards .shopcard[data-rarity='unique'] {
+.shopcards .shopcard[data-rarity='epic'] {
   border-color: #d8763a;
   box-shadow: 0 0 8px rgba(216, 118, 58, 0.3);
 }
