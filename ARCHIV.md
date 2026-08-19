@@ -1,10 +1,12 @@
 # Archiv — Index
 
-Index für alles, was der **Grundsteinumbau** (`AUFTRAG-GRUNDSTEINUMBAU.md`)
-aus dem laufenden Spiel entfernt. Gilt für den gesamten Umbau (Phase 0–10):
+Index für alles, was der **Grundsteinumbau** (`AUFTRAG-GRUNDSTEINUMBAU.md`,
+inhaltsgleich mit dem später zugesandten `AUFTRAG-FUNDAMENT.md`) aus dem
+laufenden Spiel entfernt. Gilt für den gesamten Umbau (Phase 0–10):
 **in diesem Umbau wird nichts gelöscht** — nur aus dem aktiven Code/den
 aktiven Daten entfernt und hier abgelegt, mit genug Kontext, um es bei
-Bedarf zurückzuholen.
+Bedarf zurückzuholen. Seit dem Nekromant-V2-Neubau (Abschnitt „Nekromant-V2"
+unten) gilt dieselbe Regel auch für dessen archivierte Vorgänger-Dokumente.
 
 ## Regeln
 
@@ -171,3 +173,45 @@ Deckelfeld, Kartenangebot `everyNRooms: 1`/`offersPerScreen: 3`, Shop
 `cardChoices: 5`, `scrap.cost` inkl. `rerollElement: 4`,
 `bankshotGuarantee` bereits No-op (`chance: 0`, `types: ["t_prism"]`,
 `minRoom: 6`).
+
+## Nekromant-V2 — Phase 0 (Import, Validierung, Archivierung)
+
+Der Nekromant wird vollständig neu gebaut, mit dem 105-Karten-Signaturpool
+aus `Geisterpanzer_105_Upgrades_v2.xlsx` (Blatt „Upgrades"). Dieser Auftrag
+(`AUFTRAG-NEKROMANT-V2.md`) ersetzt zwei ältere Dokumente vollständig.
+
+| Was | Warum ersetzt | Datei | Zurückholen |
+|---|---|---|---|
+| `docs/specs/geisterpanzer.md` (Fassung 1) | Ersetzt durch `AUFTRAG-NEKROMANT-V2.md` Abschnitt 2 — fünf Kernregeln ändern sich (Lebenszeit statt unbegrenzt, Stat-Übernahme vom Gegnertyp statt keine, Wiederbelebungsprobe statt fester Chance, Pfade Opfer/Legion/Alpha statt Horde/Elite/Wiedergeburt, Seltenheit „Ungewöhnlich" neu) | — | **Existiert nicht als Repo-Datei.** `docs/` gibt es im Repo nicht; die „Fassung 1" war nur in `CLAUDE.md`-Prosa und externen Sitzungsnotizen referenziert, nie eingecheckt. Nichts zu verschieben — dieser Eintrag dokumentiert nur, dass die alte Spezifikation als Konzept überholt ist. |
+| `AUFTRAG-NEKROMANT-KOMPLETT.md` | Ersetzt durch `AUFTRAG-NEKROMANT-V2.md` (Abschnitt „Was die Tabelle gegenüber der alten Spec umwirft") | — | **Existiert nicht als Repo-Datei** (wie `AUFTRAG-FUNDAMENT.md`/`AUFTRAG-GRUNDSTEINUMBAU.md` war auch dieses Dokument nie eingecheckt, nur in `CLAUDE.md` als „Danach"-Notiz nach der Upgradepool-v2-Abnahme zitiert — s. dortiger Abschnitt „Grundsteinumbau v3 — Phase 10", Punkt „Danach"). |
+| `AUFTRAG-NEKROMANT-105.md` | Ersetzt durch `AUFTRAG-NEKROMANT-V2.md` (dasselbe Dokument in einer früheren Fassung) | — | **Existiert nicht als Repo-Datei**, gleicher Befund wie oben. |
+
+**Datenimport:** `data/upgrades_necro.json` (neu, 105 Karten, Spaltenzuordnung
+laut Auftrag Phase 0) — noch **nicht** in die Angebots-Pipeline eingehängt
+(kein Import in `upgradepool.js`/`run.js`, `core` überall `{"_todo":
+"effect"}`). Validiert durch `tests/regression.mjs` Abschnitt 55.
+
+**`tag`-Zuordnung (Spalte „Typ" → Hauptkategorie):** die 31 deutschen
+Rohwerte der Spalte sind auf Kategorie-Slugs abgebildet, dokumentiert als
+`_comment_tag` direkt in `data/upgrades_necro.json`. Fünf Kategorien sind
+bewusst mit bestehenden `KNOWN_TAGS`-Werten aus `tests/regression.mjs`
+identisch (`crit`, `defense`, `scaling`, `elite`, `gadget`), weil sie
+inhaltlich exakt passen; alle übrigen sind neu und ausschließlich für diesen
+Pool relevant. Da `data/upgrades_necro.json` eine eigene Datei ist (nicht
+Teil von `data/upgrades.json`), greift die `KNOWN_TAGS`-Prüfung aus
+Abschnitt 38 hier nicht — eine eigene Struktur-Validierung dafür war in der
+Phase-0-Checkliste des Auftrags nicht gefordert (dort geht es nur um
+Seltenheit/`requires`/`maxStacks`/Pfad-Tags/verbotene Altbegriffe).
+
+**Ist-Abgleich „Was aus dem Pool an Engine gebraucht wird" (Auftrag
+Abschnitt 4):** in dieser Sitzung nur gegen den Bestand geprüft, noch nicht
+gebaut (Phase 2 des Auftrags). Bestätigt vorhanden: `critChance`/
+`critMultBonus` (`cfg.js`, `data/balance.json: crit`), `cfg.homing`
+(`tank.js`), `cfg.bulletRadius`, `tank.gadgetCooldown`, `run.eliteAffixes`,
+`mine.js: explodeAt()`, Flanken-/Heckschaden (`armor.js: flankZone()`,
+`data/balance.json: flank`) und die Exekutionsschwelle
+(`data/balance.json: execute`) — beide aus dem Grundsteinumbau (Phase 2).
+Bestätigt fehlend, wie im Auftrag angenommen: Schadensresistenz
+(`cfg.resist`), Schild als Punktepool (getrennt von `run.shieldCharges`),
+Durchschlag (`bullet.pierce`) — keiner dieser drei Werte existiert aktuell
+im Code (Phase 2 des Auftrags baut sie).
