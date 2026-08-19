@@ -215,3 +215,47 @@ Bestätigt fehlend, wie im Auftrag angenommen: Schadensresistenz
 (`cfg.resist`), Schild als Punktepool (getrennt von `run.shieldCharges`),
 Durchschlag (`bullet.pierce`) — keiner dieser drei Werte existiert aktuell
 im Code (Phase 2 des Auftrags baut sie).
+
+### Nachtrag — Korrektur auf `Geisterpanzer_105_Upgrades_v4.xlsx`
+
+Die ursprüngliche Phase-0-Sitzung (oben) importierte aus
+`Geisterpanzer_105_Upgrades_v2.xlsx`. Eine Folgesitzung erhielt dieselben
+drei Auftragsdokumente erneut, diesmal mit `Geisterpanzer_105_Upgrades_v4.xlsx`
+statt v2 — v4 enthält gegenüber v2 ein eigenes Blatt „Änderungen" (59 Zeilen)
+mit Detailkorrekturen sowie ein Blatt „Prüfung", das die Datei gegen die
+`AUFTRAG-NEKROMANT-V2.md`-Vorgaben selbst validiert. Der v2-Import wich an
+einer strukturellen Stelle bereits von der (unveränderten) Auftragsvorgabe
+ab: er trug noch ein `maxStacks`-Feld je Karte (altes Stapelmodell), obwohl
+`AUFTRAG-NEKROMANT-V2.md` Phase 0 ausdrücklich „Es gibt kein `maxStacks`"
+und ein `isUnique`-Feld verlangt. Fundament (`AUFTRAG-FUNDAMENT.md`) war zu
+diesem Zeitpunkt bereits vollständig abgearbeitet (alle 11 Phasen, s. o.) —
+die Folgesitzung hat deshalb nicht bei Fundament-Phase-0 neu angesetzt,
+sondern die bereits gemergte Nekromant-V2-Phase-0 mit den korrigierten v4-
+Daten neu durchgeführt (kein Phasen-Überspringen: es ist dieselbe Phase 0,
+nur mit der aktuelleren, in sich validierten Datenquelle).
+
+**Ersetzt:** `data/upgrades_necro.json` (v2-Fassung) →
+`archive/upgrades_necro-v2-import.json`. Neuer Stand: 105 Karten aus v4,
+`isUnique` statt `maxStacks`, Seltenheitsverteilung 34/28/22/13/8 (v2 hatte
+36/33/24/1/11 — die epische Stufe war dort mit genau einer Karte seltener
+als die legendäre), `requires` auf 4 Karten gesenkt (v2: 12, davon 11 an
+`ghost_071` „Einziger Thron" — bei nur einer entzogenen Karte wären 44 % des
+Alpha-Pfades tot gewesen), alle Distanzangaben in Pixel statt Metern (waren
+in v2 bereits umgestellt), mehrere Kartentexte präzisiert/umbenannt (s. v4-
+Blatt „Änderungen"), zwei neue Karten (`ghost_058`, `ghost_059` ersetzen
+eine dritte Totenruf-Stufe), `ghost_082` „Kronjäger" neu (Exekutionsbezug).
+**Zurückholen:** falls die v4-Korrektur verworfen werden soll, den Inhalt
+aus `archive/upgrades_necro-v2-import.json` zurück nach
+`data/upgrades_necro.json` kopieren und `tests/regression.mjs` Abschnitt 55
+auf die dort dokumentierte `maxStacks`-Fassung zurückdrehen (Git-Historie
+dieser Datei zeigt den exakten Vorzustand).
+
+`tests/regression.mjs` Abschnitt 55 ist entsprechend umgestellt: prüft jetzt
+`isUnique` (Boolean, Pflichtfeld), dass legendäre UND Aktivkarten (Tag
+`gadget`) immer `isUnique: true` sind, dass **kein** `maxStacks`-Feld mehr
+existiert, und dass höchstens 4 Karten insgesamt ein `requires` tragen.
+Jeder geänderte/neue Kernpunkt einzeln mit Gegenprobe geprüft (isUnique
+entfernt, Legendär/Aktivkarte künstlich nicht-einzigartig gemacht,
+`maxStacks` künstlich wieder eingefügt, eine 5. Karte mit `requires`
+versehen — alle fünf Fälle einzeln absichtlich rot gemacht, Meldung
+geprüft, zurückgenommen).

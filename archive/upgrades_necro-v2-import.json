@@ -1,6 +1,6 @@
 {
-  "_comment": "Nekromant-V2-Signaturpool (105 Karten), importiert aus Geisterpanzer_105_Upgrades_v4.xlsx, Blatt \"Upgrades\" (AUFTRAG-NEKROMANT-V2.md Phase 0, Fassung v4). Ersetzt den fruehereren, aus v2.xlsx gebauten Import (archive/upgrades_necro-v2-import.json) -- v4 tauscht die Spalte \"Wiederholbar\" gegen \"Einzigartig\" (isUnique statt maxStacks), senkt requires auf 4 Karten, stellt alle Distanzen von Metern auf Pixel um und aktualisiert die Seltenheits-verteilung auf 34/28/22/13/8. Noch NICHT in die aktive Angebots-Pipeline eingehaengt -- core ist ueberall {\"_todo\":\"effect\"} als Platzhalter, Phase 6-9 des Auftrags fuellen die core-Schluessel. Reihenfolge/Nummerierung ghost_001..ghost_105 entspricht der Phaseneinteilung des Auftrags (001-010 Allgemein, 011-035 Opfer, 036-060 Legion, 061-085 Alpha, 086-105 Hybride/Aktivkarten).",
-  "_comment_tag": "tag = Hauptkategorie, abgeleitet aus der Tabellenspalte \"Typ\" (31 Rohwerte). Wiederverwendete Bestandskategorien (siehe tests/regression.mjs KNOWN_TAGS): crit, defense, scaling, elite, gadget (= \"Aktiv\"), stat (= \"Werte\"). Alle anderen sind neue, nekromant-spezifische Kategorien -- diese Datei ist bewusst getrennt von data/upgrades.json und wird von dessen KNOWN_TAGS-Pruefung (Abschnitt 38) nicht erfasst. tags[] kommt direkt aus der Tabellenspalte \"Tags\" (Semikolon getrennt) -- die enthaelt in v4 bereits die Pfad-Tags (allgemein/opfer/legion/alpha) als erste Eintraege, eine gesonderte Pfad-Spalten-Uebernahme ist deshalb nicht noetig.",
+  "_comment": "Nekromant-V2-Signaturpool (105 Karten), importiert aus Geisterpanzer_105_Upgrades_v2.xlsx, Blatt \"Upgrades\" (AUFTRAG-NEKROMANT-V2.md Phase 0). Noch NICHT in die aktive Angebots-Pipeline eingehaengt -- core ist ueberall {\"_todo\":\"effect\"} als Platzhalter, Phase 6-9 des Auftrags fuellen die core-Schluessel. Reihenfolge/Nummerierung ghost_001..ghost_105 entspricht der Phaseneinteilung des Auftrags (001-010 Allgemein, 011-035 Opfer, 036-060 Legion, 061-085 Alpha, 086-105 Hybride/Aktivkarten).",
+  "_comment_tag": "tag = Hauptkategorie, abgeleitet aus der Tabellenspalte \"Typ\". Wiederverwendete Bestandskategorien (siehe tests/regression.mjs KNOWN_TAGS): crit, defense, scaling, elite, gadget, stat. Alle anderen sind neue, nekromant-spezifische Kategorien -- diese Datei ist bewusst getrennt von data/upgrades.json und wird von dessen KNOWN_TAGS-Pruefung (Abschnitt 38) nicht erfasst.",
   "upgrades": {
     "ghost_001": {
       "id": "ghost_001",
@@ -12,7 +12,7 @@
         "leben"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 5,
       "weight": 100,
       "requires": [],
       "description": "Alle Untertanenpanzer erhalten +8 % maximales Leben.",
@@ -34,7 +34,7 @@
         "schaden"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 5,
       "weight": 100,
       "requires": [],
       "description": "Alle Untertanenpanzer verursachen +8 % Schaden.",
@@ -56,7 +56,7 @@
         "feuerrate"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 5,
       "weight": 100,
       "requires": [],
       "description": "Alle Untertanenpanzer erhalten +6 % Feuerrate.",
@@ -78,7 +78,7 @@
         "bewegung"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 5,
       "weight": 100,
       "requires": [],
       "description": "Alle Untertanenpanzer erhalten +6 % Bewegungsgeschwindigkeit.",
@@ -100,7 +100,7 @@
         "dauer"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 5,
       "weight": 100,
       "requires": [],
       "description": "Die Lebenszeit aller Untertanenpanzer steigt um 2,0 Sekunden.",
@@ -122,7 +122,7 @@
         "projektil"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 4,
       "weight": 100,
       "requires": [],
       "description": "Geistergeschosse erhalten +10 % Projektiltempo und +5 % Reichweite.",
@@ -144,7 +144,7 @@
         "krit"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 4,
       "weight": 100,
       "requires": [],
       "description": "Untertanenpanzer erhalten +3 Prozentpunkte Krit-Chance und +5 % Krit-Schaden.",
@@ -166,7 +166,7 @@
         "schild"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 55,
       "requires": [],
       "description": "Jeder Untertanenpanzer erscheint mit einem Schild in Höhe von 10 % seines maximalen Lebens.",
@@ -189,17 +189,17 @@
         "resistenz"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 55,
       "requires": [],
-      "description": "Untertanenpanzer erhalten +4 Punkte Schadensresistenz.",
+      "description": "Untertanenpanzer erhalten +4 Prozentpunkte Schadensresistenz.",
       "signatureClass": "c_necro",
       "core": {
         "_todo": "effect"
       },
       "_note": {
         "buildrolle": "Sicherheit",
-        "balanceHinweis": "Resistenzpunkte werden addiert; der genommene Schaden wird durch (1 + Summe/100) geteilt."
+        "balanceHinweis": "Resistenz ist bei 60 % gedeckelt."
       }
     },
     "ghost_010": {
@@ -213,7 +213,7 @@
         "flanke"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Untertanenpanzer umfahren ihr Ziel aktiv zur ungeschützten Seite und verursachen bei Flanken- und Hecktreffern zusätzlich +15 % Schaden.",
@@ -236,7 +236,7 @@
         "schaden"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 4,
       "weight": 100,
       "requires": [],
       "description": "Jeder Geistertod gewährt dem Hauptpanzer +2 % Schaden bis Raumende. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
@@ -258,7 +258,7 @@
         "feuerrate"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 4,
       "weight": 100,
       "requires": [],
       "description": "Jeder Geistertod gewährt dem Hauptpanzer +2 % Feuerrate bis Raumende. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
@@ -280,7 +280,7 @@
         "bewegung"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 4,
       "weight": 100,
       "requires": [],
       "description": "Jeder Geistertod gewährt dem Hauptpanzer +2 % Bewegungsgeschwindigkeit bis Raumende. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
@@ -302,7 +302,7 @@
         "heilung"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Jeder Geistertod heilt den Hauptpanzer um 6 % seines maximalen Lebens. Interne Abklingzeit: 1 Sekunde.",
@@ -325,7 +325,7 @@
         "schild"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Jeder Geistertod erzeugt für 8 Sekunden einen Schild in Höhe von 4 % des maximalen Spielerlebens. Stapelt bis 20 %.",
@@ -347,7 +347,7 @@
         "gadget"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Jeder Geistertod reduziert die verbleibende Gadget-Abklingzeit um 0,6 Sekunden. Interne Abklingzeit: 1 Sekunde.",
@@ -369,7 +369,7 @@
         "projektil"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Nach jeweils 4 Geistertoden verursacht das nächste Spielergeschoss +60 % Schaden und wird +25 % größer.",
@@ -384,14 +384,14 @@
     "ghost_018": {
       "id": "ghost_018",
       "name": "Knochenmunition",
-      "tag": "ammo",
+      "tag": "pierce",
       "tags": [
         "opfer",
         "spieler",
         "durchschlag"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Nach einem Geistertod erhalten die nächsten 3 Spielergeschosse +1 Durchschlag und +10 % Projektiltempo.",
@@ -414,7 +414,7 @@
         "krit"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Nach einem Geistertod erhält der nächste Spielertreffer +12 Prozentpunkte Krit-Chance und +25 % Krit-Schaden.",
@@ -436,7 +436,7 @@
         "explosion"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 55,
       "requires": [],
       "description": "Jeder Geistertod erzeugt im Umkreis von 64 px eine Explosion mit 25 % des aktuellen Spielerschadens. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
@@ -459,7 +459,7 @@
         "starker_geist"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 55,
       "requires": [],
       "description": "Stirbt ein Untertanenpanzer mit mindestens 120 % des Basisschadens eines Untertanen, erhält der Hauptpanzer +8 % Schaden für 10 Sekunden, sonst +4 %.",
@@ -481,17 +481,17 @@
         "resistenz"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
-      "description": "Nach jeweils 3 Geistertoden erhält der Hauptpanzer +8 Punkte Schadensresistenz für 10 Sekunden.",
+      "description": "Nach jeweils 3 Geistertoden erhält der Hauptpanzer +8 Prozentpunkte Schadensresistenz für 10 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
         "_todo": "effect"
       },
       "_note": {
         "buildrolle": "Sicherheit",
-        "balanceHinweis": "Resistenzpunkte werden addiert; der genommene Schaden wird durch (1 + Summe/100) geteilt."
+        "balanceHinweis": "Resistenz ist bei 60 % gedeckelt."
       }
     },
     "ghost_023": {
@@ -505,7 +505,7 @@
         "schild"
       ],
       "rarity": "rare",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 22,
       "requires": [
         "ghost_014"
@@ -523,14 +523,14 @@
     "ghost_024": {
       "id": "ghost_024",
       "name": "Dunkler Treibstoff",
-      "tag": "tempo",
+      "tag": "firerate",
       "tags": [
         "opfer",
         "spieler",
         "feuerrate"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 55,
       "requires": [],
       "description": "Der erste Geistertod innerhalb jedes 3-Sekunden-Fensters gewährt dem Hauptpanzer +15 % Feuerrate für 5 Sekunden.",
@@ -552,7 +552,7 @@
         "rettung"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
       "description": "Einmal pro Raum: Tödlicher Schaden opfert stattdessen den schwächsten aktiven Untertanenpanzer, verhindert den Treffer vollständig und heilt den Hauptpanzer um 25 % seines maximalen Lebens. Ohne aktiven Untertanen wirkungslos.",
@@ -576,7 +576,7 @@
         "exekution"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 55,
       "requires": [],
       "description": "Ein Geistertod erzeugt im Umkreis von 96 px eine Druckwelle mit 40 % des Spielerschadens, stößt Gegner zurück und senkt ihre Exekutionsschwelle für 3 Sekunden auf 50 %.",
@@ -599,7 +599,7 @@
         "doppelt"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Ein Geistertod hat 20 % Chance, für raumweite Spielerstapel doppelt zu zählen. Heilung, Explosionen und Abklingzeitreduktion werden nicht verdoppelt.",
@@ -621,7 +621,7 @@
         "spieler"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Läuft die Lebenszeit eines Untertanen ab, statt dass er durch Schaden stirbt, sind die ausgelösten Spielerstapel um 60 % stärker.",
@@ -644,7 +644,7 @@
         "run"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Nach jeweils 10 Geistertoden erhält der Hauptpanzer +1 % Schaden für den restlichen Run.",
@@ -668,7 +668,7 @@
         "run"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Nach jeweils 10 Geistertoden erhält der Hauptpanzer +1 % maximales Leben für den restlichen Run.",
@@ -691,7 +691,7 @@
         "gadget"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
       "description": "Ersetzt dein Gadget. Abklingzeit 24 Sekunden: Opfert alle aktiven Untertanenpanzer. Je geopfertem Untertanen erhält der Hauptpanzer 10 Sekunden lang +8 % Schaden und +5 % Feuerrate. Die Opferung zählt als Geistertod.",
@@ -715,7 +715,7 @@
         "exekution"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Nach jeweils 5 Geistertoden feuert der Hauptpanzer ein zielsuchendes Seelengeschoss mit 150 % seines aktuellen Schadens. Es exekutiert Gegner unterhalb der Exekutionsschwelle sofort.",
@@ -738,7 +738,7 @@
         "tod"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Zu Beginn jedes Raums erscheint ein zerbrechlicher Untertanenpanzer mit 30 % Basiswert-Anteil und 5 Sekunden Lebenszeit. Sein Ablauf löst alle Todeseffekte aus. Er kann nicht erneut wiederbelebt werden.",
@@ -760,7 +760,7 @@
         "keystone"
       ],
       "rarity": "legendary",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 7,
       "requires": [],
       "description": "Sterben 3 Untertanenpanzer innerhalb von 4 Sekunden, erhält der Hauptpanzer 8 Sekunden Requiem: +35 % Schaden, +25 % Feuerrate und +15 % Bewegung. Abklingzeit 18 Sekunden.",
@@ -782,7 +782,7 @@
         "stapel"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
       "description": "Zu Raumstart werden 4 virtuelle Geistertode ausschließlich auf raumweite Spielerstapel angewendet. Sie lösen weder Heilung noch Explosionen, Abklingzeiten oder Zähler aus.",
@@ -804,7 +804,7 @@
         "kapazität"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Die Anzahl gleichzeitig aktiver Untertanenpanzer steigt um 1.",
@@ -814,7 +814,7 @@
       },
       "_note": {
         "buildrolle": "Skalierung",
-        "balanceHinweis": "Das Geisterlimit hat keine Obergrenze."
+        "balanceHinweis": "Das Geisterlimit ist insgesamt bei 8 gedeckelt."
       }
     },
     "ghost_037": {
@@ -826,7 +826,7 @@
         "dauer"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 4,
       "weight": 100,
       "requires": [],
       "description": "Alle Untertanenpanzer bleiben 2,5 Sekunden länger aktiv.",
@@ -847,17 +847,17 @@
         "resistenz"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
-      "description": "Sind mindestens 2 Untertanenpanzer aktiv, erhalten alle +6 Punkte Schadensresistenz.",
+      "description": "Sind mindestens 2 Untertanenpanzer aktiv, erhalten alle +6 Prozentpunkte Schadensresistenz.",
       "signatureClass": "c_necro",
       "core": {
         "_todo": "effect"
       },
       "_note": {
         "buildrolle": "Sicherheit",
-        "balanceHinweis": "Resistenzpunkte werden addiert; der genommene Schaden wird durch (1 + Summe/100) geteilt."
+        "balanceHinweis": "Resistenz ist bei 60 % gedeckelt."
       }
     },
     "ghost_039": {
@@ -870,7 +870,7 @@
         "anzahl"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Jeder Untertanenpanzer verursacht +4 % Schaden für jeden anderen aktiven Untertanenpanzer.",
@@ -892,7 +892,7 @@
         "anzahl"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Jeder Untertanenpanzer erhält +3 % Feuerrate je aktivem Untertanen einschließlich sich selbst.",
@@ -914,7 +914,7 @@
         "flanke"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 100,
       "requires": [],
       "description": "Alle Untertanenpanzer greifen das Ziel an, das der Hauptpanzer zuletzt getroffen hat, und umfahren es zur ungeschützten Seite. Gegen dieses Ziel +10 % Schaden.",
@@ -937,10 +937,10 @@
         "resistenz"
       ],
       "rarity": "common",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 100,
       "requires": [],
-      "description": "Untertanenpanzer innerhalb von 80 px zu einem anderen Untertanen erhalten +8 Punkte Schadensresistenz.",
+      "description": "Untertanenpanzer innerhalb von 80 px zu einem anderen Untertanen erhalten +8 Prozentpunkte Schadensresistenz.",
       "signatureClass": "c_necro",
       "core": {
         "_todo": "effect"
@@ -960,7 +960,7 @@
         "tod"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Stirbt ein Untertanenpanzer, heilen alle übrigen um 8 % ihres maximalen Lebens. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
@@ -981,7 +981,7 @@
         "wiederbelebung"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 4,
       "weight": 100,
       "requires": [],
       "description": "Die Wiederbelebungschance nach einem Abschuss des Hauptpanzers steigt um 5 Prozentpunkte.",
@@ -991,7 +991,7 @@
       },
       "_note": {
         "buildrolle": "Skalierung",
-        "balanceHinweis": "Über 100 % gelingt die Probe sicher; der Überschuss ist die Chance auf einen zweiten Untertanen."
+        "balanceHinweis": "Die Wiederbelebungschance ist insgesamt bei 85 % gedeckelt."
       }
     },
     "ghost_045": {
@@ -1004,7 +1004,7 @@
         "anzahl"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Sind mindestens 3 Untertanenpanzer aktiv, erhalten ihre Geschosse +15 % Größe und +10 % Projektiltempo.",
@@ -1026,7 +1026,7 @@
         "schaden"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Ein Untertanenpanzer, der 8 Sekunden überlebt, erhält für den Rest seiner Lebenszeit +20 % Schaden und +12 % maximales Leben.",
@@ -1048,7 +1048,7 @@
         "flanke"
       ],
       "rarity": "uncommon",
-      "isUnique": true,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Bewegt sich ein Untertanenpanzer auf sein Ziel zu, erhält er +15 % Bewegung und +15 % Schaden. Erreicht er dessen Seite oder Heck, zusätzlich +10 % Schaden.",
@@ -1058,7 +1058,7 @@
       },
       "_note": {
         "buildrolle": "Skalierung",
-        "balanceHinweis": "Formationen wirken einmalig, nicht gestapelt."
+        "balanceHinweis": "Nutzt die Flanken- und Heckmechanik."
       }
     },
     "ghost_048": {
@@ -1071,7 +1071,7 @@
         "formation"
       ],
       "rarity": "uncommon",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 55,
       "requires": [],
       "description": "Untertanenpanzer innerhalb von 96 px zum Hauptpanzer erhalten einen Schild in Höhe von 12 % ihres maximalen Lebens. Nach 2 Sekunden ohne Schaden lädt er mit 3 % pro Sekunde nach.",
@@ -1094,7 +1094,7 @@
         "anzahl"
       ],
       "rarity": "uncommon",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 55,
       "requires": [],
       "description": "Der älteste aktive Untertanenpanzer wird Offizier und gewährt allen anderen Untertanen innerhalb von 160 px +14 % Schaden und +8 % Feuerrate.",
@@ -1117,7 +1117,7 @@
         "kill"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Jeder Abschuss durch einen Untertanenpanzer gewährt allen aktiven Untertanen +1 % Feuerrate bis Raumende, höchstens +30 %.",
@@ -1139,7 +1139,7 @@
         "schaden"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Stirbt ein Untertanenpanzer, verursachen die nächsten 5 Schüsse jedes Überlebenden +25 % Schaden. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
@@ -1161,7 +1161,7 @@
         "typ"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Eine gelungene Wiederbelebungsprobe hat 20 % Chance, eine zweite Kopie desselben Gegnertyps mit 60 % Basiswert-Anteil zu erzeugen. Sie zählt gegen das Geisterlimit.",
@@ -1183,7 +1183,7 @@
         "verteidigung"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Jeder Untertanenpanzer ignoriert einmal je Leben einen Treffer, der mehr als 30 % seines maximalen Lebens verursacht.",
@@ -1205,7 +1205,7 @@
         "heilung"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Gelingt eine Wiederbelebungsprobe bei vollem Geisterlimit, heilen alle aktiven Untertanen 20 % und erhalten bis Raumende +10 % Schaden. Abklingzeit 5 Sekunden.",
@@ -1226,7 +1226,7 @@
         "wiederbelebung"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Die Wiederbelebungschance nach einem Abschuss des Hauptpanzers steigt um 12 Prozentpunkte.",
@@ -1236,7 +1236,7 @@
       },
       "_note": {
         "buildrolle": "Skalierung",
-        "balanceHinweis": "Über 100 % gelingt die Probe sicher; der Überschuss ist die Chance auf einen zweiten Untertanen."
+        "balanceHinweis": "Die Wiederbelebungschance ist insgesamt bei 85 % gedeckelt."
       }
     },
     "ghost_056": {
@@ -1249,7 +1249,7 @@
         "typ"
       ],
       "rarity": "rare",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 22,
       "requires": [],
       "description": "Elitegegner sind für Wiederbelebungsproben zulässig. Wiederbelebte Eliten erscheinen mit 65 % Basiswert-Anteil und belegen 2 Geisterplätze. Bosse bleiben ausgeschlossen.",
@@ -1271,17 +1271,17 @@
         "verteilung"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
-      "description": "Bei mindestens 2 aktiven Untertanenpanzern wird erlittener Geisterschaden gleichmäßig auf alle verteilt. Zusätzlich erhalten alle +10 Punkte Schadensresistenz.",
+      "description": "Bei mindestens 2 aktiven Untertanenpanzern wird erlittener Geisterschaden gleichmäßig auf alle verteilt. Zusätzlich erhalten alle +10 Prozentpunkte Schadensresistenz.",
       "signatureClass": "c_necro",
       "core": {
         "_todo": "effect"
       },
       "_note": {
         "buildrolle": "Sicherheit",
-        "balanceHinweis": "Resistenzpunkte werden addiert; der genommene Schaden wird durch (1 + Summe/100) geteilt."
+        "balanceHinweis": "Resistenz ist bei 60 % gedeckelt."
       }
     },
     "ghost_058": {
@@ -1294,7 +1294,7 @@
         "schaden"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
       "description": "Untertanenpanzer erhalten die Hälfte des Flanken- und Heckbonus des Hauptpanzers zusätzlich auf ihre eigenen Treffer.",
@@ -1317,7 +1317,7 @@
         "position"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
       "description": "Der Raum merkt sich die letzten 3 Sterbeorte von Untertanenpanzern. Ein neuer Untertan, der dort erscheint, startet mit +25 % Leben und Schaden.",
@@ -1340,7 +1340,7 @@
         "keystone"
       ],
       "rarity": "legendary",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 7,
       "requires": [],
       "description": "Das Geisterlimit steigt um 2. Jede gelungene Wiederbelebungsprobe erzeugt zusätzlich eine Kopie mit 50 % Basiswert-Anteil. Dafür verursachen alle Untertanenpanzer 15 % weniger Schaden.",
@@ -1350,7 +1350,7 @@
       },
       "_note": {
         "buildrolle": "Skalierung",
-        "balanceHinweis": "Das Geisterlimit hat keine Obergrenze."
+        "balanceHinweis": "Zusammen mit Offene Reihen bleibt das Limit bei 8 gedeckelt."
       }
     },
     "ghost_061": {
@@ -1363,7 +1363,7 @@
         "werte"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 4,
       "weight": 100,
       "requires": [],
       "description": "Der stärkste Untertanenpanzer (Champion) erhält +12 % Schaden und +12 % maximales Leben.",
@@ -1386,7 +1386,7 @@
         "werte"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 4,
       "weight": 100,
       "requires": [],
       "description": "Ist genau 1 Untertanenpanzer aktiv, erhält er +12 % Schaden und +12 % Feuerrate.",
@@ -1408,17 +1408,17 @@
         "resistenz"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
-      "description": "Der Champion erhält +8 Punkte Schadensresistenz.",
+      "description": "Der Champion erhält +8 Prozentpunkte Schadensresistenz.",
       "signatureClass": "c_necro",
       "core": {
         "_todo": "effect"
       },
       "_note": {
         "buildrolle": "Sicherheit",
-        "balanceHinweis": "Resistenzpunkte werden addiert; der genommene Schaden wird durch (1 + Summe/100) geteilt."
+        "balanceHinweis": "Resistenz ist bei 60 % gedeckelt."
       }
     },
     "ghost_064": {
@@ -1431,7 +1431,7 @@
         "elite"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Der Champion verursacht +18 % Schaden gegen Elitegegner und Bosse.",
@@ -1453,7 +1453,7 @@
         "heilung"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Stirbt ein anderer Untertanenpanzer, heilt sich der Champion um 10 % seines maximalen Lebens. Ablauf der Lebenszeit und Verschmelzung lösen ebenfalls aus.",
@@ -1476,7 +1476,7 @@
         "flanke"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 100,
       "requires": [],
       "description": "Der Champion greift bevorzugt den Gegner mit dem höchsten maximalen Leben an, umfährt ihn zur ungeschützten Seite und erhält +20 % Projektiltempo sowie +20 % Zielreichweite.",
@@ -1499,7 +1499,7 @@
         "schild"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Sobald ein Untertanenpanzer zum Champion wird, erhält er einen Schild in Höhe von 15 % seines maximalen Lebens.",
@@ -1521,7 +1521,7 @@
         "dauer"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Die Gesamtdauer und die verbleibende Lebenszeit des Champions steigen um 4 Sekunden.",
@@ -1543,7 +1543,7 @@
         "krit"
       ],
       "rarity": "common",
-      "isUnique": false,
+      "maxStacks": 3,
       "weight": 100,
       "requires": [],
       "description": "Der Champion erhält +5 Prozentpunkte Krit-Chance und +15 % Krit-Schaden.",
@@ -1565,7 +1565,7 @@
         "aura"
       ],
       "rarity": "uncommon",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 55,
       "requires": [],
       "description": "Gegner innerhalb von 80 px zum Champion verursachen 10 % weniger Schaden und erleiden 10 % mehr Schaden durch Untertanenpanzer.",
@@ -1588,7 +1588,7 @@
         "keystone"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
       "description": "Sobald ein zweiter Untertanenpanzer erscheinen würde, verschmilzt der schwächere sofort mit dem Champion. Der Champion erhält bis Raumende 30 % des Basis-Lebens und Basis-Schadens sowie 12 % der Basis-Feuerrate des Verschmolzenen. Seine Restlebenszeit steigt auf mindestens 10 Sekunden. Verschmelzung ist kein Geistertod.",
@@ -1610,7 +1610,7 @@
         "fusion"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [
         "ghost_071"
@@ -1635,7 +1635,7 @@
         "dauer"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [
         "ghost_071"
@@ -1660,7 +1660,7 @@
         "projektil"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Der Champion erhält +8 % Projektilgröße und +6 % Reichweite. Mit Einziger Thron gewährt zusätzlich jede Verschmelzung +2 % Projektilgröße bis Raumende.",
@@ -1683,7 +1683,7 @@
         "schild"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Der Champion heilt den Hauptpanzer um 2 % seines verursachten Schadens. Über volles Leben hinaus wird die Heilung zu Schild, bis 15 % des maximalen Lebens.",
@@ -1706,7 +1706,7 @@
         "projektil"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Jeder dritte Schuss des Champions feuert ein zusätzliches Geschoss mit 40 % Schaden.",
@@ -1728,7 +1728,7 @@
         "durchschlag"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Der Champion erhält +1 Durchschlag. Mit Einziger Thron zusätzlich +10 % Schaden je 3 Verschmelzungen bis Raumende.",
@@ -1750,7 +1750,7 @@
         "burst"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Jeder fünfte Schuss des Champions verursacht +100 % Schaden und erhält +1 Durchschlag.",
@@ -1772,7 +1772,7 @@
         "rettung"
       ],
       "rarity": "rare",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 22,
       "requires": [],
       "description": "Einmal pro Raum: Der erste tödliche Treffer gegen den Champion lässt ihn bei 1 Leben und macht ihn 2 Sekunden unverwundbar.",
@@ -1795,7 +1795,7 @@
         "nachfolge"
       ],
       "rarity": "rare",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 22,
       "requires": [],
       "description": "Stirbt der Champion, übernimmt der nächste innerhalb von 10 Sekunden erscheinende Untertanenpanzer 60 % seiner raumweiten Kronen- und Fusionsboni. Einmal pro Raum.",
@@ -1817,17 +1817,17 @@
         "stellung"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
-      "description": "Bewegt sich der Champion 2 Sekunden nicht, verankert er sich: +45 % Schaden, +25 % Reichweite und +20 Punkte Schadensresistenz, bis er sich wieder bewegt.",
+      "description": "Bewegt sich der Champion 2 Sekunden nicht, verankert er sich: +45 % Schaden, +25 % Reichweite und +20 Prozentpunkte Schadensresistenz, bis er sich wieder bewegt.",
       "signatureClass": "c_necro",
       "core": {
         "_todo": "effect"
       },
       "_note": {
         "buildrolle": "Skalierung",
-        "balanceHinweis": "Resistenzpunkte werden addiert; der genommene Schaden wird durch (1 + Summe/100) geteilt."
+        "balanceHinweis": "Resistenz ist bei 60 % gedeckelt."
       }
     },
     "ghost_082": {
@@ -1840,7 +1840,7 @@
         "exekution"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Der Champion exekutiert Gegner bereits ab 50 % ihres Lebens statt ab 35 %.",
@@ -1863,7 +1863,7 @@
         "dauer"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
       "description": "Der Champion verliert keine Lebenszeit mehr. Er bleibt bestehen, bis er stirbt oder der Raum endet.",
@@ -1885,7 +1885,7 @@
         "rettung"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
       "description": "Ein tödlicher Treffer gegen den Champion stellt stattdessen 30 % seines maximalen Lebens wieder her und gewährt 1 Sekunde Unverwundbarkeit. Abklingzeit 15 Sekunden.",
@@ -1908,7 +1908,7 @@
         "keystone"
       ],
       "rarity": "legendary",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 7,
       "requires": [
         "ghost_071"
@@ -1933,7 +1933,7 @@
         "schaden"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Jeder Geistertod gewährt dem Hauptpanzer +4 % Schaden und allen überlebenden Untertanenpanzern +6 % Schaden für 8 Sekunden. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
@@ -1955,7 +1955,7 @@
         "übertragung"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Ein sterbender Untertanenpanzer überträgt 15 % seines Basis-Lebens und Basis-Schadens auf einen zufälligen Überlebenden. Der Hauptpanzer erhält zusätzlich 3 % seines maximalen Lebens als Schild.",
@@ -1977,7 +1977,7 @@
         "flanke"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Der Hauptpanzer verursacht +5 % Schaden je aktivem Untertanenpanzer, und seine Flanken- und Hecktreffer zusätzlich +10 %. Der nächste wiederbelebte Untertan erhält +8 % Schaden je Geistertod im aktuellen Raum, höchstens +80 %.",
@@ -2001,7 +2001,7 @@
         "gadget"
       ],
       "rarity": "rare",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 22,
       "requires": [],
       "description": "Ersetzt dein Gadget. Abklingzeit 18 Sekunden: Opfert den Untertanenpanzer mit dem niedrigsten Leben. Alle übrigen heilen 20 %, der Hauptpanzer erhält einen Schild über 10 % seines maximalen Lebens, und die nächste Wiederbelebungsprobe innerhalb von 8 Sekunden gelingt garantiert. Die Opferung zählt als Geistertod.",
@@ -2024,7 +2024,7 @@
         "wiederbelebung"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
       "description": "Bei einem Geistertod besteht 25 % Chance, einen Ersatzuntertanen mit 50 % Basiswert-Anteil und 6 Sekunden Lebenszeit erscheinen zu lassen. Dieser Ersatz kann den Effekt nicht erneut auslösen.",
@@ -2046,7 +2046,7 @@
         "keystone"
       ],
       "rarity": "legendary",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 7,
       "requires": [],
       "description": "Sterben 3 Untertanenpanzer innerhalb von 5 Sekunden, erscheinen 2 kostenlose Untertanen mit 60 % Basiswert-Anteil, und der Hauptpanzer erhält 8 Sekunden +20 % Schaden und +20 % Feuerrate. Abklingzeit 20 Sekunden.",
@@ -2069,7 +2069,7 @@
         "zähler"
       ],
       "rarity": "uncommon",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 55,
       "requires": [],
       "description": "Verschmelzungen zählen für raumweite Spielerstapel als halber Geistertod. Sie lösen keine Heilung, Explosionen, Druckwellen oder Abklingzeitreduktion aus.",
@@ -2091,7 +2091,7 @@
         "wiederbelebung"
       ],
       "rarity": "uncommon",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 55,
       "requires": [],
       "description": "Nach jeweils 5 Abschüssen des Champions erscheint ein zerbrechlicher Untertanenpanzer mit 25 % Basiswert-Anteil und 4 Sekunden Lebenszeit. Mit Einziger Thron verschmilzt er sofort.",
@@ -2113,7 +2113,7 @@
         "übertragung"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Stirbt der Champion, erhält der Hauptpanzer bis Raumende 25 % von dessen angesammeltem Schadensbonus als eigenen Schaden und einen Schild in Höhe von 25 % seines angesammelten Lebensbonus.",
@@ -2135,7 +2135,7 @@
         "umleitung"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "25 % des Schadens am Hauptpanzer werden auf den Champion umgeleitet. Jeder umgeleitete Treffer gewährt dem Hauptpanzer 5 Sekunden +3 % Schaden.",
@@ -2158,10 +2158,10 @@
         "gadget"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
-      "description": "Ersetzt dein Gadget. Abklingzeit 30 Sekunden: Opfert den Champion. Der Hauptpanzer erhält 10 Sekunden +40 % Schaden, +25 % Feuerrate und +20 Punkte Schadensresistenz. Die Opferung zählt als Geistertod.",
+      "description": "Ersetzt dein Gadget. Abklingzeit 30 Sekunden: Opfert den Champion. Der Hauptpanzer erhält 10 Sekunden +40 % Schaden, +25 % Feuerrate und +20 Prozentpunkte Schadensresistenz. Die Opferung zählt als Geistertod.",
       "signatureClass": "c_necro",
       "core": {
         "_todo": "effect"
@@ -2181,7 +2181,7 @@
         "keystone"
       ],
       "rarity": "legendary",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 7,
       "requires": [],
       "description": "Jeder Geistertod und jede Verschmelzung gewähren dem Hauptpanzer bis Raumende +3 % Schaden und einen Schild in Höhe von 1,5 % seines maximalen Lebens, höchstens +60 % Schaden.",
@@ -2203,7 +2203,7 @@
         "fusion"
       ],
       "rarity": "uncommon",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 55,
       "requires": [],
       "description": "Würde bei vollem Geisterlimit ein weiterer Untertanenpanzer erscheinen, verschmilzt der schwächste in den Champion und überträgt 20 % Basis-Leben sowie Basis-Schaden.",
@@ -2225,7 +2225,7 @@
         "anzahl"
       ],
       "rarity": "rare",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 22,
       "requires": [],
       "description": "Der Champion erhält +5 % Schaden für jeden anderen aktiven Untertanenpanzer. Stirbt ein anderer Untertan, wird die Hälfte des aktuellen Bonus bis Raumende dauerhaft.",
@@ -2247,7 +2247,7 @@
         "nachfolge"
       ],
       "rarity": "rare",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 22,
       "requires": [],
       "description": "Stirbt der Champion, während ein weiterer Untertanenpanzer aktiv ist, übernimmt der gesündeste Überlebende 50 % der raumweiten Kronen- und Fusionsboni. Einmal pro Raum.",
@@ -2270,7 +2270,7 @@
         "typ"
       ],
       "rarity": "epic",
-      "isUnique": false,
+      "maxStacks": 2,
       "weight": 12,
       "requires": [],
       "description": "Abschüsse durch Untertanenpanzer lösen eine eigene Wiederbelebungsprobe mit 20 % Chance aus. Der so entstehende Untertan behält eine Eigenschaft des Originals: Mörser bleiben Mörser, schnelle Typen bleiben schnell.",
@@ -2293,17 +2293,17 @@
         "resistenz"
       ],
       "rarity": "epic",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 12,
       "requires": [],
-      "description": "Der Champion erhält +10 Punkte Schadensresistenz je anderem aktiven Untertanenpanzer. Ist er allein, erhält er stattdessen alle 5 Sekunden einen Schild über 10 % seines maximalen Lebens.",
+      "description": "Der Champion erhält +10 Prozentpunkte Schadensresistenz je anderem aktiven Untertanenpanzer. Ist er allein, erhält er stattdessen alle 5 Sekunden einen Schild über 10 % seines maximalen Lebens.",
       "signatureClass": "c_necro",
       "core": {
         "_todo": "effect"
       },
       "_note": {
         "buildrolle": "Sicherheit",
-        "balanceHinweis": "Resistenzpunkte werden addiert; der genommene Schaden wird durch (1 + Summe/100) geteilt."
+        "balanceHinweis": "Resistenz ist bei 60 % gedeckelt."
       }
     },
     "ghost_103": {
@@ -2316,7 +2316,7 @@
         "keystone"
       ],
       "rarity": "legendary",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 7,
       "requires": [],
       "description": "Je Geisterplatz über 3 erhält der Champion +8 % Schaden und +8 % maximales Leben. Ist außer ihm kein Platz belegt, zusätzlich +25 % Feuerrate.",
@@ -2326,7 +2326,7 @@
       },
       "_note": {
         "buildrolle": "Skalierung",
-        "balanceHinweis": "Das Geisterlimit hat keine Obergrenze."
+        "balanceHinweis": "Das Geisterlimit ist bei 8 gedeckelt."
       }
     },
     "ghost_104": {
@@ -2340,7 +2340,7 @@
         "keystone"
       ],
       "rarity": "legendary",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 7,
       "requires": [],
       "description": "Nach insgesamt 5 Geistertoden oder Verschmelzungen gelingt die nächste Wiederbelebungsprobe garantiert, und der Untertanenpanzer erscheint mit +50 % Basiswert-Anteil. Gleichzeitig erhält der Hauptpanzer 8 Sekunden +15 % Schaden.",
@@ -2350,7 +2350,7 @@
       },
       "_note": {
         "buildrolle": "Skalierung",
-        "balanceHinweis": "Garantiert die Probe unabhängig vom aktuellen Chancenwert."
+        "balanceHinweis": "Umgeht den 85-%-Deckel nur für diese eine garantierte Probe."
       }
     },
     "ghost_105": {
@@ -2365,7 +2365,7 @@
         "keystone"
       ],
       "rarity": "legendary",
-      "isUnique": true,
+      "maxStacks": 1,
       "weight": 7,
       "requires": [],
       "description": "Zu Beginn jedes Raums erscheint kostenlos ein Urahnenuntertan mit 100 % Basiswert-Anteil eines Gegnertyps des aktuellen Akts und 20 Sekunden Lebenszeit. Stirbt oder verschmilzt er, erhält der Hauptpanzer 10 Sekunden +15 % Schaden und +15 % Feuerrate.",

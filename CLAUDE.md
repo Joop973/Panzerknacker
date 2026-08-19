@@ -3769,8 +3769,10 @@ Sockel statt der 246 archivierten Karten, Nekromanten-Signaturpool
 „1 Legendär" sobald ein Klassenpool Legendaries führt) — ein separater,
 noch nicht beauftragter Folgeauftrag, keine weitere Phase dieses Plans.
 **Überholt:** `AUFTRAG-NEKROMANT-KOMPLETT.md` ist nie eingetroffen — an
-seiner Stelle kam `AUFTRAG-NEKROMANT-V2.md` mit dem 105-Karten-Pool aus
-`Geisterpanzer_105_Upgrades_v2.xlsx`, s. eigener Abschnitt weiter unten.
+seiner Stelle kam `AUFTRAG-NEKROMANT-V2.md` mit dem 105-Karten-Pool, zuerst
+aus `Geisterpanzer_105_Upgrades_v2.xlsx`, **inzwischen korrigiert auf
+Fassung v4** (s. eigener Abschnitt weiter unten, „Nachtrag — Korrektur auf
+v4").
 
 ### Bosse (Platzhalter, Nutzerentscheidung) — gemergt
 Reaktion auf die beiden Phase-0-Blocker oben: **die drei echten Bosse
@@ -4717,8 +4719,52 @@ erneut zu bearbeiten.
   eingecheckte Repo-Dateien vermerkt — nichts zu verschieben, nur die
   Ablösung dokumentiert.
 - Kein `sw.js`-Bump (reine Datenänderung, kein Asset, keine live spielbare
-  Änderung). **Nächste Sitzung: Phase 1** (Seltenheitsachse und
-  Pool-Pipeline).
+  Änderung).
+
+### Nekromant-V2 — Phase 0, Nachtrag (Korrektur auf `Geisterpanzer_105_Upgrades_v4.xlsx`) — gemergt
+**Dieselben drei Auftragsdokumente kamen ein zweites Mal**, diesmal mit
+`Geisterpanzer_105_Upgrades_v4.xlsx` statt v2. **Vor Sitzungsbeginn geprüft
+statt der Startanweisung blind gefolgt**: `STARTHIER.md` verlangt wörtlich
+„AUFTRAG-FUNDAMENT.md, Phase 0 abarbeiten" — laut `git log` war der
+komplette Grundsteinumbau (alle 11 Phasen) da längst gemergt, und die
+Nekromant-V2-Phase-0 (oben) ebenfalls schon abgeschlossen. Statt
+Fundament-Phase-0 grundlos zu wiederholen, wurde die tatsächlich offene
+Abweichung bearbeitet: v4 unterscheidet sich strukturell von v2 (eigenes
+Blatt „Änderungen", 59 Zeilen Detailkorrekturen, plus ein sich selbst
+validierendes Blatt „Prüfung") — und der v2-Import in `data/
+upgrades_necro.json` widersprach an einer Stelle bereits der (unveränderten)
+Auftragsvorgabe: er trug ein `maxStacks`-Feld je Karte, obwohl
+`AUFTRAG-NEKROMANT-V2.md` Phase 0 ausdrücklich „Es gibt kein `maxStacks`"
+verlangt (`isUnique` statt Stapelgrenze). Da noch keine Folgephase auf dem
+alten Import aufbaute (Phase 0 war der aktuellste Merge), war eine Korrektur
+ohne Kollateralschaden möglich.
+- **`data/upgrades_necro.json` neu aus v4 importiert**, alte v2-Fassung nach
+  `archive/upgrades_necro-v2-import.json`. Schema jetzt exakt wie im Auftrag:
+  `Einzigartig` (Ja/Nein) → `isUnique` (Boolean) **statt** `Stapelgrenze` →
+  `maxStacks` — das Feld `maxStacks` kommt in keiner der 105 Karten mehr vor.
+  Seltenheitsverteilung 34/28/22/13/8 (v2: 36/33/24/1/11 — die episch-Stufe
+  hatte dort genau eine Karte und war seltener als legendär). `requires` auf
+  4 Karten gesenkt (v2: 12, davon 11 an `ghost_071` „Einziger Thron" — bei
+  einer entzogenen Karte wären 44 % des Alpha-Pfades tot gewesen). Zwei neue
+  Karten (`ghost_058`/`ghost_059`), `ghost_082` „Kronjäger" neu (Exekutions-
+  bezug), mehrere Kartentexte präzisiert (v4-Blatt „Änderungen", vollständig
+  in `ARCHIV.md` referenziert). `tags[]`/`tag`-Zuordnung, `signatureClass`,
+  `core`-Platzhalter unverändert übernommen — die Spaltenzuordnung selbst
+  hat sich zwischen v2 und v4 nicht geändert, nur der Inhalt.
+- **`tests/regression.mjs` Abschnitt 55 umgestellt**: prüft jetzt `isUnique`
+  als Pflicht-Boolean, dass legendäre UND Aktivkarten (Tag `gadget`, die
+  drei Gadgetslot-Karten) immer `isUnique: true` sind, dass **kein**
+  `maxStacks`-Feld mehr existiert, und dass höchstens 4 Karten insgesamt ein
+  `requires` tragen (zusätzlich zur unveränderten „höchstens 3 Abhängige je
+  Karte, keine Ketten, jedes `requires` löst auf"-Prüfung). Jeder geänderte/
+  neue Kernpunkt einzeln mit Gegenprobe bestanden (`isUnique` entfernt,
+  Legendär/Aktivkarte künstlich nicht-einzigartig gemacht, `maxStacks`
+  künstlich wieder eingefügt, eine 5. Karte mit `requires` versehen).
+- `ARCHIV.md` um den Abschnitt „Nachtrag — Korrektur auf v4" ergänzt
+  (Rückholweg zur v2-Fassung dokumentiert, falls die Korrektur je verworfen
+  werden soll).
+- Kein `sw.js`-Bump (reine Datenänderung). **Nächste Sitzung: Phase 1**
+  (Seltenheitsachse und Pool-Pipeline, `AUFTRAG-NEKROMANT-V2.md`).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des

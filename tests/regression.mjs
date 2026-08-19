@@ -6730,10 +6730,12 @@ for (const seed of SEEDS) {
 }
 
 // ---- 55. Nekromant-V2 Phase 0: Import + Validierung des 105-Karten-Pools --
-// Reiner Datenimport (data/upgrades_necro.json aus der xlsx-Vorlage) -- die
-// Datei ist NICHT in die Angebots-Pipeline eingehaengt (kein rollOffers()-
-// Zugriff, kein upgradepool.js-Import hier), deshalb pruefen wir nur die
-// Struktur der Datei selbst. "Keine Karte ist spielbar" (Auftrag Phase 0).
+// Reiner Datenimport (data/upgrades_necro.json aus der xlsx-Vorlage, Fassung
+// v4) -- die Datei ist NICHT in die Angebots-Pipeline eingehaengt (kein
+// rollOffers()-Zugriff, kein upgradepool.js-Import hier), deshalb pruefen wir
+// nur die Struktur der Datei selbst. "Keine Karte ist spielbar" (Auftrag
+// Phase 0). v4 ersetzt das fruehere maxStacks-Modell (aus v2.xlsx) durch
+// isUnique -- siehe archive/upgrades_necro-v2-import.json.
 {
   const U = necroData.upgrades;
   const PATH_TAGS = new Set(['allgemein', 'opfer', 'legion', 'alpha']);
@@ -6747,29 +6749,40 @@ for (const seed of SEEDS) {
   for (const k in U) if (U[k].id !== k) badKey++;
   check(badKey === 0, `Phase 0 (Nekromant-V2): ${badKey} Karte(n), deren id vom Objektschluessel abweicht`);
 
-  // (b) gueltige Seltenheit; legendaere Karten haben maxStacks 1; jede Karte
-  //     hat ueberhaupt ein maxStacks-Feld.
-  let badRarity = 0, badLegendary = 0, badMaxStacks = 0, badSigClass = 0, badSpread = 0;
+  // (b) gueltige Seltenheit; jede Karte hat ein isUnique-Feld (Boolean);
+  //     alle legendaeren UND alle Aktivkarten (tag "gadget") sind isUnique;
+  //     KEINE Karte traegt mehr ein maxStacks-Feld (v4 hat es ersatzlos
+  //     abgeschafft -- nicht einzigartige Karten sind unbegrenzt stapelbar).
+  let badRarity = 0, badUniqueField = 0, badLegendaryUnique = 0, badGadgetUnique = 0;
+  let hasMaxStacks = 0, badSigClass = 0, badSpread = 0;
   for (const k in U) {
     const d = U[k];
     if (!RARITIES.has(d.rarity)) badRarity++;
-    if (!(Number.isInteger(d.maxStacks) && d.maxStacks >= 1)) badMaxStacks++;
-    if (d.rarity === 'legendary' && d.maxStacks !== 1) badLegendary++;
+    if (typeof d.isUnique !== 'boolean') badUniqueField++;
+    if (d.rarity === 'legendary' && d.isUnique !== true) badLegendaryUnique++;
+    if (d.tag === 'gadget' && d.isUnique !== true) badGadgetUnique++;
+    if (Object.prototype.hasOwnProperty.call(d, 'maxStacks')) hasMaxStacks++;
     if (d.signatureClass !== 'c_necro') badSigClass++;
     if (!Array.isArray(d.tags) || !d.tags.some((t) => PATH_TAGS.has(t))) badSpread++;
   }
   check(badRarity === 0, `Phase 0 (Nekromant-V2): ${badRarity} Karte(n) mit ungueltiger Seltenheit`);
-  check(badMaxStacks === 0, `Phase 0 (Nekromant-V2): ${badMaxStacks} Karte(n) ohne gueltiges maxStacks`);
-  check(badLegendary === 0, `Phase 0 (Nekromant-V2): ${badLegendary} legendaere Karte(n) mit maxStacks != 1`);
+  check(badUniqueField === 0, `Phase 0 (Nekromant-V2): ${badUniqueField} Karte(n) ohne gueltiges isUnique-Feld`);
+  check(badLegendaryUnique === 0, `Phase 0 (Nekromant-V2): ${badLegendaryUnique} legendaere Karte(n) ohne isUnique`);
+  check(badGadgetUnique === 0, `Phase 0 (Nekromant-V2): ${badGadgetUnique} Aktivkarte(n) (tag "gadget") ohne isUnique`);
+  check(hasMaxStacks === 0, `Phase 0 (Nekromant-V2): ${hasMaxStacks} Karte(n) tragen noch ein maxStacks-Feld (v4 hat es abgeschafft)`);
   check(badSigClass === 0, `Phase 0 (Nekromant-V2): ${badSigClass} Karte(n) ohne signatureClass "c_necro"`);
   check(badSpread === 0, `Phase 0 (Nekromant-V2): ${badSpread} Karte(n) ohne mindestens ein Pfad-Tag (allgemein/opfer/legion/alpha)`);
 
   // (c) requires loest auf; keine Ketten (eine Voraussetzung hat selbst kein
-  //     eigenes requires); hoechstens 3 Karten haengen an derselben Karte.
-  let unresolved = 0, chained = 0;
+  //     eigenes requires); hoechstens 3 Karten haengen an derselben Karte;
+  //     hoechstens 4 Karten insgesamt tragen ueberhaupt ein requires (v4:
+  //     von 12 auf 4 gesenkt, damit kein Pfad an einer einzigen Karte haengt).
+  let unresolved = 0, chained = 0, withRequires = 0;
   const dependents = {};
   for (const k in U) {
-    for (const r of U[k].requires || []) {
+    const reqs = U[k].requires || [];
+    if (reqs.length > 0) withRequires++;
+    for (const r of reqs) {
       if (!U[r]) unresolved++;
       else {
         if ((U[r].requires || []).length > 0) chained++;
@@ -6781,6 +6794,7 @@ for (const seed of SEEDS) {
   check(chained === 0, `Phase 0 (Nekromant-V2): ${chained} requires-Kette(n) (eine Voraussetzung hat selbst ein requires)`);
   const overCrowded = Object.values(dependents).filter((n) => n > 3).length;
   check(overCrowded === 0, `Phase 0 (Nekromant-V2): ${overCrowded} Karte(n) mit mehr als 3 abhaengigen Karten`);
+  check(withRequires <= 4, `Phase 0 (Nekromant-V2): ${withRequires} Karte(n) mit requires statt hoechstens 4`);
 
   // (d) kein Kartentext enthaelt Reste der ueberholten Fassung-1-Spec
   //     ("Meter" -- alte Ring-/Radius-Einheit, "Abprall" -- Bandenschuss,
