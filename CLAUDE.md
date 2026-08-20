@@ -5043,6 +5043,55 @@ alte zweistufige `spawnChance` sind archiviert
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
   **Nächste Sitzung: Phase 4** (Gegner zielen auf Untertanen).
 
+### Nekromant-V2 — Phase 4 (Gegner zielen auf Untertanen) — bereits erfüllt, keine Codeänderung
+**Ist-Abgleich statt Bau**: der komplette Auftragsumfang dieser Phase war
+schon vor diesem Auftrag fertig — gebaut in **Upgradepool-v2 Phase 5**
+(„Zielsystem der Gegner-KI", s. eigener Abschnitt weiter oben), lange bevor
+`AUFTRAG-NEKROMANT-V2.md` existierte. Jeder einzelne Änderungspunkt der
+Phasenbeschreibung wurde gegen den echten Code geprüft, nicht nur behauptet:
+- **`ai.js: resolveTarget(tank, state)`** ist bereits die zentrale Funktion;
+  `ai_drives.js` (alle vier Rollen) und `ai_turrets.js: roleTurret()` lesen
+  ausschließlich darüber (verifiziert per `grep` — die einzige verbliebene
+  `state.player`-Stelle in `ai_drives.js` ist `findCoverPoint()`, die laut
+  Auftrag ausdrücklich **spielerbezogen bleiben soll**).
+- **`data/balance.json: aggro`** steht bereits **wortgleich** zur
+  Auftragsvorgabe: `reevaluateHz: 4`, `ghostThreatMult: 0.7`,
+  `damageThreatPx: 120`, `damageThreatDecayS: 3`, `switchHysteresisPct: 0.25`,
+  `noTargetFallbackS: 3`. `data/balance.json: boss.fixate` ebenso:
+  `onPlayerS: 4`, `onGhostsS: 3`, `minPlayerShare: 0.4`.
+- **Bosse fixieren bereits zeitgesteuert** (`bossai.js:
+  resolveBossTarget()`/`resolvePhalanxTarget()`, `state.time`-Modulo, kein
+  RNG) — Spiegel zeitgesteuert allein, Phalanx zusätzlich räumlich über
+  `phalanxIndex`. Der Reaktorkern hat bewusst **keine** Sonderregel (läuft
+  über die normale `guardian`-Rolle + `updateTargeting()`), exakt wie
+  gefordert.
+- **`tank.aimingAtPlayer`** ist bereits überall auf `fire && target ===
+  state.player` verengt — sowohl im generischen Pfad (`state.js: stepState()`
+  Zeile mit `t.aimingAtPlayer = fire && resolveTarget(t, state) ===
+  state.player`) als auch in beiden Bossfunktionen.
+- **Die getrennte Geschoss-vs-Geister-Kollisionsschleife** (`state.js`, seit
+  Upgradepool-v2 Phase 5, um Resistenz/Schildpool aus Nekromant-V2 Phase 2
+  erweitert) lässt Gegnergeschosse Untertanen treffen, ohne dass Untertanen
+  in `state.tanks` stehen — der Raum gilt weiterhin korrekt als geräumt,
+  sobald alle `state.tanks`-Gegner tot sind (`state.ghosts` zählt nicht mit).
+- **Alle fünf Testschritte** sind durch bestehende Tests abgedeckt (keine
+  davon musste für diese Phase geändert werden, da sich am geprüften
+  Mechanismus nichts ändert): Testschritt 1/2/3 → Abschnitt 41
+  (Grundmechanismus, Integration Fahr-/Turmverhalten, Sichtlinien-Fallback,
+  kein Zielflackern); Testschritt 4 → Abschnitt 45 „Bosskampf-Korridor"
+  (Spieleranteil ≥ 55 %, Untertanen-Anteil ≥ 10 %, Fixierungsfenster mit
+  eigenen Zahlen nachgerechnet); Testschritt 5 → Abschnitt 41
+  „`aimingAtPlayer` über die volle `stepState()`-Pipeline".
+- **Einzige Prüfung, die diese Sitzung neu lief**: die volle
+  Regressionssuite (inkl. der in Phase 3 grundlegend umgebauten
+  Geister-Erzeugung — Typ-Vererbung, Lebensdauer, Elite-/Boss-Ausnahme)
+  bleibt mit dem unveränderten Zielsystem grün, weil `resolveTarget()`
+  strukturell unabhängig davon ist, WIE ein Geist entstanden ist oder wie
+  lange er lebt — es liest nur `state.ghosts` zur Laufzeit.
+- Keine Codeänderung, kein neuer Testabschnitt (nichts Neues zu bewachen),
+  kein `sw.js`-Bump. **Nächste Sitzung: Phase 5** (Ereignis- und
+  Stapelschicht).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
