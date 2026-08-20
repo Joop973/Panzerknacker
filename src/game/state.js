@@ -24,6 +24,7 @@ import { updateMines, explodeAt } from './mine.js';
 import { fireMortar, updateMortars } from './mortar.js';
 import { updateTraps } from './trap.js';
 import { createGhost, updateGhosts, killGhost } from './ghost.js';
+import { tickNecroTimers } from './necro.js';
 import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
 import { applyTypeEffects } from './damagetypes.js';
@@ -182,7 +183,7 @@ export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
     destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses, upgradeLevels, levelBalance,
-    starterTank = 'player', starterScrap = 0, actEnemyPool } = opts;
+    starterTank = 'player', starterScrap = 0, actEnemyPool, necroRunStacksBase } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
@@ -304,6 +305,24 @@ export function createState(data, tiles, opts) {
     // zufaelligen Typ. run.js: buildCombatRoom() liefert die echte Liste;
     // Fallback [] fuer isolierte Test-/Debug-Raeume ohne Akt-Kontext.
     actEnemyPool: actEnemyPool || [],
+    // Nekromant-V2 Phase 5 (Ereignis-/Stapelschicht): reine Infrastruktur,
+    // aktuell hoert keine Karte zu (necroListeners bleibt leer, Phase 6+
+    // fuellt ihn beim Roomaufbau). necroStacks/necroTimedStacks/
+    // necroCooldownReadyAt sind raumweit und brauchen keinen expliziten
+    // reset() -- state wird bei jedem Raumwechsel ohnehin frisch angelegt.
+    // necroRunStackGain ist der raumlokale, monoton wachsende Anteil eines
+    // runweiten Stapels -- run.js: stepRun() synchronisiert ihn per Delta
+    // (Muster wie bonusScrap/seenBonusScrap) in run.necroStacks;
+    // necroRunStacksBase ist der zu Raumbeginn kopierte Stand DIESES
+    // Speichers, damit ein Lesezugriff waehrend des Raums den korrekten
+    // Gesamtwert sieht (s. necro.js: getNecroStack()).
+    necroListeners: [],
+    necroStacks: {},
+    necroRunStackGain: {},
+    necroRunStacksBase: necroRunStacksBase || {},
+    necroTimedStacks: {},
+    necroCooldownReadyAt: {},
+    necroEventLog: [],
     roomContext: roomContext || null, // { elite, boss } -- raumabhaengige Karten
     // LP-Skalierung dieses Raums (Phase 2) -- gemerkt, damit die zweite
     // Welle (updateWave) dieselben Werte bekommt wie die erste.
@@ -1325,6 +1344,7 @@ export function stepState(state, cmd, dt) {
   updateTraps(state, dt);
   updateMortars(state, dt); // Grundsteinumbau Phase 3
   updateGhosts(state, dt);
+  tickNecroTimers(state, dt); // Nekromant-V2 Phase 5: zeitlich befristete Stapel
   updateWave(state, dt);
 
   // Sprengschuss-Upgrade: markierte Geschosse explodieren beim Tod
