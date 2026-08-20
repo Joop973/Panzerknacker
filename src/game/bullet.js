@@ -36,6 +36,7 @@ export function createBullet(
     damage,
     damageType,
     crit,
+    critMultBonus,
     pierce,
   },
 ) {
@@ -71,6 +72,12 @@ export function createBullet(
     // gewuerfelt -- eine Kugel, die mehrere Ziele streift, bleibt kritisch
     // oder nicht.
     crit: crit || false,
+    // ghost_019 "Totenblick" (Nekromant-V2 Phase 6): EINMALIGER Krit-
+    // Multiplikator-Bonus, beim Abschuss eingefroren wie crit selbst --
+    // kann nicht auf tank.cfg liegen (die gilt fuer JEDEN Schuss), s.
+    // tank.js: fireBullet(). state.js addiert ihn zum dauerhaften
+    // oc.critMultBonus einer Karte.
+    critMultBonus: critMultBonus || 0,
     // Durchschlag (Nekromant-V2 Phase 2): Anzahl zusaetzlicher Ziele, die
     // dieses Geschoss durchschlaegt, OHNE zu sterben -- zaehlt beim Treffer
     // herunter (state.js). NICHT zu verwechseln mit dem aelteren,

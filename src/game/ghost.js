@@ -85,8 +85,15 @@ function resolveGhostCfg(data, sourceType, playerCfg) {
     // unbegrenzt weit. War bis Phase 2 dieses Auftrags ein Feld des jetzt
     // archivierten ghost_tank-Typs, jetzt ein einzelner geteilter Wert
     // (data/balance.json: ghost.rangePct) -- gilt fuer jeden geerbten Typ
-    // gleich, unabhaengig von dessen eigener Waffenreichweite.
-    fireRangePx: (data.balance?.bullet?.maxDistance ?? 1200) * (gbal.rangePct ?? 0.65),
+    // gleich, unabhaengig von dessen eigener Waffenreichweite. ghost_006
+    // "Grabesoptik" (Nekromant-V2 Phase 6) skaliert BEIDE Werte gleichzeitig.
+    fireRangePx: (data.balance?.bullet?.maxDistance ?? 1200) * (gbal.rangePct ?? 0.65) * (playerCfg?.ghostRangeMult || 1),
+    // Nekromant-V2 Phase 6: weitere ghost*-core-Schluessel, additiv/
+    // multiplikativ genau wie die vier obigen aus Upgradepool-v2 Phase 8.
+    bulletSpeed: base.bulletSpeed * (playerCfg?.ghostBulletSpeedMult || 1),
+    critChance: (base.critChance || 0) + (playerCfg?.ghostCritChanceAdd || 0),
+    critMultBonus: playerCfg?.ghostCritMultAdd || 0,
+    resist: (base.resist || 0) + (playerCfg?.ghostResistAdd || 0),
   };
 }
 
@@ -115,7 +122,10 @@ export function createGhost(state, x, y, heading = 0, sourceType) {
     cfg.maxHp = Math.round(cfg.maxHp * ((bal.commanderHpMult ?? 2.5) + bonus));
     cfg.damage = Math.round(cfg.damage * ((bal.commanderDamageMult ?? 2) + bonus));
   }
-  const lifetimeMax = state.data.balance?.ghost?.lifetimeS ?? 12;
+  // ghost_005 "Laengerer Eid" (Nekromant-V2 Phase 6): additiv zur festen
+  // Basislebenszeit -- direkt hier statt in resolveGhostCfg(), weil
+  // lifetime/lifetimeMax keine cfg-Felder sind, sondern eigene Ghost-Felder.
+  const lifetimeMax = (state.data.balance?.ghost?.lifetimeS ?? 12) + (playerCfg?.ghostLifetimeAdd || 0);
   return {
     id: nextGhostId++,
     x,
@@ -131,8 +141,11 @@ export function createGhost(state, x, y, heading = 0, sourceType) {
     hp: cfg.maxHp,
     // Nekromant-V2 Phase 2: derselbe Schild-Punktepool wie bei echten
     // Panzern (state.js: applyResistToAmount/absorbWithShieldPool) --
-    // startet voll, aktuell ueberall 0.
-    shield: cfg.shieldMax || 0,
+    // startet voll (shieldMax). ghost_008 "Schattenschild" (Phase 6) legt
+    // zusaetzlich einen EINMALIGEN Spawn-Schild oben drauf (kann den
+    // shieldMax-Deckel ueberschreiten -- regeneriert dann nur bis shieldMax
+    // zurueck, sobald verbraucht).
+    shield: (cfg.shieldMax || 0) + (playerCfg?.ghostShieldOnSpawnPct ? cfg.maxHp * playerCfg.ghostShieldOnSpawnPct : 0),
     cooldown: 0,
     isGhost: true,
     alive: true,
@@ -311,10 +324,26 @@ export function updateGhosts(state, dt) {
 
     const angleToTarget = Math.atan2(target.y - g.y, target.x - g.x);
     g.turret = turnToward(g.turret, angleToTarget, TURN_SPEED * dt);
-    g.heading = g.turret; // faehrt in die Richtung, in die er zielt
+    g.heading = g.turret; // Rohr zeigt immer aufs Ziel, unabhaengig vom Bewegungskurs unten
 
-    const dx = Math.cos(g.heading);
-    const dy = Math.sin(g.heading);
+    // ghost_010 "Jenseitsziel" (Nekromant-V2 Phase 6): umfaehrt das Ziel zu
+    // dessen ungeschuetzter Seite statt frontal anzugreifen -- ein fester
+    // Seitenwert je Geist (g.id), damit er nicht jeden Tick die Seite
+    // wechselt. Nur die BEWEGUNGSrichtung weicht ab, das Rohr bleibt oben
+    // wie gehabt auf angleToTarget ausgerichtet (Feuer-Kegel unveraendert).
+    let moveAngle = g.heading;
+    if (playerCfg?.ghostFlankSeek && typeof target.heading === 'number') {
+      const side = g.id % 2 === 0 ? 1 : -1;
+      const flankX = target.x + Math.cos(target.heading + Math.PI / 2) * side * 70 - Math.cos(target.heading) * 40;
+      const flankY = target.y + Math.sin(target.heading + Math.PI / 2) * side * 70 - Math.sin(target.heading) * 40;
+      moveAngle = Math.atan2(flankY - g.y, flankX - g.x);
+    }
+    const dx = Math.cos(moveAngle);
+    const dy = Math.sin(moveAngle);
+    // Fuer den Mündungspunkt/die Feuerrichtung zaehlt weiterhin g.heading
+    // (Turmrichtung), NICHT die (bei ghost_010 abweichende) Bewegungsrichtung.
+    const aimDx = Math.cos(g.heading);
+    const aimDy = Math.sin(g.heading);
     g.x += dx * g.cfg.speed * dt;
     g.y += dy * g.cfg.speed * dt;
     // Nicht durch Waende clippen, aber keine resolveTankBlocking --
@@ -345,14 +374,24 @@ export function updateGhosts(state, dt) {
       clearLine(state, g.x, g.y, target.x, target.y)
     ) {
       const muzzle = g.cfg.radius + 8;
+      // ghost_007 "Totenpraezision" (Nekromant-V2 Phase 6): eigener Krit-Wurf
+      // fuer Geistergeschosse -- g.cfg.critChance/critMultBonus kommen aus
+      // resolveGhostCfg() (playerCfg.ghostCritChanceAdd/-MultAdd).
+      const ghostCrit = g.cfg.critChance > 0 && state.rng() < g.cfg.critChance;
       state.bullets.push(
-        createBullet(g.x + dx * muzzle, g.y + dy * muzzle, g.turret, {
+        createBullet(g.x + aimDx * muzzle, g.y + aimDy * muzzle, g.turret, {
           speed: g.cfg.bulletSpeed,
           radius: state.data.physics.bulletRadius,
           owner: g,
           kind: g.cfg.weapon,
           damage: Math.round(g.cfg.damage * packMult),
           damageType: g.cfg.damageType,
+          crit: ghostCrit,
+          // KEIN critMultBonus hier: g.cfg.critMultBonus wird bereits ueber
+          // oc?.critMultBonus (b.owner.cfg) in state.js gelesen -- ein
+          // weiteres Feld auf der Kugel wuerde denselben Bonus doppelt
+          // zaehlen. Das Kugel-Feld ist nur fuer den SPIELER da (dessen
+          // Krit-Bonus ist eine Einmal-Ladung, nicht Teil der Dauer-cfg).
         }),
       );
       g.cooldown = g.cfg.fireCooldown;

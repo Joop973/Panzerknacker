@@ -18,7 +18,7 @@
       "description": "Alle Untertanenpanzer erhalten +8 % maximales Leben.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostHpMult": 1.08
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -40,7 +40,7 @@
       "description": "Alle Untertanenpanzer verursachen +8 % Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostDamageMult": 1.08
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -62,7 +62,7 @@
       "description": "Alle Untertanenpanzer erhalten +6 % Feuerrate.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostFireMult": 0.94
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -84,7 +84,7 @@
       "description": "Alle Untertanenpanzer erhalten +6 % Bewegungsgeschwindigkeit.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostSpeedMult": 1.06
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -106,7 +106,7 @@
       "description": "Die Lebenszeit aller Untertanenpanzer steigt um 2,0 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostLifetimeAdd": 2.0
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -128,7 +128,8 @@
       "description": "Geistergeschosse erhalten +10 % Projektiltempo und +5 % Reichweite.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostBulletSpeedMult": 1.1,
+        "ghostRangeMult": 1.05
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -150,7 +151,8 @@
       "description": "Untertanenpanzer erhalten +3 Prozentpunkte Krit-Chance und +5 % Krit-Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostCritChanceAdd": 0.03,
+        "ghostCritMultAdd": 0.05
       },
       "_note": {
         "buildrolle": "Burst"
@@ -172,7 +174,7 @@
       "description": "Jeder Untertanenpanzer erscheint mit einem Schild in Höhe von 10 % seines maximalen Lebens.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostShieldOnSpawnPct": 0.1
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -195,7 +197,7 @@
       "description": "Untertanenpanzer erhalten +4 Punkte Schadensresistenz.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostResistAdd": 4
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -219,7 +221,8 @@
       "description": "Untertanenpanzer umfahren ihr Ziel aktiv zur ungeschützten Seite und verursachen bei Flanken- und Hecktreffern zusätzlich +15 % Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostFlankSeek": true,
+        "ghostFlankDamageBonus": 0.15
       },
       "_note": {
         "buildrolle": "Engine",
@@ -242,7 +245,7 @@
       "description": "Jeder Geistertod gewährt dem Hauptpanzer +2 % Schaden bis Raumende. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroDmgPctPerDeath": 0.02
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -264,7 +267,7 @@
       "description": "Jeder Geistertod gewährt dem Hauptpanzer +2 % Feuerrate bis Raumende. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroFireRatePctPerDeath": 0.02
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -286,7 +289,7 @@
       "description": "Jeder Geistertod gewährt dem Hauptpanzer +2 % Bewegungsgeschwindigkeit bis Raumende. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroSpeedPctPerDeath": 0.02
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -308,7 +311,8 @@
       "description": "Jeder Geistertod heilt den Hauptpanzer um 6 % seines maximalen Lebens. Interne Abklingzeit: 1 Sekunde.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroHealPctPerDeath": 0.06,
+        "necroHealCooldownS": 1.0
       },
       "_note": {
         "buildrolle": "Sustain",
@@ -331,7 +335,9 @@
       "description": "Jeder Geistertod erzeugt für 8 Sekunden einen Schild in Höhe von 4 % des maximalen Spielerlebens. Stapelt bis 20 %.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroShieldPctPerDeath": 0.04,
+        "necroShieldDurationS": 8.0,
+        "necroShieldCapPct": 0.2
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -353,11 +359,13 @@
       "description": "Jeder Geistertod reduziert die verbleibende Gadget-Abklingzeit um 0,6 Sekunden. Interne Abklingzeit: 1 Sekunde.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroGadgetCooldownReduceS": 0.6,
+        "necroGadgetReduceCooldownS": 1.0
       },
       "_note": {
         "buildrolle": "Engine"
-      }
+      },
+      "_todo": "balance"
     },
     "ghost_017": {
       "id": "ghost_017",
@@ -375,7 +383,9 @@
       "description": "Nach jeweils 4 Geistertoden verursacht das nächste Spielergeschoss +60 % Schaden und wird +25 % größer.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroBurstEveryN": 4,
+        "necroBurstDamageMult": 0.6,
+        "necroBurstSizeMult": 0.25
       },
       "_note": {
         "buildrolle": "Burst"
@@ -397,7 +407,9 @@
       "description": "Nach einem Geistertod erhalten die nächsten 3 Spielergeschosse +1 Durchschlag und +10 % Projektiltempo.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroAmmoShots": 3,
+        "necroAmmoPierceAdd": 1,
+        "necroAmmoSpeedMult": 1.1
       },
       "_note": {
         "buildrolle": "Tempo",
@@ -420,7 +432,8 @@
       "description": "Nach einem Geistertod erhält der nächste Spielertreffer +12 Prozentpunkte Krit-Chance und +25 % Krit-Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroNextHitCritChanceAdd": 0.12,
+        "necroNextHitCritMultAdd": 0.25
       },
       "_note": {
         "buildrolle": "Burst"
@@ -442,7 +455,8 @@
       "description": "Jeder Geistertod erzeugt im Umkreis von 64 px eine Explosion mit 25 % des aktuellen Spielerschadens. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroExplosionRadius": 64,
+        "necroExplosionDamagePct": 0.25
       },
       "_note": {
         "buildrolle": "Burst"
@@ -465,7 +479,10 @@
       "description": "Stirbt ein Untertanenpanzer mit mindestens 120 % des Basisschadens eines Untertanen, erhält der Hauptpanzer +8 % Schaden für 10 Sekunden, sonst +4 %.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroInheritHighPct": 0.08,
+        "necroInheritLowPct": 0.04,
+        "necroInheritDurationS": 10.0,
+        "necroInheritThresholdMult": 1.2
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -487,7 +504,9 @@
       "description": "Nach jeweils 3 Geistertoden erhält der Hauptpanzer +8 Punkte Schadensresistenz für 10 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroResistEveryN": 3,
+        "necroResistAmount": 8,
+        "necroResistDurationS": 10.0
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -513,7 +532,7 @@
       "description": "Heilung durch Geistertode, die über volles Leben hinausgeht, wird vollständig in Schild umgewandelt, bis zu 25 % des maximalen Lebens.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroOverflowShieldCapPct": 0.25
       },
       "_note": {
         "buildrolle": "Sustain",
@@ -536,7 +555,9 @@
       "description": "Der erste Geistertod innerhalb jedes 3-Sekunden-Fensters gewährt dem Hauptpanzer +15 % Feuerrate für 5 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroFireBurstWindowS": 3.0,
+        "necroFireBurstPct": 0.15,
+        "necroFireBurstDurationS": 5.0
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -558,7 +579,8 @@
       "description": "Einmal pro Raum: Tödlicher Schaden opfert stattdessen den schwächsten aktiven Untertanenpanzer, verhindert den Treffer vollständig und heilt den Hauptpanzer um 25 % seines maximalen Lebens. Ohne aktiven Untertanen wirkungslos.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroLastStand": true,
+        "necroLastStandHealPct": 0.25
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -582,12 +604,17 @@
       "description": "Ein Geistertod erzeugt im Umkreis von 96 px eine Druckwelle mit 40 % des Spielerschadens, stößt Gegner zurück und senkt ihre Exekutionsschwelle für 3 Sekunden auf 50 %.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroShockRadius": 96,
+        "necroShockDamagePct": 0.4,
+        "necroShockPushPx": 40,
+        "necroShockExecMult": 0.5,
+        "necroShockExecDurationS": 3.0
       },
       "_note": {
         "buildrolle": "Burst",
         "balanceHinweis": "Nutzt die Exekutionsmechanik des Spiels."
-      }
+      },
+      "_todo": "balance"
     },
     "ghost_027": {
       "id": "ghost_027",
@@ -605,7 +632,7 @@
       "description": "Ein Geistertod hat 20 % Chance, für raumweite Spielerstapel doppelt zu zählen. Heilung, Explosionen und Abklingzeitreduktion werden nicht verdoppelt.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroDoubleStackChance": 0.2
       },
       "_note": {
         "buildrolle": "Engine"
@@ -627,7 +654,7 @@
       "description": "Läuft die Lebenszeit eines Untertanen ab, statt dass er durch Schaden stirbt, sind die ausgelösten Spielerstapel um 60 % stärker.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroExpireStackBonus": 0.6
       },
       "_note": {
         "buildrolle": "Engine"
@@ -650,7 +677,8 @@
       "description": "Nach jeweils 10 Geistertoden erhält der Hauptpanzer +1 % Schaden für den restlichen Run.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroRunDmgEveryN": 10,
+        "necroRunDmgPct": 0.01
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -674,7 +702,8 @@
       "description": "Nach jeweils 10 Geistertoden erhält der Hauptpanzer +1 % maximales Leben für den restlichen Run.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroRunHpEveryN": 10,
+        "necroRunHpPct": 0.01
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -721,12 +750,15 @@
       "description": "Nach jeweils 5 Geistertoden feuert der Hauptpanzer ein zielsuchendes Seelengeschoss mit 150 % seines aktuellen Schadens. Es exekutiert Gegner unterhalb der Exekutionsschwelle sofort.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroHomingEveryN": 5,
+        "necroHomingDamageMult": 1.5,
+        "necroHomingTurnRate": 3.0
       },
       "_note": {
         "buildrolle": "Burst",
         "balanceHinweis": "Nutzt Zielsuche und Exekution."
-      }
+      },
+      "_todo": "balance"
     },
     "ghost_033": {
       "id": "ghost_033",
@@ -744,7 +776,8 @@
       "description": "Zu Beginn jedes Raums erscheint ein zerbrechlicher Untertanenpanzer mit 30 % Basiswert-Anteil und 5 Sekunden Lebenszeit. Sein Ablauf löst alle Todeseffekte aus. Er kann nicht erneut wiederbelebt werden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroStartGhostPct": 0.3,
+        "necroStartGhostLifetimeS": 5.0
       },
       "_note": {
         "buildrolle": "Engine"
@@ -766,7 +799,13 @@
       "description": "Sterben 3 Untertanenpanzer innerhalb von 4 Sekunden, erhält der Hauptpanzer 8 Sekunden Requiem: +35 % Schaden, +25 % Feuerrate und +15 % Bewegung. Abklingzeit 18 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroKeystoneCount": 3,
+        "necroKeystoneWindowS": 4.0,
+        "necroKeystoneDamagePct": 0.35,
+        "necroKeystoneFireRatePct": 0.25,
+        "necroKeystoneSpeedPct": 0.15,
+        "necroKeystoneDurationS": 8.0,
+        "necroKeystoneCooldownS": 18.0
       },
       "_note": {
         "buildrolle": "Burst"
@@ -788,7 +827,7 @@
       "description": "Zu Raumstart werden 4 virtuelle Geistertode ausschließlich auf raumweite Spielerstapel angewendet. Sie lösen weder Heilung noch Explosionen, Abklingzeiten oder Zähler aus.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroVirtualDeathsOnStart": 4
       },
       "_note": {
         "buildrolle": "Skalierung",

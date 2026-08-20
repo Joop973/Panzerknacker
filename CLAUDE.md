@@ -5193,8 +5193,166 @@ System ("gebaut, bevor es die Elemente gibt"). Neues Modul
   aufzeichnender Fake-Canvas).
 - Kein `sw.js`-Bump (reine Code-Datei, kein neues Asset). Playwright-Smoke
   (Nekromant wählen, Run starten, Snapshot bestätigt `starterTank:
-  'c_necro'`, keine Konsolenfehler) bestanden. **Nächste Sitzung: Phase 6**
-  (Allgemein und Opfer, 35 Karten).
+  'c_necro'`, keine Konsolenfehler) bestanden.
+
+### Nekromant-V2 — Phase 6 (Allgemein und Opfer, 35 Karten) — gemergt
+Die Brücke von Phase 5s reiner Infrastruktur zu echten Karten: `ghost_001`
+bis `ghost_035` (`ghost_031` „Märtyrerbefehl" ausgenommen — Aktivkarte,
+Phase 9) wirken jetzt alle über neue `ghost*`/`necro*`-`core`-Schlüssel.
+**Kein separates Nekromanten-Effektsystem** — dieselbe generische
+`core`-Applier-Schleife (`cfg.js: applyUpgrades()`) wie jede andere Phase
+des Projekts, nur um ~35 neue, flache Skalarschlüssel erweitert (keine
+verschachtelte „effect/effectValues"-Struktur — bewusst gegen Anhang A §14
+entschieden, die bestehende flache Konvention ist bereits die geforderte
+datengetriebene Effektschicht).
+- **`necro.js: buildNecroListeners(state, cfg)`** (neu) ist die eigentliche
+  Brücke: EINMAL pro Raumaufbau (`state.js: createState()`, direkt vor
+  `return state`) liest sie die neuen `core`-Felder aus dem aufgelösten
+  Spieler-`cfg` und trägt daraus `state.necroListeners`-Einträge ein — jede
+  `if (cfg.xyz)`-Zeile spiegelt genau eine Karte, „kein switch über
+  Karten-IDs" bleibt gewahrt (jede Bedingung prüft nur ein Feld, nie eine
+  id). Reservierte Stapel-/Timed-Schlüssel (beginnen mit `_`, kollidieren
+  nie mit einer Karten-id): raumweite Plain-Prozentsätze `_pctDamage`/
+  `_pctFireRate`/`_pctSpeed` (ghost_011–013), zeitlich befristete Werte mit
+  je EIGENEM Schlüssel `_timedDmgErbschaft`/`_timedFireRateFuel`/
+  `_timedResistHaerte`/`_timedRequiemDmg`+`_timedRequiemFireRate`+
+  `_timedRequiemSpeed` (021/024/022/034 — je eigener Schlüssel, damit zwei
+  Karten sich nicht gegenseitig überschreiben statt zu addieren), runweite
+  permanente `_runDmgBonus`/`_runHpBonus` (029/030). `tank.js`/`state.js`
+  summieren am Ort der Verwendung über eine feste, bekannte Liste dieser
+  Schlüssel (`necro.js: necroDamagePct/-FireRatePct/-SpeedPct/
+  -ResistBonus()`), kein neuer API-Mechanismus nötig.
+- **`pureStack` (NEU seit dieser Phase, Verschärfung von Phase 5s
+  `applyVirtualNecroDeaths()`)**: markiert einen Listener, dessen EINZIGE
+  Wirkung das Erhöhen eines raumweiten Spielerstapels ist — keine Heilung,
+  keine Explosion, kein Zähler, keine Abklingzeit. Aktuell exakt
+  `ghost_011`/`012`/`013`. Nur DAS ist die Klasse, auf die `ghost_035`s
+  virtuelle Tode zielen dürfen (die alte Phase-5-Filterung „scope==='room'"
+  allein wäre jetzt zu grob — es gibt echte Listener mit Seiteneffekten) UND
+  auf die `ghost_027`/`028`s Stapel-Multiplikator wirkt. `onGhostRemoved()`
+  berechnet den Multiplikator (`ghost_027` „Kettenopfer": 20 % Chance auf
+  Verdopplung via `state.rng()`; `ghost_028` „Treues Ende": ×1,6 bei
+  `death_expire`) und reicht ihn als 4. Parameter `mult` nur an
+  `pureStack`-Listener durch — alle anderen bekommen immer `1`.
+- **`ghost_010` „Jenseitsziel"** ist die einzige Karte, die laut Auftrag
+  „eine Erweiterung der Fahrlogik, nicht nur einen Wert" braucht:
+  `ghost.js: updateGhosts()` bekommt eine separate `moveAngle` (Ziel um
+  ±70 px seitlich + 40 px zurückversetzt, fester Seitenwert je Geist über
+  `g.id % 2`, damit er nicht jeden Tick wechselt), während `g.heading`/
+  `g.turret` weiterhin exakt auf das Ziel ausgerichtet bleiben — Fahrkurs
+  und Rohrausrichtung sind jetzt zwei getrennte Werte (`aimDx`/`aimDy` für
+  den Mündungspunkt, `dx`/`dy` für die Bewegung). `ghostFlankDamageBonus`
+  (der zweite Teil der Karte) liegt bewusst auf dem **Spieler**-cfg, nicht
+  auf `b.owner.cfg` (der Geist-eigenen cfg) — `state.js`s Trefferschleife
+  liest ihn deshalb explizit über `state.player?.cfg?.ghostFlankDamageBonus`
+  bei `b.owner?.isGhost`, als zusätzlicher Faktor NEBEN dem normalen
+  Flanken-/Heck-Multiplikator aus Grundsteinumbau Phase 2.
+- **`ghost_007` „Totenpräzision"** (Krit für Geistergeschosse) und
+  **`ghost_006`/`009`/`018`/`032`** (Geschosstempo/Reichweite/Resistenz/
+  Durchschlag/Zielsucher) sind reine Wiederverwendung bestehender Felder:
+  `bullet.js: createBullet()` bekommt ein neues `critMultBonus`-Feld
+  (**eingefroren wie `damage`/`crit`**, weil `ghost_019`s Krit-Bonus eine
+  EINMALIGE Schuss-Ladung ist, die nicht auf `tank.cfg` liegen kann — die
+  gilt für JEDEN Schuss). `state.js`s `critMult`-Formel addiert jetzt
+  `(oc?.critMultBonus||0) + (b.critMultBonus||0)` — **wichtiger
+  Umsetzungsfund**: für einen geist-eigenen Schuss (`ghost_007`) liegt der
+  Bonus schon in `g.cfg.critMultBonus` (also `oc?.critMultBonus`) — ein
+  zusätzliches Kugel-Feld hätte ihn doppelt gezählt. `ghost.js`s eigener
+  Krit-Wurf (`state.rng() < g.cfg.critChance`) setzt deshalb bewusst
+  **kein** `critMultBonus` auf der Kugel, nur `crit`.
+- **`player.necroBulletBuffs`** (neu, Array von `{shotsLeft, damageMult?,
+  sizeMult?, pierceAdd?, bulletSpeedMult?, critChanceAdd?, critMultAdd?}`):
+  generische „nächste(r) Schuss/Schüsse"-Warteschlange für `ghost_017`
+  (Opferladung, alle 4 Tode)/`018` (Knochenmunition, jeder Tod)/`019`
+  (Totenblick, jeder Tod — Vereinfachung „nächster SCHUSS" statt wörtlich
+  „nächster TREFFER", dokumentiert im Code). `tank.js: fireBullet()`
+  summiert alle aktiven Ladungen (multiplikativ bei Faktoren, additiv bei
+  Bonuspunkten) EINMAL pro Abzug, bäckt sie in die erzeugte(n) Kugel(n) ein
+  und dekrementiert `shotsLeft` **einmal pro Abzug**, nicht je Kugel eines
+  Streu-/Doppelrohr-Schusses.
+- **`ghost_025` „Letzte Deckung"** ist ein direkter Hook in
+  `state.js: applyDamage()`s letztem Fallthrough-Zweig (NACH allen
+  Abwehr-Gattern, VOR dem hp-Abzug) — kein `necroListeners`-Eintrag, weil
+  „Ohne aktiven Untertanen wirkungslos" eine reine Rettung ohne
+  Kaskadeneffekte sein soll: der geopferte Geist wird direkt auf
+  `alive=false` gesetzt (kein `killGhost()`-Aufruf, löst also keine
+  weiteren Karteneffekte wie Explosionen/Wiederkehr aus). `state.
+  necroLastStandUsed` (neu, `false` bei jedem `createState()`) sperrt eine
+  zweite Rettung im selben Raum, auch wenn ein zweiter Untertan verfügbar
+  wäre.
+- **`ghost_026` „Opferstoß"** (Druckwelle) senkt/hebt die Exekutionsschwelle
+  (Grundsteinumbau Phase 2) für getroffene Gegner zeitlich befristet auf
+  einen **absoluten** Wert (`t.necroExecUntil`/`t.necroExecThreshold`,
+  `Math.max` gegen den globalen Grundwert in `stepState()`s
+  Exekutions-Timer-Schleife) — „senkt sie auf 50 %" ist eine Ersetzung,
+  kein Delta.
+- **`ghost_015` „Aschenhaut"** (Schild-Stapel mit Deckel + Verfall) nutzt
+  bewusst **keinen** `necroTimedStacks`-Eintrag, sondern zwei eigene Felder
+  auf dem Spieler-Panzer (`tank.necroShieldStackAmount`/
+  `-StackExpiresAt`) — ein generischer Timed-Stack kennt seinen Anteil am
+  geteilten `tank.shield`-Pool nicht; beim Verfall (neue Zeile in
+  `stepState()`s Haupttick, VOR der Exekutions-Schleife) wird GENAU der
+  selbst gewährte Anteil abgezogen, nicht der ganze Pool (der auch aus
+  anderen Quellen gespeist sein kann).
+- **`ghost_029`/`030`** (permanente Run-Boni nach je 10 Toden) laufen über
+  eine neue `cfg.js: applyNecroRunScaling(cfg, runDmgBonusPct,
+  runHpBonusPct)` — `run.js: buildCombatRoom()` liest
+  `run.necroStacks._runDmgBonus`/`_runHpBonus` (vom Delta-Sync aus
+  vorherigen Räumen schon aktuell) und reicht sie als `necroRunDmgBonus`/
+  `necroRunHpBonus`-Opts an `createState()`/`respawnPlayer()` durch — an
+  derselben Stelle wie `applyScrapDamage()` (Phase 9), „einmal pro
+  Raumaufbau gebacken".
+- **`ghost_014`/`023`** (Heilung + Überlauf-in-Schild) sitzen in EINEM
+  Listener: der Heilbetrag wird berechnet, der Überschuss über volles Leben
+  hinaus geht bei gesetztem `necroOverflowShieldCapPct` (023, `requires:
+  ["ghost_014"]`) in den Schild-Pool statt verloren zu gehen.
+- **`ghost_034` „Unheiliger Höhepunkt"** (Requiem) ist die einzige Karte mit
+  einer echten rollierenden Fensterlogik: `state.necroKeystoneDeathTimes`
+  (neues, kleines Zeitstempel-Array, nur für diese Karte) wird bei jedem
+  Tod gefiltert (nur Einträge innerhalb `necroKeystoneWindowS`) und geprüft
+  — weder ein einfacher Stapel noch die interne Abklingzeit allein könnten
+  „3 Tode innerhalb von 4 Sekunden" abbilden.
+- **`data/upgrades_necro.json`**: alle 34 Karten (außer `ghost_031`) tragen
+  jetzt echte `core`-Werte statt `{"_todo":"effect"}`. Drei Karten haben
+  zusätzlich `_todo: "balance"` (Wert nicht aus der Kartenbeschreibung
+  ableitbar, sondern selbst gewählt): `ghost_016`s interne
+  Abklingzeit-Sperre (0,6 s hätte sonst gespammt werden können), `ghost_026`s
+  Rückstoß-Distanz (40 px), `ghost_032`s Zielsucher-Lenkrate (3 rad/s).
+- **Neuer Testabschnitt 58** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt einzeln bestanden — je absichtlich rot gemacht: `buildNecroListeners()`-
+  Aufruf in `createState()` entfernt (röted b/c/d/f/g/i-Zielsucher/l auf
+  einen Schlag), `ghost_025`s Last-Stand-Bedingung deaktiviert,
+  `ghostFlankSeek`-Zweig deaktiviert, der Flanken-Bonus-Faktor aus der
+  Schadensformel entfernt, `necroBulletBuffs`-Durchschlag aus dem
+  Kugelaufruf entfernt, `applyNecroRunScaling()` zu einem No-op gemacht,
+  die Timed-Resistenz-Anwendung in `applyDamage()` ausgebaut, die
+  Schild-Verfall-Zeile ausgebaut, ein Kartenkern probeweise auf `_todo`
+  zurückgesetzt): Struktur (35 Karten vorhanden, alle außer `ghost_031`
+  mit echtem `core`, NaN-Sicherheitstest gegen die upgradelose
+  Nekromanten-Basis), die fünf offiziellen Testschritte wörtlich
+  (`ghost_011` Stapel steigt/fällt beim Raumwechsel, `ghost_014` heilt
+  spürbar + interne Abklingzeit verhindert Doppelheilung, `ghost_020`
+  explodiert bei BEIDEN Todesarten, `ghost_025` rettet UND ist ohne
+  Untertan wirkungslos UND nur einmal pro Raum, `ghost_035` stellt die
+  Stapel sofort ohne Heilung auszulösen), `ghost_027`/`028`s
+  Stapel-Multiplikator (inkl. Gegenprobe für die verfehlte Chance und den
+  falschen Auslöser), `ghost_010`s Fahrlogik (isoliert von Wandkollision
+  über ein wandloses Testfeld — ein erster Entwurf mit Wänden hätte auch
+  OHNE die Karte eine Kursabweichung gezeigt und die Gegenprobe nicht
+  bestanden) + Flankenbonus, `ghost_018`/`032`s Bullet-Felder,
+  `applyNecroRunScaling()` mit eigenen Zahlen + End-to-End über
+  `createState()`, `ghost_022`s Timed-Resistenz am echten Treffer,
+  `ghost_015`s Wachstum + Deckel + Verfall. Ein echter Testbau-Fund:
+  `applyUpgrades()`/`createState()` erwarten als `upgradesData`-Parameter
+  das GANZE geladene JSON-Objekt (mit `.upgrades`-Schlüssel), nicht den
+  bereits entpackten Kartendict — `necroData.upgrades` statt `necroData`
+  übergeben ließ jede Karte lautlos wirkungslos bleiben (kein Fehler, nur
+  ein leerer Lookup), bis die erste echte Testausführung 15 Checks auf
+  einen Schlag rot zeigte.
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  Playwright-Smoke (Nekromant wählen, Run starten, Snapshot bestätigt
+  `starterTank: 'c_necro'`, keine Konsolenfehler) bestanden. **Nächste
+  Sitzung: Phase 7** (Legion, 25 Karten).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -5345,26 +5503,48 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   cause)` ist bei `cause==='damage'` (Standard) weiterhin der zentrale Ort
   für Phylakterium/Wiederkehr-Familie/Letzter Wille — bei jedem ECHTEN Tod
   (nicht bei den beiden "überlebt doch"-Zweigen) ruft es zuletzt
-  `necro.js: onGhostRemoved()` auf.
-- `src/game/necro.js` (NEU, Nekromant-V2 Phase 5) — Ereignis-/Stapelschicht
-  für die 105 Karten aus `data/upgrades_necro.json`, aktuell ohne eine
-  einzige angeschlossene Karte (`state.necroListeners` startet leer, Phase
-  6+ füllt sie). `onGhostRemoved(state, ghost, reason)` ist das zentrale
-  Ereignis (vier Auslöser: `death_damage`/`death_expire`/`fusion`/
-  `sacrifice`, `countsAsGhostDeath()` = die "löst Todeseffekte aus"-Tabelle
-  aus dem Auftrag, `fusion` bewusst ausgenommen) — kennt nie eine Karten-ID,
-  iteriert nur `state.necroListeners`. Stapel: `addNecroStack`/
-  `getNecroStack(state, 'room'|'run', key)` (raumweit `state.necroStacks`,
-  runweit über `state.necroRunStackGain` + `state.necroRunStacksBase`, s.
-  `run.js`), `addNecroTimedStack`/`getNecroTimedStack`/`tickNecroTimers`
-  (zeitlich befristet, eigene Restlaufzeit je Schlüssel), `countThreshold
-  Crossings(before, after, n)` (reiner Rechenweg für "Zähler"-Karten, keine
+  `necro.js: onGhostRemoved()` auf. Nekromant-V2 Phase 6: `resolveGhostCfg()`
+  liest sechs weitere Felder (`ghostBulletSpeedMult`/`ghostRangeMult`
+  gemeinsam auf `fireRangePx`, `ghostCritChanceAdd`/`ghostCritMultAdd`,
+  `ghostResistAdd`); `createGhost()` addiert `ghostLifetimeAdd` auf
+  `lifetimeMax` und `ghostShieldOnSpawnPct` als Einmal-Spawn-Schild
+  (zusätzlich zu `shieldMax`, kann diesen Deckel überschreiten). In
+  `updateGhosts()`: eigener Krit-Wurf für Geistergeschosse (`g.cfg.
+  critChance`, setzt bewusst KEIN `critMultBonus`-Feld auf der Kugel — der
+  Wert steckt schon in `g.cfg.critMultBonus`, ein zusätzliches Feld würde
+  ihn doppelt zählen) und eine von der Turmrichtung ENTKOPPELTE
+  Bewegungsrichtung (`moveAngle`/`aimDx`+`aimDy` getrennt von
+  `dx`+`dy`) für `ghost_010`s Flankenanflug.
+- `src/game/necro.js` (Nekromant-V2 Phase 5, seit Phase 6 angeschlossen) —
+  Ereignis-/Stapelschicht für den 105-Karten-Pool `data/upgrades_necro.json`.
+  `onGhostRemoved(state, ghost, reason)` ist das zentrale Ereignis (vier
+  Auslöser: `death_damage`/`death_expire`/`fusion`/`sacrifice`,
+  `countsAsGhostDeath()` = die "löst Todeseffekte aus"-Tabelle aus dem
+  Auftrag, `fusion` bewusst ausgenommen) — kennt nie eine Karten-ID, iteriert
+  nur `state.necroListeners`. Stapel: `addNecroStack`/`getNecroStack(state,
+  'room'|'run', key)` (raumweit `state.necroStacks`, runweit über
+  `state.necroRunStackGain` + `state.necroRunStacksBase`, s. `run.js`),
+  `addNecroTimedStack`/`getNecroTimedStack`/`tickNecroTimers` (zeitlich
+  befristet, eigene Restlaufzeit je Schlüssel), `countThresholdCrossings(
+  before, after, n)` (reiner Rechenweg für "Zähler"-Karten, keine
   Obergrenze/kein NaN durch Ganzzahlteilung auf dem Gesamtwert). Interne
   Abklingzeiten sind je Effekt-Schlüssel über `state.time` gegated (nicht
   global). `applyVirtualNecroDeaths(state, count)` ist der im Auftrag
   verlangte Prüfstein für `ghost_035` — bypasst Buchführung/Protokoll/
-  Abklingzeit bewusst, trifft nur raumweite `death_damage`/`death_expire`-
-  Listener.
+  Abklingzeit bewusst, trifft seit Phase 6 nur noch `scope:'room'`-Listener
+  MIT `pureStack:true` (verschärft gegenüber Phase 5, seit es echte
+  Listener mit Seiteneffekten gibt). **Phase 6**: `buildNecroListeners(state,
+  cfg)` (neu) trägt beim Raumaufbau aus dem aufgelösten Spieler-`cfg` echte
+  Listener-Einträge ein (`ghost_011`–`035` außer der Aktivkarte
+  `ghost_031`) — die Brücke von der reinen Infrastruktur zu spielbaren
+  Karten. `pureStack` (neuer Listener-Flag) markiert einen Listener ohne
+  jeden Seiteneffekt (aktuell nur `ghost_011`/`012`/`013`); `onGhostRemoved()`
+  berechnet daraus einen Stapel-Multiplikator für `ghost_027`/`028` und
+  reicht ihn als 4. Parameter `mult` an `fn(state, ghost, reason, mult)`
+  durch. `necroDamagePct`/`necroFireRatePct`/`necroSpeedPct`/
+  `necroResistBonus(state)` summieren am Ort der Verwendung (`tank.js`/
+  `state.js`) über eine feste, bekannte Liste reservierter Schlüssel (s.
+  eigener CLAUDE.md-Abschnitt „Phase 6" oben).
 - `src/game/ai.js` — Gegner-KI-Dispatcher + Zielsystem (Upgradepool-v2
   Phase 5): `resolveTarget`/`pickTarget`/`updateTargeting`/`registerThreat`
   wählen zwischen Spieler und Geistern statt hart auf `state.player` zu
@@ -5384,7 +5564,14 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `ghostStunOnHit`/`ghostDamageMult`/`ghostHpMult`/`ghostDeathZoneRadius`/
   `ghostDeathZoneDamage`/`ghostReviveChance`/`ghostReviveMaxUses`/
   `ghostReviveGrowth`/`ghostCommander`+`ghostCommanderShield`+
-  `ghostCommanderMultBonus`).
+  `ghostCommanderMultBonus`). Nekromant-V2 Phase 6 fügt sechs weitere
+  `ghost*`-Schlüssel (Lifetime/Bullet-Tempo/Reichweite/Krit/Schild-Spawn/
+  Resistenz/Flankenverhalten, ebenfalls über `ghost.js` gelesen) und ~25
+  neue `necro*`-Schlüssel hinzu, die NICHT auf den Spieler-cfg direkt
+  wirken, sondern von `necro.js: buildNecroListeners()` beim Raumaufbau in
+  echte `state.necroListeners`-Einträge übersetzt werden (Details im
+  Phase-6-Abschnitt oben) — derselbe generische Muster-Bruch wie bei
+  `ghost*`, nur eine Ebene weiter (Listener statt direkter cfg-Wert).
 - `src/game/upgradepool.js` — Auswahl-Pool. Filter in `buildCandidates()`:
   `rarity` (fünf Stufen + `rarityGates`, Upgradepool-v2 Phase 1),
   `isUnique` (Nekromant-V2 Phase 1: ersetzt `maxStacks` ersatzlos — eine
