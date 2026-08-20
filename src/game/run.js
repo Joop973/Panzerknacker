@@ -566,6 +566,13 @@ function buildCombatRoom(run, type, isFinal) {
     // synchronisierten Zuwachs doppelt zaehlen (einmal ueber die "Basis",
     // einmal ueber necroRunStackGain).
     necroRunStacksBase: { ...run.necroStacks },
+    // Nekromant-V2 Phase 6 (ghost_029/030): permanente Run-Boni, einmal pro
+    // Raumaufbau aus dem synchronisierten run.necroStacks gelesen (derselbe
+    // Zeitpunkt wie necroRunStacksBase oben) -- der zugrunde liegende
+    // Stapel-Schluessel ('_runDmgBonus'/'_runHpBonus') wird ausschliesslich
+    // von den beiden Karten selbst befuellt (necro.js: buildNecroListeners()).
+    necroRunDmgBonus: run.necroStacks._runDmgBonus || 0,
+    necroRunHpBonus: run.necroStacks._runHpBonus || 0,
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.

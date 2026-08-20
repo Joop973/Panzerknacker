@@ -7757,28 +7757,46 @@ for (const seed of SEEDS) {
     check(st.necroEventLog.length === 0, 'Phase 5: ein geretteter Untertan loest trotzdem ein Ereignis aus');
   }
 
-  // (l) Virtuelle Tode (Pruefstein): treffen NUR raumweite death_damage/
-  // death_expire-Listener, NICHT run-/timed-scope, OHNE die automatische
+  // (l) Virtuelle Tode (Pruefstein): treffen NUR raumweite, pureStack:true
+  // death_damage/death_expire-Listener (Nekromant-V2 Phase 6: die
+  // Einschraenkung auf pureStack ist NEU gegenueber Phase 5 -- jetzt gibt es
+  // echte Listener mit Seiteneffekten, die ghost_035 ausdruecklich NICHT
+  // treffen darf), NICHT run-/timed-scope, OHNE die automatische
   // Buchfuehrung/das Ereignisprotokoll zu beruehren, UND bypassen eine
   // bereits aktive interne Abklingzeit.
   {
     const st = necroRoom();
     let roomFired = 0;
     let runFired = 0;
+    let sideEffectFired = 0;
     st.necroListeners.push({
-      reasons: ['death_damage'], scope: 'room', key: 'virtRoom', cooldownS: 100, fn: () => roomFired++,
+      reasons: ['death_damage'], scope: 'room', key: 'virtRoom', cooldownS: 100, pureStack: true, fn: () => roomFired++,
     });
     st.necroListeners.push({ reasons: ['death_damage'], scope: 'run', key: 'virtRun', fn: () => runFired++ });
+    // Nekromant-V2 Phase 6: ein raumweiter Listener OHNE pureStack (z. B.
+    // Heilung/Explosion) darf von virtuellen Toden NIE ausgeloest werden --
+    // exakt die Einschraenkung, die diese Phase gegenueber Phase 5 einfuehrt.
+    st.necroListeners.push({
+      reasons: ['death_damage'], scope: 'room', key: 'virtSideEffect', fn: () => sideEffectFired++,
+    });
     // Abklingzeit VORAB "verbrauchen", damit der Bypass-Nachweis echt ist.
     const g = createGhost(st, 0, 0, 0, 't_pink');
-    onGhostRemoved(st, g, 'death_damage'); // normaler Tod -- feuert BEIDE Listener einmal
-    check(roomFired === 1 && runFired === 1, `Phase 5: Vorbedingung -- normale Ausloesung feuert nicht beide Listener (${roomFired}/${runFired})`);
+    onGhostRemoved(st, g, 'death_damage'); // normaler Tod -- feuert alle drei Listener einmal
+    check(
+      roomFired === 1 && runFired === 1 && sideEffectFired === 1,
+      `Phase 5: Vorbedingung -- normale Ausloesung feuert nicht alle Listener (${roomFired}/${runFired}/${sideEffectFired})`,
+    );
     const deathsVor = getNecroStack(st, 'room', '_deaths');
     const logVor = st.necroEventLog.length;
     const runFiredVorVirtual = runFired;
+    const sideEffectVorVirtual = sideEffectFired;
     applyVirtualNecroDeaths(st, 4);
     check(roomFired === 1 + 4, `Phase 5: virtuelle Tode ignorieren die aktive Abklingzeit nicht (${roomFired} statt 5)`);
     check(runFired === runFiredVorVirtual, `Phase 5: virtuelle Tode loesen faelschlich den runweiten Listener aus (${runFired} statt ${runFiredVorVirtual})`);
+    check(
+      sideEffectFired === sideEffectVorVirtual,
+      `Phase 6: virtuelle Tode loesen faelschlich einen Nicht-pureStack-Listener aus (${sideEffectFired} statt ${sideEffectVorVirtual})`,
+    );
     check(getNecroStack(st, 'room', '_deaths') === deathsVor, 'Phase 5: virtuelle Tode veraendern den _deaths-Stapel');
     check(st.necroEventLog.length === logVor, 'Phase 5: virtuelle Tode schreiben ins Ereignisprotokoll');
   }
@@ -7808,6 +7826,334 @@ for (const seed of SEEDS) {
     } finally {
       restore();
     }
+  }
+}
+
+// ---- 58. Nekromant-V2 Phase 6: Allgemein und Opfer (35 Karten) -----------
+// Die Bruecke von Phase 5s reiner Infrastruktur zu echten Karten (ghost_001-
+// 035, ghost_031 ausgenommen -- Aktivkarte, Phase 9). Alle 34 hier
+// befuellten Karten wirken ueber neue ghost*/necro*-core-Schluessel, die
+// necro.js: buildNecroListeners() beim Raumaufbau in state.necroListeners
+// eintraegt. Die fuenf Testschritte des Auftrags wörtlich, dazu Mechanismus-
+// Tests fuer die neuen, nicht-trivialen Stuecke (Bewegungslogik ghost_010,
+// Cross-Cutting-Multiplikator ghost_027/028, Rettung ghost_025, Timed-Stacks).
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createGhost, killGhost } = await import('../src/game/ghost.js');
+  const { fireBullet } = await import('../src/game/tank.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+  const { getNecroStack, necroDamagePct } = await import('../src/game/necro.js');
+
+  const necroRoom = (playerUpgrades = {}, types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades,
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    return st;
+  };
+
+  // (a) Struktur: ghost_001..ghost_035 vorhanden, alle bis auf die
+  // Aktivkarte ghost_031 haben einen echten core (kein "_todo"-Platzhalter
+  // mehr), UND jede loest sich ohne NaN/undefined in ein Spieler-cfg auf --
+  // dasselbe Muster wie Abschnitt 45s NaN-Check (Vergleich gegen die
+  // upgradelose Basis derselben Klasse, weil manche Felder wie z. B.
+  // `role`/`miner` bei JEDER Klasse von Haus aus undefined sind).
+  {
+    const ids = [];
+    for (let i = 1; i <= 35; i++) ids.push('ghost_' + String(i).padStart(3, '0'));
+    check(ids.every((id) => necroData.upgrades[id]), 'Phase 6: nicht alle 35 Karten ghost_001..ghost_035 existieren');
+    for (const id of ids) {
+      const def = necroData.upgrades[id];
+      if (id === 'ghost_031') {
+        check(def.core && def.core._todo === 'effect', 'Phase 6: ghost_031 (Aktivkarte, Phase 9) sollte noch _todo sein');
+        continue;
+      }
+      check(def.core && def.core._todo !== 'effect', `Phase 6: ${id} hat noch keinen core-Wert`);
+    }
+    const basis = applyUpgrades(resolveCfg(tanksData, 'c_necro'), {}, necroData, 'mine', null);
+    for (const id of ids) {
+      if (id === 'ghost_031') continue;
+      const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { [id]: 1 }, necroData, 'mine', null);
+      for (const k of Object.keys(cfg)) {
+        const bad = (typeof cfg[k] === 'number' && Number.isNaN(cfg[k])) || (cfg[k] === undefined && basis[k] !== undefined);
+        check(!bad, `Phase 6: ${id} macht cfg.${k} zu NaN/undefined`);
+      }
+    }
+  }
+
+  // (b) Testschritt 1 (ghost_011): drei Untertanen sterben lassen -- der
+  // Spielerschaden-Stapel steigt raumweit sichtbar und faellt beim
+  // Raumwechsel (neuer state) zurueck.
+  {
+    const st = necroRoom({ ghost_011: 1 });
+    check(necroDamagePct(st) === 0, 'Phase 6: ghost_011 hat vor jedem Tod schon einen Bonus');
+    for (let i = 0; i < 3; i++) {
+      const g = createGhost(st, 0, 0, 0, 't_pink');
+      killGhost(st, g, 'damage');
+    }
+    check(Math.abs(necroDamagePct(st) - 0.06) < 1e-9, `Phase 6: ghost_011 gibt nach 3 Toden nicht +6 % (${necroDamagePct(st)})`);
+    const st2 = necroRoom({ ghost_011: 1 });
+    check(necroDamagePct(st2) === 0, 'Phase 6: ghost_011s Bonus ueberlebt faelschlich den Raumwechsel');
+  }
+
+  // (c) Testschritt 2 (ghost_014): Heilung ist innerhalb eines Gefechts
+  // spuerbar (hp steigt sichtbar), interne 1-s-Abklingzeit verhindert
+  // Mehrfachheilung im selben Moment.
+  {
+    const st = necroRoom({ ghost_014: 1 });
+    st.player.hp = st.player.cfg.maxHp - 40;
+    const before = st.player.hp;
+    const g1 = createGhost(st, 0, 0, 0, 't_pink');
+    killGhost(st, g1, 'damage');
+    const afterOne = st.player.hp;
+    check(afterOne > before, `Phase 6: ghost_014 heilt nicht spuerbar (${before} -> ${afterOne})`);
+    check(Math.abs(afterOne - before - st.player.cfg.maxHp * 0.06) < 1e-6, `Phase 6: ghost_014s Heilbetrag stimmt nicht (${afterOne - before})`);
+    // sofort ein zweiter Tod -- Abklingzeit sperrt eine zweite Heilung
+    const g2 = createGhost(st, 0, 0, 0, 't_pink');
+    killGhost(st, g2, 'damage');
+    check(st.player.hp === afterOne, `Phase 6: ghost_014 heilt trotz aktiver interner Abklingzeit erneut (${afterOne} -> ${st.player.hp})`);
+  }
+
+  // (d) Testschritt 3 (ghost_020): Tod durch Schaden UND Tod durch Ablauf
+  // explodieren beide (Radius 64 px, 25 % des aktuellen Spielerschadens).
+  {
+    for (const cause of ['damage', 'expire']) {
+      const st = necroRoom({ ghost_020: 1 }, ['t_pink', 't_pink']);
+      const target = st.tanks.find((t) => t !== st.player);
+      target.hp = target.cfg.maxHp;
+      const g = createGhost(st, target.x + 30, target.y, 0, 't_pink');
+      const hpVor = target.hp;
+      killGhost(st, g, cause);
+      const expectedDmg = Math.round(st.player.cfg.damage * 0.25);
+      check(
+        target.hp === hpVor - expectedDmg,
+        `Phase 6: ghost_020 (${cause}) zuendet nicht mit dem erwarteten Schaden (${hpVor} -> ${target.hp}, erwartet -${expectedDmg})`,
+      );
+    }
+  }
+
+  // (e) Testschritt 4 (ghost_025 "Letzte Deckung"): toedlicher Schaden
+  // opfert einen Untertanen statt den Hauptpanzer -- UND ist ohne
+  // Untertanen wirkungslos (die epische Stufe muss beides zuverlaessig
+  // erfuellen, Auftrag Abschnitt "Änderungen").
+  {
+    const st = necroRoom({ ghost_025: 1 });
+    const g = createGhost(st, 0, 0, 0, 't_pink');
+    g.hp = 5; // schwaechster (einziger) Untertan
+    st.ghosts.push(g);
+    st.player.hp = 10;
+    st.applyDamage(st.player, 999, 'test', {});
+    check(st.player.alive, 'Phase 6: ghost_025 rettet den Spieler nicht vor toedlichem Schaden');
+    check(!g.alive, 'Phase 6: ghost_025 opfert keinen Untertanen');
+    check(st.player.hp > 10, `Phase 6: ghost_025 heilt den Spieler nicht (${st.player.hp})`);
+    check(st.necroLastStandUsed, 'Phase 6: ghost_025 markiert die einmalige Nutzung nicht');
+    // zweiter toedlicher Treffer im selben Raum: trotz eines VERFUEGBAREN
+    // zweiten Untertanen greift die Karte nicht erneut (nur einmal pro Raum).
+    const g2 = createGhost(st, 0, 0, 0, 't_pink');
+    st.ghosts.push(g2);
+    st.player.hp = 10;
+    st.applyDamage(st.player, 999, 'test', {});
+    check(!st.player.alive, 'Phase 6: ghost_025 rettet ein zweites Mal im selben Raum (nur einmal pro Raum erlaubt)');
+    // Gegenprobe im selben Test: OHNE aktiven Untertanen wirkt die Karte gar
+    // nicht -- ein frischer Raum ohne Geister muss normal sterben.
+    const st2 = necroRoom({ ghost_025: 1 });
+    st2.player.hp = 10;
+    st2.applyDamage(st2.player, 999, 'test', {});
+    check(!st2.player.alive, 'Phase 6: ghost_025 rettet den Spieler faelschlich OHNE aktiven Untertanen');
+  }
+
+  // (f) Testschritt 5 (ghost_035 "Vorbote des Endes"): 4 virtuelle
+  // Geistertode stehen SOFORT bei Raumstart (kombiniert mit ghost_011,
+  // damit ein pureStack-Ziel existiert), aber ghost_014s Heilung wurde NICHT
+  // ausgeloest (Spieler-hp unveraendert vom vollen Stand).
+  {
+    const st = necroRoom({ ghost_011: 1, ghost_014: 1, ghost_035: 1 });
+    check(Math.abs(necroDamagePct(st) - 4 * 0.02) < 1e-9, `Phase 6: ghost_035 stellt die Stapel nicht sofort (${necroDamagePct(st)})`);
+    check(st.player.hp === st.player.cfg.maxHp, `Phase 6: ghost_035 loest faelschlich ghost_014s Heilung aus (hp=${st.player.hp})`);
+  }
+
+  // (g) ghost_027 "Kettenopfer" / ghost_028 "Treues Ende": der Stapel-
+  // Multiplikator wirkt NUR auf pureStack-Beitraege (011/012/013), nicht auf
+  // Heilung (014) -- gestellter state.rng() macht die 20 %-Chance
+  // deterministisch treffend bzw. verfehlend.
+  {
+    const st = necroRoom({ ghost_011: 1, ghost_014: 1, ghost_027: 1 });
+    st.player.hp = 10;
+    st.rng = () => 0.01; // < 20 % -> Verdopplung greift
+    const g1 = createGhost(st, 0, 0, 0, 't_pink');
+    killGhost(st, g1, 'damage');
+    check(Math.abs(necroDamagePct(st) - 0.02 * 2) < 1e-9, `Phase 6: ghost_027 verdoppelt den pureStack-Beitrag nicht (${necroDamagePct(st)})`);
+    check(Math.abs(st.player.hp - (10 + st.player.cfg.maxHp * 0.06)) < 1e-6, 'Phase 6: ghost_027 verdoppelt faelschlich die Heilung (kein pureStack)');
+    // Gegenprobe im selben Test: eine Chance, die NIE trifft (rng immer 1),
+    // darf niemals verdoppeln.
+    const st2 = necroRoom({ ghost_011: 1, ghost_027: 1 });
+    st2.rng = () => 0.99;
+    const g2 = createGhost(st2, 0, 0, 0, 't_pink');
+    killGhost(st2, g2, 'damage');
+    check(Math.abs(necroDamagePct(st2) - 0.02) < 1e-9, `Phase 6: ghost_027 verdoppelt trotz verfehlter Chance (${necroDamagePct(st2)})`);
+
+    const st3 = necroRoom({ ghost_011: 1, ghost_028: 1 });
+    const g3 = createGhost(st3, 0, 0, 0, 't_pink');
+    killGhost(st3, g3, 'expire');
+    check(Math.abs(necroDamagePct(st3) - 0.02 * 1.6) < 1e-9, `Phase 6: ghost_028 verstaerkt Ablauf-Stapel nicht um 60 % (${necroDamagePct(st3)})`);
+    const st4 = necroRoom({ ghost_011: 1, ghost_028: 1 });
+    const g4 = createGhost(st4, 0, 0, 0, 't_pink');
+    killGhost(st4, g4, 'damage'); // normaler Tod -- 028 wirkt NUR bei Ablauf
+    check(Math.abs(necroDamagePct(st4) - 0.02) < 1e-9, `Phase 6: ghost_028 wirkt faelschlich auch bei normalem Tod (${necroDamagePct(st4)})`);
+  }
+
+  // (h) ghost_010 "Jenseitsziel": eine echte Fahrlogik-Erweiterung (Auftrag:
+  // "braucht eine Erweiterung ... nicht nur einen Wert") -- der Untertan
+  // bewegt sich NICHT direkt auf sein Ziel zu, und ein Flanken-/Heck-Treffer
+  // eines Untertanen ist mit der Karte staerker als ohne.
+  {
+    const st = necroRoom({ ghost_010: 1 }, ['t_pink']);
+    st.walls = []; // isoliert die reine Bewegungsrichtung von Wandkollisionen/-korrekturen
+    const target = st.tanks.find((t) => t !== st.player);
+    target.x = 400;
+    target.y = 256;
+    target.heading = 0;
+    const g = createGhost(st, 250, 256, 0, 't_pink');
+    st.ghosts.push(g);
+    g.turret = Math.atan2(target.y - g.y, target.x - g.x);
+    g.heading = g.turret;
+    const straightAngle = Math.atan2(target.y - g.y, target.x - g.x);
+    const before = { x: g.x, y: g.y };
+    const { updateGhosts } = await import('../src/game/ghost.js');
+    updateGhosts(st, 1 / 60);
+    const movedAngle = Math.atan2(g.y - before.y, g.x - before.x);
+    check(Math.abs(movedAngle - straightAngle) > 0.05, 'Phase 6: ghost_010 bewegt den Untertan trotzdem geradewegs aufs Ziel zu');
+
+    // Flanken-Schadensbonus, isoliert an der Trefferschleife gemessen -- in
+    // einem FRISCHEN Raum (nicht dem obigen `st`: dessen Untertan `g` hat
+    // waehrend der 0,5-s-Bewegungsprobe moeglicherweise schon selbst
+    // gefeuert und den einzigen Gegner getoetet).
+    const stFlank = necroRoom({ ghost_010: 1 }, ['t_pink']);
+    const target2 = stFlank.tanks.find((t) => t !== stFlank.player);
+    target2.heading = 0;
+    target2.hp = target2.cfg.maxHp;
+    const g2 = createGhost(stFlank, target2.x, target2.y - 40, Math.PI / 2, 't_pink'); // von der Seite
+    const { createBullet } = await import('../src/game/bullet.js');
+    stFlank.bullets.push(createBullet(target2.x, target2.y - 5, Math.PI / 2, { speed: 1, radius: 4, owner: g2, damage: 100 }));
+    stepState(stFlank, CMD, 1 / 60);
+    const withCard = target2.cfg.maxHp - target2.hp;
+
+    const st2 = necroRoom({}, ['t_pink']);
+    const target3 = st2.tanks.find((t) => t !== st2.player);
+    target3.heading = 0;
+    target3.hp = target3.cfg.maxHp;
+    const g3 = createGhost(st2, target3.x, target3.y - 40, Math.PI / 2, 't_pink');
+    const { createBullet: cb2 } = await import('../src/game/bullet.js');
+    st2.bullets.push(cb2(target3.x, target3.y - 5, Math.PI / 2, { speed: 1, radius: 4, owner: g3, damage: 100 }));
+    stepState(st2, CMD, 1 / 60);
+    const withoutCard = target3.cfg.maxHp - target3.hp;
+    check(withCard > withoutCard, `Phase 6: ghost_010s Flankenbonus verstaerkt Untertanen-Treffer nicht (${withCard} vs ${withoutCard})`);
+  }
+
+  // (i) ghost_018 (Durchschlag) / ghost_032 (Zielsucher, Bestand aus
+  // Phase 2) -- reine Wiederverwendung bestehender Bullet-Felder, hier am
+  // echten Schuss gemessen.
+  {
+    const st = necroRoom({ ghost_018: 1 });
+    st.player.necroBulletBuffs = [{ shotsLeft: 3, pierceAdd: 1, bulletSpeedMult: 1.1 }];
+    st.player.cooldown = 0;
+    fireBullet(st.player, st, true);
+    const b = st.bullets[st.bullets.length - 1];
+    check(b.pierce === (st.player.cfg.pierce || 0) + 1, `Phase 6: ghost_018 gibt der Kugel keinen Durchschlag (${b.pierce})`);
+    check(st.player.necroBulletBuffs[0].shotsLeft === 2, 'Phase 6: ghost_018s Ladung wird nicht verbraucht');
+
+    const st2 = necroRoom({ ghost_032: 1 });
+    st2.necroStacks._deaths = 4; // vor dem 5. Tod
+    const g = createGhost(st2, 0, 0, 0, 't_pink');
+    killGhost(st2, g, 'damage'); // 5. Tod -> Totenkanone feuert
+    const homing = st2.bullets.find((bb) => bb.owner === st2.player && bb.homing > 0);
+    check(!!homing, 'Phase 6: ghost_032 feuert nach 5 Toden keinen Zielsucher');
+    check(homing && homing.damage === Math.round(st2.player.cfg.damage * 1.5), `Phase 6: ghost_032s Zielsucher hat nicht 150 % Schaden (${homing?.damage})`);
+  }
+
+  // (j) ghost_029/030 "Seelenhunger"/"Unsterbliche Maschine": permanente
+  // Run-Boni ueber applyNecroRunScaling() -- Mechanismus mit EIGENEN Zahlen
+  // (nicht 1 %), damit ein Rechenfehler nicht zufaellig unter der
+  // Nachweisschwelle bleibt.
+  {
+    const { applyNecroRunScaling } = await import('../src/game/cfg.js');
+    const base = { damage: 100, maxHp: 200 };
+    const scaled = applyNecroRunScaling({ ...base }, 0.5, 0.25);
+    check(scaled.damage === 150, `Phase 6: applyNecroRunScaling skaliert den Schaden falsch (${scaled.damage})`);
+    check(scaled.maxHp === 250, `Phase 6: applyNecroRunScaling skaliert die LP falsch (${scaled.maxHp})`);
+    const noop = applyNecroRunScaling({ ...base }, 0, 0);
+    check(noop.damage === 100 && noop.maxHp === 200, 'Phase 6: applyNecroRunScaling veraendert bei 0-Bonus trotzdem etwas');
+
+    // End-to-End: run.js baut necroRunDmgBonus/-HpBonus aus run.necroStacks,
+    // state.js wendet sie beim Raumaufbau tatsaechlich an.
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: ['t_pink'],
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+      necroRunDmgBonus: 0.5,
+      necroRunHpBonus: 0.25,
+    });
+    const baseline = resolveCfg(tanksData, 'c_necro');
+    check(st.player.cfg.damage === Math.round(baseline.damage * 1.5), `Phase 6: der Run-Schadensbonus wirkt nicht beim Raumaufbau (${st.player.cfg.damage})`);
+    check(st.player.cfg.maxHp === Math.round(baseline.maxHp * 1.25), `Phase 6: der Run-LP-Bonus wirkt nicht beim Raumaufbau (${st.player.cfg.maxHp})`);
+  }
+
+  // (k) ghost_022 "Haerte aus Verlust": zeitlich befristete Resistenz wirkt
+  // am Trefferpunkt (state.js: applyDamage()) -- gemessen als kleinerer
+  // Schaden mit aktivem Timed-Stack als ohne.
+  {
+    const { addNecroTimedStack } = await import('../src/game/necro.js');
+    const st = necroRoom({});
+    st.player.hp = 1000;
+    const before = st.player.hp;
+    st.applyDamage(st.player, 100, 'test', {});
+    const dmgOhne = before - st.player.hp;
+
+    const st2 = necroRoom({});
+    st2.player.hp = 1000;
+    addNecroTimedStack(st2, '_timedResistHaerte', 8, 10);
+    const before2 = st2.player.hp;
+    st2.applyDamage(st2.player, 100, 'test', {});
+    const dmgMit = before2 - st2.player.hp;
+    check(dmgMit < dmgOhne, `Phase 6: ghost_022s Timed-Resistenz wirkt nicht am Treffer (${dmgMit} vs ${dmgOhne})`);
+  }
+
+  // (l) ghost_015 "Aschenhaut": Schild-Stapel waechst mit jedem Tod (bis zum
+  // Deckel) und verfaellt nach der Dauer wieder um exakt den gewaehrten
+  // Anteil.
+  {
+    const st = necroRoom({ ghost_015: 1 });
+    st.player.shield = 0;
+    const g = createGhost(st, 0, 0, 0, 't_pink');
+    killGhost(st, g, 'damage');
+    check(Math.abs(st.player.shield - st.player.cfg.maxHp * 0.04) < 1e-6, `Phase 6: ghost_015 gewaehrt beim ersten Tod nicht den erwarteten Schild (${st.player.shield})`);
+    // Deckel: viele Tode duerfen 20 % des maximalen Lebens nicht ueberschreiten.
+    for (let i = 0; i < 20; i++) {
+      const gi = createGhost(st, 0, 0, 0, 't_pink');
+      killGhost(st, gi, 'damage');
+    }
+    check(st.player.shield <= st.player.cfg.maxHp * 0.20 + 1e-6, `Phase 6: ghost_015 ueberschreitet den 20-%-Deckel (${st.player.shield})`);
+    // Verfall: nach Ablauf der Dauer sinkt der Schild um genau den
+    // gewaehrten Anteil (state.player.necroShieldStackAmount).
+    const gewaehrt = st.player.necroShieldStackAmount;
+    const vorVerfall = st.player.shield;
+    st.time = st.player.necroShieldStackExpiresAt + 0.01;
+    stepState(st, CMD, 1 / 60);
+    check(Math.abs(st.player.shield - (vorVerfall - gewaehrt)) < 1, `Phase 6: ghost_015s Schild verfaellt nicht um den gewaehrten Anteil (${vorVerfall} -> ${st.player.shield}, erwartet -${gewaehrt})`);
   }
 }
 

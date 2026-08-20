@@ -24,14 +24,14 @@ import { updateMines, explodeAt } from './mine.js';
 import { fireMortar, updateMortars } from './mortar.js';
 import { updateTraps } from './trap.js';
 import { createGhost, updateGhosts, killGhost } from './ghost.js';
-import { tickNecroTimers } from './necro.js';
+import { tickNecroTimers, buildNecroListeners, applyVirtualNecroDeaths, necroResistBonus } from './necro.js';
 import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
 import { applyTypeEffects } from './damagetypes.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
-import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, isBossCfg } from './cfg.js';
+import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, applyNecroRunScaling, isBossCfg } from './cfg.js';
 import { armorBlocks, reflectBullet, reflectFromAim, isLive, flankZone } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
@@ -183,7 +183,8 @@ export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
     destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses, upgradeLevels, levelBalance,
-    starterTank = 'player', starterScrap = 0, actEnemyPool, necroRunStacksBase } = opts;
+    starterTank = 'player', starterScrap = 0, actEnemyPool, necroRunStacksBase,
+    necroRunDmgBonus = 0, necroRunHpBonus = 0 } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
@@ -228,6 +229,11 @@ export function createState(data, tiles, opts) {
     starterTank,
     applyRoomContext(
       applyRoomModifier(
+        // Nekromant-V2 Phase 6 (ghost_029/030): permanente Run-Boni NACH dem
+        // Schrottpanzer-Passiv, VOR dem Raum-Modifikator -- gleiche Stelle
+        // wie applyScrapDamage(), ein weiterer "einmal pro Raumaufbau
+        // gebackener" Multiplikator.
+        applyNecroRunScaling(
         applyScrapDamage(
           applyUpgrades(
           resolveCfg(data, starterTank),
@@ -239,6 +245,9 @@ export function createState(data, tiles, opts) {
           levelBalance,
         ),
           starterScrap,
+        ),
+        necroRunDmgBonus,
+        necroRunHpBonus,
         ),
         modifier,
         true,
@@ -300,6 +309,8 @@ export function createState(data, tiles, opts) {
     equippedGadget: equippedGadget || null, // P4: zweiter Slot, ebenfalls fuer respawnPlayer()
     starterTank, // Phase 9: gewaehlte Klasse -- respawnPlayer() baut denselben Panzer
     starterScrap, // Phase 9: Schrottstand fuer das Schrottpanzer-Passiv (pro Raum gebacken)
+    necroRunDmgBonus, // Nekromant-V2 Phase 6: respawnPlayer() baut denselben Bonus nach
+    necroRunHpBonus,
     // Nekromant-V2 Phase 3: Gegnertypen, die zum jetzigen Zeitpunkt des Akts
     // freigeschaltet sind -- tank.js: spawnGhostBomb() zieht daraus einen
     // zufaelligen Typ. run.js: buildCombatRoom() liefert die echte Liste;
@@ -317,6 +328,9 @@ export function createState(data, tiles, opts) {
     // Speichers, damit ein Lesezugriff waehrend des Raums den korrekten
     // Gesamtwert sieht (s. necro.js: getNecroStack()).
     necroListeners: [],
+    // ghost_025 "Letzte Deckung": einmal pro Raum -- state ist pro Raum
+    // frisch, also genuegt ein einfaches false hier (kein reset() noetig).
+    necroLastStandUsed: false,
     necroStacks: {},
     necroRunStackGain: {},
     necroRunStacksBase: necroRunStacksBase || {},
@@ -567,7 +581,15 @@ export function createState(data, tiles, opts) {
       // ueber Zeit (ein resistenter Panzer soll auch gegen Brand/Gift zaeher
       // sein), deshalb VOR der DOT-Weiche unten. Rechenweg + Begruendung:
       // s. applyResistToAmount() oben.
-      amount = applyResistToAmount(tank.cfg, state.data.balance?.resist, amount);
+      // ghost_022 "Haerte aus Verlust" (Nekromant-V2 Phase 6): zeitlich
+      // befristeter Resistenz-Bonus NUR fuer den Spieler, additiv zur
+      // festen cfg.resist -- necroResistBonus() summiert den generischen
+      // Timed-Stack, kein zweites Resistenzfeld auf cfg noetig.
+      const effResistCfg =
+        tank === state.player && necroResistBonus(state) > 0
+          ? { resist: (tank.cfg.resist || 0) + necroResistBonus(state) }
+          : tank.cfg;
+      amount = applyResistToAmount(effResistCfg, state.data.balance?.resist, amount);
       // Schaden ueber Zeit (Phase 5) ueberspringt ALLE Schild-Gatter
       // darunter. Ein Schild, der "den naechsten Treffer abfaengt", darf
       // nicht an einem 4-Punkte-Brandtick verpuffen -- sechs Ticks wuerden
@@ -647,6 +669,34 @@ export function createState(data, tiles, opts) {
         if (tank.hp > 0) return;
         state.killTank(tank, cause, meta);
         return;
+      }
+      // ghost_025 "Letzte Deckung" (Nekromant-V2 Phase 6): einmal pro Raum
+      // opfert ein TOEDLICHER Treffer den SCHWAECHSTEN aktiven Untertanen
+      // statt den Hauptpanzer -- NACH allen obigen Abwehr-Gattern (ein
+      // Schild soll weiterhin zuerst greifen), aber VOR dem hp-Abzug. Ohne
+      // aktiven Untertanen (state.ghosts leer) wirkungslos, wie im Auftrag
+      // gefordert. Der geopferte Untertan wird direkt entfernt (kein
+      // killGhost()-Aufruf -- die Karte ist reine Rettung, kein Geistertod
+      // im Sinne der Tabelle, loest also keine weiteren Karteneffekte aus).
+      if (
+        tank === state.player &&
+        tank.cfg.necroLastStand &&
+        !state.necroLastStandUsed &&
+        (amount ?? 1) >= tank.hp &&
+        state.ghosts.some((g) => g.alive)
+      ) {
+        let weakest = null;
+        for (const g of state.ghosts) {
+          if (g.alive && (!weakest || g.hp < weakest.hp)) weakest = g;
+        }
+        if (weakest) {
+          state.necroLastStandUsed = true;
+          weakest.alive = false;
+          tank.hp = Math.min(tank.cfg.maxHp, tank.hp + tank.cfg.maxHp * (tank.cfg.necroLastStandHealPct || 0));
+          state.sounds.push({ name: 'shield', x: tank.x });
+          state.spawnParticles(tank.x, tank.y, '#c9a6ff', 12, 130);
+          return;
+        }
       }
       // Kein Gatter hat gegriffen -> der Treffer geht durch. Der Schaden wird
       // immer abgezogen (hp bleibt eine ehrliche Zahl).
@@ -806,6 +856,38 @@ export function createState(data, tiles, opts) {
       }
     },
   };
+  // Nekromant-V2 Phase 6: die Bruecke von Phase 5s reiner Infrastruktur zu
+  // echten Karten -- EINMAL pro Raumaufbau, NACH der vollstaendigen
+  // state-Konstruktion (die Listener-Closures brauchen den fertigen state).
+  buildNecroListeners(state, player.cfg);
+  // ghost_033 "Rueckkehr aus Asche": ein zerbrechlicher Untertan erscheint
+  // sofort am Spielerstandort. Skaliert die NORMALE (baseStatPct-basierte)
+  // Erzeugung nachtraeglich auf den Karten-eigenen Prozentsatz um, statt die
+  // resolveGhostCfg()-Rechnung zu duplizieren (mathematisch aequivalent:
+  // beide Prozentsaetze wirken auf denselben Basiswert). "Kann nicht erneut
+  // wiederbelebt werden" ergibt sich VON SELBST -- er stirbt planmaessig per
+  // Lebensdauer-Ablauf ('expire'), und killGhost() ueberspringt die
+  // Wiederkehr-Familie bei 'expire' ohnehin (s. ghost.js).
+  if (player.cfg.necroStartGhostPct && state.ghosts.length < (state.data.balance?.ghost?.maxActive ?? 3)) {
+    const pool = actEnemyPool && actEnemyPool.length ? actEnemyPool : ['t_brown'];
+    const srcType = pool[Math.floor(state.rng() * pool.length)];
+    const g = createGhost(state, player.x, player.y, player.turret, srcType);
+    const defaultPct = state.data.balance?.ghost?.baseStatPct ?? 0.5;
+    const scale = player.cfg.necroStartGhostPct / defaultPct;
+    g.cfg.maxHp = Math.max(1, Math.round(g.cfg.maxHp * scale));
+    g.cfg.damage = Math.max(1, Math.round(g.cfg.damage * scale));
+    g.hp = g.cfg.maxHp;
+    g.baseMaxHp = g.cfg.maxHp;
+    g.baseDamage = g.cfg.damage;
+    g.lifetimeMax = player.cfg.necroStartGhostLifetimeS;
+    g.lifetime = player.cfg.necroStartGhostLifetimeS;
+    state.ghosts.push(g);
+  }
+  // ghost_035 "Vorbote des Endes": 4 virtuelle Geistertode sofort bei
+  // Raumstart, ausschliesslich auf raumweite pureStack-Listener (s. necro.js).
+  if (player.cfg.necroVirtualDeathsOnStart) {
+    applyVirtualNecroDeaths(state, player.cfg.necroVirtualDeathsOnStart);
+  }
   return state;
 }
 
@@ -837,6 +919,7 @@ function respawnPlayer(state) {
     state.starterTank,
     applyRoomContext(
       applyRoomModifier(
+        applyNecroRunScaling(
         applyScrapDamage(
           applyUpgrades(
             resolveCfg(state.data, state.starterTank),
@@ -848,6 +931,9 @@ function respawnPlayer(state) {
             state.levelBalance,
           ),
           state.starterScrap,
+        ),
+        state.necroRunDmgBonus,
+        state.necroRunHpBonus,
         ),
         state.modifier,
         true,
@@ -936,6 +1022,15 @@ export function stepState(state, cmd, dt) {
   // stepState() aufruft (genau das Muster, das trickshotTimer schon nutzte).
   if (state.rearKillTimer > 0) state.rearKillTimer = Math.max(0, state.rearKillTimer - dt);
 
+  // ghost_015 "Aschenhaut" (Nekromant-V2 Phase 6): der ueber Tode gestapelte
+  // Schild-Anteil verfaellt nach necroShieldDurationS wieder -- entfernt nur
+  // GENAU den Anteil, den diese Karte selbst gewaehrt hat (nicht den ganzen
+  // Schild-Pool, der auch aus anderen Quellen gespeist sein kann).
+  if (state.player?.necroShieldStackAmount > 0 && state.time >= (state.player.necroShieldStackExpiresAt || 0)) {
+    state.player.shield = Math.max(0, (state.player.shield || 0) - state.player.necroShieldStackAmount);
+    state.player.necroShieldStackAmount = 0;
+  }
+
   // Transformation "Saboteur" (Phase 5): betaeubte Gegner explodieren,
   // sobald ihre Betaeubung endet.
   const sabotageR = state.transform.stunExplodeRadiusPx || 0;
@@ -949,8 +1044,16 @@ export function stepState(state, cmd, dt) {
   const exCfg = state.data.balance.execute;
   for (const t of state.tanks) {
     if (!t.alive) continue;
+    // ghost_026 "Opferstoss" (Nekromant-V2 Phase 6): eine Druckwelle hebt die
+    // Exekutionsschwelle fuer GETROFFENE Gegner zeitlich befristet auf einen
+    // absoluten Wert an (necroExecThreshold, typisch 0,5 -- deutlich hoeher
+    // als der globale Grundwert) statt ihn zu addieren -- "senkt sie ... auf
+    // 50 %" ist eine Ersetzung, kein Delta. Nur solange necroExecUntil in
+    // der Zukunft liegt.
+    const execThreshold =
+      t.necroExecUntil > state.time ? Math.max(exCfg?.thresholdPct ?? 0, t.necroExecThreshold || 0) : exCfg?.thresholdPct;
     t.executing =
-      !!exCfg && t !== state.player && !isBossCfg(t.cfg) && t.hp / (t.cfg.maxHp || 1) <= exCfg.thresholdPct;
+      !!exCfg && t !== state.player && !isBossCfg(t.cfg) && t.hp / (t.cfg.maxHp || 1) <= execThreshold;
     if (t.executing) {
       // "raucht sichtbar (Partikel im Takt)" -- die Lesbarkeit ist der
       // eigentliche Nutzen der Schwelle (Entscheidung D).
@@ -1197,7 +1300,7 @@ export function stepState(state, cmd, dt) {
         const isCrit = b.crit;
         // Kritischer Treffer (UMBAUPLAN-LP Phase 7): der Aufschlag traegt
         // den balance.crit.mult (+ Splittergeschoss-Bonus, falls gesetzt).
-        const critMult = isCrit ? (state.data.balance?.crit?.mult ?? 1) + (oc?.critMultBonus || 0) : 1;
+        const critMult = isCrit ? (state.data.balance?.crit?.mult ?? 1) + (oc?.critMultBonus || 0) + (b.critMultBonus || 0) : 1;
         const execMult =
           oc?.executeThreshold && t !== state.player && t.hp / (t.cfg.maxHp || 1) < oc.executeThreshold
             ? oc.executeMult || 1
@@ -1212,8 +1315,15 @@ export function stepState(state, cmd, dt) {
         const flankCfg = state.data.balance.flank;
         const flankZoneHit =
           flankCfg && t !== state.player && !isBossCfg(t.cfg) ? flankZone(t, b.x, b.y, flankCfg) : 'front';
-        const flankMult =
+        const baseFlankMult =
           flankZoneHit === 'rear' ? flankCfg.rearMult : flankZoneHit === 'side' ? flankCfg.sideMult : 1;
+        // ghost_010 "Jenseitsziel" (Nekromant-V2 Phase 6): zusaetzlicher
+        // Flanken-/Heckschaden-Bonus fuer UNTERTANEN-Treffer -- das Feld
+        // liegt auf dem SPIELER-cfg (die Karte wirkt auf "Untertanenpanzer"
+        // kollektiv), nicht auf b.owner.cfg (das ist die Ghost-eigene cfg).
+        const ghostFlankBonus =
+          flankZoneHit !== 'front' && b.owner?.isGhost ? state.player?.cfg?.ghostFlankDamageBonus || 0 : 0;
+        const flankMult = baseFlankMult * (1 + ghostFlankBonus);
         let schaden = Math.round(basisSchaden * critMult * execMult * shatterMult * flankMult);
         // Kopfschuss (Phase 11): ein Krit toetet einen Nicht-Boss-Gegner sofort.
         if (isCrit && oc?.critExecute && t !== state.player && !isBossCfg(t.cfg)) {

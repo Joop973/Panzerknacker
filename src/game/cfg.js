@@ -118,6 +118,17 @@ export function applyScrapDamage(cfg, scrap) {
   return cfg;
 }
 
+// Nekromant-V2 Phase 6 (ghost_029 "Seelenhunger"/ghost_030 "Unsterbliche
+// Maschine"): permanente, fuer den REST DES RUNS geltende Boni, gewaehrt
+// nach jeweils N Geistertoden -- dieselbe Stelle wie applyScrapDamage()
+// (einmal pro Raumaufbau gebacken, run.js reicht die runweiten
+// necro.js-Stapel als reine Zahlen durch, state.js kennt kein run-Objekt).
+export function applyNecroRunScaling(cfg, runDmgBonusPct, runHpBonusPct) {
+  if (runDmgBonusPct) cfg.damage = Math.round(cfg.damage * (1 + runDmgBonusPct));
+  if (runHpBonusPct) cfg.maxHp = Math.round(cfg.maxHp * (1 + runHpBonusPct));
+  return cfg;
+}
+
 // Upgrade-Level auf das Spieler-cfg anwenden (Spec Abschnitt 8 +
 // Erweiterungen). Die Stellwerte der neuen Upgrades kommen aus
 // upgrades.json (upsData).
@@ -422,6 +433,11 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   let ghostFireCdMult = 1;
   let ghostDmgMult = 1;
   let ghostHpMultAcc = 1;
+  // Nekromant-V2 Phase 6: zwei weitere gesammelt-multiplikative ghost*-Werte
+  // (Geschosstempo/Reichweite der Untertanen), gleiches Muster wie die vier
+  // obigen aus Upgradepool-v2 Phase 8.
+  let ghostBulletSpdMult = 1;
+  let ghostRangeMultAcc = 1;
   for (const id in U) {
     const raw = U[id].core;
     const lvl = l(id);
@@ -537,6 +553,119 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.pierceAdd) cfg.pierce = (cfg.pierce || 0) + c.pierceAdd * lvl;
     if (c.shieldMaxAdd) cfg.shieldMax = (cfg.shieldMax || 0) + c.shieldMaxAdd * lvl;
     if (c.shieldRegenAdd) cfg.shieldRegenPerS = (cfg.shieldRegenPerS || 0) + c.shieldRegenAdd * lvl;
+    // Nekromant-V2 Phase 6 (Allgemein und Opfer, 35 Karten): weitere
+    // ghost*-Felder (Untertanen-Eigenstats, ghost_005-010) -- dasselbe
+    // Muster wie die bestehenden ghostHpAdd/ghostDamageAdd/... aus
+    // Upgradepool-v2 Phase 8, additiv bzw. gesammelt-multiplikativ.
+    if (c.ghostLifetimeAdd) cfg.ghostLifetimeAdd = (cfg.ghostLifetimeAdd || 0) + c.ghostLifetimeAdd * lvl;
+    if (c.ghostBulletSpeedMult) ghostBulletSpdMult *= Math.pow(c.ghostBulletSpeedMult, lvl);
+    if (c.ghostRangeMult) ghostRangeMultAcc *= Math.pow(c.ghostRangeMult, lvl);
+    if (c.ghostCritChanceAdd) cfg.ghostCritChanceAdd = (cfg.ghostCritChanceAdd || 0) + c.ghostCritChanceAdd * lvl;
+    if (c.ghostCritMultAdd) cfg.ghostCritMultAdd = (cfg.ghostCritMultAdd || 0) + c.ghostCritMultAdd * lvl;
+    if (c.ghostShieldOnSpawnPct) cfg.ghostShieldOnSpawnPct = (cfg.ghostShieldOnSpawnPct || 0) + c.ghostShieldOnSpawnPct * lvl;
+    if (c.ghostResistAdd) cfg.ghostResistAdd = (cfg.ghostResistAdd || 0) + c.ghostResistAdd * lvl;
+    if (c.ghostFlankSeek) cfg.ghostFlankSeek = true;
+    if (c.ghostFlankDamageBonus) cfg.ghostFlankDamageBonus = (cfg.ghostFlankDamageBonus || 0) + c.ghostFlankDamageBonus * lvl;
+    // Nekromant-V2 Phase 6: Opfer-Karten (ghost_011-030, 032-035), die auf
+    // Geistertode REAGIEREN statt nur Untertanen-Werte zu setzen. Reine
+    // Datenuebernahme hier (dieselbe generische core-Schleife wie alles
+    // andere) -- necro.js: buildNecroListeners() liest diese Felder aus dem
+    // fertig aufgeloesten cfg und registriert daraus state.necroListeners.
+    // Bewusst KEIN core-Objekt-Nesting/Effekt-DSL: jedes Feld ist ein
+    // gewoehnlicher Skalar/Boolean, exakt das Muster der ghost*-Felder oben
+    // -- "kein switch ueber Karten-IDs" ist damit erfuellt, ohne ein
+    // zweites Parallelsystem zu bauen (Anhang A S16/Anhang B S19).
+    if (c.necroDmgPctPerDeath) cfg.necroDmgPctPerDeath = (cfg.necroDmgPctPerDeath || 0) + c.necroDmgPctPerDeath * lvl;
+    if (c.necroFireRatePctPerDeath) cfg.necroFireRatePctPerDeath = (cfg.necroFireRatePctPerDeath || 0) + c.necroFireRatePctPerDeath * lvl;
+    if (c.necroSpeedPctPerDeath) cfg.necroSpeedPctPerDeath = (cfg.necroSpeedPctPerDeath || 0) + c.necroSpeedPctPerDeath * lvl;
+    if (c.necroHealPctPerDeath) {
+      cfg.necroHealPctPerDeath = (cfg.necroHealPctPerDeath || 0) + c.necroHealPctPerDeath * lvl;
+      cfg.necroHealCooldownS = Math.max(cfg.necroHealCooldownS || 0, c.necroHealCooldownS || 0);
+    }
+    if (c.necroShieldPctPerDeath) {
+      cfg.necroShieldPctPerDeath = (cfg.necroShieldPctPerDeath || 0) + c.necroShieldPctPerDeath * lvl;
+      cfg.necroShieldDurationS = Math.max(cfg.necroShieldDurationS || 0, c.necroShieldDurationS || 0);
+      cfg.necroShieldCapPct = Math.max(cfg.necroShieldCapPct || 0, c.necroShieldCapPct || 0);
+    }
+    if (c.necroGadgetCooldownReduceS) {
+      cfg.necroGadgetCooldownReduceS = (cfg.necroGadgetCooldownReduceS || 0) + c.necroGadgetCooldownReduceS * lvl;
+      cfg.necroGadgetReduceCooldownS = Math.max(cfg.necroGadgetReduceCooldownS || 0, c.necroGadgetReduceCooldownS || 0);
+    }
+    if (c.necroBurstEveryN) {
+      cfg.necroBurstEveryN = c.necroBurstEveryN;
+      cfg.necroBurstDamageMult = Math.max(cfg.necroBurstDamageMult || 0, c.necroBurstDamageMult || 0);
+      cfg.necroBurstSizeMult = Math.max(cfg.necroBurstSizeMult || 0, c.necroBurstSizeMult || 0);
+    }
+    if (c.necroAmmoShots) {
+      cfg.necroAmmoShots = Math.max(cfg.necroAmmoShots || 0, c.necroAmmoShots);
+      cfg.necroAmmoPierceAdd = (cfg.necroAmmoPierceAdd || 0) + (c.necroAmmoPierceAdd || 0) * lvl;
+      cfg.necroAmmoSpeedMult = Math.max(cfg.necroAmmoSpeedMult || 0, c.necroAmmoSpeedMult || 0);
+    }
+    if (c.necroNextHitCritChanceAdd) {
+      cfg.necroNextHitCritChanceAdd = (cfg.necroNextHitCritChanceAdd || 0) + c.necroNextHitCritChanceAdd * lvl;
+      cfg.necroNextHitCritMultAdd = (cfg.necroNextHitCritMultAdd || 0) + (c.necroNextHitCritMultAdd || 0) * lvl;
+    }
+    if (c.necroExplosionRadius) {
+      cfg.necroExplosionRadius = Math.max(cfg.necroExplosionRadius || 0, c.necroExplosionRadius);
+      cfg.necroExplosionDamagePct = Math.max(cfg.necroExplosionDamagePct || 0, c.necroExplosionDamagePct || 0);
+    }
+    if (c.necroInheritHighPct) {
+      cfg.necroInheritHighPct = Math.max(cfg.necroInheritHighPct || 0, c.necroInheritHighPct);
+      cfg.necroInheritLowPct = Math.max(cfg.necroInheritLowPct || 0, c.necroInheritLowPct || 0);
+      cfg.necroInheritDurationS = Math.max(cfg.necroInheritDurationS || 0, c.necroInheritDurationS || 0);
+      cfg.necroInheritThresholdMult = Math.max(cfg.necroInheritThresholdMult || 0, c.necroInheritThresholdMult || 0);
+    }
+    if (c.necroResistEveryN) {
+      cfg.necroResistEveryN = c.necroResistEveryN;
+      cfg.necroResistAmount = Math.max(cfg.necroResistAmount || 0, c.necroResistAmount || 0);
+      cfg.necroResistDurationS = Math.max(cfg.necroResistDurationS || 0, c.necroResistDurationS || 0);
+    }
+    if (c.necroOverflowShieldCapPct) cfg.necroOverflowShieldCapPct = Math.max(cfg.necroOverflowShieldCapPct || 0, c.necroOverflowShieldCapPct);
+    if (c.necroFireBurstWindowS) {
+      cfg.necroFireBurstWindowS = c.necroFireBurstWindowS;
+      cfg.necroFireBurstPct = Math.max(cfg.necroFireBurstPct || 0, c.necroFireBurstPct || 0);
+      cfg.necroFireBurstDurationS = Math.max(cfg.necroFireBurstDurationS || 0, c.necroFireBurstDurationS || 0);
+    }
+    if (c.necroLastStand) {
+      cfg.necroLastStand = true;
+      cfg.necroLastStandHealPct = Math.max(cfg.necroLastStandHealPct || 0, c.necroLastStandHealPct || 0);
+    }
+    if (c.necroShockRadius) {
+      cfg.necroShockRadius = Math.max(cfg.necroShockRadius || 0, c.necroShockRadius);
+      cfg.necroShockDamagePct = Math.max(cfg.necroShockDamagePct || 0, c.necroShockDamagePct || 0);
+      cfg.necroShockPushPx = Math.max(cfg.necroShockPushPx || 0, c.necroShockPushPx || 0);
+      cfg.necroShockExecMult = Math.max(cfg.necroShockExecMult || 0, c.necroShockExecMult || 0);
+      cfg.necroShockExecDurationS = Math.max(cfg.necroShockExecDurationS || 0, c.necroShockExecDurationS || 0);
+    }
+    if (c.necroDoubleStackChance) cfg.necroDoubleStackChance = Math.max(cfg.necroDoubleStackChance || 0, c.necroDoubleStackChance);
+    if (c.necroExpireStackBonus) cfg.necroExpireStackBonus = (cfg.necroExpireStackBonus || 0) + c.necroExpireStackBonus * lvl;
+    if (c.necroRunDmgEveryN) {
+      cfg.necroRunDmgEveryN = c.necroRunDmgEveryN;
+      cfg.necroRunDmgPct = Math.max(cfg.necroRunDmgPct || 0, c.necroRunDmgPct || 0);
+    }
+    if (c.necroRunHpEveryN) {
+      cfg.necroRunHpEveryN = c.necroRunHpEveryN;
+      cfg.necroRunHpPct = Math.max(cfg.necroRunHpPct || 0, c.necroRunHpPct || 0);
+    }
+    if (c.necroHomingEveryN) {
+      cfg.necroHomingEveryN = c.necroHomingEveryN;
+      cfg.necroHomingDamageMult = Math.max(cfg.necroHomingDamageMult || 0, c.necroHomingDamageMult || 0);
+      cfg.necroHomingTurnRate = Math.max(cfg.necroHomingTurnRate || 0, c.necroHomingTurnRate || 0);
+    }
+    if (c.necroStartGhostPct) {
+      cfg.necroStartGhostPct = Math.max(cfg.necroStartGhostPct || 0, c.necroStartGhostPct);
+      cfg.necroStartGhostLifetimeS = Math.max(cfg.necroStartGhostLifetimeS || 0, c.necroStartGhostLifetimeS || 0);
+    }
+    if (c.necroKeystoneCount) {
+      cfg.necroKeystoneCount = c.necroKeystoneCount;
+      cfg.necroKeystoneWindowS = c.necroKeystoneWindowS || 0;
+      cfg.necroKeystoneDamagePct = c.necroKeystoneDamagePct || 0;
+      cfg.necroKeystoneFireRatePct = c.necroKeystoneFireRatePct || 0;
+      cfg.necroKeystoneSpeedPct = c.necroKeystoneSpeedPct || 0;
+      cfg.necroKeystoneDurationS = c.necroKeystoneDurationS || 0;
+      cfg.necroKeystoneCooldownS = c.necroKeystoneCooldownS || 0;
+    }
+    if (c.necroVirtualDeathsOnStart) cfg.necroVirtualDeathsOnStart = Math.max(cfg.necroVirtualDeathsOnStart || 0, c.necroVirtualDeathsOnStart);
   }
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;
@@ -572,6 +701,8 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   if (ghostFireCdMult !== 1) cfg.ghostFireMult = (cfg.ghostFireMult || 1) * ghostFireCdMult;
   if (ghostDmgMult !== 1) cfg.ghostDamageMult = (cfg.ghostDamageMult || 1) * ghostDmgMult;
   if (ghostHpMultAcc !== 1) cfg.ghostHpMult = (cfg.ghostHpMult || 1) * ghostHpMultAcc;
+  if (ghostBulletSpdMult !== 1) cfg.ghostBulletSpeedMult = (cfg.ghostBulletSpeedMult || 1) * ghostBulletSpdMult;
+  if (ghostRangeMultAcc !== 1) cfg.ghostRangeMult = (cfg.ghostRangeMult || 1) * ghostRangeMultAcc;
   // Ausweichen-Kernkarten schalten den Dash frei (unabhaengig von der alten
   // dash-Karte) und verkuerzen die Abklingzeit. Reusen dieselbe dash-Definition.
   if (coreDashGrant) {

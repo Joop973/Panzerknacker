@@ -10,6 +10,7 @@ import { createBullet } from './bullet.js';
 import { createMine } from './mine.js';
 import { createGhost } from './ghost.js';
 import { statusSpeedMult } from './status.js';
+import { necroDamagePct, necroFireRatePct, necroSpeedPct } from './necro.js';
 import { CELL } from '../config.js';
 
 let nextTankId = 1;
@@ -151,12 +152,17 @@ export function moveTank(tank, axis, state, dt) {
   // Tick VOR der Bewegung gesetzt (t.executing), gilt fuer Spieler und Bosse
   // nie (dort bleibt es immer false).
   const execSlow = tank.executing ? state.data.balance.execute?.slowMult ?? 1 : 1;
+  // Nekromant-V2 Phase 6 (ghost_013/034): raumweite/zeitliche Tempo-
+  // Prozentsaetze -- nur der Spieler (necroSpeedPct() summiert Room-/
+  // Timed-Quellen, s. necro.js).
+  const necroSpd = tank === state.player ? 1 + necroSpeedPct(state) : 1;
   const spd =
     tank.cfg.speed *
     (tank.berserkerSpeed || 1) *
     boost *
     blood *
     execSlow *
+    necroSpd *
     statusSpeedMult(state, tank);
   const mod = state.modifier;
   // Oelpfuetze (Phase 15): dieselbe Grip-Physik wie das raumweite Glatteis
@@ -266,6 +272,31 @@ export function fireBullet(tank, state, pressed) {
   }
 
   tank.shots++;
+  // Nekromant-V2 Phase 6: raumweite/zeitlich befristete Prozentwerte (nur
+  // Spieler -- necro*Pct() liefern 0 fuer jeden Gegner-Aufruf implizit ueber
+  // die Bedingung unten) + die Einmal-Ladungen aus player.necroBulletBuffs
+  // (ghost_017/018/019, "naechste(r) Schuss/Schuesse"). Alle Ladungen eines
+  // Abzugs wirken zusammen (multiplikativ bei Faktoren, additiv bei
+  // Bonuspunkten) und werden EINMAL pro Abzug verbraucht, nicht je Kugel
+  // eines Streu-/Doppelrohr-Schusses.
+  const necroPctDmg = tank === state.player ? necroDamagePct(state) : 0;
+  const necroPctFireRate = tank === state.player ? necroFireRatePct(state) : 0;
+  let buffDmgMult = 1;
+  let buffSizeMult = 1;
+  let buffPierceAdd = 0;
+  let buffSpeedMult = 1;
+  let buffCritChanceAdd = 0;
+  let buffCritMultAdd = 0;
+  if (tank === state.player && tank.necroBulletBuffs?.length) {
+    for (const buff of tank.necroBulletBuffs) {
+      if (buff.damageMult) buffDmgMult *= buff.damageMult;
+      if (buff.sizeMult) buffSizeMult *= buff.sizeMult;
+      if (buff.pierceAdd) buffPierceAdd += buff.pierceAdd;
+      if (buff.bulletSpeedMult) buffSpeedMult *= buff.bulletSpeedMult;
+      if (buff.critChanceAdd) buffCritChanceAdd += buff.critChanceAdd;
+      if (buff.critMultAdd) buffCritMultAdd += buff.critMultAdd;
+    }
+  }
   // Sprengschuss: jeder N-te Schuss ist eine ABPRALLENDE Sprengkugel.
   const explosiveShot =
     !tank.cfg.allExplosive &&
@@ -303,7 +334,10 @@ export function fireBullet(tank, state, pressed) {
   const isCrit =
     tank === state.player &&
     !!critCfg &&
-    state.rng() < Math.min(critCfg.cap ?? 1, tank.cfg.critChance ?? 0);
+    // ghost_019 "Totenblick": Einmal-Krit-Chance-Bonus (buffCritChanceAdd)
+    // fliesst in DIESEN Wurf mit ein -- der Deckel greift weiterhin am
+    // Roll-Ort, unveraendert seit UMBAUPLAN-LP Phase 7.
+    state.rng() < Math.min(critCfg.cap ?? 1, (tank.cfg.critChance ?? 0) + buffCritChanceAdd);
 
   const muzzle = tank.cfg.radius + 8; // Spitze des Rohrs
   let fired = false;
@@ -318,8 +352,9 @@ export function fireBullet(tank, state, pressed) {
     const isExplosive = explosiveShot || tank.cfg.allExplosive;
     state.bullets.push(
       createBullet(mx, my, a, {
-        speed: boosted ? tank.cfg.bulletSpeed * tank.cfg.powershotSpeedFactor : tank.cfg.bulletSpeed,
-        radius: tank.cfg.bulletRadius,
+        speed:
+          (boosted ? tank.cfg.bulletSpeed * tank.cfg.powershotSpeedFactor : tank.cfg.bulletSpeed) * buffSpeedMult,
+        radius: tank.cfg.bulletRadius * buffSizeMult,
         owner: tank,
         kind: tank.cfg.weapon,
         tungsten: tank.cfg.tungsten || false,
@@ -329,10 +364,20 @@ export function fireBullet(tank, state, pressed) {
         phaseWalls: tank.cfg.phaseWalls || false,
         homing: tank.cfg.homing || 0,
         burstDistance: tank.cfg.burstRangePx || 0,
-        damage: tank.cfg.damage,
+        // Nekromant-V2 Phase 6: raumweite/zeitliche Prozentwerte + die
+        // Einmal-Ladung (ghost_017) multiplizieren den Schaden BEIM ABSCHUSS
+        // ein -- wie jeder andere Schaden-Modifikator traegt die Kugel den
+        // Wert, der beim Abschuss galt.
+        damage: Math.round(tank.cfg.damage * (1 + necroPctDmg) * buffDmgMult),
         damageType: tank.cfg.damageType,
         crit: isCrit,
-        pierce: tank.cfg.pierce || 0, // Nekromant-V2 Phase 2: Durchschlag
+        // buffCritMultAdd (ghost_019) ist eine EINMALIGE, per-Schuss-Ladung --
+        // anders als tank.cfg.critMultBonus (dauerhafte Kartenwirkung) kann
+        // sie nicht auf der cfg liegen (die gilt fuer JEDEN Schuss), deshalb
+        // eingefroren auf der Kugel selbst (state.js liest b.critMultBonus
+        // beim Treffer zusaetzlich zu oc?.critMultBonus).
+        critMultBonus: buffCritMultAdd,
+        pierce: (tank.cfg.pierce || 0) + buffPierceAdd, // Nekromant-V2 Phase 2/6: Durchschlag + Einmal-Ladung
       }),
     );
     // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.
@@ -358,7 +403,18 @@ export function fireBullet(tank, state, pressed) {
   // Phase 7b: Gegnerschuesse klingen tiefer als eigene und werden ueber ihre
   // x-Position im Stereobild geortet -- "wer schiesst woher?" ohne Hinsehen.
   state.sounds.push({ name: tank === state.player ? 'shoot' : 'shoot_enemy', x: tank.x });
-  tank.cooldown = tank.cfg.fireCooldown * (tank.berserkerFire || 1);
+  // Nekromant-V2 Phase 6: raumweite/zeitliche Feuerrate-Prozentsaetze senken
+  // den Nachladezeit-Faktor -- Math.max(0.1, ...) verhindert einen
+  // Nachladewert von 0/negativ bei extremem Stapelaufbau (dieselbe
+  // Schutzklammer, die andere gedeckelte Faktoren im Projekt schon nutzen).
+  tank.cooldown = tank.cfg.fireCooldown * (tank.berserkerFire || 1) * Math.max(0.1, 1 - necroPctFireRate);
+  // Einmal-Ladungen verbrauchen (ghost_017/018/019): EIN Abzug zaehlt fuer
+  // JEDE aktive Ladung als ein Schuss, unabhaengig davon, wie viele Kugeln
+  // dieser Abzug erzeugt hat (Streuschuss/Doppelrohr).
+  if (tank.necroBulletBuffs?.length) {
+    for (const buff of tank.necroBulletBuffs) buff.shotsLeft--;
+    tank.necroBulletBuffs = tank.necroBulletBuffs.filter((b) => b.shotsLeft > 0);
+  }
   // Krit (Phase 7): setzt das Nachladen SOFORT zurueck -- man darf sofort
   // wieder feuern (nur noch vom Magazin/aktiven Kugeln begrenzt). Das ist der
   // spuerbare Ausschlag des Ereignisses; die 2x-Schadensverdopplung selbst
