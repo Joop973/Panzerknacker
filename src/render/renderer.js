@@ -1002,6 +1002,33 @@ export function createRenderer(ctx) {
         ctx.arc(x, y, r + 6, 0, Math.PI * 2);
         ctx.stroke();
       }
+      // Nekromant-V2 Phase 7 (Legion): "Abstandsauren (ghost_042/048/049)
+      // ... sichtbarer Ring beim Traeger -- sonst versteht niemand, warum
+      // Werte schwanken." Drei eigene Farben/Radien, damit sie auch
+      // gleichzeitig unterscheidbar bleiben.
+      if (g.phalanxRingActive) {
+        ctx.strokeStyle = '#5ad1c8';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 9, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (g.wallInRange) {
+        ctx.strokeStyle = 'rgba(120,170,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.arc(x, y, r + 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (g.isOfficer) {
+        ctx.strokeStyle = '#c98fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 15, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       // Lebensdauer (Phase 3, NEU): schrumpfender Ring -- "ein anderer
       // Todes-Ausloeser als Schaden" braucht ein sichtbares Gegenstueck,

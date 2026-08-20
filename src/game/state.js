@@ -23,7 +23,7 @@ import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { fireMortar, updateMortars } from './mortar.js';
 import { updateTraps } from './trap.js';
-import { createGhost, updateGhosts, killGhost } from './ghost.js';
+import { createGhost, updateGhosts, killGhost, occupiedGhostSlots, recomputeLegionCache } from './ghost.js';
 import { tickNecroTimers, buildNecroListeners, applyVirtualNecroDeaths, necroResistBonus } from './necro.js';
 import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
@@ -114,6 +114,7 @@ function rollGhostSpawnCount(chance, rng) {
   const remainder = chance - guaranteed;
   return guaranteed + (remainder > 0 && rng() < remainder ? 1 : 0);
 }
+
 
 function buildWalls(grid, destructibleHits, generatorHits) {
   const walls = [];
@@ -331,6 +332,25 @@ export function createState(data, tiles, opts) {
     // ghost_025 "Letzte Deckung": einmal pro Raum -- state ist pro Raum
     // frisch, also genuegt ein einfaches false hier (kein reset() noetig).
     necroLastStandUsed: false,
+    // Nekromant-V2 Phase 7 (Legion): Cache-Defaults fuer die zaehlerbasierte
+    // Skalierung (recomputeLegionCache() in ghost.js) -- gueltig, bis der
+    // erste Spawn/Entfernen-Aufruf sie neu setzt (bei 0 Untertanen ohnehin
+    // die richtigen Neutralwerte).
+    necroActiveGhostCount: 0,
+    necroLegionResistBonus: 0,
+    necroPackMult: 1,
+    necroLegionFireRatePct: 0,
+    necroOverwhelmActive: false,
+    necroSharedWillActive: false,
+    // ghost_059 "Grabfeld": die letzten 3 Sterbeorte VON UNTERTANEN, raumweit
+    // (kein reset() noetig, state ist pro Raum frisch).
+    necroGraveyardSpots: [],
+    // ghost_041 "Geteiltes Ziel": das zuletzt vom SPIELER getroffene Ziel.
+    necroLastPlayerHitTarget: null,
+    // ghost_054 "Legionskern": bis Raumende aktiver Schadensbonus fuer ALLE
+    // Untertanen, sobald eine Wiederbelebungsprobe am vollen Limit gelingt.
+    necroLegionKernActive: false,
+    necroCoreCooldownUntil: 0,
     necroStacks: {},
     necroRunStackGain: {},
     necroRunStacksBase: necroRunStacksBase || {},
@@ -806,24 +826,78 @@ export function createState(data, tiles, opts) {
         const killer = meta?.killer;
         const gcfg = state.data.balance.ghost || {};
         const necroKill = pc.necromancer && (killer === state.player || killer?.isGhost);
-        const canRevive = necroKill && !isBossCfg(tank.cfg) && !(tank.affixes && tank.affixes.length > 0);
+        const isBoss = isBossCfg(tank.cfg);
+        const isElite = !!(tank.affixes && tank.affixes.length > 0);
+        // ghost_056 "Elite-Reaktivierung" (Nekromant-V2 Phase 7): erlaubt
+        // Wiederbelebungsproben ausdruecklich AUCH bei Eliten -- Bosse bleiben
+        // in JEDEM Fall ausgeschlossen (Auftrag: "Bosse bleiben ausgeschlossen").
+        const canRevive = necroKill && !isBoss && (!isElite || pc.necroEliteRevive);
         if (canRevive) {
-          // Seelenruf/Geisterlegion/Armee der Toten (Upgradepool-v2 Phase 8):
-          // ghostMaxAdd erhoeht das Basislimit additiv -- eine Zahl aus
-          // state.player.cfg statt eines zweiten Deckel-Felds.
+          // Seelenruf/Geisterlegion/Armee der Toten (Upgradepool-v2 Phase 8,
+          // ghost_036/060 seit Phase 7): ghostMaxAdd erhoeht das Basislimit
+          // additiv, ohne Obergrenze.
           const ghostCap = (gcfg.maxActive ?? 3) + (pc.ghostMaxAdd || 0);
           // "Rechenweg statt Obergrenze" (Auftrag Abschnitt 4a): reviveChance
           // ist additiv OHNE Deckel -- ueber 100 % erzeugt der ganzzahlige
-          // Anteil sichere Zusatz-Untertanen (aktuell in der Praxis nie, da
-          // keine Karte den Wert vor Phase 6+ ueber 0,35 treibt, aber der
-          // Mechanismus selbst kennt keine Obergrenze).
-          const n = rollGhostSpawnCount(gcfg.reviveChance ?? 0, state.rng);
+          // Anteil sichere Zusatz-Untertanen. Nekromant-V2 Phase 7
+          // (ghost_044/055 "Totenruf"): necroReviveChanceAdd kommt vom
+          // Spieler-cfg dazu, ebenfalls ohne Deckel.
+          const chance = (gcfg.reviveChance ?? 0) + (pc.necroReviveChanceAdd || 0);
+          const n = rollGhostSpawnCount(chance, state.rng);
+          // ghost_054 "Legionskern": die Probe war erfolgreich (n>0), aber
+          // KEIN Platz mehr frei -- statt eines wirkungslosen Wurfs heilen
+          // und staerken sich die vorhandenen Untertanen bis Raumende.
+          // Eigene, kleine interne Abklingzeit (kein necro.js-Umweg noetig,
+          // s. state.necroCoreCooldownUntil).
+          if (
+            n > 0 &&
+            occupiedGhostSlots(state) >= ghostCap &&
+            pc.necroCoreHealPct &&
+            state.time >= state.necroCoreCooldownUntil
+          ) {
+            for (const g of state.ghosts) {
+              if (!g.alive) continue;
+              g.hp = Math.min(g.cfg.maxHp, g.hp + g.cfg.maxHp * pc.necroCoreHealPct);
+            }
+            state.necroLegionKernActive = true;
+            state.necroCoreCooldownUntil = state.time + (pc.necroCoreCooldownS || 0);
+          }
           // Limit OHNE Verdraengung: am Deckel passiert einfach nichts fuer
           // die restlichen Wuerfe (kein Verbrauch) -- dieselbe Regel wie bei
-          // der Geisterbombe (tank.js: spawnGhostBomb()).
-          for (let i = 0; i < n && state.ghosts.length < ghostCap; i++) {
-            state.ghosts.push(createGhost(state, tank.x, tank.y, tank.heading, tank.type));
+          // der Geisterbombe (tank.js: spawnGhostBomb()). Der Deckel-
+          // Vergleich zaehlt seit Phase 7 belegte PLAETZE (occupiedGhostSlots),
+          // nicht die reine Anzahl.
+          let spawnedAny = false;
+          for (let i = 0; i < n; i++) {
+            if (occupiedGhostSlots(state) >= ghostCap) break;
+            // ghost_056: ein wiederbelebter ELITE-Gegner erscheint mit einem
+            // eigenen (hoeheren) Basiswert-Anteil und belegt 2 Plaetze.
+            const overrides =
+              isElite && pc.necroEliteRevive
+                ? { baseStatPctOverride: pc.necroEliteReviveStatPct, slotCost: pc.necroEliteReviveSlots || 2 }
+                : null;
+            state.ghosts.push(createGhost(state, tank.x, tank.y, tank.heading, tank.type, overrides));
+            spawnedAny = true;
+            // ghost_052 "Mehrfachwiederbelebung": zusaetzliche Chance auf eine
+            // ZWEITE, schwaechere Kopie.
+            if (pc.necroDoubleReviveChance && occupiedGhostSlots(state) < ghostCap && state.rng() < pc.necroDoubleReviveChance) {
+              state.ghosts.push(
+                createGhost(state, tank.x, tank.y, tank.heading, tank.type, {
+                  baseStatPctOverride: pc.necroDoubleReviveStatPct,
+                }),
+              );
+            }
+            // ghost_060 "Armee der Toten": JEDE gelungene Probe erzeugt
+            // GARANTIERT eine weitere Kopie (kein Zufallswurf).
+            if (pc.necroGuaranteedReviveCopy && occupiedGhostSlots(state) < ghostCap) {
+              state.ghosts.push(
+                createGhost(state, tank.x, tank.y, tank.heading, tank.type, {
+                  baseStatPctOverride: pc.necroGuaranteedReviveStatPct,
+                }),
+              );
+            }
           }
+          if (spawnedAny) recomputeLegionCache(state);
         }
       }
     },
@@ -868,7 +942,10 @@ export function createState(data, tiles, opts) {
   // wiederbelebt werden" ergibt sich VON SELBST -- er stirbt planmaessig per
   // Lebensdauer-Ablauf ('expire'), und killGhost() ueberspringt die
   // Wiederkehr-Familie bei 'expire' ohnehin (s. ghost.js).
-  if (player.cfg.necroStartGhostPct && state.ghosts.length < (state.data.balance?.ghost?.maxActive ?? 3)) {
+  if (
+    player.cfg.necroStartGhostPct &&
+    occupiedGhostSlots(state) < (state.data.balance?.ghost?.maxActive ?? 3) + (player.cfg.ghostMaxAdd || 0)
+  ) {
     const pool = actEnemyPool && actEnemyPool.length ? actEnemyPool : ['t_brown'];
     const srcType = pool[Math.floor(state.rng() * pool.length)];
     const g = createGhost(state, player.x, player.y, player.turret, srcType);
@@ -882,6 +959,7 @@ export function createState(data, tiles, opts) {
     g.lifetimeMax = player.cfg.necroStartGhostLifetimeS;
     g.lifetime = player.cfg.necroStartGhostLifetimeS;
     state.ghosts.push(g);
+    recomputeLegionCache(state);
   }
   // ghost_035 "Vorbote des Endes": 4 virtuelle Geistertode sofort bei
   // Raumstart, ausschliesslich auf raumweite pureStack-Listener (s. necro.js).
@@ -1321,14 +1399,34 @@ export function stepState(state, cmd, dt) {
         // Flanken-/Heckschaden-Bonus fuer UNTERTANEN-Treffer -- das Feld
         // liegt auf dem SPIELER-cfg (die Karte wirkt auf "Untertanenpanzer"
         // kollektiv), nicht auf b.owner.cfg (das ist die Ghost-eigene cfg).
+        // ghost_058 "Chor der Toten" (Nekromant-V2 Phase 7): Untertanen
+        // erhalten zusaetzlich die HAELFTE des globalen Flanken-/Heck-Faktors
+        // (baseFlankMult) als eigenen Bonus -- "die Haelfte des Flanken-/
+        // Heckbonus des Hauptpanzers" liest sich als "des globalen Wertes",
+        // da der Spieler selbst keinen individuellen Flankenbonus-Stat hat.
+        const chorusBonus =
+          flankZoneHit !== 'front' && b.owner?.isGhost && state.player?.cfg?.necroChorusOfDead
+            ? (baseFlankMult - 1) * 0.5
+            : 0;
         const ghostFlankBonus =
-          flankZoneHit !== 'front' && b.owner?.isGhost ? state.player?.cfg?.ghostFlankDamageBonus || 0 : 0;
-        const flankMult = baseFlankMult * (1 + ghostFlankBonus);
+          flankZoneHit !== 'front' && b.owner?.isGhost
+            ? (state.player?.cfg?.ghostFlankDamageBonus || 0) + chorusBonus
+            : 0;
+        // ghost_041 "Geteiltes Ziel" (Nekromant-V2 Phase 7): +X % Schaden fuer
+        // Untertanen-Treffer GENAU auf das zuletzt vom Spieler getroffene Ziel.
+        const sharedTargetBonus =
+          b.owner?.isGhost && state.player?.cfg?.necroSharedTarget && t === state.necroLastPlayerHitTarget
+            ? (state.player.cfg.necroSharedTargetDamageMult || 1) - 1
+            : 0;
+        const flankMult = baseFlankMult * (1 + ghostFlankBonus) * (1 + sharedTargetBonus);
         let schaden = Math.round(basisSchaden * critMult * execMult * shatterMult * flankMult);
         // Kopfschuss (Phase 11): ein Krit toetet einen Nicht-Boss-Gegner sofort.
         if (isCrit && oc?.critExecute && t !== state.player && !isBossCfg(t.cfg)) {
           schaden = Math.max(schaden, t.hp);
         }
+        // ghost_041: der SPIELER merkt sich sein zuletzt getroffenes Ziel --
+        // nur echte Spielertreffer auf einen Nicht-Spieler zaehlen.
+        if (own && t !== state.player) state.necroLastPlayerHitTarget = t;
         const trefferMeta = {
           code: own ? 'own_bullet' : 'enemy_bullet',
           enemyType: own ? null : b.owner?.type || null,
@@ -1438,13 +1536,37 @@ export function stepState(state, cmd, dt) {
         b.pierceHits.add(g);
         if (b.pierce > 0) b.pierce--;
         else b.dead = true;
-        // Schadensresistenz + Schild-Punktepool (Nekromant-V2 Phase 2):
-        // "Untertanen" sind ausdruecklich mit gemeint (Auftrag), s.
-        // applyResistToAmount()/absorbWithShieldPool() oben.
-        let dmg = applyResistToAmount(g.cfg, state.data.balance?.resist, b.damage);
-        dmg = absorbWithShieldPool(state, g, dmg);
-        g.hp -= dmg;
-        if (g.hp <= 0) killGhost(state, g);
+        const pc7 = state.player?.cfg;
+        // ghost_057 "Gemeinsamer Wille" (Nekromant-V2 Phase 7): ab der
+        // Schwelle wird der erlittene Schaden gleichmaessig auf ALLE
+        // aktiven Untertanen verteilt (VOR Resistenz/Schild -- jeder
+        // Empfaenger rechnet seine eigenen Abwehrwerte).
+        const recipients = state.necroSharedWillActive
+          ? state.ghosts.filter((x) => x.alive)
+          : [g];
+        const share = b.damage / recipients.length;
+        for (const rg of recipients) {
+          // ghost_038/042/057: raumweiter Schwellenwert-Bonus + Naehe-Aura +
+          // "Gemeinsamer Wille"-Resistenz, additiv auf die eigene Resistenz.
+          const effResist =
+            (rg.cfg.resist || 0) +
+            (state.necroLegionResistBonus || 0) +
+            (rg.legionAuraResist || 0) +
+            (state.necroSharedWillActive ? pc7?.necroSharedWillResist || 0 : 0);
+          let dmg = applyResistToAmount({ resist: effResist }, state.data.balance?.resist, share);
+          // ghost_053 "Verstaerkte Huelle": ignoriert EINMAL je Leben einen
+          // Treffer, der mehr als necroHullThresholdPct des maximalen Lebens
+          // verursacht -- gemessen am fertig berechneten Schaden (der Wert,
+          // der wirklich von hp abginge).
+          if (pc7?.necroHullThresholdPct && !rg.hullUsed && dmg > rg.cfg.maxHp * pc7.necroHullThresholdPct) {
+            rg.hullUsed = true;
+            continue;
+          }
+          dmg = absorbWithShieldPool(state, rg, dmg);
+          if (dmg > 0) rg.lastDamageAt = state.time; // ghost_048: Schildwall-Regen-Sperre
+          rg.hp -= dmg;
+          if (rg.hp <= 0) killGhost(state, rg);
+        }
         break;
       }
     }

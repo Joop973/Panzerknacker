@@ -36,7 +36,8 @@ import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
 import { resolveCfg } from './cfg.js';
 import { explodeAt } from './mine.js';
-import { onGhostRemoved } from './necro.js';
+import { onGhostRemoved, addNecroStack, getNecroStack } from './necro.js';
+import { flankZone } from './armor.js';
 
 const TURN_SPEED = 4; // rad/s -- Drehen von Rumpf UND Turm Richtung Ziel
 const FIRE_CONE = 0.15; // rad -- muss so genau ausgerichtet sein, um zu feuern
@@ -62,8 +63,15 @@ function resolveGhostCfg(data, sourceType, playerCfg) {
   const base = resolveCfg(data, sourceType || 'player');
   const gbal = data.balance?.ghost || {};
   const pct = gbal.baseStatPct ?? 0.5;
-  const maxHp = Math.round(base.maxHp * pct) + (playerCfg?.ghostHpAdd || 0);
-  const damage = Math.round(base.damage * pct) + (playerCfg?.ghostDamageAdd || 0);
+  // Nekromant-V2 Phase 7 Fund: ghostHpMult/ghostDamageMult wurden seit
+  // Upgradepool-v2 Phase 8 in cfg.js gesammelt, aber NIE hier gelesen -- ein
+  // reiner Blindgaenger, unbemerkt, weil die einzigen Karten, die sie
+  // setzten (sig_necro_*), seit Grundsteinumbau Phase 4 archiviert sind.
+  // ghost_060 "Armee der Toten" ist die erste seither wieder ERREICHBARE
+  // Karte, die ghostDamageMult setzt -- Fix: additiv (Add), DANACH
+  // multiplikativ (Mult), wie beim generischen Applier-Muster ueberall sonst.
+  const maxHp = Math.round((Math.round(base.maxHp * pct) + (playerCfg?.ghostHpAdd || 0)) * (playerCfg?.ghostHpMult || 1));
+  const damage = Math.round((Math.round(base.damage * pct) + (playerCfg?.ghostDamageAdd || 0)) * (playerCfg?.ghostDamageMult || 1));
   // base.armor/base.role/base.accuracy usw. wandern per Spread unveraendert
   // mit -- sie stehen im aufgeloesten cfg, werden von der Geister-eigenen
   // Kollisionsschleife (state.js, direkt vor updateGhosts()) aber bewusst
@@ -111,9 +119,21 @@ function resolveGhostCfg(data, sourceType, playerCfg) {
 // ghostCommander mehr, bleibt aber unveraendert als Wiederanschlusspunkt).
 // NICHT zu verwechseln mit dem NEUEN, dynamischen isChampion (updateGhosts(),
 // jeden Tick neu berechnet, kein Kartengate).
-export function createGhost(state, x, y, heading = 0, sourceType) {
+// `overrides` (Nekromant-V2 Phase 7, NEU): { baseStatPctOverride?, slotCost? }
+// -- ghost_052/056/060 erzeugen Kopien mit einem ANDEREN Basiswert-Anteil als
+// dem normalen `balance.ghost.baseStatPct` (Auftrag: "60/65/50 % Basiswert-
+// Anteil"), ohne die ganze resolveGhostCfg()-Rechnung ein zweites Mal zu
+// implementieren -- dieselbe Skalierungs-Ratio wie ghost_033 (Phase 6):
+// `neuerPct / normalerPct` auf die bereits aufgeloesten maxHp/damage.
+export function createGhost(state, x, y, heading = 0, sourceType, overrides) {
   const playerCfg = state.player?.cfg;
   const cfg = resolveGhostCfg(state.data, sourceType, playerCfg);
+  const gbal0 = state.data.balance?.ghost || {};
+  if (overrides?.baseStatPctOverride) {
+    const scale = overrides.baseStatPctOverride / (gbal0.baseStatPct ?? 0.5);
+    cfg.maxHp = Math.max(1, Math.round(cfg.maxHp * scale));
+    cfg.damage = Math.max(1, Math.round(cfg.damage * scale));
+  }
   const isCommander =
     !!playerCfg?.ghostCommander && !state.ghosts.some((g) => g.alive && g.isCommander);
   if (isCommander) {
@@ -126,6 +146,22 @@ export function createGhost(state, x, y, heading = 0, sourceType) {
   // Basislebenszeit -- direkt hier statt in resolveGhostCfg(), weil
   // lifetime/lifetimeMax keine cfg-Felder sind, sondern eigene Ghost-Felder.
   const lifetimeMax = (state.data.balance?.ghost?.lifetimeS ?? 12) + (playerCfg?.ghostLifetimeAdd || 0);
+  // ghost_059 "Grabfeld" (Nekromant-V2 Phase 7): erscheint ein Untertan an
+  // einem der letzten 3 gemerkten Sterbeorte (state.necroGraveyardSpots,
+  // raumweit, befuellt von necro.js: buildNecroListeners()), wird er staerker.
+  // Radius in data/balance.json (kein Kartentextwert -- "dort" ist vage).
+  let graveMaxHp = cfg.maxHp;
+  let graveDamage = cfg.damage;
+  if (playerCfg?.necroGraveyardBonus && state.necroGraveyardSpots?.length) {
+    const r = gbal0.graveyardRadiusPx ?? 40;
+    const near = state.necroGraveyardSpots.some((s) => Math.hypot(s.x - x, s.y - y) <= r);
+    if (near) {
+      graveMaxHp = Math.round(cfg.maxHp * (1 + playerCfg.necroGraveyardBonus));
+      graveDamage = Math.round(cfg.damage * (1 + playerCfg.necroGraveyardBonus));
+    }
+  }
+  cfg.maxHp = graveMaxHp;
+  cfg.damage = graveDamage;
   return {
     id: nextGhostId++,
     x,
@@ -168,6 +204,17 @@ export function createGhost(state, x, y, heading = 0, sourceType) {
     commanderShieldUsed: false, // Phase 8: Phylakterium (einmal pro Raum)
     reviveUsesLeft: null, // Phase 8: Wiederkehr/Unsterbliche Seele (lazy init)
     reviveGrowthStacks: 0, // Phase 8: Ewige Wiederkehr
+    // Nekromant-V2 Phase 7 (Legion): wie viele Geisterplaetze dieser Untertan
+    // belegt -- normal 1, ghost_056 (wiederbelebte Elite) setzt 2. Ueberall,
+    // wo gegen das Geisterlimit geprueft wird, zaehlt die SUMME dieses Feldes
+    // (occupiedGhostSlots()), nicht mehr die reine Anzahl.
+    slotCost: overrides?.slotCost || 1,
+    isVeteran: false, // ghost_046: einmalige Befoerderung nach necroVeteranAfterS
+    hullUsed: false, // ghost_053: ignoriert einmal je Leben einen grossen Treffer
+    lastDamageAt: -1e9, // ghost_048: Schildwall laedt erst X s nach dem letzten Treffer
+    legionBulletBuffs: [], // ghost_051: "naechste 5 Schuesse" je Untertan, analog player.necroBulletBuffs
+    isOfficer: false, // ghost_049: dynamisch (aeltester lebender Untertan), jeden Tick neu
+    legionAuraResist: 0, // ghost_038/042: dynamisch aus der Legion-Neuberechnung/Naehe-Aura
   };
 }
 
@@ -257,6 +304,54 @@ export function killGhost(state, g, cause = 'damage') {
   // Zweigen, ein geretteter Geist ist kein Geistertod. cause ('damage'/
   // 'expire') ist 1:1 die Auslöser-Tabelle aus dem Auftrag.
   onGhostRemoved(state, g, cause === 'expire' ? 'death_expire' : 'death_damage');
+  // Nekromant-V2 Phase 7 (Legion): killGhost() ist der EINZIGE Entfernungs-
+  // Trichter (Schaden UND Ablauf) -- die "bei Spawn UND Entfernen neu
+  // berechnen, NICHT pro Frame"-Vorgabe des Auftrags braucht deshalb nur
+  // hier UND an den (zwei) Erzeugungsstellen einen Aufruf.
+  recomputeLegionCache(state);
+}
+
+// Nekromant-V2 Phase 7 (Legion, ghost_056 "Elite-Reaktivierung"): Summe
+// belegter Geisterplaetze statt der reinen Anzahl -- ein wiederbelebter
+// Elite-Untertan belegt 2 (g.slotCost), jeder andere 1.
+export function occupiedGhostSlots(state) {
+  let n = 0;
+  for (const g of state.ghosts) if (g.alive) n += g.slotCost || 1;
+  return n;
+}
+
+// Nekromant-V2 Phase 7 (Legion): "Zaehlerbasierte Skalierung ... neu
+// berechnen bei Spawn und Entfernen, NICHT pro Frame" -- diese Funktion ist
+// der EINZIGE Ort, der die reinen ZAEHLER-Karten (038/039/040/045) neu
+// bewertet, aufgerufen ausschliesslich von den Erzeugungs-/Entfernungs-
+// Stellen (killGhost() oben, tank.js: spawnGhostBomb(), state.js:
+// killTank()s Wiederbelebungs-Block, state.js: der ghost_033-Raumstart-Hook).
+// Abstandsauren (042/048/049) sind bewusst NICHT hier -- die haengen von
+// Positionen ab, die sich JEDEN Tick aendern, und werden deshalb weiterhin
+// live in updateGhosts() bewertet.
+export function recomputeLegionCache(state) {
+  const pc = state.player?.cfg;
+  const aliveCount = state.ghosts.reduce((n, g) => n + (g.alive ? 1 : 0), 0);
+  state.necroActiveGhostCount = aliveCount;
+  // ghost_038 "Gemeinsame Ruestung": Schwellenwert-Resistenz fuer ALLE.
+  state.necroLegionResistBonus =
+    pc?.necroLegionResistThreshold && aliveCount >= pc.necroLegionResistThreshold ? pc.necroLegionResistAmount || 0 : 0;
+  // ghost_039 "Rudelfeuer": reine Wiederverwendung von ghostPackDamagePerAlly
+  // (Upgradepool-v2 Phase 8) -- war bisher JEDEN Tick in updateGhosts()
+  // berechnet, jetzt hierher verschoben (Auftrag: "nicht pro Frame").
+  state.necroPackMult = 1 + (pc?.ghostPackDamagePerAlly || 0) * Math.max(0, aliveCount - 1);
+  // ghost_040 "Synchronverschluss": +X % Feuerrate JE aktivem Untertan
+  // (sich selbst eingeschlossen) -- als reiner PROZENTSATZ gespeichert (nicht
+  // schon als Multiplikator), weil updateGhosts() ihn mit weiteren additiven
+  // Feuerraten-Quellen (Seelenoffizier/Munitionsaustausch) summieren muss,
+  // bevor daraus EIN Cooldown-Faktor wird.
+  state.necroLegionFireRatePct = (pc?.necroFireRatePerAlly || 0) * aliveCount;
+  // ghost_045 "Ueberzahl": Schwellenwert-Boost auf Geschossgroesse/-tempo.
+  state.necroOverwhelmActive = !!(pc?.necroOverwhelmThreshold && aliveCount >= pc.necroOverwhelmThreshold);
+  // ghost_057 "Gemeinsamer Wille": Schwellenwert fuer Schadensverteilung +
+  // Resistenz -- ebenfalls reine Zaehler-Bedingung, deshalb hier statt live
+  // in der Kollisionsschleife neu bewertet.
+  state.necroSharedWillActive = !!(pc?.necroSharedWillThreshold && aliveCount >= pc.necroSharedWillThreshold);
 }
 
 // Naechster gueltiger Gegner (Anhang B S9/S10: "Basissystem: Primaerziel =
@@ -278,12 +373,47 @@ function nearestEnemy(state, ghost) {
 
 export function updateGhosts(state, dt) {
   const playerCfg = state.player?.cfg;
-  // Rudelgeist/Armee der Toten (Phase 8): dynamischer Rudelbonus -- haengt
-  // von der AKTUELLEN Anzahl lebender Geister ab, wird deshalb NICHT in die
-  // cfg gebacken (die aendert sich sonst nie nach der Erzeugung), sondern
-  // je Schuss neu berechnet.
-  const aliveCount = state.ghosts.reduce((n, x) => n + (x.alive ? 1 : 0), 0);
-  const packMult = 1 + (playerCfg?.ghostPackDamagePerAlly || 0) * Math.max(0, aliveCount - 1);
+  // Rudelgeist/Armee der Toten (Phase 8) + ghost_039 "Rudelfeuer" (Phase 7):
+  // wird seit Phase 7 NICHT mehr hier neu berechnet ("Zaehlerbasierte
+  // Skalierung ... nicht pro Frame") -- state.necroPackMult kommt aus
+  // recomputeLegionCache(), aufgerufen an den Spawn-/Entfernen-Stellen.
+  const packMult = state.necroPackMult ?? 1;
+  const aliveGhosts = state.ghosts.filter((x) => x.alive);
+
+  // ---- Positions-Auren (Nekromant-V2 Phase 7) ------------------------------
+  // Haengen von LIVE-Positionen ab (Geister bewegen sich jeden Tick) --
+  // bewusst NICHT im Spawn/Entfernen-Cache, sondern hier jeden Tick neu
+  // bewertet. Der Auftrag nennt ausdruecklich nur die reinen ZAEHLER-Karten
+  // (038/039/040/045) als "nicht pro Frame" -- Auren sind etwas anderes.
+  // ghost_042 "Phalanx": +Resistenz, solange ein ANDERER Untertan nahe ist.
+  const phalanxR = playerCfg?.necroPhalanxRadius;
+  for (const g of aliveGhosts) {
+    g.legionAuraResist = 0;
+    g.phalanxRingActive = false;
+    if (!phalanxR) continue;
+    for (const other of aliveGhosts) {
+      if (other === g) continue;
+      if (Math.hypot(other.x - g.x, other.y - g.y) <= phalanxR) {
+        g.legionAuraResist = playerCfg.necroPhalanxResist || 0;
+        g.phalanxRingActive = true;
+        break;
+      }
+    }
+  }
+  // ghost_049 "Seelenoffizier": der AELTESTE lebende Untertan (kleinste id,
+  // da nextGhostId streng aufsteigend vergeben wird) traegt den Ring.
+  let officer = null;
+  if (playerCfg?.necroOfficerRadius) {
+    for (const g of aliveGhosts) if (!officer || g.id < officer.id) officer = g;
+  }
+  for (const g of aliveGhosts) g.isOfficer = g === officer;
+  // ghost_048 "Schildwall": Naehe zum SPIELER (nicht zu anderen Untertanen).
+  const wallR = playerCfg?.necroWallRadius;
+  const pTank = state.player;
+  for (const g of aliveGhosts) {
+    g.wallInRange = !!(wallR && pTank?.alive && Math.hypot(pTank.x - g.x, pTank.y - g.y) <= wallR);
+  }
+
   for (const g of state.ghosts) {
     if (!g.alive) continue;
     // Lebensdauer (Phase 3, NEU -- ersetzt Anhang B S6 "KEIN Lebensdauer-
@@ -311,10 +441,35 @@ export function updateGhosts(state, dt) {
     if (g.cfg.shieldRegenPerS && g.shield < g.cfg.shieldMax) {
       g.shield = Math.min(g.cfg.shieldMax, (g.shield || 0) + g.cfg.shieldRegenPerS * dt);
     }
+    // ghost_048 "Schildwall" (Nekromant-V2 Phase 7): naeher als necroWallRadius
+    // am Spieler UND seit necroWallRegenDelayS unbeschadet -> Schild laedt
+    // Richtung necroWallShieldPct des maximalen Lebens nach.
+    if (g.wallInRange && playerCfg?.necroWallShieldPct) {
+      const cap = g.cfg.maxHp * playerCfg.necroWallShieldPct;
+      if (g.shield < cap && state.time - (g.lastDamageAt ?? -1e9) >= (playerCfg.necroWallRegenDelayS || 0)) {
+        g.shield = Math.min(cap, (g.shield || 0) + g.cfg.maxHp * (playerCfg.necroWallRegenPerS || 0) * dt);
+      }
+    }
+    // ghost_046 "Veteranen": EINMALIGE Befoerderung nach necroVeteranAfterS
+    // Sekunden Ueberleben -- lifetimeMax aendert sich nach der Erzeugung nie,
+    // "verstrichene Zeit" ist deshalb einfach lifetimeMax - lifetime.
+    if (playerCfg?.necroVeteranAfterS && !g.isVeteran && g.lifetimeMax - g.lifetime >= playerCfg.necroVeteranAfterS) {
+      g.isVeteran = true;
+      g.cfg.damage = Math.round(g.cfg.damage * (playerCfg.necroVeteranDamageMult || 1));
+      const oldMax = g.cfg.maxHp;
+      g.cfg.maxHp = Math.round(g.cfg.maxHp * (playerCfg.necroVeteranHpMult || 1));
+      g.hp = Math.min(g.cfg.maxHp, g.hp + (g.cfg.maxHp - oldMax));
+    }
     g.prevX = g.x;
     g.prevY = g.y;
 
-    const target = nearestEnemy(state, g);
+    // ghost_041 "Geteiltes Ziel" (Nekromant-V2 Phase 7): alle Untertanen
+    // greifen das zuletzt vom SPIELER getroffene Ziel an, solange es lebt --
+    // sonst der normale naechstgelegene Gegner.
+    const target =
+      playerCfg?.necroSharedTarget && state.necroLastPlayerHitTarget?.alive
+        ? state.necroLastPlayerHitTarget
+        : nearestEnemy(state, g);
     if (g.cooldown > 0) g.cooldown -= dt;
     if (!target) {
       g.vx = 0;
@@ -326,13 +481,14 @@ export function updateGhosts(state, dt) {
     g.turret = turnToward(g.turret, angleToTarget, TURN_SPEED * dt);
     g.heading = g.turret; // Rohr zeigt immer aufs Ziel, unabhaengig vom Bewegungskurs unten
 
-    // ghost_010 "Jenseitsziel" (Nekromant-V2 Phase 6): umfaehrt das Ziel zu
-    // dessen ungeschuetzter Seite statt frontal anzugreifen -- ein fester
-    // Seitenwert je Geist (g.id), damit er nicht jeden Tick die Seite
-    // wechselt. Nur die BEWEGUNGSrichtung weicht ab, das Rohr bleibt oben
-    // wie gehabt auf angleToTarget ausgerichtet (Feuer-Kegel unveraendert).
+    // ghost_010 "Jenseitsziel" (Phase 6) UND ghost_041 "Geteiltes Ziel"
+    // (Phase 7, "...und umfahren es zur ungeschuetzten Seite"): beide teilen
+    // sich denselben Flankier-Bewegungspfad. Fester Seitenwert je Geist
+    // (g.id), damit er nicht jeden Tick die Seite wechselt. Nur die
+    // BEWEGUNGSrichtung weicht ab, das Rohr bleibt oben wie gehabt auf
+    // angleToTarget ausgerichtet (Feuer-Kegel unveraendert).
     let moveAngle = g.heading;
-    if (playerCfg?.ghostFlankSeek && typeof target.heading === 'number') {
+    if ((playerCfg?.ghostFlankSeek || playerCfg?.necroSharedTarget) && typeof target.heading === 'number') {
       const side = g.id % 2 === 0 ? 1 : -1;
       const flankX = target.x + Math.cos(target.heading + Math.PI / 2) * side * 70 - Math.cos(target.heading) * 40;
       const flankY = target.y + Math.sin(target.heading + Math.PI / 2) * side * 70 - Math.sin(target.heading) * 40;
@@ -344,8 +500,12 @@ export function updateGhosts(state, dt) {
     // (Turmrichtung), NICHT die (bei ghost_010 abweichende) Bewegungsrichtung.
     const aimDx = Math.cos(g.heading);
     const aimDy = Math.sin(g.heading);
-    g.x += dx * g.cfg.speed * dt;
-    g.y += dy * g.cfg.speed * dt;
+    // ghost_047 "Sturmformation" (Nekromant-V2 Phase 7, isUnique): solange
+    // ein Untertan sein Ziel verfolgt (praktisch immer -- Basisverhalten ist
+    // reine Verfolgung), gilt der Anflug-Tempobonus.
+    const stormSpeedMult = playerCfg?.necroStormApproachSpeedMult || 1;
+    g.x += dx * g.cfg.speed * stormSpeedMult * dt;
+    g.y += dy * g.cfg.speed * stormSpeedMult * dt;
     // Nicht durch Waende clippen, aber keine resolveTankBlocking --
     // Geister blockieren echte Panzer nicht und werden nicht von ihnen
     // blockiert (passend zu "blockieren keine Kugeln").
@@ -378,13 +538,50 @@ export function updateGhosts(state, dt) {
       // fuer Geistergeschosse -- g.cfg.critChance/critMultBonus kommen aus
       // resolveGhostCfg() (playerCfg.ghostCritChanceAdd/-MultAdd).
       const ghostCrit = g.cfg.critChance > 0 && state.rng() < g.cfg.critChance;
+      // ghost_049 "Seelenoffizier": Schaden-/Feuerratenbonus fuer ALLE
+      // ANDEREN Untertanen innerhalb des Radius (nicht fuer den Offizier selbst).
+      let officerDmgMult = 1;
+      let officerFireRatePct = 0;
+      if (officer && g !== officer && Math.hypot(officer.x - g.x, officer.y - g.y) <= (playerCfg?.necroOfficerRadius || 0)) {
+        officerDmgMult = playerCfg.necroOfficerDamageMult || 1;
+        officerFireRatePct = playerCfg.necroOfficerFireRateBonus || 0;
+      }
+      // ghost_047 "Sturmformation": zusaetzlicher Bonus, sobald der Untertan
+      // die Seite/das Heck des Ziels erreicht hat (dieselbe flankZone()-
+      // Geometrie wie die Spieler-Trefferschleife in state.js, hier gegen
+      // die ZIEL-Ausrichtung gemessen).
+      let stormDmgMult = playerCfg?.necroStormApproachDamageMult || 1;
+      if (playerCfg?.necroStormFlankBonus && typeof target.heading === 'number') {
+        const flankCfg = state.data.balance?.flank;
+        if (flankCfg && flankZone(target, g.x, g.y, flankCfg) !== 'front') {
+          stormDmgMult *= 1 + playerCfg.necroStormFlankBonus;
+        }
+      }
+      // ghost_054 "Legionskern": +X % Schaden bis Raumende fuer ALLE
+      // Untertanen, sobald der Effekt einmal ausgeloest wurde.
+      const kernMult = state.necroLegionKernActive ? 1 + (playerCfg?.necroCoreDamageBonus || 0) : 1;
+      // ghost_060 "Armee der Toten"/allgemeine ghostDamageMult-Karten wirken
+      // bereits ueber g.cfg.damage (resolveGhostCfg()) -- hier nur die
+      // dynamischen, NICHT in die cfg gebackenen Legion-Multiplikatoren.
+      let dmg = Math.round(g.cfg.damage * packMult * officerDmgMult * stormDmgMult * kernMult);
+      // ghost_051 "Erbmunition": "naechste 5 Schuesse" je Untertan, analog
+      // player.necroBulletBuffs -- konsumiert EINMAL pro Abzug.
+      if (g.legionBulletBuffs?.length) {
+        let buffMult = 1;
+        for (const buff of g.legionBulletBuffs) if (buff.damageMult) buffMult *= buff.damageMult;
+        dmg = Math.round(dmg * buffMult);
+        for (const buff of g.legionBulletBuffs) buff.shotsLeft--;
+        g.legionBulletBuffs = g.legionBulletBuffs.filter((b) => b.shotsLeft > 0);
+      }
+      // ghost_045 "Ueberzahl": groessere/schnellere Geschosse ab der Schwelle.
+      const overwhelm = state.necroOverwhelmActive;
       state.bullets.push(
         createBullet(g.x + aimDx * muzzle, g.y + aimDy * muzzle, g.turret, {
-          speed: g.cfg.bulletSpeed,
-          radius: state.data.physics.bulletRadius,
+          speed: g.cfg.bulletSpeed * (overwhelm ? playerCfg.necroOverwhelmBulletSpeedMult || 1 : 1),
+          radius: state.data.physics.bulletRadius * (overwhelm ? playerCfg.necroOverwhelmBulletSizeMult || 1 : 1),
           owner: g,
           kind: g.cfg.weapon,
-          damage: Math.round(g.cfg.damage * packMult),
+          damage: dmg,
           damageType: g.cfg.damageType,
           crit: ghostCrit,
           // KEIN critMultBonus hier: g.cfg.critMultBonus wird bereits ueber
@@ -394,7 +591,18 @@ export function updateGhosts(state, dt) {
           // Krit-Bonus ist eine Einmal-Ladung, nicht Teil der Dauer-cfg).
         }),
       );
-      g.cooldown = g.cfg.fireCooldown;
+      // Feuerrate: Zaehler-Cache (040) + Offizier-Aura (049) additiv als
+      // Prozentsaetze summiert, dann EIN Cooldown-Faktor. ghost_050
+      // "Munitionsaustausch" erhoeht danach den raumweiten, gedeckelten
+      // Stapel fuer den NAECHSTEN Schuss (wirkt erst auf folgende Schuesse).
+      const ammoExchangePct = getNecroStack(state, 'room', '_legionAmmoExchange');
+      const fireRatePct = (state.necroLegionFireRatePct || 0) + officerFireRatePct + ammoExchangePct;
+      g.cooldown = g.cfg.fireCooldown * Math.max(0.1, 1 - fireRatePct);
+      if (playerCfg?.necroAmmoExchangePerShot) {
+        const cap = playerCfg.necroAmmoExchangeCap || 0;
+        const cur = getNecroStack(state, 'room', '_legionAmmoExchange');
+        if (cur < cap) addNecroStack(state, 'room', '_legionAmmoExchange', Math.min(playerCfg.necroAmmoExchangePerShot, cap - cur));
+      }
       // Geister kaempfen auf Spielerseite -> der freundliche Schuss-Ton.
       state.sounds.push({ name: 'shoot', x: g.x });
     }

@@ -8,7 +8,7 @@
 import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
 import { createMine } from './mine.js';
-import { createGhost } from './ghost.js';
+import { createGhost, recomputeLegionCache, occupiedGhostSlots } from './ghost.js';
 import { statusSpeedMult } from './status.js';
 import { necroDamagePct, necroFireRatePct, necroSpeedPct } from './necro.js';
 import { CELL } from '../config.js';
@@ -572,16 +572,21 @@ function spawnGhostBomb(tank, state) {
   }
   // Seelenruf/Geisterlegion/Armee der Toten (Upgradepool-v2 Phase 8):
   // ghostMaxAdd erhoeht das Basislimit additiv -- dieselbe Formel wie beim
-  // kill-ausgeloesten Spawnwuerfel in state.js: killTank().
+  // kill-ausgeloesten Spawnwuerfel in state.js: killTank(). Nekromant-V2
+  // Phase 7 (Legion): der Deckel-Vergleich zaehlt jetzt belegte PLAETZE
+  // (occupiedGhostSlots), nicht die reine Anzahl -- ein wiederbelebter
+  // Elite-Untertan (ghost_056) belegt 2.
   const cap = (state.data.balance.ghost?.maxActive ?? 3) + (tank.cfg.ghostMaxAdd || 0);
-  if (state.ghosts.length >= cap) return false;
+  if (occupiedGhostSlots(state) >= cap) return false;
   // Zufaelliger Typ aus dem Akt-Gegnerpool -- ueber den Seed-RNG
   // (state.rng), nie Math.random. Ein leerer Pool (Testfixtures ohne
   // actEnemyPool) faellt auf 't_brown' zurueck, den fruehesten/einfachsten
   // Gegnertyp, statt den Wurf zu verweigern.
   const pool = state.actEnemyPool && state.actEnemyPool.length ? state.actEnemyPool : ['t_brown'];
   const sourceType = pool[Math.floor(state.rng() * pool.length) % pool.length];
-  state.ghosts.push(createGhost(state, tank.x, tank.y, tank.turret, sourceType));
+  const bombGhost = createGhost(state, tank.x, tank.y, tank.turret, sourceType);
+  state.ghosts.push(bombGhost);
+  recomputeLegionCache(state);
   tank.ghostBombCooldown = state.data.balance.ghost?.bombCooldownS ?? 10;
   state.sounds.push({ name: 'shield', x: tank.x });
   state.spawnParticles?.(tank.x, tank.y, '#8ecaf0', 10, 90);

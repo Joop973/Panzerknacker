@@ -5351,8 +5351,127 @@ datengetriebene Effektschicht).
   einen Schlag rot zeigte.
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
   Playwright-Smoke (Nekromant wählen, Run starten, Snapshot bestätigt
+  `starterTank: 'c_necro'`, keine Konsolenfehler) bestanden.
+
+### Nekromant-V2 — Phase 7 (Legion, 25 Karten) — gemergt
+`ghost_036` bis `ghost_060`: deutlich mehr Untertanen, stärker in der
+Gruppe. Zwei neue architektonische Bausteine tragen den ganzen Topf: eine
+Plätze- statt Anzahl-Buchführung (wegen `ghost_056`) und ein expliziter
+Neuberechnungs-Cache für die reinen Zähler-Karten (Auftrags-Vorgabe „nicht
+pro Frame").
+- **`ghost.js: occupiedGhostSlots(state)`** (neu, exportiert): Summe
+  `g.slotCost` über alle lebenden Untertanen statt der reinen Array-Länge —
+  ein wiederbelebter Elite-Untertan (`ghost_056`) belegt 2. JEDE Stelle, die
+  bisher gegen `state.ghosts.length` prüfte (`state.js: killTank()`s
+  Wiederbelebungs-Block, `tank.js: spawnGhostBomb()`, der `ghost_033`-
+  Raumstart-Hook), prüft jetzt dagegen.
+- **`ghost.js: recomputeLegionCache(state)`** (neu, exportiert): die vom
+  Auftrag verlangte „zählerbasierte Skalierung ... neu berechnen bei Spawn
+  und Entfernen, NICHT pro Frame" — berechnet `necroActiveGhostCount`/
+  `necroLegionResistBonus` (`ghost_038`)/`necroPackMult` (`ghost_039`, aus
+  dem Bestand `ghostPackDamagePerAlly` von Upgradepool-v2 Phase 8, bisher
+  fälschlich JEDEN Tick in `updateGhosts()` neu berechnet — jetzt hierher
+  verschoben)/`necroLegionFireRatePct` (`ghost_040`)/`necroOverwhelmActive`
+  (`ghost_045`)/`necroSharedWillActive` (`ghost_057`) — EINMAL, aufgerufen
+  ausschließlich von den drei Erzeugungsstellen und `killGhost()` (der
+  einzige Entfernungs-Trichter, Schaden UND Ablauf). **Bewusst NICHT
+  hier**: die drei „Abstandsauren" (`ghost_042`/`048`/`049`) — die hängen
+  von Positionen ab, die sich jeden Tick ändern, und werden deshalb
+  weiterhin live in `updateGhosts()` bewertet (mit sichtbarem Ring je
+  Karte, Auftrag: „sonst versteht niemand, warum Werte schwanken").
+- **`state.js: killTank()`s Wiederbelebungs-Block komplett neu**, weil
+  fünf Karten (`044`/`052`/`054`/`055`/`056`/`060`) alle an derselben
+  Stelle greifen: `necroReviveChanceAdd` (`044`/`055`) ist additiv OHNE
+  Deckel auf die Chance; `necroEliteRevive` (`056`) hebt die Elite-Ausnahme
+  gezielt auf (Bosse bleiben in JEDEM Fall ausgeschlossen) und der
+  wiederbelebte Elite-Untertan bekommt `slotCost: 2` + einen eigenen
+  Basiswert-Anteil über `ghost.js: createGhost()`s neuen `overrides`-
+  Parameter (`{baseStatPctOverride, slotCost}` — dieselbe Skalierungs-Ratio
+  wie `ghost_033` aus Phase 6, kein zweiter `resolveGhostCfg()`-Zweig);
+  `necroDoubleReviveChance` (`052`) und `necroGuaranteedReviveCopy` (`060`)
+  hängen je einen weiteren, unabhängigen Spawn-Versuch an eine gelungene
+  Probe; `necroCoreHealPct`/`necroCoreDamageBonus` (`054` „Legionskern")
+  greift NUR, wenn die Probe gelingt, aber `occupiedGhostSlots(state) >=
+  ghostCap` (kein Platz mehr) — heilt/stärkt dann die VORHANDENEN
+  Untertanen bis Raumende statt eines wirkungslosen Spawnversuchs, mit
+  eigener kleiner Abklingzeit (`state.necroCoreCooldownUntil`, kein
+  `necro.js`-Umweg nötig).
+- **`ghost_041` „Geteiltes Ziel" + `ghost_010`s Flankier-Bewegung
+  zusammengelegt**: `updateGhosts()`s Zielwahl bevorzugt
+  `state.necroLastPlayerHitTarget` (neu, in der Spieler-Trefferschleife in
+  `state.js` gesetzt, sobald eine EIGENE Kugel einen Nicht-Spieler trifft),
+  solange es lebt, sonst der normale nächstgelegene Gegner. Der
+  Flankier-Bewegungspfad aus Phase 6 (`ghost_010`) ist jetzt eine
+  gemeinsame Bedingung (`ghostFlankSeek || necroSharedTarget`) — beide
+  Karten wollen dasselbe „umfährt das Ziel zur ungeschützten Seite".
+- **`ghost_057` „Gemeinsamer Wille"**: die Geist-vs-Geschoss-Kollisions-
+  schleife in `state.js` verteilt den Schaden ab der Schwelle GLEICHMÄSSIG
+  auf ALLE lebenden Untertanen (VOR Resistenz/Schild — jeder Empfänger
+  rechnet seine eigene Abwehr), statt nur den getroffenen zu treffen.
+- **`ghost_053` „Verstärkte Hülle"**: ignoriert EINMAL je Leben einen
+  Treffer über der Schwelle, gemessen am fertig berechneten Schaden (NACH
+  Resistenz, VOR Schild) — ein neues `g.hullUsed`-Flag, das erst mit dem
+  nächsten frisch erzeugten Untertan wieder `false` ist.
+- **`ghost_058` „Chor der Toten"**: Untertanen-Treffer bekommen zusätzlich
+  die HÄLFTE des GLOBALEN Flanken-/Heck-Faktors (`data/balance.json:
+  flank`) als eigenen Bonus — „die Hälfte des Flankenbonus des
+  Hauptpanzers" liest sich als der globale Wert, weil der Spieler selbst
+  keinen individuellen Flankenbonus-Stat besitzt.
+- **`ghost_059` „Grabfeld"**: `state.necroGraveyardSpots` (raumweit, FIFO
+  auf 3, in `necro.js: buildNecroListeners()` bei jedem Untertanen-Tod
+  befüllt) wird von `createGhost()` beim Spawnen gelesen — ein neuer
+  Untertan nahe einem gemerkten Sterbeort ist stärker. Radius
+  (`data/balance.json: ghost.graveyardRadiusPx`, 40) ist der einzige Wert
+  dieses Kartentopfs ohne Beleg im Kartentext.
+- **Echter Bugfund**: `ghostHpMult`/`ghostDamageMult` wurden seit
+  Upgradepool-v2 Phase 8 in `cfg.js` gesammelt, aber `ghost.js:
+  resolveGhostCfg()` hat sie NIE gelesen — ein reiner Blindgänger, unbemerkt,
+  weil die einzigen Karten, die sie setzten (`sig_necro_*`), seit
+  Grundsteinumbau Phase 4 archiviert sind. `ghost_060` „Armee der Toten"
+  ist die erste seither wieder erreichbare Karte, die `ghostDamageMult`
+  setzt (−15 % Schaden für alle Untertanen) — jetzt gefixt: additiv (Add)
+  zuerst, danach multiplikativ (Mult), wie beim generischen Applier-Muster
+  überall sonst im Projekt.
+- **Sichtbare Ringe** (Auftrag: „sonst versteht niemand, warum Werte
+  schwanken"): `renderer.js: drawGhosts()` bekommt drei neue Ringe —
+  türkis (`ghost_042` Phalanx), gestrichelt hellblau (`ghost_048`
+  Schildwall), lila (`ghost_049` Offizier) — auf unterschiedlichen Radien,
+  damit sie gleichzeitig unterscheidbar bleiben.
+- **Neuer Testabschnitt 59** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt einzeln bestanden — u. a.: der `ghostDamageMult`-Bugfix selbst
+  zurückgebaut, die Elite-Ausnahme in `canRevive` wieder scharf gestellt,
+  die Schadensverteilung von `ghost_057` auf `[g]` zurückgesetzt, `ghost_053`s
+  Hüllen-Bedingung auf `false`, `ghost_054`s Deckel-Zweig deaktiviert, die
+  Phalanx-/Offizier-/Schildwall-Auren einzeln stillgelegt, `ghost_041`s
+  Zielüberschreibung ausgebaut, `ghost_046`s Veteranen-Zweig auf `false`,
+  `ghost_050`s Deckel-Klemmung entfernt, `ghost_051`s Listener deaktiviert,
+  `ghost_059`s Grabfeld-Zweig auf `false`): die fünf offiziellen
+  Testschritte wörtlich (`ghost_036` ×10 → 13 gleichzeitige Untertanen ohne
+  Sperre, `ghost_039` erhöht den Schaden mit mehr Untertanen, `ghost_049`s
+  Offizier + Nähe-Bonus, „Totenruf" ×10 steigt linear und bleibt im Pool
+  (`isUnique:false`), `ghost_056`s Elite-Untertan belegt 2 Plätze), dazu
+  Mechanismus-Tests für `occupiedGhostSlots`/`recomputeLegionCache`
+  („nicht pro Frame" explizit nachgewiesen: ein Geist, der ohne den
+  Funktionsaufruf ins Array gelangt, ändert den Cache noch nicht), sowie
+  je einen Test für die übrigen 18 Karten. **Fund beim Testbau**: direkt
+  gewählte Testkoordinaten (z. B. `(0,0)`) liegen oft außerhalb des von
+  `createState()` generierten Kartengrids — `isSolid()`/`blocksSight()`
+  lesen aus dem GRID-Closure der Raumgenerierung, nicht aus `state.walls`
+  (ein bloßes `state.walls=[]` reicht deshalb NICHT); `legionRoom()`
+  überschreibt deshalb `st.isSolid`/`st.blocksSight` direkt. Ein zweiter
+  Fund: ein echter, im generierten Raum vorhandener Gegnertank kann eine
+  direkt injizierte Testkugel VOR der Geister-Kollisionsschleife abfangen
+  (die Haupt-Trefferschleife läuft zuerst) — betroffene Tests (`ghost_053`/
+  `057`) setzen `st.tanks = [st.player]`. Ein dritter Fund: eine nach
+  Aufrufreihenfolge gezählte `state.rng()`-Stub-Sequenz ist fragil, weil
+  `killTank()` für `spawnParticles()` selbst schon viele `rng()`-Aufrufe
+  VOR dem Wiederbelebungswurf macht (`ghost_052`s Gegenprobe nutzt
+  stattdessen einen festen Wert 0,25, der unabhängig von der Aufrufstelle
+  „Basis-Chance trifft, Doppel-Chance verfehlt" ergibt).
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  Playwright-Smoke (Nekromant wählen, Run starten, Snapshot bestätigt
   `starterTank: 'c_necro'`, keine Konsolenfehler) bestanden. **Nächste
-  Sitzung: Phase 7** (Legion, 25 Karten).
+  Sitzung: Phase 8** (Alpha und Verschmelzung, 25 Karten).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -5514,7 +5633,20 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Wert steckt schon in `g.cfg.critMultBonus`, ein zusätzliches Feld würde
   ihn doppelt zählen) und eine von der Turmrichtung ENTKOPPELTE
   Bewegungsrichtung (`moveAngle`/`aimDx`+`aimDy` getrennt von
-  `dx`+`dy`) für `ghost_010`s Flankenanflug.
+  `dx`+`dy`) für `ghost_010`s Flankenanflug. Nekromant-V2 Phase 7 (Legion):
+  `occupiedGhostSlots(state)` (Plätze statt Anzahl, `ghost_056`) und
+  `recomputeLegionCache(state)` (die zähler-basierten Legion-Karten, „nicht
+  pro Frame" — aufgerufen von `killGhost()` UND den beiden Erzeugungs-
+  stellen in `state.js`/`tank.js`) sind neu und exportiert.
+  `resolveGhostCfg()` liest jetzt auch `ghostHpMult`/`ghostDamageMult`
+  (**Bugfix**: waren seit Upgradepool-v2 Phase 8 nie gelesen worden).
+  `createGhost()`s neuer `overrides`-Parameter (`{baseStatPctOverride,
+  slotCost}`) bedient `ghost_052`/`056`/`060`, sowie einen Grabfeld-Bonus
+  (`ghost_059`, `state.necroGraveyardSpots`). `updateGhosts()` bewertet die
+  drei Abstandsauren (`ghost_042`/`048`/`049`) live jeden Tick (position-
+  sabhängig, bewusst NICHT im Cache) und konsolidiert Sturmformation
+  (`047`)/Veteranen (`046`)/Munitionsaustausch (`050`)/Erbmunition (`051`)/
+  Legionskern (`054`) am Feuerzeitpunkt.
 - `src/game/necro.js` (Nekromant-V2 Phase 5, seit Phase 6 angeschlossen) —
   Ereignis-/Stapelschicht für den 105-Karten-Pool `data/upgrades_necro.json`.
   `onGhostRemoved(state, ghost, reason)` ist das zentrale Ereignis (vier
