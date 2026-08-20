@@ -79,6 +79,26 @@ export function createDebugOverlay(ctx) {
     ];
   }
 
+  // Nekromant-V2 Phase 5: state.necroEventLog haelt die letzten 20 Ereignisse
+  // (necro.js: onGhostRemoved()) -- hier nur nach Ausloeser gruppiert und
+  // gezaehlt, damit "durch Schaden" und "durch Ablauf" auf einen Blick
+  // unterscheidbar sind (Testschritt 1).
+  const REASON_LABEL = {
+    death_damage: 'Schaden',
+    death_expire: 'Ablauf',
+    fusion: 'Verschmelzung',
+    sacrifice: 'Opfer',
+  };
+  function necroEventLine(state) {
+    const log = state.necroEventLog || [];
+    if (!log.length) return '–';
+    const counts = {};
+    for (const e of log) counts[e.reason] = (counts[e.reason] || 0) + 1;
+    return Object.entries(counts)
+      .map(([reason, n]) => `${n}× ${REASON_LABEL[reason] || reason}`)
+      .join(', ');
+  }
+
   function drawPanel(state, fps, timing) {
     const liveTanks = state.tanks.filter((t) => t.alive).length;
     const entities = liveTanks + state.bullets.length + state.mines.length;
@@ -94,6 +114,11 @@ export function createDebugOverlay(ctx) {
       // Resistenz, Durchschlag, Schild-Punktepool des Spielers. Alle drei
       // aktuell 0 -- noch keine Karte gewaehrt sie.
       `Resist ${p.cfg.resist || 0} · Durchschlag ${p.cfg.pierce || 0} · Schild ${Math.round(p.shield || 0)}/${p.cfg.shieldMax || 0}`,
+      // Nekromant-V2 Phase 5 (Testschritt 1: "unterscheidbar im Debug-
+      // Overlay"): Zaehlt die letzten Ereignisse aus state.necroEventLog
+      // nach Ausloeser -- Schaden/Ablauf muessen als GETRENNTE Zahlen
+      // sichtbar sein, nicht nur ein gemeinsames "N Tode".
+      `Untertan-Ereignisse ${necroEventLine(state)}`,
       ...capLines(state),
     ];
     if (timing) {

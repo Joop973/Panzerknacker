@@ -7454,6 +7454,363 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 57. Nekromant-V2 Phase 5: Ereignis- und Stapelschicht ---------------
+// Das Fundament fuer alle 105 Karten -- NOCH KEINE Karte hoert zu (Phase 6+
+// fuellt state.necroListeners), s. src/game/necro.js Kopfkommentar. Mechanismus
+// mit synthetischen Test-Listenern geprueft (Muster wie Abschnitt 56), Gegen-
+// probe fuer jeden Kernpunkt bestanden.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const {
+    onGhostRemoved,
+    countsAsGhostDeath,
+    addNecroStack,
+    getNecroStack,
+    addNecroTimedStack,
+    getNecroTimedStack,
+    tickNecroTimers,
+    countThresholdCrossings,
+    applyVirtualNecroDeaths,
+    NECRO_REASONS,
+  } = await import('../src/game/necro.js');
+  const { createGhost, killGhost } = await import('../src/game/ghost.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+
+  const necroRoom = () => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: ['t_pink'],
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    return st;
+  };
+
+  // (a) Struktur: die vier Ausloeser + die "loest Todeseffekte aus"-Tabelle
+  // aus dem Auftrag (death_damage/death_expire/sacrifice ja, fusion nein).
+  {
+    check(
+      NECRO_REASONS.length === 4 &&
+        ['death_damage', 'death_expire', 'fusion', 'sacrifice'].every((r) => NECRO_REASONS.includes(r)),
+      `Phase 5: NECRO_REASONS enthaelt nicht genau die vier Ausloeser (${NECRO_REASONS})`,
+    );
+    check(countsAsGhostDeath('death_damage'), 'Phase 5: death_damage zaehlt nicht als Geistertod');
+    check(countsAsGhostDeath('death_expire'), 'Phase 5: death_expire zaehlt nicht als Geistertod');
+    check(countsAsGhostDeath('sacrifice'), 'Phase 5: sacrifice zaehlt nicht als Geistertod');
+    check(!countsAsGhostDeath('fusion'), 'Phase 5: fusion zaehlt faelschlich als Geistertod');
+  }
+
+  // (b) Zentrale Zustellung: ein Listener wird NUR fuer seine deklarierten
+  // Gruende aufgerufen, kein switch(id) -- zwei verschiedene Listener mit
+  // disjunkten reasons[] duerfen sich nie gegenseitig ausloesen.
+  {
+    const st = necroRoom();
+    let damageFired = 0;
+    let expireFired = 0;
+    st.necroListeners.push({ reasons: ['death_damage'], scope: 'room', key: 'testA', fn: () => damageFired++ });
+    st.necroListeners.push({ reasons: ['death_expire'], scope: 'room', key: 'testB', fn: () => expireFired++ });
+    const g = createGhost(st, 0, 0, 0, 't_pink');
+    onGhostRemoved(st, g, 'death_damage');
+    check(damageFired === 1 && expireFired === 0, `Phase 5: death_damage loest den falschen Listener aus (${damageFired}/${expireFired})`);
+    onGhostRemoved(st, g, 'death_expire');
+    check(damageFired === 1 && expireFired === 1, `Phase 5: death_expire loest den falschen Listener aus (${damageFired}/${expireFired})`);
+  }
+
+  // (c) Automatische _deaths-Buchfuehrung (raum- UND runweit): jeder Ausloeser
+  // ausser fusion erhoeht den reservierten Stapel um 1 -- OHNE dass irgendein
+  // Listener registriert ist (die Buchfuehrung ist unabhaengig von Karten).
+  {
+    const st = necroRoom();
+    const g = createGhost(st, 0, 0, 0, 't_pink');
+    onGhostRemoved(st, g, 'death_damage');
+    onGhostRemoved(st, g, 'death_expire');
+    onGhostRemoved(st, g, 'sacrifice');
+    onGhostRemoved(st, g, 'fusion');
+    check(getNecroStack(st, 'room', '_deaths') === 3, `Phase 5: _deaths-Stapel (raumweit) ${getNecroStack(st, 'room', '_deaths')} statt 3`);
+    check(getNecroStack(st, 'run', '_deaths') === 3, `Phase 5: _deaths-Stapel (runweit) ${getNecroStack(st, 'run', '_deaths')} statt 3`);
+  }
+
+  // (d) Raumweiter Stapel ist NUR fuer diesen Raum gueltig -- ein frischer
+  // createState()-Aufruf (naechster Raum) startet garantiert bei 0, ueber
+  // die ECHTE Erzeugung geprueft, nicht nur behauptet.
+  {
+    const st1 = necroRoom();
+    addNecroStack(st1, 'room', 'testKey', 7);
+    check(getNecroStack(st1, 'room', 'testKey') === 7, 'Phase 5: raumweiter Stapel schreibt/liest nicht korrekt');
+    const st2 = necroRoom(); // simuliert den naechsten Raum
+    check(getNecroStack(st2, 'room', 'testKey') === 0, `Phase 5: raumweiter Stapel ueberlebt einen Raumwechsel (${getNecroStack(st2, 'room', 'testKey')})`);
+  }
+
+  // (e) Runweiter Stapel: state.js kennt kein run-Objekt -- run.js: stepRun()
+  // synchronisiert den Zuwachs per Delta (wie bonusScrap), geprueft an einem
+  // ECHTEN Run. Der Raumwechsel selbst (Testschritt 2+3: raumweit weg, runweit
+  // bleibt) wird -- wie schon in Abschnitt 43(i) fuer Geister -- ueber einen
+  // zweiten, echten createState()-Aufruf simuliert statt die volle
+  // Kartenwahl-/Shop-Zustandsmaschine von run.js nachzubauen; das prueft
+  // denselben Mechanismus (necroRunStacksBase-Kopie beim Raumaufbau), ohne
+  // Kartenscreens durchzuklicken.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 42, 'normal', { starterTank: 'c_necro' });
+    check(run.starterTank === 'c_necro', `Phase 5: Vorbedingung -- Run laeuft als ${run.starterTank} statt c_necro`);
+    run.phase = 'playing';
+    const st = run.state;
+    const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+    addNecroStack(st, 'room', 'roomKey', 5);
+    addNecroStack(st, 'run', 'runKey', 3);
+    stepRun(run, CMD0, 1 / 60); // synchronisiert den runweiten Zuwachs
+    check(run.necroStacks.runKey === 3, `Phase 5: runweiter Stapel wird nicht in run.necroStacks synchronisiert (${run.necroStacks.runKey})`);
+
+    // Naechster Raum: frisches createState() mit necroRunStacksBase aus
+    // run.necroStacks -- exakt das Opt, das run.js: buildCombatRoom() liefert.
+    const st2 = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: ['t_pink'],
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+      necroRunStacksBase: { ...run.necroStacks },
+    });
+    check(
+      getNecroStack(st2, 'room', 'roomKey') === 0,
+      `Phase 5: raumweiter Stapel ueberlebt den Raumwechsel (${getNecroStack(st2, 'room', 'roomKey')})`,
+    );
+    // Der runweite Gesamtwert bleibt im neuen Raum korrekt lesbar.
+    check(
+      getNecroStack(st2, 'run', 'runKey') === 3,
+      `Phase 5: runweiter Stapel ist im neuen Raum nicht mehr lesbar (${getNecroStack(st2, 'run', 'runKey')})`,
+    );
+    // Weiterer Zuwachs im neuen Raum addiert sich korrekt auf den Altwert --
+    // KEINE Doppelzaehlung durch eine geteilte Referenz statt einer Kopie.
+    addNecroStack(st2, 'run', 'runKey', 2);
+    check(
+      getNecroStack(st2, 'run', 'runKey') === 5,
+      `Phase 5: runweiter Stapel zaehlt nach einem Raumwechsel falsch weiter (${getNecroStack(st2, 'run', 'runKey')}, Doppelzaehlung?)`,
+    );
+  }
+
+  // (e2) Dieselbe Behauptung, aber ueber den ECHTEN buildCombatRoom()-Pfad
+  // (run.js) statt eines von Hand nachgebauten createState()-Aufrufs -- das
+  // haette einen echten Fund (necroRunStacksBase als geteilte REFERENZ statt
+  // einer Kopie, sichtbar erst NACH einem zweiten Sync-Tick im neuen Raum,
+  // sonst zufaellig unauffaellig) im 'Weiter' des Auftrags sonst nicht
+  // gefangen. driveOneRoom() faehrt den echten run.js-Zustandsautomaten
+  // (Kartenwahl/Upgrade-Screen inklusive) bis zum naechsten Raumwechsel.
+  {
+    const driveOneRoom = (run) => {
+      const startRoom = run.roomIndex;
+      const startAct = run.actIndex;
+      let guard = 20000;
+      while (guard-- > 0) {
+        if (run.phase === 'victory' || run.phase === 'gameover') return false;
+        if (run.roomIndex !== startRoom || run.actIndex !== startAct) return true;
+        if (run.phase === 'preview') enterRoom(run);
+        else if (run.phase === 'transition') stepRun(run, CMD, STEP);
+        else if (run.phase === 'playing') {
+          cheatKillAll(run.state);
+          stepRun(run, CMD, STEP);
+        } else if (run.phase === 'upgrade') chooseUpgrade(run, 0);
+        else if (run.phase === 'map') pickMapNode(run);
+        else if (run.phase === 'workshop') leaveWorkshop(run);
+        else if (run.phase === 'event') chooseEventOption(run, 0);
+        else if (run.phase === 'rest') passRest(run);
+        else if (run.phase === 'actComplete') advanceAct(run);
+        else return false;
+      }
+      return false;
+    };
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 99, 'normal', { starterTank: 'c_necro' });
+    run.phase = 'playing';
+    addNecroStack(run.state, 'run', 'realRunKey', 4);
+    stepRun(run, CMD, STEP);
+    check(run.necroStacks.realRunKey === 4, `Phase 5: Vorbedingung -- Sync vor dem Raumwechsel schlaegt fehl (${run.necroStacks.realRunKey})`);
+    const advanced = driveOneRoom(run);
+    check(advanced, `Phase 5: Vorbedingung -- kein echter Raumwechsel ueber run.js erreicht (Phase "${run.phase}")`);
+    // driveOneRoom() haelt beim ALLERERSTEN Anzeichen eines neuen Raums an
+    // (typischerweise noch Phase 'preview') -- stepRun() ist dort ein No-op
+    // (nur Phase 'playing'/'transition' laufen durch), der Sync-Tick unten
+    // braeuchte den Raum sonst wirkungslos. Bis 'playing' weiterfahren.
+    let enterGuard = 1000;
+    while (run.phase !== 'playing' && enterGuard-- > 0) {
+      if (run.phase === 'preview') enterRoom(run);
+      else stepRun(run, CMD, STEP);
+    }
+    check(run.phase === 'playing', `Phase 5: Vorbedingung -- der neue Raum erreicht "playing" nicht (Phase "${run.phase}")`);
+    // Ein weiterer Zuwachs IM NEUEN Raum + ein Sync-Tick zeigt die
+    // Referenz-vs-Kopie-Falle: mit einer geteilten Referenz waere
+    // necroRunStacksBase nach dem Sync-Tick bereits der NEUE Gesamtwert,
+    // necroRunStackGain zaehlt den Zuwachs dann ein zweites Mal oben drauf.
+    addNecroStack(run.state, 'run', 'realRunKey', 1);
+    stepRun(run, CMD, STEP);
+    check(
+      getNecroStack(run.state, 'run', 'realRunKey') === 5,
+      `Phase 5: runweiter Stapel zaehlt nach einem ECHTEN, ueber buildCombatRoom() erzeugten Raumwechsel falsch (${getNecroStack(run.state, 'run', 'realRunKey')} statt 5) -- necroRunStacksBase eine geteilte Referenz statt einer Kopie?`,
+    );
+  }
+
+  // (f) Speichern und Laden: runweite Stapel stimmen nach einem echten
+  // Snapshot + createRun({resume}) (Testschritt 4).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 7, 'normal', { starterTank: 'c_necro' });
+    run.phase = 'playing';
+    const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+    addNecroStack(run.state, 'run', 'saveKey', 9);
+    stepRun(run, CMD0, 1 / 60);
+    const snap = runSnapshot(run);
+    check(snap.necroStacks.saveKey === 9, `Phase 5: runSnapshot() vergisst den runweiten Stapel (${snap.necroStacks.saveKey})`);
+    const resumed = createRun(tanksData, tilesData, diffData, upgradesData, 7, 'normal', { resume: snap });
+    check(resumed.necroStacks.saveKey === 9, `Phase 5: ein wiederhergestellter Run verliert den runweiten Stapel (${resumed.necroStacks.saveKey})`);
+  }
+
+  // (g) Zeitlich befristete Stapel: eigene Restlaufzeit je Schluessel, laeuft
+  // ab, ein erneutes Auftragen VOR dem Ablauf erneuert nur die Dauer.
+  {
+    const st = necroRoom();
+    addNecroTimedStack(st, 'buff', 15, 5);
+    check(getNecroTimedStack(st, 'buff') === 15, 'Phase 5: zeitlich befristeter Stapel liest den falschen Wert');
+    tickNecroTimers(st, 3); // 3 von 5 s vergangen
+    check(getNecroTimedStack(st, 'buff') === 15, 'Phase 5: zeitlich befristeter Stapel verfaellt vor Ablauf');
+    addNecroTimedStack(st, 'buff', 20, 5); // erneutes Auftragen: neuer Wert, Dauer erneuert
+    tickNecroTimers(st, 4); // waere ohne Erneuerung (Rest 2s von der ersten Vergabe) laengst abgelaufen
+    check(getNecroTimedStack(st, 'buff') === 20, `Phase 5: erneutes Auftragen erneuert die Dauer nicht (${getNecroTimedStack(st, 'buff')})`);
+    tickNecroTimers(st, 2); // insgesamt 6s seit der Erneuerung -> abgelaufen
+    check(getNecroTimedStack(st, 'buff') === 0, `Phase 5: zeitlich befristeter Stapel verfaellt nicht nach Ablauf (${getNecroTimedStack(st, 'buff')})`);
+  }
+
+  // (h) "Zaehler": countThresholdCrossings() mit EIGENEN, teils sehr grossen
+  // Zahlen -- Ganzzahlteilung auf dem Gesamtwert, kein Ueberlauf/NaN.
+  {
+    check(countThresholdCrossings(5, 25, 10) === 2, `Phase 5: Schwellenwert-Sprung falsch gezaehlt (${countThresholdCrossings(5, 25, 10)} statt 2)`);
+    check(countThresholdCrossings(5, 9, 10) === 0, 'Phase 5: eine nicht erreichte Schwelle zaehlt trotzdem');
+    check(countThresholdCrossings(9, 10, 10) === 1, 'Phase 5: die exakt erreichte Schwelle zaehlt nicht');
+    const big = countThresholdCrossings(0, 2 ** 40, 1);
+    check(big === 2 ** 40, `Phase 5: sehr grosse Werte verlieren Praezision (${big} statt ${2 ** 40})`);
+    check(!Number.isNaN(big), 'Phase 5: sehr grosse Werte erzeugen NaN');
+  }
+
+  // (i) Interne Abklingzeit JE EFFEKT-SCHLUESSEL, nicht global: zwei
+  // Listener mit unterschiedlichem key stoeren sich nicht gegenseitig, und
+  // NACH Ablauf der Abklingzeit (state.time vorgerueckt) loest derselbe
+  // Schluessel erneut aus.
+  {
+    const st = necroRoom();
+    let firedA = 0;
+    let firedOther = 0;
+    st.necroListeners.push({ reasons: ['death_damage'], scope: 'room', key: 'cdA', cooldownS: 1, fn: () => firedA++ });
+    st.necroListeners.push({ reasons: ['death_damage'], scope: 'room', key: 'cdOther', cooldownS: 1, fn: () => firedOther++ });
+    const g = createGhost(st, 0, 0, 0, 't_pink');
+    onGhostRemoved(st, g, 'death_damage');
+    check(firedA === 1 && firedOther === 1, `Phase 5: erste Ausloesung schlaegt fehl (${firedA}/${firedOther})`);
+    onGhostRemoved(st, g, 'death_damage'); // sofort wieder, beide Abklingzeiten aktiv
+    check(firedA === 1 && firedOther === 1, `Phase 5: die interne Abklingzeit blockt nicht (${firedA}/${firedOther})`);
+    st.time += 1.1; // Abklingzeit abgelaufen
+    onGhostRemoved(st, g, 'death_damage');
+    check(firedA === 2 && firedOther === 2, `Phase 5: nach Ablauf der Abklingzeit loest der Effekt nicht erneut aus (${firedA}/${firedOther})`);
+  }
+
+  // (j) Testschritt 5, woertlich: zwei Untertanen sterben im SELBEN Tick
+  // (state.time unveraendert zwischen beiden killGhost()-Aufrufen) bei
+  // aktiver interner Abklingzeit -- der Effekt loest nur EINMAL aus.
+  {
+    const st = necroRoom();
+    let fired = 0;
+    st.necroListeners.push({ reasons: ['death_damage'], scope: 'room', key: 'doubleKill', cooldownS: 1, fn: () => fired++ });
+    const g1 = createGhost(st, 0, 0, 0, 't_pink');
+    const g2 = createGhost(st, 10, 10, 0, 't_pink');
+    killGhost(st, g1); // cause 'damage' (Standard)
+    killGhost(st, g2); // derselbe Tick, state.time unveraendert
+    check(fired === 1, `Phase 5: zwei Tode im selben Tick loesen den Effekt ${fired} statt 1 mal aus`);
+  }
+
+  // (k) killGhost()-Verdrahtung: Schaden -> death_damage, Ablauf ->
+  // death_expire, unterscheidbar im Ereignisprotokoll.
+  {
+    const st = necroRoom();
+    const g1 = createGhost(st, 0, 0, 0, 't_pink');
+    const g2 = createGhost(st, 10, 10, 0, 't_pink');
+    killGhost(st, g1, 'damage');
+    killGhost(st, g2, 'expire');
+    const reasons = st.necroEventLog.map((e) => e.reason);
+    check(reasons.includes('death_damage'), 'Phase 5: ein Schadenstod meldet sich nicht als death_damage');
+    check(reasons.includes('death_expire'), 'Phase 5: ein Ablauftod meldet sich nicht als death_expire');
+  }
+
+  // (k2) Ein GERETTETER Untertan (Phylakterium) loest KEIN Ereignis aus --
+  // er ist ja gar nicht gestorben.
+  {
+    const st = necroRoom();
+    st.player.cfg.ghostCommanderShield = true;
+    const g = createGhost(st, 0, 0, 0, 't_pink');
+    g.isCommander = true;
+    g.commanderShieldUsed = false;
+    killGhost(st, g, 'damage');
+    check(g.alive === true, 'Phase 5: Vorbedingung -- das Phylakterium hat den Untertan nicht gerettet');
+    check(st.necroEventLog.length === 0, 'Phase 5: ein geretteter Untertan loest trotzdem ein Ereignis aus');
+  }
+
+  // (l) Virtuelle Tode (Pruefstein): treffen NUR raumweite death_damage/
+  // death_expire-Listener, NICHT run-/timed-scope, OHNE die automatische
+  // Buchfuehrung/das Ereignisprotokoll zu beruehren, UND bypassen eine
+  // bereits aktive interne Abklingzeit.
+  {
+    const st = necroRoom();
+    let roomFired = 0;
+    let runFired = 0;
+    st.necroListeners.push({
+      reasons: ['death_damage'], scope: 'room', key: 'virtRoom', cooldownS: 100, fn: () => roomFired++,
+    });
+    st.necroListeners.push({ reasons: ['death_damage'], scope: 'run', key: 'virtRun', fn: () => runFired++ });
+    // Abklingzeit VORAB "verbrauchen", damit der Bypass-Nachweis echt ist.
+    const g = createGhost(st, 0, 0, 0, 't_pink');
+    onGhostRemoved(st, g, 'death_damage'); // normaler Tod -- feuert BEIDE Listener einmal
+    check(roomFired === 1 && runFired === 1, `Phase 5: Vorbedingung -- normale Ausloesung feuert nicht beide Listener (${roomFired}/${runFired})`);
+    const deathsVor = getNecroStack(st, 'room', '_deaths');
+    const logVor = st.necroEventLog.length;
+    const runFiredVorVirtual = runFired;
+    applyVirtualNecroDeaths(st, 4);
+    check(roomFired === 1 + 4, `Phase 5: virtuelle Tode ignorieren die aktive Abklingzeit nicht (${roomFired} statt 5)`);
+    check(runFired === runFiredVorVirtual, `Phase 5: virtuelle Tode loesen faelschlich den runweiten Listener aus (${runFired} statt ${runFiredVorVirtual})`);
+    check(getNecroStack(st, 'room', '_deaths') === deathsVor, 'Phase 5: virtuelle Tode veraendern den _deaths-Stapel');
+    check(st.necroEventLog.length === logVor, 'Phase 5: virtuelle Tode schreiben ins Ereignisprotokoll');
+  }
+
+  // (m) Debug-Overlay (Testschritt 1): Schaden- und Ablauf-Tode erscheinen
+  // getrennt zaehlbar im echten Renderpfad.
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { createDebugOverlay } = await import('../src/render/debug.js');
+      const texts = [];
+      const fakeCtx = new Proxy(
+        { fillText: (t) => texts.push(t) },
+        { get: (t, k) => (k in t ? t[k] : () => {}), set: () => true },
+      );
+      const dbg = createDebugOverlay(fakeCtx);
+      const st = necroRoom();
+      const g1 = createGhost(st, 0, 0, 0, 't_pink');
+      const g2 = createGhost(st, 10, 10, 0, 't_pink');
+      killGhost(st, g1, 'damage');
+      killGhost(st, g2, 'expire');
+      dbg.render(st, 60, null);
+      const line = texts.find((t) => t.includes('Untertan-Ereignisse'));
+      check(!!line, 'Phase 5: das Debug-Overlay zeigt keine Untertan-Ereignis-Zeile');
+      check(line && line.includes('Schaden') && line.includes('Ablauf'), `Phase 5: Schaden/Ablauf sind im Debug-Overlay nicht unterscheidbar ("${line}")`);
+    } finally {
+      restore();
+    }
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

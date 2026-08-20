@@ -381,6 +381,7 @@ export function runSnapshot(run) {
     selectedUniqueUpgradeIds: [...run.selectedUniqueUpgradeIds], // Nekromant-V2 Phase 1
     tagCounts: { ...run.tagCounts },
     synergyTags: { ...run.synergyTags }, // Upgradepool-v2 Phase 3
+    necroStacks: { ...run.necroStacks }, // Nekromant-V2 Phase 5: runweite Stapel
     transformations: [...run.transformations],
     endless: !!run.endless,
     playTime: run.playTime,
@@ -396,6 +397,7 @@ function resetRoomCounters(run) {
   run.seenKillLog = 0;
   run.seenRoomShots = 0;
   run.seenBonusScrap = 0;
+  run.seenNecroRunStackGain = {}; // Nekromant-V2 Phase 5: raumlokaler Delta-Sync-Stand
   run.combo = 0; // Combo gilt nur innerhalb eines Raums
   run.comboTimer = 0;
 }
@@ -556,6 +558,14 @@ function buildCombatRoom(run, type, isFinal) {
     // Raumnummer freigeschaltet) fuer die Geisterbombe -- "ein zufaelliger
     // Typ aus dem Gegnerpool des aktuellen Akts, damit sie mit skaliert".
     actEnemyPool: unlockedEnemyTypes(diff, run.actIndex, run.roomIndex),
+    // Nekromant-V2 Phase 5: Stand der runweiten necro-Stapel bei Raumbeginn
+    // (necro.js: getNecroStack() addiert den in DIESEM Raum neu gewonnenen
+    // Anteil selbst dazu). BEWUSST eine flache KOPIE, keine Referenz: run
+    // .necroStacks wird noch WAEHREND dieses Raums per Delta-Sync (s. o.)
+    // weitergeschrieben -- eine geteilte Referenz wuerde den bereits
+    // synchronisierten Zuwachs doppelt zaehlen (einmal ueber die "Basis",
+    // einmal ueber necroRunStackGain).
+    necroRunStacksBase: { ...run.necroStacks },
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.
@@ -953,6 +963,13 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     // zaehlt die Hauptkategorie `tag` fuer die Transformationen und bleibt
     // unangetastet). Speist die Angebotsgewichtung in upgradepool.js.
     synergyTags: {},
+    // Nekromant-V2 Phase 5 (Ereignis-/Stapelschicht): runweite Stapel --
+    // persistenter Speicher, in den state.js: stepRun() jeden Tick den
+    // raumlokalen Zuwachs eintraegt (Muster wie scrap/bonusScrap). Reservierter
+    // Schluessel '_deaths' zaehlt automatisch jeden echten Geistertod
+    // (necro.js: onGhostRemoved()), unabhaengig von jeder Karte.
+    necroStacks: {},
+    seenNecroRunStackGain: {}, // Delta-Sync-Stand je Schluessel (raumlokal, reset pro Raum)
     transformations: new Set(), // freigeschaltete Transformations-ids
     newTransformation: null, // Phase 17: zuletzt freigeschaltete (fuer Text-Einblendung)
     roomSpec: opts.roomSpec || null, // { fixedLayout } -> Arena-Weiche
@@ -1022,6 +1039,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     );
     run.tagCounts = { ...(r.tagCounts || {}) };
     run.synergyTags = { ...(r.synergyTags || {}) }; // Upgradepool-v2 Phase 3
+    run.necroStacks = { ...(r.necroStacks || {}) }; // Nekromant-V2 Phase 5
     run.transformations = new Set(r.transformations || []);
     run.endless = !!r.endless;
     run.playTime = r.playTime || 0;
@@ -1143,6 +1161,19 @@ export function stepRun(run, cmd, dt) {
     run.seenBonusScrap = st.bonusScrap;
     run.scrap += gained;
     run.scrapThisRoom += gained;
+  }
+  // Nekromant-V2 Phase 5: runweite necro-Stapel (necro.js: addNecroStack()
+  // mit scope 'run') werden genauso per Delta uebernommen -- state.js kennt
+  // kein run-Objekt. Mehrere Schluessel gleichzeitig moeglich (jede
+  // zukuenftige Karte bekommt ihren eigenen), deshalb eine Schleife statt
+  // eines einzelnen Feldes wie bei scrap.
+  for (const key of Object.keys(st.necroRunStackGain)) {
+    const cur = st.necroRunStackGain[key];
+    const seen = run.seenNecroRunStackGain[key] || 0;
+    if (cur > seen) {
+      run.necroStacks[key] = (run.necroStacks[key] || 0) + (cur - seen);
+      run.seenNecroRunStackGain[key] = cur;
+    }
   }
 
   // Spielertod: Leben abziehen; bei 0 ist der Run vorbei (der Raum-

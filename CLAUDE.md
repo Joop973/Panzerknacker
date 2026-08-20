@@ -5092,6 +5092,110 @@ Phasenbeschreibung wurde gegen den echten Code geprüft, nicht nur behauptet:
   kein `sw.js`-Bump. **Nächste Sitzung: Phase 5** (Ereignis- und
   Stapelschicht).
 
+### Nekromant-V2 — Phase 5 (Ereignis- und Stapelschicht) — gemergt
+Das Fundament, auf dem alle 105 Karten aus `data/upgrades_necro.json` stehen
+("ohne diese Phase werden die Pfade zu Sonderfällen im Code") — reine
+Engine-Infrastruktur, **noch keine Karte hört zu** (Phase 6-9 füllen
+`state.necroListeners`), Muster wie UMBAUPLAN-LP Phase 5s Statuseffekt-
+System ("gebaut, bevor es die Elemente gibt"). Neues Modul
+**`src/game/necro.js`** (ghost.js war mit 377 Zeilen bereits über dem
+~300-Zeilen-Richtwert, ein cohesive Subsystem verdient wie `mortar.js`/
+`status.js`/`damagetypes.js` eine eigene Datei).
+- **Vier Auslöser** (`NECRO_REASONS`: `death_damage`/`death_expire`/
+  `fusion`/`sacrifice`) und die Tabelle "löst Todeseffekte aus?" aus dem
+  Auftrag als `countsAsGhostDeath(reason)` — `fusion` zählt bewusst NICHT
+  (eine künftige Karte kann trotzdem explizit auf `'fusion'` hören, das ist
+  eine andere Prüfung als die automatische Buchführung).
+- **Zentrales Ereignis `onGhostRemoved(state, ghost, reason)`**
+  (`ghost.js: killGhost()` ruft es NACH den beiden „überlebt doch"-Zweigen
+  auf — ein geretteter Untertan ist kein Geistertod). Kennt **keine
+  Karten-ID**: iteriert nur `state.necroListeners` (`{reasons, scope, key,
+  cooldownS?, fn}`), aktuell eine leere Liste. Bumpt automatisch einen
+  reservierten Stapel-Schlüssel `'_deaths'` (raum- UND runweit), damit jede
+  künftige Karte (z. B. ghost_029/030 "nach jeweils 10 Geistertoden") densel-
+  ben generischen `getNecroStack()`/`countThresholdCrossings()`-Pfad nutzen
+  kann, ohne dass die Engine ihretwegen eine neue Funktion braucht.
+- **Vier Stapelbereiche auf drei Speicher + einen Rechenweg reduziert**
+  (keine Verhaltensänderung, nur eine schlankere Umsetzung): raumweit
+  (`state.necroStacks`, kein `reset()` nötig — `state` wird bei jedem
+  Raumwechsel ohnehin frisch angelegt), runweit (`state.necroRunStackGain`
+  als raumlokaler, monoton wachsender Zuwachs — `run.js: stepRun()` synchro-
+  nisiert ihn per Delta in `run.necroStacks`, exakt das Muster von
+  `bonusScrap`/`seenBonusScrap`; ein Lesezugriff mitten im Raum addiert
+  `state.necroRunStacksBase` — eine **flache Kopie** von `run.necroStacks`
+  bei Raumbeginn — auf den bisherigen Zuwachs), zeitlich
+  (`state.necroTimedStacks`, eigene Restlaufzeit je Schlüssel, `tickNecro
+  Timers()` im Haupt-Tick, erneutes Auftragen erneuert nur die Dauer) und
+  „Zähler" als reiner Rechenweg (`countThresholdCrossings(before, after, n)`
+  — Ganzzahlteilung auf dem Gesamtwert statt eines mitgeführten Rests, dadurch
+  von Natur aus überlauf-/NaN-sicher bei beliebig großen Werten).
+- **Interne Abklingzeiten je Effekt-Schlüssel** (nicht global): nutzt die
+  ohnehin laufende `state.time`-Uhr (`readyAt = state.time + cooldownS`)
+  statt eines eigenen Countdown-Felds — zwei Auslöser im selben Tick
+  (`state.time` unverändert) können denselben Schlüssel dadurch nachweislich
+  nur einmal auslösen.
+- **Virtuelle Tode** (`applyVirtualNecroDeaths(state, count)`) — der im
+  Auftrag genannte Prüfstein für `ghost_035` "Vorbote des Endes": ein
+  bewusst SEPARATER Pfad, der NUR `scope:'room'`-Listener mit
+  `death_damage`/`death_expire` aufruft, dabei die automatische
+  `_deaths`-Buchführung, das Ereignisprotokoll UND die interne Abklingzeit
+  komplett umgeht (bypasst, statt sie zu respektieren) — sonst wäre die
+  Trennung von Stapel und Ereignis nur behauptet, nicht bewiesen.
+- **`run.js`**: `run.necroStacks`/`run.seenNecroRunStackGain` neu (persistiert
+  über `runSnapshot()`, Fallback `{}` beim Fortsetzen älterer Zwischenstände),
+  `resetRoomCounters()` setzt `seenNecroRunStackGain` pro Raum zurück,
+  `buildCombatRoom()` reicht `necroRunStacksBase: { ...run.necroStacks }`
+  **als Kopie** durch (ein gefundener Fehlgriff beim ersten Entwurf: eine
+  geteilte Referenz hätte den schon synchronisierten Zuwachs nach dem
+  nächsten Sync-Tick doppelt gezählt — nur über einen echten, durch
+  `run.js` selbst gefahrenen Raumwechsel nachweisbar, ein händisch
+  nachgebauter `createState()`-Aufruf im Test hätte ihn NICHT gefangen).
+- **`src/render/debug.js`** (Testschritt 1: "unterscheidbar im Debug-
+  Overlay"): neue Zeile zählt `state.necroEventLog` (letzte 20 Ereignisse)
+  nach Auslöser gruppiert — „Untertan-Ereignisse 2× Schaden, 1× Ablauf" statt
+  nur einer gemeinsamen Zahl.
+- **`cfg.js`/`src/core/storage.js` brauchten KEINE Änderung** (beide in der
+  Auftrags-Dateiliste genannt): `storage.js` ist ein reiner generischer
+  Key-Value-Wrapper (Muster wie schon bei Grundsteinumbau Phase 6 für
+  `actIndex` festgestellt) — `run.necroStacks` fließt einfach mit durch
+  `JSON.stringify()`. `cfg.js` bekommt erst dann etwas zu tun, wenn Phase 6+
+  echte Karten definiert, die `state.necroListeners` aus dem aufgelösten
+  Spieler-`cfg` befüllen — diese Übersetzung ohne reale Karten-Schemata
+  vorwegzunehmen wäre reine Spekulation gewesen.
+- **Neuer Testabschnitt 57** (Gegenprobe für jeden Kernpunkt einzeln
+  bestanden — je absichtlich rot gemacht: Reason-Filter im Dispatcher
+  entfernt, `fusion` faelschlich als Geistertod gezaehlt, die
+  Referenz-statt-Kopie-Falle in `necroRunStacksBase` wieder eingebaut
+  (nur vom END-TO-END-Test über den echten `buildCombatRoom()`-Pfad
+  gefangen, nicht vom direkten Mechanismustest), Timer-Löschung nach
+  Ablauf entfernt, Dauer-Erneuerung ausgebaut, `countThresholdCrossings()`
+  auf eine ungenaue Rundungsformel zurückgebaut, die interne Abklingzeit
+  auf einen globalen Schlüssel verengt, der `onGhostRemoved()`-Aufruf aus
+  `killGhost()` entfernt, der Scope-Filter UND der Cooldown-Bypass in
+  `applyVirtualNecroDeaths()` je einzeln ausgebaut, die Debug-Zeile entfernt,
+  `necroStacks` aus `runSnapshot()` entfernt — mehrere davon crashen hart
+  statt nur einen Check zu röten, auch das zählt als bestandene Gegenprobe):
+  Struktur (vier Auslöser, Todeseffekt-Tabelle), zentrale Zustellung nach
+  deklarierten `reasons[]` ohne Karten-ID, automatische `_deaths`-Buchführung
+  raum- UND runweit, raumweiter Stapel-Reset bei Raumwechsel, runweiter
+  Stapel-Sync über einen echten Run (Delta-Sync-Mechanismus UND — als
+  eigener End-to-End-Test — über den tatsächlichen `run.js:
+  buildCombatRoom()`-Pfad, der den Referenz-vs-Kopie-Fund erst zutage
+  förderte), Speichern/Laden über echten Snapshot + `createRun({resume})`,
+  zeitlich befristeter Stapel (Ablauf + Dauer-Erneuerung ohne Wert-
+  Verdopplung), `countThresholdCrossings()` mit eigenen (teils sehr großen)
+  Zahlen, interne Abklingzeit je Schlüssel (nicht global) + Ablauf-Verhalten,
+  Testschritt 5 wörtlich (zwei Tode im selben Tick lösen den Effekt nur
+  einmal aus), `killGhost()`-Verdrahtung (Schaden→death_damage, Ablauf→
+  death_expire, ein geretteter Untertan löst nichts aus), virtuelle Tode
+  (nur raumweite death-Listener, Bypass von Buchführung/Protokoll/
+  Abklingzeit), Debug-Overlay über den echten Renderpfad (`domstub.mjs` +
+  aufzeichnender Fake-Canvas).
+- Kein `sw.js`-Bump (reine Code-Datei, kein neues Asset). Playwright-Smoke
+  (Nekromant wählen, Run starten, Snapshot bestätigt `starterTank:
+  'c_necro'`, keine Konsolenfehler) bestanden. **Nächste Sitzung: Phase 6**
+  (Allgemein und Opfer, 35 Karten).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -5239,7 +5343,28 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Grundsteinumbau Phase 4 archivierten `sig_necro_*`-Karten, aktuell also
   unerreichbar) additiv/multiplikativ oben drauf; `killGhost(state, g,
   cause)` ist bei `cause==='damage'` (Standard) weiterhin der zentrale Ort
-  für Phylakterium/Wiederkehr-Familie/Letzter Wille.
+  für Phylakterium/Wiederkehr-Familie/Letzter Wille — bei jedem ECHTEN Tod
+  (nicht bei den beiden "überlebt doch"-Zweigen) ruft es zuletzt
+  `necro.js: onGhostRemoved()` auf.
+- `src/game/necro.js` (NEU, Nekromant-V2 Phase 5) — Ereignis-/Stapelschicht
+  für die 105 Karten aus `data/upgrades_necro.json`, aktuell ohne eine
+  einzige angeschlossene Karte (`state.necroListeners` startet leer, Phase
+  6+ füllt sie). `onGhostRemoved(state, ghost, reason)` ist das zentrale
+  Ereignis (vier Auslöser: `death_damage`/`death_expire`/`fusion`/
+  `sacrifice`, `countsAsGhostDeath()` = die "löst Todeseffekte aus"-Tabelle
+  aus dem Auftrag, `fusion` bewusst ausgenommen) — kennt nie eine Karten-ID,
+  iteriert nur `state.necroListeners`. Stapel: `addNecroStack`/
+  `getNecroStack(state, 'room'|'run', key)` (raumweit `state.necroStacks`,
+  runweit über `state.necroRunStackGain` + `state.necroRunStacksBase`, s.
+  `run.js`), `addNecroTimedStack`/`getNecroTimedStack`/`tickNecroTimers`
+  (zeitlich befristet, eigene Restlaufzeit je Schlüssel), `countThreshold
+  Crossings(before, after, n)` (reiner Rechenweg für "Zähler"-Karten, keine
+  Obergrenze/kein NaN durch Ganzzahlteilung auf dem Gesamtwert). Interne
+  Abklingzeiten sind je Effekt-Schlüssel über `state.time` gegated (nicht
+  global). `applyVirtualNecroDeaths(state, count)` ist der im Auftrag
+  verlangte Prüfstein für `ghost_035` — bypasst Buchführung/Protokoll/
+  Abklingzeit bewusst, trifft nur raumweite `death_damage`/`death_expire`-
+  Listener.
 - `src/game/ai.js` — Gegner-KI-Dispatcher + Zielsystem (Upgradepool-v2
   Phase 5): `resolveTarget`/`pickTarget`/`updateTargeting`/`registerThreat`
   wählen zwischen Spieler und Geistern statt hart auf `state.player` zu

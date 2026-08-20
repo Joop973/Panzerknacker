@@ -36,6 +36,7 @@ import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
 import { resolveCfg } from './cfg.js';
 import { explodeAt } from './mine.js';
+import { onGhostRemoved } from './necro.js';
 
 const TURN_SPEED = 4; // rad/s -- Drehen von Rumpf UND Turm Richtung Ziel
 const FIRE_CONE = 0.15; // rad -- muss so genau ausgerichtet sein, um zu feuern
@@ -238,6 +239,11 @@ export function killGhost(state, g, cause = 'damage') {
   }
   g.alive = false;
   if (cause === 'damage') spawnDeathZone(state, g);
+  // Nekromant-V2 Phase 5 (Ereignis-/Stapelschicht): zentrales Ereignis fuer
+  // JEDEN echten Geistertod -- NACH den beiden obigen "ueberlebt doch"-
+  // Zweigen, ein geretteter Geist ist kein Geistertod. cause ('damage'/
+  // 'expire') ist 1:1 die Auslöser-Tabelle aus dem Auftrag.
+  onGhostRemoved(state, g, cause === 'expire' ? 'death_expire' : 'death_damage');
 }
 
 // Naechster gueltiger Gegner (Anhang B S9/S10: "Basissystem: Primaerziel =
