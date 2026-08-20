@@ -3974,11 +3974,15 @@ for (const seed of SEEDS) {
 }
 
 // ---- 42. Upgradepool-v2 Phase 6: Nekromant -- Klassenidentitaet ---------
-// Die Geistermechanik ist ab Klassenwahl aktiv (kein Upgrade noetig): Kill
-// durch den Nekromanten 50 % Geist, Kill durch einen Geist 33 % --
-// deterministisch ueber state.rng. Kill-Zuordnung (meta.killer) haengt an
-// applyDamage()/killTank() und muss auch fuer Minen-, Explosions- und
-// Kettenblitz-Kills stimmen. Geisterbombe ersetzt den Bombenslot komplett.
+// Die Geistermechanik ist ab Klassenwahl aktiv (kein Upgrade noetig).
+// Teilabschnitt (b) ist mit Nekromant-V2 Phase 3 aktualisiert: EIN
+// einheitlicher reviveChance-Wert statt der alten, zweistufigen
+// spawnChance.necro/.ghost (50 %/33 %, archiviert), Elite-/Boss-Ausnahme
+// und ein ueberlauffaehiger "Rechenweg statt Obergrenze"-Wurf (b2/b3) sind
+// dazugekommen -- deterministisch ueber state.rng. Kill-Zuordnung
+// (meta.killer) haengt an applyDamage()/killTank() und muss auch fuer
+// Minen-, Explosions- und Kettenblitz-Kills stimmen (Teilabschnitte weiter
+// unten, unveraendert). Geisterbombe ersetzt den Bombenslot komplett.
 {
   const { createState, stepState } = await import('../src/game/state.js');
   const { useSecondary } = await import('../src/game/tank.js');
@@ -4014,9 +4018,16 @@ for (const seed of SEEDS) {
     check(/[Gg]eist/.test(tanksData.types.c_necro.desc), 'Phase 6: die Klassenbeschreibung nennt die Geistermechanik nicht');
   }
 
-  // (b) Spawn-Wuerfel: deterministisch ueber state.rng, korrekt je
-  // Verursacher (Nekromant 50 %, Geist 33 %, alle anderen 0 %).
+  // (b) Spawn-Wuerfel: deterministisch ueber state.rng. Seit Nekromant-V2
+  // Phase 3 EIN einheitlicher reviveChance-Wert fuer Spieler-als-Nekromant-
+  // Kills UND Kills durch einen bereits vorhandenen Geist (die alte,
+  // zweistufige spawnChance.necro/.ghost 50%/33% ist archiviert, s.
+  // archive/ghost-tank-v1.json) -- gegen den ECHTEN Datenwert
+  // (tanksData.balance.ghost.reviveChance) geprueft, nicht gegen einen
+  // hartkodierten Bruch, sonst wandert der Test bei der naechsten
+  // Balance-Aenderung grundlos auf Rot (CLAUDE.md-Pflicht).
   {
+    const chance = tanksData.balance.ghost.reviveChance;
     const rollKill = (starterTank, killer, rngValue) => {
       const st = necroRoom();
       if (starterTank !== 'c_necro') {
@@ -4036,12 +4047,69 @@ for (const seed of SEEDS) {
       st.killTank(e, 'test', killer === 'player' ? { killer: st.player } : killer === 'ghost' ? { killer: { isGhost: true, alive: true } } : {});
       return st.ghosts.length;
     };
-    check(rollKill('c_necro', 'player', 0.49) === 1, 'Phase 6: Nekromant-Kill unter der 50%-Schwelle erzeugt keinen Geist');
-    check(rollKill('c_necro', 'player', 0.51) === 0, 'Phase 6: Nekromant-Kill ueber der 50%-Schwelle erzeugt trotzdem einen Geist');
-    check(rollKill('c_necro', 'ghost', 0.32) === 1, 'Phase 6: Geist-Kill unter der 33%-Schwelle erzeugt keinen Geist');
-    check(rollKill('c_necro', 'ghost', 0.34) === 0, 'Phase 6: Geist-Kill ueber der 33%-Schwelle erzeugt trotzdem einen Geist');
-    check(rollKill('player', 'player', 0) === 0, 'Phase 6: eine Nicht-Nekromant-Klasse erzeugt trotzdem einen Geist (Chance ist 0)');
-    check(rollKill('c_necro', 'none', 0) === 0, 'Phase 6: ein Kill ohne bekannten Killer (z. B. Statuseffekt-Tick) erzeugt trotzdem einen Geist');
+    check(rollKill('c_necro', 'player', chance - 0.01) === 1, 'Phase 3: Nekromant-Kill unter der reviveChance-Schwelle erzeugt keinen Untertan');
+    check(rollKill('c_necro', 'player', chance + 0.01) === 0, 'Phase 3: Nekromant-Kill ueber der reviveChance-Schwelle erzeugt trotzdem einen Untertan');
+    check(rollKill('c_necro', 'ghost', chance - 0.01) === 1, 'Phase 3: ein Geist-Kill hat nicht dieselbe (vereinheitlichte) Chance wie ein Spieler-Kill');
+    check(rollKill('c_necro', 'ghost', chance + 0.01) === 0, 'Phase 3: ein Geist-Kill ueber der Schwelle erzeugt trotzdem einen Untertan');
+    check(rollKill('player', 'player', 0) === 0, 'Phase 3: eine Nicht-Nekromant-Klasse erzeugt trotzdem einen Untertan (Chance ist 0)');
+    check(rollKill('c_necro', 'none', 0) === 0, 'Phase 3: ein Kill ohne bekannten Killer (z. B. Statuseffekt-Tick) erzeugt trotzdem einen Untertan');
+  }
+
+  // (b2) Elite-/Boss-Ausnahme (Nekromant-V2 Phase 3, NEU): ein Gegner mit
+  // Elite-Affix ODER ein Boss wird trotz garantiertem Wurf (rng=>0) NIE
+  // wiederbelebt.
+  {
+    const st = necroRoom();
+    const e = st.tanks.find((t) => t !== st.player);
+    e.affixes = ['twinshot']; // synthetischer Elite-Affix
+    st.rng = () => 0; // garantierter Wurf, waere ohne die Ausnahme immer ein Treffer
+    st.killTank(e, 'test', { killer: st.player });
+    check(st.ghosts.length === 0, 'Phase 3: ein Elite-Gegner wird trotz Affix wiederbelebt');
+  }
+  {
+    const st = necroRoom();
+    const e = st.tanks.find((t) => t !== st.player);
+    e.cfg.bossInvincible = true; // synthetisches Boss-Flag (isBossCfg)
+    st.rng = () => 0;
+    st.killTank(e, 'test', { killer: st.player });
+    check(st.ghosts.length === 0, 'Phase 3: ein Boss wird trotz Affix-losem Kill wiederbelebt');
+  }
+
+  // (b3) "Rechenweg statt Obergrenze" (Auftrag Abschnitt 4a): reviveChance
+  // OHNE Deckel -- ueber 100 % erzeugt der ganzzahlige Anteil GARANTIERTE
+  // Zusatz-Untertanen, der Rest bleibt eine Chance. Mit einem synthetischen
+  // Wert (1.4) statt der echten 0,35, damit der Mechanismus selbst geprueft
+  // wird, nicht die aktuelle Datenlage.
+  {
+    const orig = tanksData.balance.ghost.reviveChance;
+    tanksData.balance.ghost.reviveChance = 1.4;
+    try {
+      const stLow = necroRoom(['t_pink', 't_pink', 't_pink']);
+      const eLow = stLow.tanks.find((t) => t !== stLow.player);
+      stLow.rng = () => 0.3; // < remainder (0.4) -> zweiter Untertan spawnt ebenfalls
+      stLow.killTank(eLow, 'test', { killer: stLow.player });
+      check(stLow.ghosts.length === 2, `Phase 3: reviveChance 1.4 mit Restwurf < 0.4 erzeugt ${stLow.ghosts.length} statt 2 Untertanen`);
+
+      const stHigh = necroRoom(['t_pink', 't_pink', 't_pink']);
+      const eHigh = stHigh.tanks.find((t) => t !== stHigh.player);
+      stHigh.rng = () => 0.9; // >= remainder (0.4) -> nur der garantierte Untertan
+      stHigh.killTank(eHigh, 'test', { killer: stHigh.player });
+      check(stHigh.ghosts.length === 1, `Phase 3: reviveChance 1.4 mit Restwurf >= 0.4 erzeugt ${stHigh.ghosts.length} statt 1 Untertan`);
+
+      // Deckel bleibt trotz Ueberlauf gueltig: reviveChance 5.0 (garantiert
+      // 5 Untertanen) bei einem Basislimit von 3 (data/balance.json:
+      // ghost.maxActive) darf trotz "5 garantiert" nicht mehr als das Limit
+      // erzeugen -- s. state.js: killTank()s Spawnschleife.
+      const stCap = necroRoom(['t_pink', 't_pink', 't_pink']);
+      const eCap = stCap.tanks.find((t) => t !== stCap.player);
+      tanksData.balance.ghost.reviveChance = 5.0;
+      stCap.rng = () => 0;
+      stCap.killTank(eCap, 'test', { killer: stCap.player });
+      const cap = (tanksData.balance.ghost.maxActive ?? 3);
+      check(stCap.ghosts.length === cap, `Phase 3: das Geistlimit (${cap}) wird trotz reviveChance 5.0 ueberschritten (${stCap.ghosts.length})`);
+    } finally {
+      tanksData.balance.ghost.reviveChance = orig;
+    }
   }
 
   // (c) Geistlimit OHNE Verdraengung: am Deckel passiert nichts, auch bei
@@ -4317,11 +4385,18 @@ for (const seed of SEEDS) {
   }
 }
 
-// ---- 43. Upgradepool-v2 Phase 7: Geisterpanzer neu gebaut ----------------
-// Anhang B S18/S20: eigener, fester Basiseinheiten-Typ `ghost_tank`. Ersetzt
-// ghost.js komplett -- ab hier haben ALLE Geister exakt dieselben, vom
-// getoeteten Gegner UNABHAENGIGEN Basiswerte (S8), keinen Lebensdauer-Timer
-// mehr (S6) und schiessen erst innerhalb einer Feuer-Schwelle (S7).
+// ---- 43. Upgradepool-v2 Phase 7: Geisterpanzer -- Basis (ueberholt durch
+// Nekromant-V2 Phase 3) -------------------------------------------------
+// Der urspruengliche Anhang-B-Kern "eigener, fester Basiseinheiten-Typ
+// ghost_tank, kein Stat-Erbe, kein Lebensdauer-Timer" ist mit Nekromant-V2
+// Phase 3 GRUNDLEGEND umgekehrt worden (Auftrag Abschnitt 3): ein Untertan
+// erbt jetzt den vollen TYP des getoeteten Gegners (nur maxHp/damage werden
+// gestutzt), hat eine Lebensdauer, und ein dynamischer Champion ersetzt/
+// ergaenzt den alten Kommandanten. ghost_tank selbst ist archiviert
+// (archive/ghost-tank-v1.json). Die folgenden Teilabschnitte sind auf den
+// NEUEN Stand umgeschrieben (Buchstaben unveraendert, wo die zugrunde-
+// liegende Aussage nur angepasst statt ersetzt werden musste); (b3)/(k)-(o)
+// sind komplett neu.
 {
   const { createState, stepState } = await import('../src/game/state.js');
   const { createGhost, updateGhosts, killGhost } = await import('../src/game/ghost.js');
@@ -4329,7 +4404,7 @@ for (const seed of SEEDS) {
   const { resolveCfg } = await import('../src/game/cfg.js');
   const { hashSeed, rngFor } = await import('../src/core/rng.js');
 
-  const necroRoom = (types = ['t_pink']) => {
+  const necroRoom = (types = ['t_pink'], actEnemyPool = ['t_pink', 't_grey', 't_yellow']) => {
     const st = createState(tanksData, tilesData, {
       genRng: rngFor(1, 3, 'rooms'),
       enemyTypes: types,
@@ -4339,6 +4414,7 @@ for (const seed of SEEDS) {
       equippedSecondary: 'mine',
       transform: {},
       starterTank: 'c_necro',
+      actEnemyPool,
     });
     st.bullets.length = 0;
     st.mines.length = 0;
@@ -4350,121 +4426,163 @@ for (const seed of SEEDS) {
     return st;
   };
 
-  // (a) Einheitlicher Unit-Typ: JEDER Erzeugungsweg (Kill-Wuerfel UND
-  // Geisterbombe) liefert denselben 'ghost_tank' (Anhang B Kernregel 4).
+  // (a) Typ-Vererbung (Nekromant-V2 Phase 3, ERSETZT den alten "einheitlicher
+  // Unit-Typ"-Nachweis): der Kill-Wuerfel liefert den TYP des getoeteten
+  // Gegners, die Geisterbombe einen Typ aus dem Akt-Gegnerpool.
   {
     const st = necroRoom();
     const e = st.tanks.find((t) => t !== st.player);
     e.protect = 0;
     st.rng = () => 0; // garantierter Spawnwurf
     st.killTank(e, 'test', { killer: st.player });
-    check(st.ghosts[0]?.type === 'ghost_tank', `Phase 7: Kill-Spawn erzeugt Typ ${st.ghosts[0]?.type} statt ghost_tank`);
+    check(st.ghosts[0]?.type === 't_pink', `Phase 3: Kill-Spawn erzeugt Typ ${st.ghosts[0]?.type} statt des geerbten t_pink`);
 
     useSecondary(st.player, st, null); // Geisterbombe (2. Slot, Kappe noch nicht erreicht)
-    check(st.ghosts[1]?.type === 'ghost_tank', `Phase 7: Geisterbombe erzeugt Typ ${st.ghosts[1]?.type} statt ghost_tank`);
+    check(
+      st.actEnemyPool.includes(st.ghosts[1]?.type),
+      `Phase 3: Geisterbombe erzeugt Typ ${st.ghosts[1]?.type}, der nicht im Akt-Gegnerpool steht`,
+    );
   }
 
-  // (b) Feste Basiswerte gegen die Anhang-B-Zahlen (S7): 60 LP, 8 Schaden,
-  // 2,0 s Schussintervall, keine Ruestung. ("0 Abpraller" aus Anhang B ist
-  // mit dem Bandenschuss gegenstandslos, Grundsteinumbau Phase 1 -- es gibt
-  // das Konzept fuer niemanden mehr.) Tempo/Kugeltempo/Reichweite als
-  // Prozentsatz der STANDARDKLASSE player (nicht des Nekromanten) --
-  // ausdruecklich gegen resolveCfg(tanksData,'player') nachgerechnet, nicht
-  // gegen einen zweiten hartkodierten Wert.
+  // (b) Basiswerte = Typ-Basiswerte * baseStatPct (statt der alten festen
+  // Anhang-B-Zahlen): maxHp/damage kommen aus resolveCfg(tanksData, 't_pink')
+  // gestutzt, alle anderen Felder (fireCooldown/speed/bulletSpeed/armor/
+  // weapon/role/accuracy) bleiben UNVERAENDERT die des Quelltyps.
   {
     const st = necroRoom();
-    const g = createGhost(st, 0, 0);
-    const p = resolveCfg(tanksData, 'player');
-    check(g.cfg.maxHp === 60, `Phase 7: Geist-LP ${g.cfg.maxHp} statt 60`);
-    check(g.cfg.damage === 8, `Phase 7: Geist-Schaden ${g.cfg.damage} statt 8`);
-    check(g.cfg.fireCooldown === 2.0, `Phase 7: Geist-Schussintervall ${g.cfg.fireCooldown} statt 2,0 s`);
-    check(g.cfg.armor === null, 'Phase 7: Geist hat eine Panzerung');
+    const g = createGhost(st, 0, 0, 0, 't_pink');
+    const base = resolveCfg(tanksData, 't_pink');
+    const pct = tanksData.balance.ghost.baseStatPct;
+    check(g.cfg.maxHp === Math.round(base.maxHp * pct), `Phase 3: Geist-LP ${g.cfg.maxHp} statt ${Math.round(base.maxHp * pct)} (t_pink * baseStatPct)`);
+    check(g.cfg.damage === Math.round(base.damage * pct), `Phase 3: Geist-Schaden ${g.cfg.damage} statt ${Math.round(base.damage * pct)}`);
+    check(g.cfg.armor === base.armor, 'Phase 3: die Panzerung des Quelltyps wird nicht vererbt');
+    check(g.cfg.role === base.role, 'Phase 3: die Rolle des Quelltyps wird nicht vererbt');
+    check(g.cfg.accuracy === base.accuracy, 'Phase 3: die Zielgenauigkeit des Quelltyps wird nicht vererbt');
     check(
-      Math.abs(g.cfg.speed - p.speed * 0.7) < 1e-9,
-      `Phase 7: Geist-Tempo ${g.cfg.speed} statt 70 % von ${p.speed} (Standardklasse player)`,
+      Math.abs(g.cfg.speed - base.speed) < 1e-9,
+      `Phase 3: Geist-Tempo ${g.cfg.speed} statt des geerbten Basistempos ${base.speed} (kein Karten-Boost aktiv)`,
     );
     check(
-      Math.abs(g.cfg.bulletSpeed - p.bulletSpeed * 0.8) < 1e-9,
-      `Phase 7: Geist-Kugeltempo ${g.cfg.bulletSpeed} statt 80 % von ${p.bulletSpeed}`,
+      Math.abs(g.cfg.fireRangePx - tanksData.balance.bullet.maxDistance * tanksData.balance.ghost.rangePct) < 1e-9,
+      `Phase 3: Geist-Feuerschwelle ${g.cfg.fireRangePx} entspricht nicht balance.ghost.rangePct * maxDistance`,
     );
+
+    // Ein echtes, NICHT-leeres Panzerungsobjekt (nicht nur der triviale
+    // null===null-Fall oben) wird ebenfalls unveraendert mitgegeben.
+    const gArmored = createGhost(st, 0, 0, 0, 't_armored');
+    const baseArmored = resolveCfg(tanksData, 't_armored');
     check(
-      Math.abs(g.cfg.fireRangePx - tanksData.balance.bullet.maxDistance * 0.65) < 1e-9,
-      `Phase 7: Geist-Feuerschwelle ${g.cfg.fireRangePx} statt 65 % von balance.bullet.maxDistance`,
+      gArmored.cfg.armor === baseArmored.armor && gArmored.cfg.armor?.arc === 120,
+      `Phase 3: ein von t_armored geerbter Untertan verliert seine Panzerung (${JSON.stringify(gArmored.cfg.armor)})`,
     );
   }
 
-  // (c) Mechanismus statt Datenlage: die drei Prozentsaetze wirklich MULTI-
-  // PLIKATIV gegen die player-Baseline, nicht hartkodiert -- mit einem
-  // synthetischen Wert veraendert, der von den echten 0.7/0.8/0.65 abweicht.
+  // (c) Mechanismus statt Datenlage: baseStatPct wirkt wirklich MULTI-
+  // PLIKATIV auf die Typ-Basiswerte -- mit einem synthetischen Wert
+  // geprueft, der von der echten Zahl (0,5) abweicht.
   {
-    const orig = { ...tanksData.types.ghost_tank };
-    tanksData.types.ghost_tank.speedPct = 0.4;
-    tanksData.types.ghost_tank.bulletSpeedPct = 0.3;
-    tanksData.types.ghost_tank.rangePct = 0.2;
+    const orig = tanksData.balance.ghost.baseStatPct;
+    tanksData.balance.ghost.baseStatPct = 0.2;
     try {
       const st = necroRoom();
-      const g = createGhost(st, 0, 0);
-      const p = resolveCfg(tanksData, 'player');
-      check(Math.abs(g.cfg.speed - p.speed * 0.4) < 1e-9, 'Phase 7: speedPct wirkt nicht multiplikativ');
-      check(Math.abs(g.cfg.bulletSpeed - p.bulletSpeed * 0.3) < 1e-9, 'Phase 7: bulletSpeedPct wirkt nicht multiplikativ');
-      check(
-        Math.abs(g.cfg.fireRangePx - tanksData.balance.bullet.maxDistance * 0.2) < 1e-9,
-        'Phase 7: rangePct wirkt nicht multiplikativ',
-      );
+      const g = createGhost(st, 0, 0, 0, 't_pink');
+      const base = resolveCfg(tanksData, 't_pink');
+      check(g.cfg.maxHp === Math.round(base.maxHp * 0.2), 'Phase 3: baseStatPct wirkt nicht multiplikativ auf maxHp');
+      check(g.cfg.damage === Math.round(base.damage * 0.2), 'Phase 3: baseStatPct wirkt nicht multiplikativ auf damage');
     } finally {
-      Object.assign(tanksData.types.ghost_tank, orig);
+      tanksData.balance.ghost.baseStatPct = orig;
     }
   }
 
-  // (d) KEIN Stat-Erbe vom getoeteten Gegner (Anhang B Kernregel 5, S8):
-  // ein sehr schwacher UND ein kuenstlich sehr starker Gegner erzeugen
-  // IDENTISCHE Geister.
+  // (d) Instanzwerte des getoeteten EXEMPLARS werden NICHT vererbt (nur der
+  // TYP): ein Exemplar mit kuenstlich veraenderter Instanz-cfg (Raum-
+  // Skalierung, Elite-Multiplikator o. ae.) erzeugt trotzdem einen Geist mit
+  // den unveraenderten TYP-Basiswerten -- resolveGhostCfg() liest ueber
+  // resolveCfg(data, sourceType) frisch aus tanksData, nicht aus tank.cfg.
   {
     const leicht = necroRoom(['t_pink']);
     const eLeicht = leicht.tanks.find((t) => t !== leicht.player);
     eLeicht.protect = 0;
-    eLeicht.cfg.maxHp = 5; // synthetisch sehr schwach
+    eLeicht.cfg.maxHp = 5; // synthetisch veraenderte INSTANZ (z. B. Raumskalierung)
     leicht.rng = () => 0;
     leicht.killTank(eLeicht, 'test', { killer: leicht.player });
 
     const schwer = necroRoom(['t_pink']);
     const eSchwer = schwer.tanks.find((t) => t !== schwer.player);
     eSchwer.protect = 0;
-    eSchwer.cfg.maxHp = 99999; // synthetisch "Boss"-stark
+    eSchwer.cfg.maxHp = 99999; // synthetisch veraenderte INSTANZ
     schwer.rng = () => 0;
     schwer.killTank(eSchwer, 'test', { killer: schwer.player });
 
     const gL = leicht.ghosts[0];
     const gS = schwer.ghosts[0];
-    check(!!gL && !!gS, 'Phase 7: Vorbedingung -- nicht beide Kills haben einen Geist erzeugt');
+    check(!!gL && !!gS, 'Phase 3: Vorbedingung -- nicht beide Kills haben einen Geist erzeugt');
     check(
       gL.cfg.maxHp === gS.cfg.maxHp && gL.cfg.damage === gS.cfg.damage && gL.cfg.speed === gS.cfg.speed,
-      `Phase 7: Geister aus unterschiedlich starken Gegnern unterscheiden sich (leicht: ${gL.cfg.maxHp} LP, schwer: ${gS.cfg.maxHp} LP)`,
+      `Phase 3: Geister aus unterschiedlich skalierten EXEMPLAREN desselben Typs unterscheiden sich (${gL.cfg.maxHp} vs. ${gS.cfg.maxHp} LP)`,
     );
   }
 
-  // (e) KEIN Lebensdauer-Timer (Anhang B S6): ein Geist ohne Ziel bleibt
-  // ueber eine lange simulierte Zeit hinweg am Leben. Im alten System (vor
-  // Phase 7) waere er nach balance.ghost.duration (Fallback 3 s) verfallen.
+  // (e) Lebensdauer (Nekromant-V2 Phase 3, ERSETZT "KEIN Lebensdauer-Timer"):
+  // ein Geist OHNE Ziel verfaellt nach lifetimeS trotzdem -- mit einem
+  // synthetisch VERKUERZTEN Wert geprueft (Mechanismus statt Datenlage).
   {
-    const st = necroRoom([]);
-    st.tanks.length = 1; // nur der Spieler -- kein Ziel fuer den Geist
-    const g = createGhost(st, 300, 300);
+    const orig = tanksData.balance.ghost.lifetimeS;
+    tanksData.balance.ghost.lifetimeS = 1; // synthetisch kurz
+    try {
+      const st = necroRoom([]);
+      st.tanks.length = 1; // nur der Spieler -- kein Ziel fuer den Geist
+      const g = createGhost(st, 300, 300, 0, 't_pink');
+      st.ghosts.push(g);
+      check(g.lifetimeMax === 1, `Phase 3: Vorbedingung -- lifetimeMax ist ${g.lifetimeMax} statt 1`);
+      for (let i = 0; i < 30; i++) updateGhosts(st, 1 / 60); // 0,5 s -- deutlich vor Ablauf
+      check(st.ghosts.length === 1 && g.alive, 'Phase 3: ein Geist verfaellt VOR Ablauf seiner Lebensdauer');
+      for (let i = 0; i < 60; i++) updateGhosts(st, 1 / 60); // weitere 1 s -- deutlich nach Ablauf
+      check(st.ghosts.length === 0, 'Phase 3: ein Geist ohne Ziel verfaellt nicht nach Ablauf seiner Lebensdauer');
+    } finally {
+      tanksData.balance.ghost.lifetimeS = orig;
+    }
+  }
+
+  // (e2) Der Ablauf ist ein ANDERER Todes-Ausloeser als Schaden: killGhost()
+  // mit cause 'expire' loest KEINE der kartengebundenen Todes-Mechaniken aus
+  // (hier: Letzter Wille/spawnDeathZone -- ueber die entstehende Explosion
+  // nachweisbar). Ein synthetischer ghostDeathZoneRadius auf dem
+  // Spieler-cfg, damit der Mechanismus ueberhaupt etwas ausloesen KOENNTE.
+  {
+    const st = necroRoom();
+    st.player.cfg.ghostDeathZoneRadius = 40;
+    st.player.cfg.ghostDeathZoneDamage = 10;
+    const g = createGhost(st, 50, 50, 0, 't_pink');
     st.ghosts.push(g);
-    for (let i = 0; i < 60 * 20; i++) updateGhosts(st, 1 / 60); // 20 simulierte Sekunden
-    check(st.ghosts.length === 1 && g.alive, 'Phase 7: ein Geist ohne Ziel verfaellt trotzdem nach einiger Zeit');
+    const explosionsVor = st.explosions.length;
+    killGhost(st, g, 'expire');
+    check(g.alive === false, 'Phase 3: killGhost(..., "expire") toetet den Geist nicht');
+    check(st.explosions.length === explosionsVor, 'Phase 3: ein Ablauf-Tod loest trotzdem Letzter Wille aus');
+
+    const g2 = createGhost(st, 60, 60, 0, 't_pink');
+    st.ghosts.push(g2);
+    killGhost(st, g2, 'damage');
+    check(st.explosions.length > explosionsVor, 'Phase 3: ein echter Schadens-Tod loest Letzter Wille nicht mehr aus (Vorbedingung fuer den obigen Vergleich)');
+
+    // Dieselbe Ausnahme gilt fuer die Wiederkehr-Familie: ein 'expire'-Tod
+    // wird trotz garantierter Wiederkehr-Chance NICHT wiederbelebt.
+    st.player.cfg.ghostReviveChance = 1; // wuerde bei cause 'damage' IMMER greifen
+    const g3 = createGhost(st, 70, 70, 0, 't_pink');
+    st.ghosts.push(g3);
+    killGhost(st, g3, 'expire');
+    check(g3.alive === false, 'Phase 3: ein Ablauf-Tod wird trotz garantierter Wiederkehr-Chance wiederbelebt');
   }
 
   // (f) Feuer-Schwelle: ausserhalb von fireRangePx wird trotz freier Sicht
   // und exakter Ausrichtung NICHT geschossen, das Verfolgen (Bewegung)
-  // bleibt aber unbegrenzt aktiv (Anhang B S7: "das Verfolgen bleibt
-  // unbegrenzt"). Eigene, kuenstlich verkleinerte rangePct statt der echten
-  // 780 px -- die Arena (768x512) laesst innerhalb einer Zeile keine 780 px
-  // Abstand zu, ausserdem misst das so den MECHANISMUS statt der aktuellen
-  // Datenlage (CLAUDE.md-Pflicht).
+  // bleibt aber unbegrenzt aktiv. Eigene, kuenstlich verkleinerte
+  // balance.ghost.rangePct statt der echten 780 px -- die Arena (768x512)
+  // laesst innerhalb einer Zeile keine 780 px Abstand zu, ausserdem misst
+  // das so den MECHANISMUS statt der aktuellen Datenlage (CLAUDE.md-Pflicht).
   {
-    const origRangePct = tanksData.types.ghost_tank.rangePct;
-    tanksData.types.ghost_tank.rangePct = 0.05; // fireRangePx = 0.05 * 1200 = 60
+    const origRangePct = tanksData.balance.ghost.rangePct;
+    tanksData.balance.ghost.rangePct = 0.05; // fireRangePx = 0.05 * 1200 = 60
     try {
       const st = createState(tanksData, tilesData, {
         genRng: rngFor(1, 3, 'rooms'),
@@ -4484,43 +4602,44 @@ for (const seed of SEEDS) {
       const e = st.tanks.find((t) => t !== st.player);
       e.x = 400;
       e.y = 48; // offene Testzeile
-      const g = createGhost(st, 100, 48); // Abstand 300 > fireRangePx (60)
-      check(g.cfg.fireRangePx === 60, `Phase 7: Vorbedingung -- fireRangePx ist ${g.cfg.fireRangePx} statt 60`);
+      const g = createGhost(st, 100, 48, 0, 't_pink'); // Abstand 300 > fireRangePx (60)
+      check(g.cfg.fireRangePx === 60, `Phase 3: Vorbedingung -- fireRangePx ist ${g.cfg.fireRangePx} statt 60`);
       check(
         Math.hypot(e.x - g.x, e.y - g.y) > g.cfg.fireRangePx,
-        'Phase 7: Vorbedingung -- das Ziel liegt bereits innerhalb der Feuer-Schwelle',
+        'Phase 3: Vorbedingung -- das Ziel liegt bereits innerhalb der Feuer-Schwelle',
       );
       st.ghosts.push(g);
       const xVor = g.x;
       for (let i = 0; i < 90; i++) updateGhosts(st, 1 / 60);
-      check(st.bullets.length === 0, 'Phase 7: der Geist schiesst trotz Ziel ausserhalb der Feuer-Schwelle');
-      check(g.x > xVor, 'Phase 7: der Geist bewegt sich nicht auf ein zu weit entferntes Ziel zu (Verfolgen ist nicht unbegrenzt)');
+      check(st.bullets.length === 0, 'Phase 3: der Geist schiesst trotz Ziel ausserhalb der Feuer-Schwelle');
+      check(g.x > xVor, 'Phase 3: der Geist bewegt sich nicht auf ein zu weit entferntes Ziel zu (Verfolgen ist nicht unbegrenzt)');
 
       // Jetzt nah genug heranholen -- derselbe Geist schiesst jetzt.
       g.x = e.x - 50;
       g.y = e.y;
       g.turret = 0; // schon ausgerichtet, damit der Schuss nicht am Winkel scheitert
       updateGhosts(st, 1 / 60);
-      check(st.bullets.length === 1, 'Phase 7: der Geist schiesst innerhalb der Feuer-Schwelle trotzdem nicht');
+      check(st.bullets.length === 1, 'Phase 3: der Geist schiesst innerhalb der Feuer-Schwelle trotzdem nicht');
     } finally {
-      tanksData.types.ghost_tank.rangePct = origRangePct;
+      tanksData.balance.ghost.rangePct = origRangePct;
     }
   }
 
-  // (g) killGhost(): der Basistod hat KEINEN Zusatzeffekt (Anhang B S13/S17)
-  // -- nur alive wird false, sonst nichts; idempotent bei doppeltem Aufruf.
+  // (g) killGhost() bei cause 'damage' (Standard): der Basistod hat KEINEN
+  // Zusatzeffekt ohne einsatzbereite Karte -- nur alive wird false, sonst
+  // nichts; idempotent bei doppeltem Aufruf.
   {
     const st = necroRoom();
-    const g = createGhost(st, 10, 20);
+    const g = createGhost(st, 10, 20, 0, 't_pink');
     const vorher = { ...g };
     killGhost(st, g);
-    check(g.alive === false, 'Phase 7: killGhost() setzt alive nicht auf false');
+    check(g.alive === false, 'Phase 3: killGhost() setzt alive nicht auf false');
     for (const k of Object.keys(vorher)) {
       if (k === 'alive') continue;
-      check(g[k] === vorher[k], `Phase 7: killGhost() veraendert Feld "${k}" (Basistod haette keinen Zusatzeffekt)`);
+      check(g[k] === vorher[k], `Phase 3: killGhost() veraendert Feld "${k}" (Basistod haette keinen Zusatzeffekt)`);
     }
     killGhost(st, g); // zweiter Aufruf darf nicht werfen oder etwas doppelt tun
-    check(g.alive === false, 'Phase 7: ein zweiter killGhost()-Aufruf ist nicht idempotent');
+    check(g.alive === false, 'Phase 3: ein zweiter killGhost()-Aufruf ist nicht idempotent');
   }
 
   // (h) Nach dem Tod eines Geistes entsteht bei einem neuen qualifizierten
@@ -4532,32 +4651,33 @@ for (const seed of SEEDS) {
     e2.protect = 0;
     st.rng = () => 0;
     st.killTank(e1, 'test', { killer: st.player });
-    check(st.ghosts.length === 1, 'Phase 7: Vorbedingung -- der erste Kill erzeugt keinen Geist');
+    check(st.ghosts.length === 1, 'Phase 3: Vorbedingung -- der erste Kill erzeugt keinen Geist');
     killGhost(st, st.ghosts[0]);
     st.ghosts = st.ghosts.filter((g) => g.alive);
-    check(st.ghosts.length === 0, 'Phase 7: Vorbedingung -- der Geist ist nach killGhost() noch da');
+    check(st.ghosts.length === 0, 'Phase 3: Vorbedingung -- der Geist ist nach killGhost() noch da');
     st.killTank(e2, 'test', { killer: st.player });
-    check(st.ghosts.length === 1, 'Phase 7: nach dem Tod des ersten Geistes entsteht kein neuer mehr');
+    check(st.ghosts.length === 1, 'Phase 3: nach dem Tod des ersten Geistes entsteht kein neuer mehr');
   }
 
-  // (i) Raumwechsel entfernt alle Geister (Anhang B S15, Testschritt 4) --
-  // ueber die echte createState()-Frischzelle, nicht nur behauptet.
+  // (i) Raumwechsel entfernt alle Geister -- ueber die echte
+  // createState()-Frischzelle, nicht nur behauptet.
   {
     const st1 = necroRoom();
     const e = st1.tanks.find((t) => t !== st1.player);
     e.protect = 0;
     st1.rng = () => 0;
     st1.killTank(e, 'test', { killer: st1.player });
-    check(st1.ghosts.length === 1, 'Phase 7: Vorbedingung -- kein Geist im ersten Raum');
+    check(st1.ghosts.length === 1, 'Phase 3: Vorbedingung -- kein Geist im ersten Raum');
     const st2 = necroRoom(); // simuliert den naechsten Raum (frisches createState)
-    check(st2.ghosts.length === 0, 'Phase 7: Geister ueberleben einen Raumwechsel');
+    check(st2.ghosts.length === 0, 'Phase 3: Geister ueberleben einen Raumwechsel');
   }
 
-  // (j) Regressionsschutz: ghost_tank ist keine purchasable Gegnerkarte
-  // (fehlt in difficulty.json: danger) und zaehlt nicht gegen den
-  // enemiesAlive-Deckel (Geister stehen nie in state.tanks).
+  // (j) Regressionsschutz, umgekehrt gegenueber dem alten ghost_tank-Stand:
+  // der geerbte Typ bleibt ein GANZ NORMALER, weiterhin kaufbarer Gegnertyp
+  // (Typ-Vererbung sperrt keinen Gegnertyp) -- ein Geist steckt aber
+  // trotzdem nie in state.tanks (zaehlt nicht gegen limits.enemiesAlive).
   {
-    check(!diffData.danger?.ghost_tank, 'Phase 7: ghost_tank ist als purchasable Gegner in difficulty.json gelistet');
+    check(!!diffData.danger?.t_pink, 'Phase 3: t_pink ist trotz Typ-Vererbung kein purchasable Gegner mehr');
     const st = necroRoom();
     const e = st.tanks.find((t) => t !== st.player);
     e.protect = 0;
@@ -4565,8 +4685,133 @@ for (const seed of SEEDS) {
     st.killTank(e, 'test', { killer: st.player });
     check(
       !st.tanks.includes(st.ghosts[0]),
-      'Phase 7: ein Geist steckt in state.tanks (wuerde gegen limits.enemiesAlive zaehlen)',
+      'Phase 3: ein Geist steckt in state.tanks (wuerde gegen limits.enemiesAlive zaehlen)',
     );
+  }
+
+  // (k) Geisterbombe: der Zufallstyp kommt WIRKLICH aus dem Akt-Gegnerpool --
+  // mit zwei verschiedenen rng-Werten beide Pool-Eintraege einzeln erzwungen.
+  {
+    const pool = ['t_grey', 't_yellow'];
+    const st1 = necroRoom(['t_pink'], pool);
+    st1.rng = () => 0; // erster Pool-Eintrag
+    useSecondary(st1.player, st1, null);
+    check(st1.ghosts[0]?.type === 't_grey', `Phase 3: Geisterbombe mit rng=>0 erzeugt ${st1.ghosts[0]?.type} statt t_grey`);
+
+    const st2 = necroRoom(['t_pink'], pool);
+    st2.rng = () => 0.99; // zweiter Pool-Eintrag
+    useSecondary(st2.player, st2, null);
+    check(st2.ghosts[0]?.type === 't_yellow', `Phase 3: Geisterbombe mit rng=>0.99 erzeugt ${st2.ghosts[0]?.type} statt t_yellow`);
+  }
+
+  // (l) Geisterbombe: ein leerer/fehlender Akt-Gegnerpool verweigert den
+  // Wurf nicht, sondern faellt auf t_brown zurueck (statt abzustuerzen oder
+  // stillschweigend nichts zu erzeugen).
+  {
+    const st = necroRoom(['t_pink'], []);
+    useSecondary(st.player, st, null);
+    check(st.ghosts[0]?.type === 't_brown', `Phase 3: Geisterbombe mit leerem Akt-Gegnerpool erzeugt ${st.ghosts[0]?.type} statt des Rueckfalls t_brown`);
+  }
+
+  // (m) Champion (NEU, dynamisch): der staerkste lebende Untertan nach
+  // strengthWeights traegt isChampion, alle anderen nicht -- mit einem
+  // synthetischen strengthWeights-Wert (reines hp-Gewicht) statt der echten
+  // Formel geprueft.
+  {
+    const orig = { ...tanksData.balance.ghost.strengthWeights };
+    tanksData.balance.ghost.strengthWeights = { hp: 1, damage: 0 };
+    try {
+      const st = necroRoom();
+      const gSchwach = createGhost(st, 0, 0, 0, 't_pink');
+      gSchwach.hp = 10;
+      const gStark = createGhost(st, 10, 10, 0, 't_pink');
+      gStark.hp = 500;
+      st.ghosts.push(gSchwach, gStark);
+      updateGhosts(st, 0); // dt=0: keine Bewegung/Schuss, nur die Champion-Neuberechnung
+      check(gStark.isChampion === true, 'Phase 3: der staerkere Untertan ist nicht Champion');
+      check(gSchwach.isChampion === false, 'Phase 3: der schwaechere Untertan ist faelschlich Champion');
+
+      // Faellt der Champion unter den anderen, wechselt der Titel noch
+      // IM SELBEN Raum (dynamisch, kein Kartengate/keine feste Zuweisung).
+      gStark.hp = 1;
+      gSchwach.hp = 999;
+      updateGhosts(st, 0);
+      check(gSchwach.isChampion === true, 'Phase 3: der Champion-Titel wechselt nicht, wenn ein anderer Untertan staerker wird');
+      check(gStark.isChampion === false, 'Phase 3: der alte Champion behaelt den Titel trotz Staerkeverlust');
+    } finally {
+      tanksData.balance.ghost.strengthWeights = orig;
+    }
+  }
+
+  // (m2) Champion-Gleichstand: gewinnt der AELTERE (Erzeugungsreihenfolge),
+  // ein gleich starker JUENGERER Untertan verdraengt ihn nicht (striktes '>').
+  {
+    const st = necroRoom();
+    const alt = createGhost(st, 0, 0, 0, 't_pink');
+    alt.hp = 100;
+    alt.cfg.damage = 5;
+    const jung = createGhost(st, 10, 10, 0, 't_pink');
+    jung.hp = 100;
+    jung.cfg.damage = 5; // exakter Gleichstand
+    st.ghosts.push(alt, jung);
+    updateGhosts(st, 0);
+    check(alt.isChampion === true, 'Phase 3: bei Gleichstand gewinnt nicht der AELTERE Untertan');
+    check(jung.isChampion === false, 'Phase 3: bei Gleichstand wird der JUENGERE Untertan faelschlich Champion');
+  }
+
+  // (n) Elite-/Boss-Ausnahme, End-to-End ueber updateTargeting/Rendering
+  // hinaus bereits in Abschnitt 42 (b2) mechanistisch geprueft (rng=>0
+  // garantiert, trotzdem kein Spawn) -- hier zusaetzlich die Kombination mit
+  // einer regulaeren (nicht-affix-tragenden) zweiten Leiche im selben Raum,
+  // damit sichergestellt ist, dass die Ausnahme wirklich NUR den
+  // Elite-/Boss-Kill betrifft, nicht den ganzen Raum.
+  {
+    const st = necroRoom(['t_pink', 't_pink']);
+    const [eElite, eNormal] = st.tanks.filter((t) => t !== st.player);
+    eElite.affixes = ['twinshot'];
+    eNormal.protect = 0;
+    st.rng = () => 0;
+    st.killTank(eElite, 'test', { killer: st.player });
+    check(st.ghosts.length === 0, 'Phase 3: der Elite-Kill erzeugt trotzdem einen Untertan');
+    st.killTank(eNormal, 'test', { killer: st.player });
+    check(st.ghosts.length === 1, 'Phase 3: ein regulaerer Kill im selben Raum ist von der Elite-Ausnahme des vorigen Kills mitbetroffen');
+  }
+
+  // (o) Renderpfad: der neue Lebensdauer-Ring + der wiederverwendete
+  // Champion-Ring werden ueber den ECHTEN renderer.js: render() gezeichnet,
+  // nicht nur behauptet -- derselbe blinde Fleck, der beim Ziellinien-Crash
+  // und beim P6-Bombenwurf schon einmal zuschlug (renderer.js wurde in der
+  // Node-Suite bis dahin nie fuer diesen Zweig ausgefuehrt).
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { createRenderer } = await import('../src/render/renderer.js');
+      const { createTracks } = await import('../src/render/tracks.js');
+      const ctx = document.createElement('canvas').getContext('2d');
+      const renderer = createRenderer(ctx);
+      const tracks = createTracks();
+      const st = necroRoom();
+      const g = createGhost(st, 100, 100, 0, 't_pink');
+      g.isChampion = true;
+      st.ghosts.push(g);
+      const arcCallsFor = () => {
+        ctx.calls.length = 0;
+        renderer.render(st, 0, tracks, null, null);
+        return ctx.calls.filter((c) => c.fn === 'stroke').length;
+      };
+      const mitChampion = arcCallsFor();
+      g.isChampion = false;
+      const ohneChampion = arcCallsFor();
+      check(
+        mitChampion > ohneChampion,
+        `Phase 3: der Champion-Ring erscheint nicht im echten Renderpfad (${mitChampion} vs. ${ohneChampion} stroke()-Aufrufe)`,
+      );
+    } catch (e) {
+      check(false, `Phase 3: der Geister-Renderpfad wirft (${e.message})`);
+    } finally {
+      restore();
+    }
   }
 }
 
@@ -4577,11 +4822,11 @@ for (const seed of SEEDS) {
 // Karten. Mit Grundsteinumbau Phase 4 ist der gesamte Signaturpool nach
 // archive/upgrades-v1.json ausgelagert (data/upgrades.json: 5-Karten-
 // Sockel) -- jede dieser Pruefungen waere seitdem strukturell rot. Die
-// zugrundeliegende Basiseinheit (ghost_tank, ghost.js: resolveGhostCfg())
-// bleibt unangetastet gebaut und wird weiterhin von Abschnitt 43 bewacht;
-// die 16 ghost*-core-Schluessel in cfg.js selbst sind ohne eine Karte, die
-// sie setzt, aktuell unerreichbar. Details/Wiederanschlusspunkt: ARCHIV.md,
-// archive/upgrades-v1.json.
+// zugrundeliegende Geistereinheit (ghost.js: resolveGhostCfg()) ist mit
+// Nekromant-V2 Phase 3 grundlegend neu gebaut (Typ-Vererbung statt fester
+// ghost_tank-Basis, s. Abschnitt 43) -- die 16 ghost*-core-Schluessel in
+// cfg.js selbst sind ohne eine Karte, die sie setzt, weiterhin unerreichbar.
+// Details/Wiederanschlusspunkt: ARCHIV.md, archive/upgrades-v1.json.
 
 
 // ---- 45. Upgradepool-v2 Phase 9: Schlussabnahme -------------------------
@@ -4629,12 +4874,14 @@ for (const seed of SEEDS) {
 
   // === GEISTERPANZER ====================================================
 
-  // (a) Punkt 2: die Spawnquoten sind nicht nur an der Schwelle richtig
-  // (das prueft 42(b) mit gestelltem rng), sondern auch STATISTISCH ueber
-  // viele Kills mit einem echten geseedeten Strom. Bewusst gegen die
-  // balance.json-Sollwerte gemessen -- der Auftrag nennt sie ausdruecklich
-  // ("50 % / 33 % Spawnchance, mit festem Seed ueber viele Kills gemessen"),
-  // eine Balance-Aenderung SOLL diesen Test also mitziehen.
+  // (a) Punkt 2 (ueberholt durch Nekromant-V2 Phase 3): die alte, zweistufige
+  // spawnChance.necro/.ghost (50 %/33 %) ist durch EINE einheitliche
+  // reviveChance ersetzt (s. archive/ghost-tank-v1.json) -- die Spawnquote
+  // ist deshalb nicht nur an der Schwelle richtig (das prueft 42(b) mit
+  // gestelltem rng), sondern auch STATISTISCH ueber viele Kills mit einem
+  // echten geseedeten Strom fuer BEIDE Killer-Arten identisch. Bewusst
+  // gegen den echten balance.json-Sollwert gemessen -- eine Balance-
+  // Aenderung SOLL diesen Test mitziehen.
   {
     const N = 3000;
     const TOLERANZ = 0.04; // 4 Prozentpunkte -- deckt die Streuung bei N=3000
@@ -4659,38 +4906,33 @@ for (const seed of SEEDS) {
       }
       return spawns / N;
     };
-    const soll = tanksData.balance.ghost.spawnChance;
+    const soll = tanksData.balance.ghost.reviveChance;
     const qn = quote('necro');
     const qg = quote('ghost');
     check(
-      Math.abs(qn - soll.necro) <= TOLERANZ,
-      `Phase 9: Nekromant-Spawnquote ${(qn * 100).toFixed(1)} % statt ${(soll.necro * 100).toFixed(0)} % (${N} Kills)`,
+      Math.abs(qn - soll) <= TOLERANZ,
+      `Phase 3: Nekromant-Spawnquote ${(qn * 100).toFixed(1)} % statt ${(soll * 100).toFixed(0)} % (${N} Kills)`,
     );
     check(
-      Math.abs(qg - soll.ghost) <= TOLERANZ,
-      `Phase 9: Geist-Spawnquote ${(qg * 100).toFixed(1)} % statt ${(soll.ghost * 100).toFixed(0)} % (${N} Kills)`,
+      Math.abs(qg - soll) <= TOLERANZ,
+      `Phase 3: Geist-Kill-Spawnquote ${(qg * 100).toFixed(1)} % statt der VEREINHEITLICHTEN ${(soll * 100).toFixed(0)} % (${N} Kills)`,
     );
   }
 
-  // (b) Punkt 3: auch ein BOSS-Kill erzeugt denselben Basistyp mit denselben
-  // Werten -- Anhang B S8 nennt den Boss ausdruecklich ("Boss ->
-  // Geisterpanzer"). 43(d) prueft das nur mit synthetisch aufgeblasenen
-  // Gegnern, hier mit einem echten Boss aus tanks.json.
+  // (b) Punkt 3 (ueberholt durch Nekromant-V2 Phase 3): ein BOSS-Kill
+  // erzeugt jetzt bewusst KEINEN Untertan mehr (Auftrag Abschnitt 3,
+  // Elite-/Boss-Ausnahme -- das genaue Gegenteil der alten Anhang-B-Aussage
+  // "Boss -> Geisterpanzer"). Mit einem echten Boss aus tanks.json statt nur
+  // synthetisch aufgeblasenen LP.
   {
     const st = arenaRoom(['t_mirror'], 'boss_mirror');
     const boss = st.tanks.find((t) => t !== st.player);
-    check(boss.cfg.maxHp >= 500, `Phase 9: Vorbedingung -- Boss hat nur ${boss.cfg.maxHp} LP`);
+    check(boss.cfg.maxHp >= 500, `Phase 3: Vorbedingung -- Boss hat nur ${boss.cfg.maxHp} LP`);
+    check(!!boss.cfg.mirrorBoss, 'Phase 3: Vorbedingung -- der Testboss traegt kein Boss-Flag (isBossCfg wuerde ihn nicht erkennen)');
     boss.protect = 0;
-    st.rng = () => 0; // garantierter Spawnwurf
+    st.rng = () => 0; // garantierter Spawnwurf -- waere ohne die Ausnahme immer ein Treffer
     st.killTank(boss, 'test', { killer: st.player });
-    const g = st.ghosts[0];
-    check(!!g && g.type === 'ghost_tank', `Phase 9: Boss-Kill erzeugt Typ ${g?.type} statt ghost_tank`);
-    // Gegenprobe zum Erben: der Geist darf NICHTS vom Boss uebernehmen.
-    const vergleich = createGhost(necroRoom(), 0, 0);
-    check(
-      g.cfg.maxHp === vergleich.cfg.maxHp && g.cfg.damage === vergleich.cfg.damage,
-      `Phase 9: Boss-Geist (${g.cfg.maxHp} LP / ${g.cfg.damage} Schaden) weicht vom Basistyp ab`,
-    );
+    check(st.ghosts.length === 0, `Phase 3: ein Boss-Kill erzeugt trotzdem ${st.ghosts.length} Untertan(en)`);
   }
 
   // (c) Punkt 4: am Limit wird NICHTS verdraengt -- die Geist-IDs vor und

@@ -4940,6 +4940,109 @@ einer früheren Fassung, in der Resistenz noch eine feste Obergrenze hatte.
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
   **Nächste Sitzung: Phase 3** (Geisterpanzer-Basis).
 
+### Nekromant-V2 — Phase 3 (Geisterpanzer-Basis) — gemergt
+Der Kern von Anhang B ("eigener, fester Basiseinheiten-Typ `ghost_tank`,
+kein Stat-Erbe, kein Lebensdauer-Timer") ist **grundlegend umgekehrt**
+worden (Auftrag Abschnitt 3, keine Inkonsistenz — der Auftrag selbst
+verlangt das): ein Untertan erbt jetzt den vollen **Typ** des getöteten
+Gegners, hat eine **Lebensdauer**, und ein **dynamischer Champion** ersetzt/
+ergänzt den alten kartengebundenen Kommandanten. `ghost_tank` selbst und die
+alte zweistufige `spawnChance` sind archiviert
+(`archive/ghost-tank-v1.json`, `ARCHIV.md`).
+- **Typ-Vererbung** (`ghost.js: resolveGhostCfg(data, sourceType, playerCfg)`):
+  baut auf `resolveCfg(data, sourceType)` auf und spreadet das volle
+  aufgelöste cfg des Quelltyps — Rolle, Waffe, Panzerung, Zielgenauigkeit,
+  Geschosstempo, Magazin bleiben dadurch **unverändert** die des geerbten
+  Typs. Nur `maxHp`/`damage` werden auf `data/balance.json: ghost
+  .baseStatPct` (0,5) gestutzt ("ein Untertan ist eine geschwächte Kopie,
+  kein Vollwert-Klon"). Die Instanzwerte des konkreten getöteten
+  **Exemplars** (Raum-Skalierung, Elite-Multiplikator) werden bewusst NICHT
+  übernommen — `resolveGhostCfg()` liest frisch aus `tanksData`, nie aus
+  `tank.cfg`. `fireRangePx` (Feuer-Schwelle) ist jetzt ein einzelner
+  geteilter Wert (`ghost.rangePct`) statt eines Feldes des archivierten
+  Typs. Ein geerbter `t_armored`-Untertan trägt seine Panzerung sichtbar in
+  der cfg, ist aber (noch) nicht dadurch geschützt — die Geister-eigene
+  Kollisionsschleife (`state.js`, seit Upgradepool-v2 Phase 5) wertet Armor/
+  Krit/Kopfschuss bewusst nicht aus, unverändert seit dem Vorgängermodul.
+  Ein geerbter **Mörser** (`t_green`) feuert als Untertan bewusst **kein**
+  echtes Geschoss über `fireMortar()` — der wirft ein volles KI-Zielobjekt
+  voraus (`resolveTarget()` liest `tank.ai.target`) und würde bei einem
+  Geist ohne `.ai` immer auf `state.player` zurückfallen, also den eigenen
+  Nekromanten beschießen. Volle Waffen-Portierung ist bewusst nicht Teil
+  dieser Phase (To-do).
+- **ReviveChance vereinheitlicht** (`data/balance.json: ghost.reviveChance`
+  0,35, ersetzt `spawnChance.necro/.ghost` 50 %/33 %): EIN Wert für jeden
+  Kill auf Nekromanten-Seite, egal ob der Spieler selbst oder ein
+  vorhandener Geist getötet hat. **Elite-/Boss-Ausnahme** (`state.js:
+  killTank()`): ein Gegner mit Elite-Affix (`tank.affixes.length > 0`) oder
+  ein Boss (`isBossCfg(tank.cfg)`, dasselbe Erkennungsmuster wie bei
+  Flankenschaden/Exekutionsschwelle) wird nie wiederbelebt.
+- **"Rechenweg statt Obergrenze"** (Auftrag Abschnitt 4a, neue Funktion
+  `state.js: rollGhostSpawnCount(chance, rng)`): additiv ohne Deckel — der
+  ganzzahlige Anteil von `reviveChance` erzeugt GARANTIERTE Zusatz-
+  Untertanen (z. B. bei 1,4 sicher einen, plus 40 % Chance auf einen
+  zweiten), der Rest bleibt eine reine Chance. Aktuell ohne Karte nie über
+  0,35 hinaus getrieben, der Mechanismus selbst kennt aber keine Grenze. Das
+  Geistlimit (`ghost.maxActive`, weiterhin 3, `ghostMaxAdd`-additiv) greift
+  trotzdem — die Spawnschleife bricht am Deckel ab, ohne zu verdrängen.
+- **Lebensdauer** (`ghost.lifetimeS` 12 s, `g.lifetime`/`g.lifetimeMax`):
+  ein ANDERER Todes-Auslöser als Schaden. `killGhost(state, g, cause)` hat
+  jetzt zwei Ursachen — `'damage'` (Standard, wie bisher) und `'expire'`
+  (Ablauf) — ein Ablauf-Tod überspringt bewusst ALLE drei kartengebundenen
+  Todes-Mechaniken (Phylakterium, Wiederkehr-Familie, Letzter Wille): eine
+  Wiederkehr würde sonst die Lebensdauer selbst bedeutungslos machen.
+- **Champion** (NEU, dynamisch): am Ende jedes `updateGhosts()`-Ticks wird
+  über alle lebenden Untertanen der stärkste nach `ghost.strengthWeights`
+  (`LIVE-hp*weights.hp + damage*weights.damage`) bestimmt und trägt
+  `g.isChampion` — kein Kartengate, kann den Titel im selben Raum verlieren,
+  wenn er schwächer wird. Gleichstand gewinnt der ÄLTERE (Array-/
+  Erzeugungsreihenfolge, striktes `>`). Teilt sich mit dem älteren,
+  kartengebundenen (aktuell toten) `isCommander` denselben goldenen Ring im
+  Renderer (`renderer.js: drawGhosts()`), NICHT verwechseln — beide Flags
+  bleiben getrennte Felder.
+- **Geisterbombe** (`tank.js: spawnGhostBomb()`): erzeugt jetzt einen
+  **zufälligen** Typ aus dem Gegnerpool des aktuellen Akts
+  (`state.actEnemyPool`, neu über `run.js: buildCombatRoom()` →
+  `createState()`-Opt durchgereicht, Muster wie `roomModifier`/
+  `eliteAffixes`) statt eines festen Basistyps — "man weiß vorher nicht, was
+  man bekommt". Ein leerer/fehlender Pool fällt auf `t_brown` zurück statt
+  abzustürzen. `run.js: unlockedEnemyTypes(diff, actIndex, roomIndexInAct)`
+  ist dafür aus `buyEnemies()` extrahiert (reine Funktion, kein Run-Objekt
+  nötig) und wird jetzt an zwei Stellen genutzt.
+- **Darstellung**: ein schrumpfender heller Ring um jeden Untertanen zeigt
+  seine verbleibende Lebensdauer (`renderer.js: drawGhosts()`, Radius
+  `(r+10) * lifetime/lifetimeMax`) — ohne dieses sichtbare Gegenstück wäre
+  der neue Todes-Ausslöser unerklärlich.
+- **Neue Dauertests** (Abschnitte 42/43/45 aktualisiert bzw. erweitert,
+  Gegenprobe für jeden Kernpunkt einzeln bestanden — je absichtlich rot
+  gemacht: Typ-Vererbung ausgebaut → `TypeError` statt Checkfehler;
+  Elite-/Boss-Ausnahme entfernt → 5 Checks rot; Überlaufwurf auf reinen
+  Boolean-Wurf zurückgebaut → 2 Checks rot; Lebensdauer-Countdown entfernt →
+  1 Check rot; die `cause`-Weiche an BEIDEN betroffenen Stellen in
+  `killGhost()` einzeln ausgebaut → je 1 Check rot; Champion-Neuberechnung
+  ausgebaut → 3 Checks rot, Gleichstand-Striktheit auf `>=` gelockert →
+  2 Checks rot; Geisterbombe auf einen festen Typ zurückgebaut → 3 Checks
+  rot, der `t_brown`-Rückfall entfernt → 1 Check rot; der Champion-Ring im
+  echten Renderpfad ausgebaut → 1 Check rot): Typ-Vererbung (Basiswerte,
+  unveränderte Panzerung/Rolle/Zielgenauigkeit inkl. eines echten
+  Panzerungsobjekts, Mechanismus mit synthetischem `baseStatPct`, Instanz-
+  vs.-Typ-Trennung), vereinheitlichte Reviveschwelle + Elite-/Boss-Ausnahme
+  (inkl. Kombination mit einem regulären zweiten Kill im selben Raum),
+  Überlauf-Spawnanzahl mit synthetischer `reviveChance` > 1 inkl. Deckel-
+  Klemmung, Lebensdauer vor/nach Ablauf mit synthetisch verkürztem Wert,
+  Ablauf-Tod löst weder Letzter Wille noch Wiederkehr aus (echter
+  Schadens-Tod als Kontrolle), Feuer-Schwelle (unverändert, jetzt über
+  `balance.ghost.rangePct`), Basistod ohne Zusatzeffekt + Idempotenz,
+  Geistlimit ohne Verdrängung, Raumwechsel, Champion-Neuberechnung +
+  Gleichstand-Tiebreak, Geisterbombe zieht wirklich aus dem Akt-Gegnerpool
+  (zwei erzwungene Pool-Einträge) + Rückfall bei leerem Pool, End-to-End-
+  Renderpfad über `domstub.mjs` (Champion-Ring erscheint als zusätzlicher
+  `stroke()`-Aufruf, kein Absturz). Playwright-Smoke (Nekromant wählen, Run
+  starten, Snapshot bestätigt `starterTank: 'c_necro'`, keine
+  Konsolenfehler) bestanden.
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  **Nächste Sitzung: Phase 4** (Gegner zielen auf Untertanen).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -5064,20 +5167,30 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   werden gezaehlt, nicht heruntergezaehlt (bildratenunabhaengig). Werte in
   `data/status.json`. Haengt bis Phase 6 an keiner Quelle — nur
   `state.applyStatus()` (Debugtasten 1/2/3 bei `?debug=1`).
-- `src/game/ghost.js` — Geisterpanzer (Upgradepool-v2 Phase 7 komplett neu
-  gebaut, ersetzt das Phase-5/6-Interimssystem): eigener, fester Unit-Typ
-  `ghost_tank` (`data/tanks.json`) mit vom getöteten Panzer UNABHÄNGIGEN
-  Basiswerten (`resolveGhostCfg()` skaliert Prozentfelder auf die
-  Standardklasse `player`, nicht auf den Nekromanten selbst), kein
-  Lebensdauer-Timer mehr, `killGhost()` als einziger Tod-Trichter. Zwei
-  Erzeuger reichen nur noch Position/Ausrichtung durch: `state.js:
-  killTank()`s Spawnwürfel und `tank.js: useSecondary()`s Geisterbombe.
-  Eigenes `state.ghosts`-Array, kein Eintrag in `state.tanks` (blockiert
-  keine Kugeln, zählt nicht gegen `limits.enemiesAlive`). Seit Phase 8:
-  `resolveGhostCfg(data, playerCfg)` legt 16 neue `ghost*`-`core`-Schlüssel
-  (aus den `sig_necro_*`-Signaturkarten, `cfg.js` sammelt sie auf dem
-  Spieler-cfg) additiv/multiplikativ auf die Basiswerte; `killGhost(state, g)`
-  ist der zentrale Ort für Phylakterium/Wiederkehr-Familie/Letzter Wille.
+- `src/game/ghost.js` — Untertanen/Geisterpanzer. Seit Nekromant-V2 Phase 3
+  grundlegend neu (ersetzt den festen `ghost_tank`-Basistyp aus
+  Upgradepool-v2 Phase 7, archiviert in `archive/ghost-tank-v1.json`):
+  **Typ-Vererbung** — `resolveGhostCfg(data, sourceType, playerCfg)` baut
+  auf `resolveCfg(data, sourceType)` auf (Rolle/Waffe/Panzerung/Tempo
+  unverändert des Quelltyps), nur `maxHp`/`damage` gestutzt auf
+  `balance.ghost.baseStatPct`. `createGhost(state, x, y, heading,
+  sourceType)` braucht jetzt zwingend den Quelltyp; beide Erzeuger reichen
+  ihn durch: `state.js: killTank()`s Spawnwürfel den Typ des getöteten
+  Gegners, `tank.js: spawnGhostBomb()`s Geisterbombe einen zufälligen Typ
+  aus `state.actEnemyPool` (Fallback `t_brown`). `g.lifetime`/`lifetimeMax`
+  (NEU, `balance.ghost.lifetimeS`) — ein Ablauf ist ein ANDERER Todes-
+  Auslöser als Schaden (`killGhost(state, g, 'expire')` überspringt die
+  kartengebundenen Todes-Mechaniken). `g.isChampion` (NEU, dynamisch, jeden
+  `updateGhosts()`-Tick neu über `balance.ghost.strengthWeights` bestimmt,
+  kein Kartengate) — NICHT verwechseln mit dem älteren, kartengebundenen
+  (aktuell toten) `isCommander`. Eigenes `state.ghosts`-Array, kein Eintrag
+  in `state.tanks` (blockiert keine Kugeln, zählt nicht gegen
+  `limits.enemiesAlive`). Seit Upgradepool-v2 Phase 8: dieselbe
+  `resolveGhostCfg()` legt 16 `ghost*`-`core`-Schlüssel (aus den seit
+  Grundsteinumbau Phase 4 archivierten `sig_necro_*`-Karten, aktuell also
+  unerreichbar) additiv/multiplikativ oben drauf; `killGhost(state, g,
+  cause)` ist bei `cause==='damage'` (Standard) weiterhin der zentrale Ort
+  für Phylakterium/Wiederkehr-Familie/Letzter Wille.
 - `src/game/ai.js` — Gegner-KI-Dispatcher + Zielsystem (Upgradepool-v2
   Phase 5): `resolveTarget`/`pickTarget`/`updateTargeting`/`registerThreat`
   wählen zwischen Spieler und Geistern statt hart auf `state.player` zu

@@ -952,9 +952,12 @@ export function createRenderer(ctx) {
 
   // Geisterpanzer (Phase 7): EIN gemeinsames Geister-Sprite fuer alle Panzer,
   // die zum Geist werden -- durchscheinend gezeichnet (konstante Transparenz
-  // statt Blinken), unabhaengig vom Ursprungstyp (ohnehin immer 'ghost_tank'
-  // seit Anhang B, Phase 7). Faellt ohne geladenes Sprite auf die alte
-  // prozedurale Wanne+Rohr-Form in der Typfarbe zurueck.
+  // statt Blinken). Seit Nekromant-V2 Phase 3 erbt ein Untertan den vollen
+  // Typ des getoeteten Gegners (g.type ist jetzt z. B. 't_black', nicht mehr
+  // fest 'ghost_tank') -- das Geister-Sprite bleibt trotzdem fuer ALLE
+  // gleich (Wiedererkennbarkeit "das ist ein Untertan", nicht "das ist ein
+  // wiederbelebter Brauner"); g.type faerbt nur den prozeduralen Fallback
+  // ein (kein Sprite geladen).
   function drawGhosts(ctx, state, alpha) {
     const ghostBody = sprite('body', 'ghost');
     const ghostTur = sprite('turret', 'ghost');
@@ -986,15 +989,30 @@ export function createRenderer(ctx) {
       }
       ctx.globalAlpha = 1;
 
-      // Geisterkommandant (Upgradepool-v2 Phase 8, Anhang A "Eliteeinheit,
-      // muss erkennbar sein"): ein goldener Ring um den einen Kommandanten --
-      // dieselbe Farbe wie die legendaeren Karten (style.css), damit "das ist
-      // etwas Besonderes" sofort assoziiert wird, ohne ein neues Sprite.
-      if (g.isCommander) {
+      // Geisterkommandant (Upgradepool-v2 Phase 8, aktuell kartenlos also
+      // unerreichbar, s. ghost.js Kopfkommentar) UND der NEUE, dynamische
+      // Champion (Nekromant-V2 Phase 3) teilen sich denselben goldenen Ring
+      // (Auftrag: "Eliteeinheit, muss erkennbar sein") -- dieselbe Farbe wie
+      // die legendaeren Karten (style.css), damit "das ist etwas
+      // Besonderes" sofort assoziiert wird, ohne ein neues Sprite.
+      if (g.isCommander || g.isChampion) {
         ctx.strokeStyle = '#e8b44a';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(x, y, r + 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Lebensdauer (Phase 3, NEU): schrumpfender Ring -- "ein anderer
+      // Todes-Ausloeser als Schaden" braucht ein sichtbares Gegenstueck,
+      // sonst verschwindet ein Untertan scheinbar grundlos. Innen (voller
+      // Radius) = frisch, schrumpft auf 0, wenn lifetime abgelaufen ist.
+      if (g.lifetimeMax > 0) {
+        const frac = Math.max(0, Math.min(1, g.lifetime / g.lifetimeMax));
+        ctx.strokeStyle = 'rgba(207,224,245,0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, (r + 10) * frac, 0, Math.PI * 2);
         ctx.stroke();
       }
 

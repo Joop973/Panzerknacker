@@ -98,6 +98,22 @@ function absorbWithShieldPool(state, entity, amount) {
   return (amount ?? 1) - absorbed;
 }
 
+// Nekromant-V2 Phase 3: Wiederbelebungs-Anzahl fuer EINEN Kill, "Rechenweg
+// statt Obergrenze" (Auftrag Abschnitt 4a) -- derselbe Ganzzahl-plus-Rest-
+// Mechanismus wie bei anderen ueberlauffaehigen Chancen (Krit, Phase 7):
+// der ganzzahlige Anteil erzeugt GARANTIERTE Zusatz-Untertanen (bei chance
+// 1.4 also sicher einen, plus 40 % Chance auf einen zweiten), der Rest bleibt
+// eine reine Wahrscheinlichkeit. Bei chance <= 0 immer 0, bei chance < 1 wie
+// bisher ein einzelner Wurf -- keine Verhaltensaenderung im aktuell
+// erreichbaren Wertebereich (0,35), nur der Mechanismus selbst kennt keinen
+// Deckel.
+function rollGhostSpawnCount(chance, rng) {
+  if (!(chance > 0)) return 0;
+  const guaranteed = Math.floor(chance);
+  const remainder = chance - guaranteed;
+  return guaranteed + (remainder > 0 && rng() < remainder ? 1 : 0);
+}
+
 function buildWalls(grid, destructibleHits, generatorHits) {
   const walls = [];
   for (let row = 0; row < ROWS; row++) {
@@ -166,7 +182,7 @@ export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
     destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses, upgradeLevels, levelBalance,
-    starterTank = 'player', starterScrap = 0 } = opts;
+    starterTank = 'player', starterScrap = 0, actEnemyPool } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
   const room = fixedRoom
     ? buildFixedRoom(fixedRoom, enemyTypes.length)
@@ -283,6 +299,11 @@ export function createState(data, tiles, opts) {
     equippedGadget: equippedGadget || null, // P4: zweiter Slot, ebenfalls fuer respawnPlayer()
     starterTank, // Phase 9: gewaehlte Klasse -- respawnPlayer() baut denselben Panzer
     starterScrap, // Phase 9: Schrottstand fuer das Schrottpanzer-Passiv (pro Raum gebacken)
+    // Nekromant-V2 Phase 3: Gegnertypen, die zum jetzigen Zeitpunkt des Akts
+    // freigeschaltet sind -- tank.js: spawnGhostBomb() zieht daraus einen
+    // zufaelligen Typ. run.js: buildCombatRoom() liefert die echte Liste;
+    // Fallback [] fuer isolierte Test-/Debug-Raeume ohne Akt-Kontext.
+    actEnemyPool: actEnemyPool || [],
     roomContext: roomContext || null, // { elite, boss } -- raumabhaengige Karten
     // LP-Skalierung dieses Raums (Phase 2) -- gemerkt, damit die zweite
     // Welle (updateWave) dieselben Werte bekommt wie die erste.
@@ -700,28 +721,40 @@ export function createState(data, tiles, opts) {
         if (pc.chainLightning) {
           explodeAt(state, tank.x, tank.y, pc.chainLightning, state.player, { killer: state.player });
         }
-        // Nekromant: Klassenidentitaet (Upgradepool-v2 Phase 6). Ein Kill
-        // durch den SPIELER als Nekromant hat eine Chance, den getoeteten
-        // Gegner als Geisterpanzer wiederzubeleben; ein Kill durch einen
-        // bereits vorhandenen Geist hat eine kleinere Chance (Werte in
-        // data/balance.json: ghost.spawnChance). Ueber den Seed-RNG
-        // (state.rng), nie Math.random -- der Run bleibt deterministisch.
-        // Limit OHNE Verdraengung: am Deckel passiert einfach nichts (kein
-        // Wurf, kein Verbrauch) -- dieselbe Regel wie bei der Geisterbombe
-        // (tank.js: useSecondary()). createGhost() baut seit Phase 7 den
-        // FESTEN Basistyp (Anhang B S8) -- tank liefert nur noch Position/
-        // Ausrichtung des Spawnpunkts, keine cfg mehr.
+        // Nekromant: Klassenidentitaet (Upgradepool-v2 Phase 6), Basiswerte
+        // seit Nekromant-V2 Phase 3 grundlegend neu: EIN einheitlicher
+        // reviveChance-Wert (egal ob der Kill vom Spieler-als-Nekromant oder
+        // von einem bereits vorhandenen Geist kommt -- die alte, zweistufige
+        // spawnChance.necro/.ghost ist archiviert, s. archive/ghost-tank-v1
+        // .json), UND der wiederbelebte Untertan erbt den TYP des getoeteten
+        // Gegners (Rolle/Waffe/Panzerung/Tempo bleiben, nur maxHp/damage
+        // werden auf baseStatPct gestutzt -- s. ghost.js: resolveGhostCfg()).
+        // Elite-/Boss-Ausnahme (Auftrag Abschnitt 3): ein Gegner mit
+        // Elite-Affix (t.affixes, Phase 9) oder ein Boss (isBossCfg) wird nie
+        // wiederbelebt -- sonst waere ein wiederbelebter Boss/Elite eine
+        // zweite, unbeabsichtigte Kampfarena. Ueber den Seed-RNG (state.rng),
+        // nie Math.random -- der Run bleibt deterministisch.
         const killer = meta?.killer;
         const gcfg = state.data.balance.ghost || {};
-        let spawnChance = 0;
-        if (killer === state.player && pc.necromancer) spawnChance = gcfg.spawnChance?.necro ?? 0;
-        else if (killer?.isGhost) spawnChance = gcfg.spawnChance?.ghost ?? 0;
-        // Seelenruf/Geisterlegion/Armee der Toten (Upgradepool-v2 Phase 8):
-        // ghostMaxAdd erhoeht das Basislimit additiv -- eine Zahl aus
-        // state.player.cfg statt eines zweiten Deckel-Felds.
-        const ghostCap = (gcfg.maxActive ?? 3) + (pc.ghostMaxAdd || 0);
-        if (spawnChance > 0 && state.ghosts.length < ghostCap && state.rng() < spawnChance) {
-          state.ghosts.push(createGhost(state, tank.x, tank.y, tank.heading));
+        const necroKill = pc.necromancer && (killer === state.player || killer?.isGhost);
+        const canRevive = necroKill && !isBossCfg(tank.cfg) && !(tank.affixes && tank.affixes.length > 0);
+        if (canRevive) {
+          // Seelenruf/Geisterlegion/Armee der Toten (Upgradepool-v2 Phase 8):
+          // ghostMaxAdd erhoeht das Basislimit additiv -- eine Zahl aus
+          // state.player.cfg statt eines zweiten Deckel-Felds.
+          const ghostCap = (gcfg.maxActive ?? 3) + (pc.ghostMaxAdd || 0);
+          // "Rechenweg statt Obergrenze" (Auftrag Abschnitt 4a): reviveChance
+          // ist additiv OHNE Deckel -- ueber 100 % erzeugt der ganzzahlige
+          // Anteil sichere Zusatz-Untertanen (aktuell in der Praxis nie, da
+          // keine Karte den Wert vor Phase 6+ ueber 0,35 treibt, aber der
+          // Mechanismus selbst kennt keine Obergrenze).
+          const n = rollGhostSpawnCount(gcfg.reviveChance ?? 0, state.rng);
+          // Limit OHNE Verdraengung: am Deckel passiert einfach nichts fuer
+          // die restlichen Wuerfe (kein Verbrauch) -- dieselbe Regel wie bei
+          // der Geisterbombe (tank.js: spawnGhostBomb()).
+          for (let i = 0; i < n && state.ghosts.length < ghostCap; i++) {
+            state.ghosts.push(createGhost(state, tank.x, tank.y, tank.heading, tank.type));
+          }
         }
       }
     },

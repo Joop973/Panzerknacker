@@ -70,6 +70,20 @@ export const ROOM_TYPE_INFO = {
   rest: { name: 'Rastplatz', symbol: '🏕️', desc: 'Eine Verschnaufpause · ein Leben zurück oder ein Upgrade verbessern.' },
 };
 
+// Welche Gegnertypen sind zum jetzigen Zeitpunkt (Akt + akt-lokale
+// Raumnummer) ueberhaupt freigeschaltet -- "eingefuehrt in Akt X, bleibt
+// danach verfuegbar" (Grundsteinumbau Phase 6). Exportiert und von
+// buyEnemies() (Raum-Einkauf) UND der Geisterbombe (Nekromant-V2 Phase 3:
+// zufaelliger Typ aus dem Gegnerpool des aktuellen Akts, s. tank.js:
+// spawnGhostBomb()) gemeinsam genutzt, damit es nur EINE Freischaltungsregel
+// gibt.
+export function unlockedEnemyTypes(diff, actIndex, roomIndexInAct) {
+  return Object.keys(diff.danger).filter((ty) => {
+    const d = diff.danger[ty];
+    return actIndex > d.unlockAct || (actIndex === d.unlockAct && roomIndexInAct >= (d.unlockRoomInAct ?? 1));
+  });
+}
+
 // Kauft Gegner vom Gefahrenbudget (nur freigeschaltete Typen, max. 8).
 // `maxPerRoom` in difficulty.json deckelt einzelne Typen zusaetzlich
 // (Phase 4: hoechstens ein Prisma pro Raum).
@@ -80,10 +94,7 @@ export const ROOM_TYPE_INFO = {
 // Exportiert (wie upgradepool.js: weightedPick) fuer direkte
 // Mechanismus-Tests -- buyEnemies() ist eine reine Funktion ohne Run-Objekt.
 export function buyEnemies(diff, genRng, actIndex, roomIndexInAct, budget) {
-  const unlocked = Object.entries(diff.danger).filter(
-    ([, d]) =>
-      actIndex > d.unlockAct || (actIndex === d.unlockAct && roomIndexInAct >= (d.unlockRoomInAct ?? 1)),
-  );
+  const unlocked = unlockedEnemyTypes(diff, actIndex, roomIndexInAct).map((ty) => [ty, diff.danger[ty]]);
   const types = [];
   const taken = {};
   let rest = budget;
@@ -541,6 +552,10 @@ function buildCombatRoom(run, type, isFinal) {
       (type === 'elite' || type === 'cursed' ? diff.elite?.hpMult || 1 : 1) *
       (isFinal ? actCfg.bossHpMult ?? 1 : 1),
     hpSkipBosses: diff.hpScaling?.skipBosses !== false,
+    // Nekromant-V2 Phase 3: Gegnerpool des AKTUELLEN Akts (bis zur jetzigen
+    // Raumnummer freigeschaltet) fuer die Geisterbombe -- "ein zufaelliger
+    // Typ aus dem Gegnerpool des aktuellen Akts, damit sie mit skaliert".
+    actEnemyPool: unlockedEnemyTypes(diff, run.actIndex, run.roomIndex),
   });
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.

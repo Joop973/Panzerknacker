@@ -123,13 +123,18 @@
   "shop": {
     "cardChoices": 4
   },
-  "_comment_ghost": "Upgradepool-v2 Phase 6: Geistlimit laut Festgelegte-Entscheidungen-Tabelle auf 3 gesetzt (vorher 4, Rest des alten Systems), OHNE Verdraengung -- am Limit passiert nichts (kein Verbrauch, kein Wurf). spawnChance.necro gilt fuer einen Kill DURCH DEN SPIELER als Nekromant (cfg.necromancer), spawnChance.ghost fuer einen Kill DURCH EINEN GEIST (killer.isGhost) -- state.js: killTank(). Lebensdauer bleibt kein Timer (Phase 7 baut die feste Basiseinheit). commanderHpMult/commanderDamageMult/commanderShieldHealFraction/reviveHealFraction sind Phase-8-Vorschlaege (Signaturkarten Geisterkommandant/Phylakterium/Wiederkehr) -- Anhang B nennt dafuer keine Zahlen, noch nicht am echten Spielgefuehl geprueft. bombCooldownS (Nutzerwunsch): eigene Abklingzeit der Geisterbombe (tank.js: spawnGhostBomb), unabhaengig vom Geistlimit UND vom kill-ausgeloesten Spawnwuerfel -- letzterer bleibt ungedeckelt.",
+  "_comment_ghost": "Nekromant-V2 Phase 3 (Geisterpanzer-Basis): reviveChance ersetzt das alte, zweistufige spawnChance.necro/spawnChance.ghost (0,5/0,33, archiviert in ARCHIV.md) -- EIN einheitlicher Wert fuer JEDEN Kill auf der Nekromanten-Seite (Spieler ODER ein vorhandener Geist), additiv ohne Obergrenze (Auftrag Abschnitt 4a: ueber 100% erzeugt der ganzzahlige Anteil sichere Zusatz-Untertanen, der Rest bleibt Chance) -- keine Karte treibt ihn vor Phase 6+ ueber 0,35. baseStatPct: Anteil der TYP-Basiswerte (maxHp/damage), die ein Untertan vom geerbten Typ erbt (Rest der Werte -- Rolle/Waffe/Panzerung/Tempo -- bleibt unveraendert, 'Typ wird geerbt'). lifetimeS: Grundlebenszeit, sichtbar als schrumpfender Ring, Ablauf ist ein ANDERER Todes-Ausloeser als Schaden (Phase 5 baut die Unterscheidung aus). rangePct: Feuer-SCHWELLE (nicht Bewegungsgrenze) relativ zu balance.bullet.maxDistance -- war bis Phase 2 (Upgradepool-v2) ein Feld des jetzt archivierten ghost_tank-Typs, jetzt ein einzelner geteilter Wert (gilt fuer jeden geerbten Typ gleich). meterPx: reine Dokumentations-Umrechnung fuer Kartentexte (1 Zelle = 32px), von keiner Formel gelesen. strengthWeights: Champion-Formel (Abschnitt 3) -- aktuelleLP*hp + Schaden*damage, bei Gleichstand gewinnt der AELTERE Untertan (Iterationsreihenfolge, kein Zufall). Geistlimit bleibt 3 OHNE Verdraengung (Upgradepool-v2 Phase 6). commanderHpMult/commanderDamageMult/commanderShieldHealFraction sind Reste des ALTEN, kartengebundenen Kommandanten-Mechanismus (Upgradepool-v2 Phase 8) -- aktuell unerreichbar (kein lebendiges Upgrade setzt cfg.ghostCommander mehr), bleiben stehen als Wiederanschlusspunkt fuer Phase 8 dieses Auftrags (Alpha und Verschmelzung), NICHT zu verwechseln mit dem NEUEN, immer aktiven isChampion (dynamisch aus strengthWeights berechnet). bombCooldownS (Nutzerwunsch): eigene Abklingzeit der Geisterbombe, unabhaengig vom Geistlimit UND vom kill-ausgeloesten Spawnwuerfel.",
   "ghost": {
     "maxActive": 3,
     "bombCooldownS": 10,
-    "spawnChance": {
-      "necro": 0.5,
-      "ghost": 0.33
+    "reviveChance": 0.35,
+    "baseStatPct": 0.5,
+    "lifetimeS": 12,
+    "rangePct": 0.65,
+    "meterPx": 32,
+    "strengthWeights": {
+      "hp": 1,
+      "damage": 5
     },
     "commanderHpMult": 2.5,
     "commanderDamageMult": 2,
