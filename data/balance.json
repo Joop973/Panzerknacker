@@ -139,7 +139,8 @@
     "commanderHpMult": 2.5,
     "commanderDamageMult": 2,
     "commanderShieldHealFraction": 0.5,
-    "graveyardRadiusPx": 40
+    "graveyardRadiusPx": 40,
+    "crownHeirWindowS": 10
   },
   "_comment_aggro": "Upgradepool-v2 Phase 5: Zielauflösung der Gegner-KI (ai.js: resolveTarget/updateTargeting). Bewertung ueber eine EFFEKTIVE DISTANZ (kleiner = attraktiver), keine echte Aggro-Tabelle: Naehe ist der Hauptfaktor. ghostThreatMult <1 vergroessert die effektive Distanz zu Geistern (bei gleicher echter Entfernung weniger attraktiv als der Spieler). damageThreatPx/damageThreatDecayS: zugefuegter Schaden zieht zusaetzlich an (senkt die effektive Distanz) und klingt linear ueber die Decay-Zeit ab. switchHysteresisPct: ein neues Ziel muss um diesen Anteil besser sein, sonst bleibt der Gegner beim alten (verhindert Zappeln). noTargetFallbackS: kein freier Blick aufs aktuelle Ziel fuer so lange -> erzwungener Rueckfall auf den Spieler.",
   "aggro": {

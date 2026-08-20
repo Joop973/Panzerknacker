@@ -8613,6 +8613,605 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 60. Nekromant-V2 Phase 8: Alpha und Verschmelzung (25 Karten) --------
+// ghost_061 bis ghost_085 -- der aufwendigste Teil (Auftrag). Zwei neue
+// Bausteine: ein zentraler Erzeugungs-Hook pushGhost() (wertet "Einziger
+// Thron"/ghost_071 an ALLEN sechs Erzeugungsstellen gleich aus, statt die
+// Verschmelzung sechsmal zu duplizieren) und die Champion-Bestimmung, die
+// jetzt an den ANFANG von updateGhosts() gewandert ist (Kronen-/Anker-/
+// Aura-Karten muessen VOR dem restlichen Tick wissen, wer Champion ist).
+// "Getrennte Buchfuehrung dreier Bonusarten": Basiswerte (baseMaxHp/-Damage/
+// -FireCooldown, Phase 3, unveraendert), Kronenboni (necroCrown*, bewusst
+// STATELESS -- live gegen isChampion ausgewertet, jeder neue Champion liest
+// sie automatisch selbst aus demselben Spieler-cfg), Fusionsboni (die
+// fusion*-Felder auf jedem Geist -- die EINZIGEN, die ghost_080 tatsaechlich
+// an einen Nachfolger uebertragen muss, s. (m)).
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const {
+    createGhost,
+    killGhost,
+    updateGhosts,
+    occupiedGhostSlots,
+    recomputeLegionCache,
+    pushGhost,
+  } = await import('../src/game/ghost.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+
+  const legionRoom = (playerUpgrades = {}, types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades,
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    st.walls = [];
+    st.isSolid = () => false;
+    st.blocksSight = () => false;
+    return st;
+  };
+  const mkEnemy = (x = 400, y = 400, opts = {}) => ({
+    // role: 'guardian' (bewegt sich nie, Muster aus frueheren Testhelfern):
+    // haelt updateEnemy()/DRIVES[role] am Leben, ohne aggression/preferredRange
+    // fuer eine echte Fahrfunktion mitbringen zu muessen.
+    cfg: { maxHp: 100, damage: 10, radius: 14, role: 'guardian', accuracy: 0, ...opts.cfg },
+    hp: opts.hp ?? 100,
+    alive: true,
+    type: 't_pink',
+    x,
+    y,
+    heading: 0,
+    turret: 0,
+    affixes: opts.affixes || [],
+    // updateTargeting()/updateEnemy() (ai.js) lesen tank.ai fuer JEDEN
+    // Nicht-Spieler-Panzer in state.tanks -- ohne dieses Feld crasht ein
+    // stepState()-Aufruf, sobald ein synthetischer Testgegner in state.tanks
+    // landet (echte Panzer bekommen es von createTank()).
+    ai: { threatTimer: 0, targetTimer: 0, target: null },
+  });
+  const push = (st, g) => {
+    st.ghosts.push(g);
+    recomputeLegionCache(st);
+    return g;
+  };
+  // Positioniert g bereits ausgerichtet auf target (Kegel/Cooldown erfuellt),
+  // ruft EINEN updateGhosts()-Tick und liefert die dabei von g abgefeuerten
+  // Geschosse -- gemeinsamer Helfer fuer alle Feuer-bezogenen Kartentests.
+  const fireGhost = (st, g, target) => {
+    st.tanks = [st.player, target];
+    const ang = Math.atan2(target.y - g.y, target.x - g.x);
+    g.turret = ang;
+    g.heading = ang;
+    g.cooldown = 0;
+    const before = st.bullets.length;
+    updateGhosts(st, 0.0001);
+    return st.bullets.slice(before).filter((b) => b.owner === g);
+  };
+  // Champion-Feststellung ohne nennenswerte Seiteneffekte (Bewegung/Feuern
+  // laufen mit dt=0.0001 praktisch nicht ab, die Kroenungslogik selbst ist
+  // dt-unabhaengig).
+  const settleChampion = (st) => updateGhosts(st, 0.0001);
+
+  // (a) Struktur: 25 Karten, alle mit echtem core (kein "_todo: effect"), NaN-Check.
+  {
+    const ids = [];
+    for (let i = 61; i <= 85; i++) ids.push('ghost_' + String(i).padStart(3, '0'));
+    check(ids.every((id) => necroData.upgrades[id]), 'Phase 8: nicht alle 25 Karten ghost_061..ghost_085 existieren');
+    for (const id of ids) {
+      const def = necroData.upgrades[id];
+      check(def.core && def.core._todo !== 'effect', `Phase 8: ${id} hat noch keinen core-Wert`);
+    }
+    const basis = applyUpgrades(resolveCfg(tanksData, 'c_necro'), {}, necroData, 'mine', null);
+    for (const id of ids) {
+      const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { [id]: 1 }, necroData, 'mine', null);
+      for (const k of Object.keys(cfg)) {
+        const bad = (typeof cfg[k] === 'number' && Number.isNaN(cfg[k])) || (cfg[k] === undefined && basis[k] !== undefined);
+        check(!bad, `Phase 8: ${id} macht cfg.${k} zu NaN/undefined`);
+      }
+    }
+  }
+
+  // (b) Testschritt 1: ghost_071 "Einziger Thron" -- beim zweiten Untertan
+  // verschmilzt der SCHWAECHERE sofort mit dem staerkeren (Champion).
+  {
+    const st = legionRoom({ ghost_071: 1 });
+    const strong = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    strong.hp = 999;
+    strong.cfg.maxHp = 999;
+    pushGhost(st, createGhost(st, 500, 500, 0, 't_pink')); // klar schwaecher
+    check(st.ghosts.length === 1, `Phase 8: ghost_071 laesst trotzdem 2 Untertanen bestehen (${st.ghosts.length})`);
+    check(st.ghosts[0] === strong, 'Phase 8: der schwaechere haette in den staerkeren verschmelzen muessen, nicht umgekehrt');
+    check(strong.fusionCount === 1, `Phase 8: fusionCount nach einer Verschmelzung nicht 1 (${strong.fusionCount})`);
+  }
+
+  // (c) Testschritt 2: drei Verschmelzungen -- der Champion ist sichtbar
+  // staerker, der Zaehler stimmt.
+  {
+    const st = legionRoom({ ghost_071: 1 });
+    const champ = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const baseDmg = champ.cfg.damage;
+    for (let i = 0; i < 3; i++) pushGhost(st, createGhost(st, 100 + i, 100 + i, 0, 't_pink'));
+    check(champ.fusionCount === 3, `Phase 8: Verschmelzungs-Zaehler stimmt nicht (${champ.fusionCount})`);
+    check(champ.cfg.damage > baseDmg, `Phase 8: Champion nicht sichtbar staerker nach 3 Verschmelzungen (${baseDmg} -> ${champ.cfg.damage})`);
+    check(st.ghosts.length === 1, `Phase 8: nach 3 Verschmelzungen sollte nur der Champion uebrig sein (${st.ghosts.length})`);
+  }
+
+  // (d) Testschritt 3: ghost_083 "Ewiger Thron" OHNE ghost_071 -- wirkt
+  // trotzdem (kein requires zwischen den beiden Karten).
+  {
+    const st = legionRoom({ ghost_083: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    check(g.isChampion, 'Phase 8: Testaufbau -- einziger Untertan sollte Champion sein');
+    const before = g.lifetime;
+    updateGhosts(st, g.lifetimeMax + 10); // wuerde ohne die Karte laengst ablaufen
+    check(st.ghosts.includes(g) && g.alive, `Phase 8: ghost_083 verhindert den Lebenszeit-Ablauf des Champions nicht (lifetime ${g.lifetime})`);
+    check(g.lifetime === before, `Phase 8: ghost_083 senkt die Lebenszeit trotzdem (${before} -> ${g.lifetime})`);
+  }
+
+  // (e) Testschritt 4: ghost_085 "Seelenkoloss" ERSETZT die Uebertragung von
+  // Einziger Thron/Seelenauslese, statt sich zu addieren.
+  {
+    const st = legionRoom({ ghost_071: 1, ghost_072: 1, ghost_085: 1 });
+    const champ = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    pushGhost(st, createGhost(st, 100, 100, 0, 't_pink'));
+    check(
+      Math.abs(champ.fusionHpFrac - 0.5) < 1e-9,
+      `Phase 8: ghost_085 ersetzt den Uebertragungswert nicht auf 50% (${champ.fusionHpFrac})`,
+    );
+    check(champ.fusionHpFrac < 0.3 + 0.08 + 0.5 - 1e-9, `Phase 8: ghost_085 addiert sich zu 071/072 statt zu ersetzen (${champ.fusionHpFrac})`);
+  }
+
+  // (f) Testschritt 5: Champion stirbt mit ghost_080 "Kronenerbe" -- der
+  // Nachfolger erbt anteilig (60%) die bis dahin angesammelten Fusionsboni.
+  {
+    const st = legionRoom({ ghost_071: 1, ghost_080: 1 });
+    const champ = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    pushGhost(st, createGhost(st, 50, 50, 0, 't_pink'));
+    pushGhost(st, createGhost(st, 60, 60, 0, 't_pink'));
+    settleChampion(st);
+    check(champ.isChampion, 'Phase 8: Testaufbau -- Champion nicht gesetzt');
+    const hpFracBefore = champ.fusionHpFrac;
+    check(hpFracBefore > 0, 'Phase 8: Testaufbau -- keine Fusionsboni vorhanden');
+    killGhost(st, champ, 'damage');
+    check(!!st.necroCrownHeir, 'Phase 8: ghost_080 hinterlaesst kein Erbe-Fenster beim Champion-Tod');
+    const successor = createGhost(st, 10, 10, 0, 't_pink');
+    const expected = hpFracBefore * 0.6;
+    check(
+      Math.abs(successor.fusionHpFrac - expected) < 1e-6,
+      `Phase 8: der Nachfolger erbt nicht 60% der Fusionsboni (${successor.fusionHpFrac} statt ${expected})`,
+    );
+  }
+  // Gegenprobe fuer (f): necroCrownHeirPct-Applier stillgelegt -> kein Erbe.
+  {
+    const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_080: 1 }, necroData, 'mine', null);
+    check(cfg.necroCrownHeirPct > 0, 'Phase 8 Gegenprobe: necroCrownHeirPct wird nicht gesetzt (Applier fehlt)');
+  }
+
+  // (g) ghost_061 "Erwaehlter Geist": PERMANENTE Kroenungsboni (+Schaden,
+  // +maxHp), nur EINMAL je Geist-Instanz -- ein Titelwechsel (Krone verloren,
+  // spaeter zurueckerhalten) darf NICHT ein zweites Mal draufaddieren.
+  // Testfallstrick, per Gegenprobe gefunden: mit nur EINEM Untertan feuert
+  // die Kroenungsflanke (becameChampion) sowieso nur EIN einziges Mal,
+  // unabhaengig vom crownBonusesApplied-Schutz -- ein zweiter Untertan, der
+  // die Krone zwischenzeitlich UEBERNIMMT, ist zwingend noetig, um den
+  // Schutz wirklich zu pruefen.
+  {
+    const st = legionRoom({ ghost_061: 1 });
+    const g1 = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const g2 = push(st, createGhost(st, 50, 50, 0, 't_pink'));
+    const baseDmg = g1.cfg.damage;
+    const baseMax = g1.cfg.maxHp;
+    settleChampion(st); // g1 zuerst erzeugt -> gewinnt bei Gleichstand
+    check(g1.isChampion, 'Phase 8: Testaufbau -- g1 ist nicht Champion');
+    check(g1.cfg.damage > baseDmg, `Phase 8: ghost_061 erhoeht den Champion-Schaden nicht (${baseDmg} -> ${g1.cfg.damage})`);
+    check(g1.cfg.maxHp > baseMax, `Phase 8: ghost_061 erhoeht das Champion-Maximalleben nicht (${baseMax} -> ${g1.cfg.maxHp})`);
+    const dmgAfterFirst = g1.cfg.damage;
+    g2.hp = 99999;
+    g2.cfg.maxHp = 99999; // g2 uebernimmt die Krone
+    settleChampion(st);
+    check(g2.isChampion && !g1.isChampion, 'Phase 8: Testaufbau -- g2 haette die Krone uebernehmen sollen');
+    g2.hp = 1;
+    g2.cfg.maxHp = 1; // g1 bekommt die Krone zurueck
+    settleChampion(st);
+    check(g1.isChampion, 'Phase 8: Testaufbau -- g1 haette die Krone zurueckerhalten sollen');
+    check(g1.cfg.damage === dmgAfterFirst, `Phase 8: ghost_061 wird bei erneuter Kroenung ein zweites Mal angewendet (${dmgAfterFirst} -> ${g1.cfg.damage})`);
+  }
+
+  // (h) ghost_062 "Einsamer Waechter": +Schaden und +Feuerrate, SOLANGE genau
+  // 1 Untertan aktiv ist -- verschwindet, sobald ein zweiter dazukommt.
+  {
+    const st = legionRoom({ ghost_062: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const target = mkEnemy(60, 0);
+    const soloShots = fireGhost(st, g, target);
+    check(soloShots.length === 1, `Phase 8: Testaufbau -- kein Schuss ausgeloest (${soloShots.length})`);
+    const soloDmg = soloShots[0].damage;
+
+    push(st, createGhost(st, 200, 200, 0, 't_pink')); // 2. Untertan -> nicht mehr allein
+    g.cooldown = 0;
+    const groupShots = fireGhost(st, g, target);
+    check(groupShots.length === 1, 'Phase 8: Testaufbau -- kein zweiter Schuss ausgeloest');
+    check(soloDmg > groupShots[0].damage, `Phase 8: ghost_062 wirkt nicht nur solo (solo ${soloDmg} vs zu zweit ${groupShots[0].damage})`);
+  }
+
+  // (i) ghost_063 "Kronenpanzerung": +8 Punkte Schadensresistenz NUR fuer
+  // den Champion.
+  {
+    const st = legionRoom({ ghost_063: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const before = g.cfg.resist || 0;
+    settleChampion(st);
+    check((g.cfg.resist || 0) > before, `Phase 8: ghost_063 erhoeht die Champion-Resistenz nicht (${before} -> ${g.cfg.resist})`);
+  }
+
+  // (j) ghost_064 "Jagdinstinkt": +Schaden NUR gegen Elite-/Boss-Ziele, NUR
+  // vom Champion.
+  {
+    const st = legionRoom({ ghost_064: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    const normal = mkEnemy(60, 0);
+    const elite = mkEnemy(60, 0, { affixes: [{ id: 'twinshot' }] });
+    const dmgNormal = fireGhost(st, g, normal)[0].damage;
+    g.cooldown = 0;
+    const dmgElite = fireGhost(st, g, elite)[0].damage;
+    check(dmgElite > dmgNormal, `Phase 8: ghost_064 erhoeht den Schaden gegen Elite-Ziele nicht (${dmgNormal} vs ${dmgElite})`);
+  }
+
+  // (k) ghost_065 "Seelenheilung": der Champion heilt sich, wenn ein ANDERER
+  // Untertan stirbt -- auf allen drei Wegen (Schaden, Ablauf, Verschmelzung).
+  {
+    // Champion-Bestimmung MUSS VOR dem kuenstlichen hp-Absenken laufen --
+    // sonst waere der absichtlich geschwaechte "Champion" per Definition der
+    // SCHWAECHERE und wuerde die Krone nie tragen (Testfallstrick).
+    const stDamage = legionRoom({ ghost_065: 1 });
+    const champA = push(stDamage, createGhost(stDamage, 0, 0, 0, 't_pink'));
+    const ally = push(stDamage, createGhost(stDamage, 50, 50, 0, 't_pink'));
+    settleChampion(stDamage); // champA zuerst erzeugt -> gewinnt bei Gleichstand
+    check(champA.isChampion, 'Phase 8: Testaufbau -- champA ist nicht Champion');
+    champA.hp = 1;
+    ally.hp = 0;
+    killGhost(stDamage, ally, 'damage');
+    check(champA.hp > 1, `Phase 8: ghost_065 heilt den Champion beim Schadenstod eines Verbuendeten nicht (hp=${champA.hp})`);
+
+    const stExpire = legionRoom({ ghost_065: 1 });
+    const champB = push(stExpire, createGhost(stExpire, 0, 0, 0, 't_pink'));
+    const allyB = push(stExpire, createGhost(stExpire, 50, 50, 0, 't_pink'));
+    settleChampion(stExpire);
+    check(champB.isChampion, 'Phase 8: Testaufbau -- champB ist nicht Champion');
+    champB.hp = 1;
+    killGhost(stExpire, allyB, 'expire');
+    check(champB.hp > 1, `Phase 8: ghost_065 heilt beim Ablauf-Tod nicht (hp=${champB.hp})`);
+
+    // Verschmelzung: champC muss trotz niedrigen hp der STAERKERE bleiben,
+    // sonst wuerde er selbst absorbiert -- der neue Untertan bekommt dafuer
+    // ein noch niedrigeres hp, bevor er gepusht wird.
+    const stFusion = legionRoom({ ghost_065: 1, ghost_071: 1 });
+    const champC = push(stFusion, createGhost(stFusion, 0, 0, 0, 't_pink'));
+    settleChampion(stFusion);
+    check(champC.isChampion, 'Phase 8: Testaufbau -- champC ist nicht Champion');
+    champC.hp = 1;
+    const weakerAlly = createGhost(stFusion, 40, 40, 0, 't_pink');
+    weakerAlly.hp = 0.1;
+    pushGhost(stFusion, weakerAlly); // verschmilzt in champC
+    check(champC.hp > 1, `Phase 8: ghost_065 heilt bei Verschmelzung nicht (hp=${champC.hp})`);
+  }
+
+  // (l) ghost_066 "Vorrang des Staerkeren": der Champion zielt auf den
+  // Gegner mit dem hoechsten MAXIMALEN Leben, nicht den naechsten.
+  {
+    const st = legionRoom({ ghost_066: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    const near = mkEnemy(30, 0, { cfg: { maxHp: 50 } });
+    const farStrong = mkEnemy(-500, 0, { cfg: { maxHp: 500 } });
+    st.tanks = [st.player, near, farStrong];
+    const ang0 = g.turret;
+    updateGhosts(st, 0.5); // genug Zeit, den Turm auf das gewaehlte Ziel zu drehen
+    const angToNear = Math.atan2(near.y - g.y, near.x - g.x);
+    const angToStrong = Math.atan2(farStrong.y - g.y, farStrong.x - g.x);
+    const devNear = Math.abs(((g.turret - angToNear + Math.PI) % (2 * Math.PI)) - Math.PI);
+    const devStrong = Math.abs(((g.turret - angToStrong + Math.PI) % (2 * Math.PI)) - Math.PI);
+    check(devStrong < devNear, `Phase 8: ghost_066 zielt nicht auf den Gegner mit dem hoechsten maximalen Leben (Abw. nah=${devNear.toFixed(2)}, stark=${devStrong.toFixed(2)}, Start ${ang0.toFixed(2)})`);
+  }
+
+  // (m) ghost_067 "Kronenschild": ein Untertan erhaelt beim Kroenungs-
+  // Uebergang einen Schild von 15% seines maximalen Lebens.
+  {
+    const st = legionRoom({ ghost_067: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    g.shield = 0;
+    settleChampion(st);
+    check(g.shield > 0, `Phase 8: ghost_067 gewaehrt keinen Kronenschild (${g.shield})`);
+  }
+
+  // (n) ghost_068 "Langer Anspruch": Gesamtdauer UND Restlebenszeit steigen
+  // um 4 Sekunden bei der Kroenung.
+  {
+    const st = legionRoom({ ghost_068: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const maxBefore = g.lifetimeMax;
+    const curBefore = g.lifetime;
+    settleChampion(st);
+    check(g.lifetimeMax > maxBefore, `Phase 8: ghost_068 erhoeht die Gesamtdauer nicht (${maxBefore} -> ${g.lifetimeMax})`);
+    check(g.lifetime > curBefore, `Phase 8: ghost_068 erhoeht die Restlebenszeit nicht (${curBefore} -> ${g.lifetime})`);
+  }
+
+  // (o) ghost_069 "Kritische Krone": zusaetzliche Krit-Chance/-Schaden NUR
+  // fuer den Champion -- gestellter RNG-Wurf faengt genau den Bereich, den
+  // nur der Bonus erreicht.
+  {
+    const st = legionRoom({ ghost_069: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    const baseChance = g.cfg.critChance || 0;
+    const cfg = st.player.cfg;
+    check(cfg.necroCrownCritChanceAdd > 0, 'Phase 8: Testaufbau -- necroCrownCritChanceAdd fehlt');
+    st.rng = () => baseChance + cfg.necroCrownCritChanceAdd / 2; // nur mit dem Bonus < Chance
+    const target = mkEnemy(60, 0);
+    const shot = fireGhost(st, g, target)[0];
+    check(shot.crit, 'Phase 8: ghost_069 erhoeht die Krit-Chance des Champions nicht spuerbar');
+  }
+
+  // (p) ghost_070 "Herrscheraura": Gegner im Radius verursachen weniger
+  // Schaden UND nehmen von Untertanen mehr Schaden.
+  {
+    const st = legionRoom({ ghost_070: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    const inRange = mkEnemy(20, 0);
+    const veryFarAway = mkEnemy(2000, 0);
+    const outOfAura = mkEnemy(500, 0); // noch in Feuerreichweite, aber ausserhalb der 80px-Aura
+    st.tanks = [st.player, inRange, veryFarAway];
+    updateGhosts(st, 0.0001); // markiert necroAuraWeakened neu
+    check(inRange.necroAuraWeakened, 'Phase 8: ghost_070 markiert einen nahen Gegner nicht als geschwaecht');
+    check(!veryFarAway.necroAuraWeakened, 'Phase 8: ghost_070 markiert einen fernen Gegner faelschlich als geschwaecht');
+
+    // Schaden GEGEN einen markierten Gegner ist hoeher -- der Multiplikator
+    // wirkt erst in der TREFFERSCHLEIFE (state.js), nicht am Muendungspunkt,
+    // deshalb eine echte Kugel per stepState() treffen lassen statt nur die
+    // rohe b.damage der Erzeugung zu lesen. necroAuraWeakened selbst kommt
+    // vom VORHERIGEN updateGhosts()-Tick -- erst markieren, dann schiessen.
+    st.tanks = [st.player, inRange];
+    updateGhosts(st, 0.0001);
+    inRange.hp = 1000;
+    st.bullets.length = 0;
+    st.bullets.push(createBullet(inRange.x, inRange.y, 0, { owner: g, damage: 100, speed: 0, radius: 50 }));
+    stepState(st, CMD, 1 / 60);
+    const dmgAura = 1000 - inRange.hp;
+
+    st.tanks = [st.player, outOfAura];
+    updateGhosts(st, 0.0001);
+    outOfAura.hp = 1000;
+    st.bullets.length = 0;
+    st.bullets.push(createBullet(outOfAura.x, outOfAura.y, 0, { owner: g, damage: 100, speed: 0, radius: 50 }));
+    stepState(st, CMD, 1 / 60);
+    const dmgFree = 1000 - outOfAura.hp;
+    check(dmgAura > dmgFree, `Phase 8: ghost_070 erhoeht den Schaden gegen aura-geschwaechte Gegner nicht (${dmgFree} vs ${dmgAura})`);
+
+    // Zweite Richtung: eine Kugel eines aura-geschwaechten GEGNERS trifft den
+    // SPIELER schwaecher als dieselbe Kugel von einem nicht markierten Gegner.
+    st.tanks = [st.player, inRange];
+    updateGhosts(st, 0.0001); // inRange erneut markieren
+    st.player.hp = 1000;
+    st.player.shield = 0;
+    st.bullets.length = 0;
+    st.bullets.push(createBullet(st.player.x, st.player.y, 0, { owner: inRange, damage: 100, speed: 0, radius: 50 }));
+    stepState(st, CMD, 1 / 60);
+    const dmgTakenWeakened = 1000 - st.player.hp;
+
+    st.tanks = [st.player, outOfAura];
+    updateGhosts(st, 0.0001); // outOfAura bleibt unmarkiert
+    st.player.hp = 1000;
+    st.player.shield = 0;
+    st.bullets.length = 0;
+    st.bullets.push(createBullet(st.player.x, st.player.y, 0, { owner: outOfAura, damage: 100, speed: 0, radius: 50 }));
+    stepState(st, CMD, 1 / 60);
+    const dmgTakenNormal = 1000 - st.player.hp;
+    check(
+      dmgTakenWeakened < dmgTakenNormal,
+      `Phase 8: ghost_070 senkt den vom Spieler erlittenen Schaden eines geschwaechten Gegners nicht (${dmgTakenNormal} vs ${dmgTakenWeakened})`,
+    );
+  }
+
+  // (q) ghost_072 "Seelenauslese" (requires ghost_071): zusaetzliche
+  // Uebertragung JE Verschmelzung, additiv zur Grundrate von 071.
+  {
+    const stBase = legionRoom({ ghost_071: 1 });
+    const champBase = push(stBase, createGhost(stBase, 0, 0, 0, 't_pink'));
+    pushGhost(stBase, createGhost(stBase, 100, 100, 0, 't_pink'));
+
+    const stBonus = legionRoom({ ghost_071: 1, ghost_072: 1 });
+    const champBonus = push(stBonus, createGhost(stBonus, 0, 0, 0, 't_pink'));
+    pushGhost(stBonus, createGhost(stBonus, 100, 100, 0, 't_pink'));
+    check(
+      champBonus.fusionHpFrac > champBase.fusionHpFrac,
+      `Phase 8: ghost_072 erhoeht den Uebertragungsanteil nicht (${champBase.fusionHpFrac} vs ${champBonus.fusionHpFrac})`,
+    );
+  }
+
+  // (r) ghost_073 "Endloser Anspruch" (requires ghost_071): jede
+  // Verschmelzung fuellt die Restlebenszeit auf UND erhoeht die Gesamtdauer
+  // um weitere 6 Sekunden.
+  {
+    const st = legionRoom({ ghost_071: 1, ghost_073: 1 });
+    const champ = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    champ.lifetime = 1; // stark abgelaufen
+    const maxBefore = champ.lifetimeMax;
+    pushGhost(st, createGhost(st, 100, 100, 0, 't_pink'));
+    check(champ.lifetime > 1, `Phase 8: ghost_073 fuellt die Restlebenszeit bei Verschmelzung nicht auf (${champ.lifetime})`);
+    check(champ.lifetimeMax > maxBefore, `Phase 8: ghost_073 erhoeht die Gesamtdauer nicht (${maxBefore} -> ${champ.lifetimeMax})`);
+  }
+
+  // (s) ghost_074 "Verdichtete Geschosse": +Projektilgroesse/-reichweite fuer
+  // den Champion; MIT Einziger Thron zusaetzlich +Groesse JE Verschmelzung.
+  {
+    const st = legionRoom({ ghost_074: 1, ghost_071: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    const target = mkEnemy(60, 0);
+    const radiusBefore = fireGhost(st, g, target)[0].radius;
+    pushGhost(st, createGhost(st, 100, 100, 0, 't_pink')); // 1 Verschmelzung -> mehr Groesse
+    g.cooldown = 0;
+    const radiusAfter = fireGhost(st, g, target)[0].radius;
+    check(radiusAfter > radiusBefore, `Phase 8: ghost_074 erhoeht die Projektilgroesse mit Einziger Thron nicht je Verschmelzung (${radiusBefore} -> ${radiusAfter})`);
+  }
+
+  // (t) ghost_075 "Raubseele": der Champion heilt den Hauptpanzer um einen
+  // Anteil des verursachten Schadens; Ueberlauf ueber volles Leben wird zu
+  // Schild, gedeckelt.
+  {
+    const st = legionRoom({ ghost_075: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    st.player.hp = st.player.cfg.maxHp; // voll -> naechste Heilung geht in den Schild
+    st.player.shield = 0;
+    const target = mkEnemy(60, 0);
+    fireGhost(st, g, target);
+    st.tanks = [st.player, target];
+    stepState(st, CMD, 0.3); // laesst die abgefeuerte Kugel das Ziel treffen
+    check((st.player.shield || 0) > 0, `Phase 8: ghost_075 laesst ueberschuessige Heilung nicht in Schild uebergehen (${st.player.shield})`);
+  }
+
+  // (u) ghost_076 "Erbgeschuetz": jeder DRITTE Schuss des Champions feuert
+  // ein ZUSAETZLICHES Geschoss mit reduziertem Schaden.
+  {
+    const st = legionRoom({ ghost_076: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    const target = mkEnemy(60, 0);
+    let extraSeen = false;
+    for (let i = 0; i < 3; i++) {
+      const shots = fireGhost(st, g, target);
+      if (shots.length > 1) extraSeen = true;
+      g.cooldown = 0;
+    }
+    check(extraSeen, `Phase 8: ghost_076 feuert nach 3 Schuessen kein Zusatzgeschoss (shotCount=${g.shotCount})`);
+  }
+
+  // (v) ghost_077 "Seelenverdichtung": +1 Durchschlag fuer den Champion;
+  // MIT Einziger Thron zusaetzlich +Schaden je 3 Verschmelzungen.
+  {
+    const st = legionRoom({ ghost_077: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    const target = mkEnemy(60, 0);
+    const shot = fireGhost(st, g, target)[0];
+    check(shot.pierce >= 1, `Phase 8: ghost_077 gewaehrt dem Champion keinen Durchschlag (${shot.pierce})`);
+
+    const stStack = legionRoom({ ghost_077: 1, ghost_071: 1 });
+    const champStack = push(stStack, createGhost(stStack, 0, 0, 0, 't_pink'));
+    settleChampion(stStack);
+    for (let i = 0; i < 3; i++) pushGhost(stStack, createGhost(stStack, 100 + i, 100 + i, 0, 't_pink'));
+    const targetStack = mkEnemy(60, 0);
+    champStack.cooldown = 0;
+    const dmgStacked = fireGhost(stStack, champStack, targetStack)[0].damage;
+    const stFlat = legionRoom({ ghost_077: 1, ghost_071: 1 });
+    const champFlat = push(stFlat, createGhost(stFlat, 0, 0, 0, 't_pink'));
+    settleChampion(stFlat);
+    const dmgFlat = fireGhost(stFlat, champFlat, mkEnemy(60, 0))[0].damage;
+    check(dmgStacked > dmgFlat, `Phase 8: ghost_077 erhoeht den Schaden nach 3 Verschmelzungen nicht (${dmgFlat} vs ${dmgStacked})`);
+  }
+
+  // (w) ghost_078 "Alpha-Schuss": jeder FUENFTE Schuss macht +100% Schaden
+  // und erhaelt +1 Durchschlag.
+  {
+    const st = legionRoom({ ghost_078: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    const target = mkEnemy(60, 0);
+    let normalDmg = null;
+    let alphaShot = null;
+    for (let i = 0; i < 5; i++) {
+      const shots = fireGhost(st, g, target);
+      if (i === 0) normalDmg = shots[0].damage;
+      if (i === 4) alphaShot = shots[0];
+      g.cooldown = 0;
+    }
+    check(alphaShot.damage > normalDmg * 1.5, `Phase 8: ghost_078 verdoppelt den Schaden des 5. Schusses nicht (${normalDmg} -> ${alphaShot.damage})`);
+    check(alphaShot.pierce >= 1, `Phase 8: ghost_078 gewaehrt dem 5. Schuss keinen Durchschlag (${alphaShot.pierce})`);
+  }
+
+  // (x) ghost_079 "Unantastbarer": einmal pro Raum uebersteht der Champion
+  // einen toedlichen Treffer bei 1 Leben + kurzer Unverwundbarkeit.
+  {
+    const st = legionRoom({ ghost_079: 1 });
+    const g = push(st, createGhost(st, 300, 300, 0, 't_pink'));
+    settleChampion(st);
+    check(g.isChampion, 'Phase 8: Testaufbau -- kein Champion');
+    g.hp = 5;
+    st.tanks = [st.player];
+    st.bullets.push(createBullet(g.x, g.y, 0, { owner: mkEnemy(0, 0), damage: 999, speed: 0, radius: 50 }));
+    stepState(st, CMD, 1 / 60);
+    check(g.alive && g.hp === 1, `Phase 8: ghost_079 laesst den Champion nicht bei 1 Leben ueberleben (alive=${g.alive}, hp=${g.hp})`);
+    check(g.invulnUntil > st.time, 'Phase 8: ghost_079 gewaehrt keine Unverwundbarkeit nach der Rettung');
+    // Gegenprobe des "einmal pro Raum": ein ZWEITER toedlicher Treffer nach
+    // Ablauf der Unverwundbarkeit toetet ihn wirklich.
+    g.invulnUntil = 0;
+    g.hp = 5;
+    st.bullets.push(createBullet(g.x, g.y, 0, { owner: mkEnemy(0, 0), damage: 999, speed: 0, radius: 50 }));
+    stepState(st, CMD, 1 / 60);
+    check(!g.alive, 'Phase 8: ghost_079 rettet den Champion ein ZWEITES Mal im selben Raum (sollte nur einmal wirken)');
+  }
+
+  // (y) ghost_081 "Seelenmonolith": verankert sich nach necroCrownAnchorAfterS
+  // Sekunden Stillstand -- +Schaden/+Reichweite/+Resistenz, bis er sich
+  // wieder bewegt.
+  {
+    const st = legionRoom({ ghost_081: 1 });
+    const g = push(st, createGhost(st, 300, 300, 0, 't_pink'));
+    st.tanks = [st.player]; // kein Ziel -> Untertan bleibt stehen
+    settleChampion(st);
+    const anchorAfterS = st.player.cfg.necroCrownAnchorAfterS;
+    check(anchorAfterS > 0, 'Phase 8: Testaufbau -- necroCrownAnchorAfterS fehlt');
+    updateGhosts(st, anchorAfterS + 0.5);
+    check(g.anchored, `Phase 8: ghost_081 verankert den Champion nach Stillstand nicht (anchorTimer=${g.anchorTimer})`);
+  }
+
+  // (z) ghost_082 "Kronjaeger": hebt die Exekutionsschwelle fuer vom
+  // Champion getroffene Gegner auf 50% an.
+  {
+    const st = legionRoom({ ghost_082: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    const target = mkEnemy(60, 0, { cfg: { maxHp: 1000 }, hp: 1000 });
+    fireGhost(st, g, target);
+    st.tanks = [st.player, target];
+    stepState(st, CMD, 0.3);
+    check(target.necroExecThreshold === 0.5, `Phase 8: ghost_082 setzt die erhoehte Exekutionsschwelle nicht (${target.necroExecThreshold})`);
+    check(target.necroExecUntil > st.time, 'Phase 8: ghost_082 setzt kein Zeitfenster fuer die Exekutionsschwelle');
+  }
+
+  // (aa) ghost_084 "Unsterblicher Koenig": rettet den Champion wiederholt,
+  // eigene Abklingzeit.
+  {
+    const st = legionRoom({ ghost_084: 1 });
+    const g = push(st, createGhost(st, 300, 300, 0, 't_pink'));
+    settleChampion(st);
+    g.hp = 5;
+    st.tanks = [st.player];
+    st.bullets.push(createBullet(g.x, g.y, 0, { owner: mkEnemy(0, 0), damage: 999, speed: 0, radius: 50 }));
+    stepState(st, CMD, 1 / 60);
+    check(g.alive && g.hp > 1, `Phase 8: ghost_084 heilt den Champion nach einem toedlichen Treffer nicht (alive=${g.alive}, hp=${g.hp})`);
+    check(g.immortalKingReadyAt > st.time, 'Phase 8: ghost_084 startet keine Abklingzeit');
+    // Gegenprobe: waehrend der Abklingzeit rettet die Karte NICHT ein zweites Mal.
+    g.invulnUntil = 0;
+    g.hp = 5;
+    st.bullets.push(createBullet(g.x, g.y, 0, { owner: mkEnemy(0, 0), damage: 999, speed: 0, radius: 50 }));
+    stepState(st, CMD, 1 / 60);
+    check(!g.alive, 'Phase 8: ghost_084 rettet den Champion trotz laufender Abklingzeit ein zweites Mal');
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

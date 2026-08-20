@@ -23,7 +23,7 @@ import { updateBullet, createBullet } from './bullet.js';
 import { updateMines, explodeAt } from './mine.js';
 import { fireMortar, updateMortars } from './mortar.js';
 import { updateTraps } from './trap.js';
-import { createGhost, updateGhosts, killGhost, occupiedGhostSlots, recomputeLegionCache } from './ghost.js';
+import { createGhost, updateGhosts, killGhost, occupiedGhostSlots, recomputeLegionCache, pushGhost } from './ghost.js';
 import { tickNecroTimers, buildNecroListeners, applyVirtualNecroDeaths, necroResistBonus } from './necro.js';
 import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
@@ -351,6 +351,13 @@ export function createState(data, tiles, opts) {
     // Untertanen, sobald eine Wiederbelebungsprobe am vollen Limit gelingt.
     necroLegionKernActive: false,
     necroCoreCooldownUntil: 0,
+    // ghost_080 "Kronenerbe" (Nekromant-V2 Phase 8): merkt sich beim Tod des
+    // Champions ein Zeitfenster + einen Anteil seiner Fusionsboni fuer den
+    // naechsten erscheinenden Untertan (ghost.js: createGhost()). "Einmal pro
+    // Raum" -- necroCrownHeirUsed sperrt weitere Erbschaften (state ist pro
+    // Raum frisch, kein reset() noetig).
+    necroCrownHeir: null,
+    necroCrownHeirUsed: false,
     necroStacks: {},
     necroRunStackGain: {},
     necroRunStacksBase: necroRunStacksBase || {},
@@ -876,12 +883,18 @@ export function createState(data, tiles, opts) {
               isElite && pc.necroEliteRevive
                 ? { baseStatPctOverride: pc.necroEliteReviveStatPct, slotCost: pc.necroEliteReviveSlots || 2 }
                 : null;
-            state.ghosts.push(createGhost(state, tank.x, tank.y, tank.heading, tank.type, overrides));
+            // Nekromant-V2 Phase 8: pushGhost() statt eines direkten
+            // state.ghosts.push() -- EINZIGER Ort, der "Einziger Thron"
+            // (necroUniqueThrone, ghost_071) auswertet. An allen sechs
+            // Erzeugungsstellen gleich, damit die Verschmelzung nicht
+            // fuenffach dupliziert werden muss.
+            pushGhost(state, createGhost(state, tank.x, tank.y, tank.heading, tank.type, overrides));
             spawnedAny = true;
             // ghost_052 "Mehrfachwiederbelebung": zusaetzliche Chance auf eine
             // ZWEITE, schwaechere Kopie.
             if (pc.necroDoubleReviveChance && occupiedGhostSlots(state) < ghostCap && state.rng() < pc.necroDoubleReviveChance) {
-              state.ghosts.push(
+              pushGhost(
+                state,
                 createGhost(state, tank.x, tank.y, tank.heading, tank.type, {
                   baseStatPctOverride: pc.necroDoubleReviveStatPct,
                 }),
@@ -890,7 +903,8 @@ export function createState(data, tiles, opts) {
             // ghost_060 "Armee der Toten": JEDE gelungene Probe erzeugt
             // GARANTIERT eine weitere Kopie (kein Zufallswurf).
             if (pc.necroGuaranteedReviveCopy && occupiedGhostSlots(state) < ghostCap) {
-              state.ghosts.push(
+              pushGhost(
+                state,
                 createGhost(state, tank.x, tank.y, tank.heading, tank.type, {
                   baseStatPctOverride: pc.necroGuaranteedReviveStatPct,
                 }),
@@ -958,8 +972,11 @@ export function createState(data, tiles, opts) {
     g.baseDamage = g.cfg.damage;
     g.lifetimeMax = player.cfg.necroStartGhostLifetimeS;
     g.lifetime = player.cfg.necroStartGhostLifetimeS;
-    state.ghosts.push(g);
-    recomputeLegionCache(state);
+    // Nekromant-V2 Phase 8: pushGhost() statt eines direkten Push (Muster
+    // s. killTank()s Wiederbelebungs-Block) -- hier praktisch immer ein
+    // reiner Push (state.ghosts ist zu Raumbeginn leer), aus Konsistenz aber
+    // ueber denselben zentralen Hook wie alle anderen Erzeugungsstellen.
+    pushGhost(state, g);
   }
   // ghost_035 "Vorbote des Endes": 4 virtuelle Geistertode sofort bei
   // Raumstart, ausschliesslich auf raumweite pureStack-Listener (s. necro.js).
@@ -1419,7 +1436,20 @@ export function stepState(state, cmd, dt) {
             ? (state.player.cfg.necroSharedTargetDamageMult || 1) - 1
             : 0;
         const flankMult = baseFlankMult * (1 + ghostFlankBonus) * (1 + sharedTargetBonus);
-        let schaden = Math.round(basisSchaden * critMult * execMult * shatterMult * flankMult);
+        // ghost_070 "Herrscheraura" (Nekromant-V2 Phase 8): Gegner innerhalb
+        // des Champion-Radius (b.owner.necroAuraWeakened, in ghost.js:
+        // updateGhosts() jeden Tick markiert) verursachen weniger Schaden UND
+        // nehmen von UNTERTANEN mehr Schaden -- zwei getrennte Richtungen
+        // derselben Aura, beide multiplikativ am Ende.
+        const auraTakenReduction =
+          t === state.player && !own && b.owner?.necroAuraWeakened
+            ? 1 - (state.player?.cfg?.necroCrownAuraDamageTakenReduction || 0)
+            : 1;
+        const auraGhostBonus =
+          b.owner?.isGhost && t !== state.player && t.necroAuraWeakened
+            ? 1 + (state.player?.cfg?.necroCrownAuraGhostDamageBonus || 0)
+            : 1;
+        let schaden = Math.round(basisSchaden * critMult * execMult * shatterMult * flankMult * auraTakenReduction * auraGhostBonus);
         // Kopfschuss (Phase 11): ein Krit toetet einen Nicht-Boss-Gegner sofort.
         if (isCrit && oc?.critExecute && t !== state.player && !isBossCfg(t.cfg)) {
           schaden = Math.max(schaden, t.hp);
@@ -1483,6 +1513,37 @@ export function stepState(state, cmd, dt) {
         // weiterspringen lassen. NACH dem eigentlichen Treffer, damit die
         // Kette vom bereits geschaedigten Ziel ausgeht.
         applyTypeEffects(state, t, b.damageType, schaden, trefferMeta);
+        // ghost_075 "Raubseele" (Nekromant-V2 Phase 8): der CHAMPION heilt den
+        // Hauptpanzer um einen Anteil des VERURSACHTEN Schadens (jeder Treffer,
+        // nicht nur ein Kill wie das aeltere Seelensog unten). Ueberlauf ueber
+        // volles Leben hinaus wird zu Schild, gedeckelt auf einen Anteil des
+        // maximalen Lebens.
+        if (b.owner?.isGhost && b.owner.isChampion && t !== state.player) {
+          const stealPct = state.player?.cfg?.necroCrownLifestealToPlayerPct;
+          if (stealPct && state.player.alive) {
+            let heal = Math.round(schaden * stealPct);
+            const room = state.player.cfg.maxHp - state.player.hp;
+            const toHp = Math.min(room, heal);
+            state.player.hp += toHp;
+            heal -= toHp;
+            if (heal > 0) {
+              const cap = state.player.cfg.maxHp * (state.player.cfg.necroCrownLifestealShieldCapPct || 0);
+              state.player.shield = Math.min(cap, (state.player.shield || 0) + heal);
+            }
+          }
+        }
+        // ghost_082 "Kronjaeger" (Nekromant-V2 Phase 8, nur Champion): hebt die
+        // Exekutionsschwelle fuer das GETROFFENE Ziel zeitlich befristet an --
+        // wiederverwendet 1:1 den ghost_026-Mechanismus (necroExecUntil/
+        // necroExecThreshold, s. Exekutions-Timer-Schleife oben in dieser
+        // Funktion), refresht sich mit jedem weiteren Champion-Treffer.
+        if (b.owner?.isGhost && b.owner.isChampion && t !== state.player) {
+          const execPct = state.player?.cfg?.necroChampionExecThreshold;
+          if (execPct) {
+            t.necroExecUntil = state.time + (state.player.cfg.necroChampionExecDurationS || 0);
+            t.necroExecThreshold = execPct;
+          }
+        }
         // Geisterpanzer: eigener Kill-Zaehler, nicht dem Spieler zugerechnet.
         // Upgradepool-v2 Phase 4: die Timer-Verlaengerung (b.owner.timeLeft +=
         // balance.ghost.killBonus) ist mit dem alten Geistersystem abgebaut --
@@ -1546,12 +1607,17 @@ export function stepState(state, cmd, dt) {
           : [g];
         const share = b.damage / recipients.length;
         for (const rg of recipients) {
+          // ghost_079/ghost_084 (Nekromant-V2 Phase 8): waehrend eines
+          // gewaehrten Unverwundbarkeitsfensters (Unantastbarer/Unsterblicher
+          // Koenig, s. u.) nimmt der Champion gar keinen weiteren Schaden.
+          if (rg.invulnUntil > state.time) continue;
           // ghost_038/042/057: raumweiter Schwellenwert-Bonus + Naehe-Aura +
           // "Gemeinsamer Wille"-Resistenz, additiv auf die eigene Resistenz.
           const effResist =
             (rg.cfg.resist || 0) +
             (state.necroLegionResistBonus || 0) +
             (rg.legionAuraResist || 0) +
+            (rg.anchored ? pc7?.necroCrownAnchorResist || 0 : 0) +
             (state.necroSharedWillActive ? pc7?.necroSharedWillResist || 0 : 0);
           let dmg = applyResistToAmount({ resist: effResist }, state.data.balance?.resist, share);
           // ghost_053 "Verstaerkte Huelle": ignoriert EINMAL je Leben einen
@@ -1565,7 +1631,23 @@ export function stepState(state, cmd, dt) {
           dmg = absorbWithShieldPool(state, rg, dmg);
           if (dmg > 0) rg.lastDamageAt = state.time; // ghost_048: Schildwall-Regen-Sperre
           rg.hp -= dmg;
-          if (rg.hp <= 0) killGhost(state, rg);
+          if (rg.hp <= 0) {
+            // ghost_079 "Unantastbarer" (einmal pro Raum, kein Cooldown) /
+            // ghost_084 "Unsterblicher Koenig" (wiederholbar, eigene
+            // Abklingzeit) -- beide nur fuer den CHAMPION, beide fangen den
+            // toedlichen Treffer VOR killGhost() ab.
+            if (rg.isChampion && pc7?.necroCrownUnassailable && !rg.unassailableUsed) {
+              rg.unassailableUsed = true;
+              rg.hp = 1;
+              rg.invulnUntil = state.time + (pc7.necroCrownUnassailableS || 0);
+            } else if (rg.isChampion && pc7?.necroCrownImmortalKingHealPct && state.time >= (rg.immortalKingReadyAt || 0)) {
+              rg.hp = Math.max(1, Math.round(rg.cfg.maxHp * pc7.necroCrownImmortalKingHealPct));
+              rg.invulnUntil = state.time + (pc7.necroCrownImmortalKingInvulnS || 0);
+              rg.immortalKingReadyAt = state.time + (pc7.necroCrownImmortalKingCooldownS || 0);
+            } else {
+              killGhost(state, rg);
+            }
+          }
         }
         break;
       }

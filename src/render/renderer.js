@@ -1029,6 +1029,15 @@ export function createRenderer(ctx) {
         ctx.arc(x, y, r + 15, 0, Math.PI * 2);
         ctx.stroke();
       }
+      // ghost_081 "Seelenmonolith" (Nekromant-V2 Phase 8): "verankert" --
+      // eigene Farbe/Radius, vierte gleichzeitig unterscheidbare Aura-Farbe.
+      if (g.anchored) {
+        ctx.strokeStyle = '#8a6ad8';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 18, 0, Math.PI * 2);
+        ctx.stroke();
+      }
 
       // Lebensdauer (Phase 3, NEU): schrumpfender Ring -- "ein anderer
       // Todes-Ausloeser als Schaden" braucht ein sichtbares Gegenstueck,

@@ -8,7 +8,7 @@
 import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
 import { createMine } from './mine.js';
-import { createGhost, recomputeLegionCache, occupiedGhostSlots } from './ghost.js';
+import { createGhost, occupiedGhostSlots, pushGhost } from './ghost.js';
 import { statusSpeedMult } from './status.js';
 import { necroDamagePct, necroFireRatePct, necroSpeedPct } from './necro.js';
 import { CELL } from '../config.js';
@@ -585,8 +585,10 @@ function spawnGhostBomb(tank, state) {
   const pool = state.actEnemyPool && state.actEnemyPool.length ? state.actEnemyPool : ['t_brown'];
   const sourceType = pool[Math.floor(state.rng() * pool.length) % pool.length];
   const bombGhost = createGhost(state, tank.x, tank.y, tank.turret, sourceType);
-  state.ghosts.push(bombGhost);
-  recomputeLegionCache(state);
+  // Nekromant-V2 Phase 8: pushGhost() (Muster s. state.js: killTank()) --
+  // wertet "Einziger Thron" (ghost_071) aus, statt die Geisterbombe eine
+  // eigene sechste Fusionslogik bauen zu lassen.
+  pushGhost(state, bombGhost);
   tank.ghostBombCooldown = state.data.balance.ghost?.bombCooldownS ?? 10;
   state.sounds.push({ name: 'shield', x: tank.x });
   state.spawnParticles?.(tank.x, tank.y, '#8ecaf0', 10, 90);

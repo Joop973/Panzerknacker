@@ -5470,8 +5470,150 @@ pro Frame").
   „Basis-Chance trifft, Doppel-Chance verfehlt" ergibt).
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
   Playwright-Smoke (Nekromant wählen, Run starten, Snapshot bestätigt
+  `starterTank: 'c_necro'`, keine Konsolenfehler) bestanden.
+
+### Nekromant-V2 — Phase 8 (Alpha und Verschmelzung, 25 Karten) — gemergt
+Der laut Auftrag „aufwendigste Teil": Champion und Fusion. `ghost_061` bis
+`ghost_085`. Zwei neue architektonische Bausteine tragen den ganzen Topf.
+- **`ghost.js: pushGhost(state, g)`** (neu, exportiert) ist ab jetzt der
+  EINZIGE Erzeugungs-Hook — alle sechs bisherigen `state.ghosts.push(
+  createGhost(...))`-Aufrufstellen (`state.js: killTank()`s Wiederbelebungs-
+  Block ×3, der `ghost_033`-Raumstart-Hook; `tank.js: spawnGhostBomb()`)
+  rufen ihn jetzt auf, statt „Einziger Thron" sechsmal zu duplizieren. Ohne
+  `necroUniqueThrone` unverändertes Verhalten (reiner Push +
+  `recomputeLegionCache()`).
+- **`ghost_071` „Einziger Thron"**: `pushGhost()` vergleicht bei gesetztem
+  `necroUniqueThrone` den neu erzeugten Geist gegen den EINEN vorhandenen
+  (Karte begrenzt die Population dadurch selbst auf 1) über dieselbe
+  Stärkeformel wie die Champion-Bestimmung — der SCHWÄCHERE verschmilzt in
+  den STÄRKEREN (`fuseGhost()`). Übertragen werden Anteile der **Basiswerte**
+  des Verschmolzenen (`baseMaxHp`/`baseDamage`/`baseFireCooldown`, Phase 3),
+  NICHT seiner aktuellen Werte (Auftrag: „sonst schaukelt sich das
+  exponentiell auf") — ein gemeinsamer Helfer `applyFusionTransfer(g, hpFrac,
+  dmgFrac, frFrac)` rechnet das für `fuseGhost()` UND die
+  Kronenerbe-Übertragung (s. u.) identisch. Restlebenszeit steigt auf
+  mindestens `necroFusionMinLifetimeS` (Standard 10s). „Verschmelzung ist
+  KEIN Geistertod" — `onGhostRemoved(state, loser, 'fusion')` wird trotzdem
+  aufgerufen (Phase 5s `countsAsGhostDeath()` schließt `'fusion'` weiterhin
+  aus, ein künftiger, ausdrücklich lauschender Listener wäre also möglich).
+- **„Getrennte Buchführung dreier Bonusarten"** (Auftrag): Basiswerte
+  (unverändert seit Phase 3), **Fusionsboni** (`g.fusionHpFrac`/
+  `-DamageFrac`/`-FireRateFrac`/`fusionCount`/`fusionBulletSizeBonus`, PRO
+  GEIST-INSTANZ gespeichert — die einzigen, die ghost_080 tatsächlich
+  übertragen muss), **Kronenboni** (`necroCrown*`, bewusst STATELESS — live
+  gegen `g.isChampion` ausgewertet, jeder neue Champion liest sie automatisch
+  selbst aus demselben Spieler-cfg, braucht also KEINE Übertragung).
+- **`ghost_072`/`ghost_073`** (beide `requires: ["ghost_071"]`): zusätzliche
+  Übertragungsrate je Verschmelzung bzw. Auffüllung+Verlängerung der
+  Lebenszeit bei jeder Verschmelzung — beide reine `fuseGhost()`-Parameter,
+  keine neue Logik.
+- **`ghost_085` „Seelenkoloss" ERSETZT** die Übertragungswerte von 071/072,
+  statt zu addieren — neues Datenfeld `core.necroFusionReplace` (+ eigene
+  `necroFusionReplace*`-Werte), in `fuseGhost()` geprüft NACH den 071/072-
+  Werten, überschreibt sie komplett statt sie aufzuaddieren (Testschritt 4).
+- **`ghost_080` „Kronenerbe"**: `killGhost()` merkt beim Tod des Champions
+  (Schaden ODER Ablauf, nicht Fusion — dort überlebt der Champion i. d. R.
+  ohnehin) `state.necroCrownHeir` (60 % der Fusionsboni + ein
+  10-Sekunden-Fenster, `balance.json: ghost.crownHeirWindowS`). `createGhost()`
+  prüft das Fenster bei JEDER Neuerzeugung und wendet die Übertragung über
+  denselben `applyFusionTransfer()` an — „einmal pro Raum"
+  (`necroCrownHeirUsed`). Kronenboni brauchen keine Übertragung (s. o.).
+- **Neun eigenständige Alpha-Karten** (061–070 minus 071, plus 074/077/078/
+  081–084) wirken OHNE `requires` auf 071 — nur 072/073/085 haben eine
+  Voraussetzung (Auftrag: „nur drei Karten haben eine Voraussetzung").
+  Champion-Bestimmung ist dafür an den **ANFANG** von `updateGhosts()`
+  gewandert (bis Phase 7 stand sie am Ende) — Kronen-/Anker-/Aura-Karten
+  brauchen VOR dem restlichen Tick zu wissen, wer Champion ist.
+- **Permanente vs. wiederholte Kronenboni**: `ghost_061`/`063` (Schaden/
+  Leben/Resistenz) sind EINMALIGE Boni je Geist-Instanz (`g.crownBonusesApplied`,
+  verhindert doppeltes Aufaddieren bei einem Titelwechsel — verliert/
+  gewinnt dieselbe Instanz die Krone erneut, wird der Bonus NICHT
+  wiederholt); `ghost_067`/`068` (Schild/Lebenszeit) gelten dagegen bei
+  JEDER Krönung erneut (Kartentext: „Sobald ein Untertan zum Champion wird").
+- **`ghost_066` „Vorrang des Stärkeren"**: der Champion zielt auf den Gegner
+  mit dem höchsten MAXIMALEN Leben (`strongestEnemyByMaxHp()`, neu) statt des
+  nächstgelegenen, umfährt ihn zur ungeschützten Seite (teilt sich den
+  Flankier-Bewegungspfad aus Phase 6/7 mit `ghost_010`/`ghost_041`) und
+  bekommt Projektiltempo-/Reichweitenboni.
+- **`ghost_070` „Herrscheraura"**: `updateGhosts()` markiert Gegner im
+  Champion-Radius als `t.necroAuraWeakened` (Muster wie `t.aimingAtPlayer`) —
+  gelesen an ZWEI Stellen in `state.js`s Haupt-Trefferschleife: ein
+  markierter Gegner richtet weniger Schaden gegen den SPIELER an, nimmt aber
+  von UNTERTANEN mehr Schaden. Das Flag stammt vom VORHERIGEN
+  `updateGhosts()`-Tick (Aufrufreihenfolge in `stepState()`), ein bekannter,
+  harmloser Ein-Tick-Versatz wie bei der Champion-Bestimmung selbst.
+- **`ghost_076`/`ghost_078`**: Schuss-Zähler `g.shotCount` je Untertan.
+  `ghost_076` „Erbgeschütz" feuert jeden dritten Schuss ein ZUSÄTZLICHES
+  Geschoss (reduzierter Schaden, keine eigenen Cooldown-Kosten); `ghost_078`
+  „Alpha-Schuss" macht jeden fünften Schuss selbst stärker (+100 % Schaden,
+  +1 Durchschlag).
+- **`ghost_079` „Unantastbarer" / `ghost_084` „Unsterblicher König"**: beide
+  fangen einen tödlichen Treffer VOR `killGhost()` ab, direkt in der
+  Geist-vs-Geschoss-Kollisionsschleife (`state.js`) — 079 einmal pro Raum
+  (`g.unassailableUsed`, kein Cooldown), 084 wiederholbar mit eigener
+  Abklingzeit (`g.immortalKingReadyAt`). Ein neues `g.invulnUntil`-Fenster
+  wird GANZ AM ANFANG der Schleife geprüft (`if (rg.invulnUntil > state.time)
+  continue;`) — verhindert, dass ein zweiter Treffer im selben kurzen Fenster
+  die Rettung sofort wieder aufhebt.
+- **`ghost_081` „Seelenmonolith"**: `g.anchorTimer` läuft hoch, solange
+  `|g.vx,vy| < 1` UND der Geist Champion ist; ab `necroCrownAnchorAfterS`
+  gilt `g.anchored` — Schaden-/Reichweiten-/Resistenzbonus, bis er sich
+  wieder bewegt (kein Kartengate nötig, reiner Live-Zustand).
+- **`ghost_082` „Kronjäger"**: wiederverwendet 1:1 den `ghost_026`-Mechanismus
+  aus Phase 6 (`t.necroExecUntil`/`t.necroExecThreshold`, Grundsteinumbau
+  Phase 2s Exekutionsschwelle) — greift direkt in die Fundament-Mechanik ein,
+  ohne einen zweiten Mechanismus zu bauen.
+- **`ghost_075` „Raubseele"**: Heilung an genau der Stelle in der
+  Trefferschleife, an der `schaden` fertig berechnet ist (nicht kill-basiert
+  wie das ältere Seelensog aus Upgradepool-v2 Phase 8) — Überlauf über volles
+  Leben hinaus geht in den Schild-Pool, gedeckelt auf einen Anteil des
+  maximalen Lebens.
+- **Echter Bugfund beim eigenen Testbau, per Gegenprobe entdeckt**: die
+  erste Fassung von `ghost_061`s Test prüfte nach dem Umbau auf „nur einmal
+  angewendet" nur noch `dmgAfterFirst === g.cfg.damage` (Vergleich mit sich
+  selbst) — ohne jemals zu prüfen, dass der Bonus überhaupt einmal ankommt.
+  Mit der Applier-Zeile stillgelegt blieb der Test **trivial grün** (beide
+  Seiten blieben gleich dem unveränderten Basiswert). Fix: die ursprüngliche
+  „Bonus > Basis"-Prüfung wieder ergänzt, zusätzlich zur „kein zweites Mal"-
+  Prüfung — genau die Fehlerklasse, vor der die CLAUDE.md-Faustregel warnt
+  („den Mechanismus prüfen, nicht nur, dass zwei Werte übereinstimmen").
+- **Sichtbarkeit**: `renderer.js: drawGhosts()` bekommt einen vierten
+  Auren-Ring (`ghost_081`, lila `#8a6ad8`, Radius `r+18`) neben den drei aus
+  Phase 7; eine Verschmelzung löst einen kurzen Partikelstoß + Schwebetext
+  „Verschmolzen!" + Ton aus (`fuseGhost()`, Wiederverwendung des
+  bestehenden `'combo'`-Sounds statt eines neuen synthetisierten Tons).
+- **Neuer Testabschnitt 60** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt einzeln bestanden — u. a.: Fusionsrichtung in `pushGhost()`
+  umgedreht (schwächerer gewinnt statt stärkerer → kaskadiert korrekt über
+  mehrere Folgetests, inkl. ghost_080/065), `ghost_085`s Ersetzungsflag
+  stillgelegt, `ghost_061`s Einmal-Schutz entfernt (deckte den o. g. eigenen
+  Testfund auf), beide Richtungen von `ghost_070`s Aura auf No-op gesetzt,
+  `ghost_079`s Einmal-Gate UND `ghost_084`s Cooldown-Gate je einzeln
+  aufgehoben, `ghost_066`s Zielwahl zurückgebaut, `ghost_076`s Zusatzschuss-
+  Block deaktiviert): Struktur (25 Karten, echter `core`, NaN-Check), die
+  fünf offiziellen Testschritte wörtlich, sowie ein Mechanismustest je
+  übrige Karte (062/063/064/065 auf allen drei Todeswegen/067/068/069/072/
+  073/074/075/076/077/078/079/081/082/084). **Testfallstricke, vor dem
+  finalen Lauf gefunden und behoben**: (1) `ghost_065`s Heilungstest senkte
+  die hp des Champions VOR der Champion-Bestimmung — der künstlich
+  geschwächte „Champion" war dadurch per Definition der SCHWÄCHERE und
+  wurde nie gekrönt; Fix: erst krönen (bei vollen, gleichen Werten gewinnt
+  der zuerst erzeugte Geist den Gleichstand), dann schwächen. (2) derselbe
+  Test brauchte für den Fusionsweg einen NOCH schwächeren neuen Geist, sonst
+  hätte der (künstlich geschwächte) „Champion" selbst verschmolzen werden
+  können, statt den anderen zu absorbieren. (3) `ghost_070`s erster Entwurf
+  verglich die REINE `b.damage` eines gerade erzeugten Geschosses — der
+  Aura-Multiplikator wirkt aber erst beim tatsächlichen TREFFER in der
+  Trefferschleife; umgestellt auf eine echte `stepState()`-Kollision mit
+  vorher gemessenem hp-Verlust. (4) mehrere Tests, die einen synthetischen
+  Testgegner in `state.tanks` einreihen und `stepState()` aufrufen,
+  brauchten zusätzliche Felder am Testobjekt (`cfg.role: 'guardian'`,
+  `ai: {threatTimer, targetTimer, target}`) — sonst crasht `updateTargeting()`/
+  `updateEnemy()` beim Verarbeiten des unvollständigen Fake-Panzers.
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
+  Playwright-Smoke (Nekromant wählen, Run starten, Snapshot bestätigt
   `starterTank: 'c_necro'`, keine Konsolenfehler) bestanden. **Nächste
-  Sitzung: Phase 8** (Alpha und Verschmelzung, 25 Karten).
+  Sitzung: Phase 9** (Hybride und Aktivkarten, 20 Karten).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -5568,6 +5710,11 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   der getrennten Geister-Kollisionsschleife (Untertanen sind ausdrücklich
   mitgemeint). `bullet.pierce`/`bullet.pierceHits`: Durchschlag statt
   `b.dead` bei verbleibender Ladung, Trefferliste verhindert Doppeltreffer.
+  Nekromant-V2 Phase 8: `t.necroAuraWeakened` (`ghost_070`, in beiden
+  Trefferschleifen-Richtungen gelesen), `ghost_075`/`082` direkt nach
+  `applyTypeEffects()` in der Haupt-Trefferschleife, das
+  `rg.invulnUntil`-Gate + `ghost_079`/`084`s Rettungsblock in der
+  Geist-vs-Geschoss-Kollisionsschleife (VOR `killGhost()`).
 - `src/game/armor.js` — gerichtete Panzerung (Phase 4): `armorBlocks`,
   `reflectBullet`, `isLive`. Seit Grundsteinumbau Phase 1 ist `isLive(b)`
   nur noch `!!b.reflected` (kein Bandenschuss mehr, `hasWallBounced()` ist
@@ -5646,7 +5793,17 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   drei Abstandsauren (`ghost_042`/`048`/`049`) live jeden Tick (position-
   sabhängig, bewusst NICHT im Cache) und konsolidiert Sturmformation
   (`047`)/Veteranen (`046`)/Munitionsaustausch (`050`)/Erbmunition (`051`)/
-  Legionskern (`054`) am Feuerzeitpunkt.
+  Legionskern (`054`) am Feuerzeitpunkt. Nekromant-V2 Phase 8 (Alpha und
+  Verschmelzung): `pushGhost(state, g)` (neu, exportiert) ist der EINZIGE
+  Erzeugungs-Hook für alle sechs Aufrufstellen — wertet `necroUniqueThrone`
+  (`ghost_071`) aus und delegiert an `fuseGhost()`/`applyFusionTransfer()`
+  bei Bedarf. Champion-Bestimmung steht jetzt am ANFANG von `updateGhosts()`
+  (vorher am Ende) — Kronen-/Anker-/Aura-Karten (`necroCrown*`) werden
+  DANACH live gegen `g.isChampion` ausgewertet, „Getrennte Buchführung":
+  Basiswerte (Phase 3), Fusionsboni (`g.fusionHpFrac`/`-DamageFrac`/
+  `-FireRateFrac`/`fusionCount`, pro Instanz — die einzigen, die
+  `state.necroCrownHeir`/`createGhost()`s Kronenerbe-Zweig übertragen),
+  Kronenboni (stateless, kein Übertragungsbedarf).
 - `src/game/necro.js` (Nekromant-V2 Phase 5, seit Phase 6 angeschlossen) —
   Ereignis-/Stapelschicht für den 105-Karten-Pool `data/upgrades_necro.json`.
   `onGhostRemoved(state, ghost, reason)` ist das zentrale Ereignis (vier
