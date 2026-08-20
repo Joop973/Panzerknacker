@@ -1434,7 +1434,8 @@
       "description": "Der stärkste Untertanenpanzer (Champion) erhält +12 % Schaden und +12 % maximales Leben.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownDamagePct": 0.12,
+        "necroCrownHpPct": 0.12
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1457,7 +1458,8 @@
       "description": "Ist genau 1 Untertanenpanzer aktiv, erhält er +12 % Schaden und +12 % Feuerrate.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroSoloDamagePct": 0.12,
+        "necroSoloFireRatePct": 0.12
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -1479,7 +1481,7 @@
       "description": "Der Champion erhält +8 Punkte Schadensresistenz.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownResist": 8
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -1502,7 +1504,7 @@
       "description": "Der Champion verursacht +18 % Schaden gegen Elitegegner und Bosse.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownEliteBossDamagePct": 0.18
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -1524,7 +1526,7 @@
       "description": "Stirbt ein anderer Untertanenpanzer, heilt sich der Champion um 10 % seines maximalen Lebens. Ablauf der Lebenszeit und Verschmelzung lösen ebenfalls aus.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownHealOnAllyDeathPct": 0.1
       },
       "_note": {
         "buildrolle": "Sustain"
@@ -1547,7 +1549,9 @@
       "description": "Der Champion greift bevorzugt den Gegner mit dem höchsten maximalen Leben an, umfährt ihn zur ungeschützten Seite und erhält +20 % Projektiltempo sowie +20 % Zielreichweite.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownTargetStrongest": true,
+        "necroCrownBulletSpeedPct": 0.2,
+        "necroCrownRangePct": 0.2
       },
       "_note": {
         "buildrolle": "Engine",
@@ -1570,7 +1574,7 @@
       "description": "Sobald ein Untertanenpanzer zum Champion wird, erhält er einen Schild in Höhe von 15 % seines maximalen Lebens.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownShieldOnCrownPct": 0.15
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -1592,7 +1596,7 @@
       "description": "Die Gesamtdauer und die verbleibende Lebenszeit des Champions steigen um 4 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownLifetimeBonusS": 4
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -1614,7 +1618,8 @@
       "description": "Der Champion erhält +5 Prozentpunkte Krit-Chance und +15 % Krit-Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownCritChanceAdd": 0.05,
+        "necroCrownCritMultAdd": 0.15
       },
       "_note": {
         "buildrolle": "Burst"
@@ -1636,7 +1641,9 @@
       "description": "Gegner innerhalb von 80 px zum Champion verursachen 10 % weniger Schaden und erleiden 10 % mehr Schaden durch Untertanenpanzer.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownAuraRadius": 80,
+        "necroCrownAuraDamageTakenReduction": 0.1,
+        "necroCrownAuraGhostDamageBonus": 0.1
       },
       "_note": {
         "buildrolle": "Kontrolle",
@@ -1659,7 +1666,11 @@
       "description": "Sobald ein zweiter Untertanenpanzer erscheinen würde, verschmilzt der schwächere sofort mit dem Champion. Der Champion erhält bis Raumende 30 % des Basis-Lebens und Basis-Schadens sowie 12 % der Basis-Feuerrate des Verschmolzenen. Seine Restlebenszeit steigt auf mindestens 10 Sekunden. Verschmelzung ist kein Geistertod.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroUniqueThrone": true,
+        "necroFusionHpPct": 0.3,
+        "necroFusionDamagePct": 0.3,
+        "necroFusionFireRatePct": 0.12,
+        "necroFusionMinLifetimeS": 10
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1683,7 +1694,9 @@
       "description": "Jede Verschmelzung überträgt zusätzlich 8 Prozentpunkte Basis-Leben und Basis-Schaden sowie 3 Prozentpunkte Basis-Feuerrate.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroFusionHpPctBonus": 0.08,
+        "necroFusionDamagePctBonus": 0.08,
+        "necroFusionFireRatePctBonus": 0.03
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1708,7 +1721,7 @@
       "description": "Jede Verschmelzung setzt die verbleibende Lebenszeit des Champions auf seine aktuelle Gesamtdauer und erhöht diese um weitere 6 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroFusionLifetimeExtendS": 6
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -1731,7 +1744,9 @@
       "description": "Der Champion erhält +8 % Projektilgröße und +6 % Reichweite. Mit Einziger Thron gewährt zusätzlich jede Verschmelzung +2 % Projektilgröße bis Raumende.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownBulletSizePct": 0.08,
+        "necroCrownRangePct": 0.06,
+        "necroFusionBulletSizePctPerFusion": 0.02
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -1754,7 +1769,8 @@
       "description": "Der Champion heilt den Hauptpanzer um 2 % seines verursachten Schadens. Über volles Leben hinaus wird die Heilung zu Schild, bis 15 % des maximalen Lebens.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownLifestealToPlayerPct": 0.02,
+        "necroCrownLifestealShieldCapPct": 0.15
       },
       "_note": {
         "buildrolle": "Sustain",
@@ -1777,7 +1793,8 @@
       "description": "Jeder dritte Schuss des Champions feuert ein zusätzliches Geschoss mit 40 % Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownEveryNShots": 3,
+        "necroCrownExtraShotDamagePct": 0.4
       },
       "_note": {
         "buildrolle": "Burst"
@@ -1799,7 +1816,8 @@
       "description": "Der Champion erhält +1 Durchschlag. Mit Einziger Thron zusätzlich +10 % Schaden je 3 Verschmelzungen bis Raumende.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownPierceAdd": 1,
+        "necroCrownFusionDamagePer3": 0.1
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -1821,7 +1839,9 @@
       "description": "Jeder fünfte Schuss des Champions verursacht +100 % Schaden und erhält +1 Durchschlag.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownAlphaShotEvery": 5,
+        "necroCrownAlphaShotDamageMult": 2.0,
+        "necroCrownAlphaShotPierceAdd": 1
       },
       "_note": {
         "buildrolle": "Burst"
@@ -1843,12 +1863,14 @@
       "description": "Einmal pro Raum: Der erste tödliche Treffer gegen den Champion lässt ihn bei 1 Leben und macht ihn 2 Sekunden unverwundbar.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownUnassailable": true,
+        "necroCrownUnassailableS": 2.0
       },
       "_note": {
         "buildrolle": "Sicherheit",
         "balanceHinweis": "Rettet den Champion, nicht den Hauptpanzer."
-      }
+      },
+      "_todo": "balance"
     },
     "ghost_080": {
       "id": "ghost_080",
@@ -1866,7 +1888,7 @@
       "description": "Stirbt der Champion, übernimmt der nächste innerhalb von 10 Sekunden erscheinende Untertanenpanzer 60 % seiner raumweiten Kronen- und Fusionsboni. Einmal pro Raum.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownHeirPct": 0.6
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -1888,7 +1910,10 @@
       "description": "Bewegt sich der Champion 2 Sekunden nicht, verankert er sich: +45 % Schaden, +25 % Reichweite und +20 Punkte Schadensresistenz, bis er sich wieder bewegt.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownAnchorAfterS": 2.0,
+        "necroCrownAnchorDamagePct": 0.45,
+        "necroCrownAnchorRangePct": 0.25,
+        "necroCrownAnchorResist": 20
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1911,12 +1936,14 @@
       "description": "Der Champion exekutiert Gegner bereits ab 50 % ihres Lebens statt ab 35 %.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroChampionExecThreshold": 0.5,
+        "necroChampionExecDurationS": 2.0
       },
       "_note": {
         "buildrolle": "Burst",
         "balanceHinweis": "Nutzt die Exekutionsmechanik des Spiels."
-      }
+      },
+      "_todo": "balance"
     },
     "ghost_083": {
       "id": "ghost_083",
@@ -1934,7 +1961,7 @@
       "description": "Der Champion verliert keine Lebenszeit mehr. Er bleibt bestehen, bis er stirbt oder der Raum endet.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownNoLifetimeDecay": true
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -1956,12 +1983,15 @@
       "description": "Ein tödlicher Treffer gegen den Champion stellt stattdessen 30 % seines maximalen Lebens wieder her und gewährt 1 Sekunde Unverwundbarkeit. Abklingzeit 15 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownImmortalKingHealPct": 0.3,
+        "necroCrownImmortalKingInvulnS": 1.0,
+        "necroCrownImmortalKingCooldownS": 15.0
       },
       "_note": {
         "buildrolle": "Sicherheit",
         "balanceHinweis": "Rettet den Champion, nicht den Hauptpanzer."
-      }
+      },
+      "_todo": "balance"
     },
     "ghost_085": {
       "id": "ghost_085",
@@ -1981,7 +2011,10 @@
       "description": "Ersetzt die Übertragung von Einziger Thron: Jede Verschmelzung überträgt 50 % Basis-Leben, 50 % Basis-Schaden und 20 % Basis-Feuerrate. Solange diese Karte aktiv ist, kann nur der Champion als Untertanenpanzer bestehen.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroFusionReplace": true,
+        "necroFusionReplaceHpPct": 0.5,
+        "necroFusionReplaceDamagePct": 0.5,
+        "necroFusionReplaceFireRatePct": 0.2
       },
       "_note": {
         "buildrolle": "Skalierung",
