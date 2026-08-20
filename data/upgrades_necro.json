@@ -849,7 +849,7 @@
       "description": "Die Anzahl gleichzeitig aktiver Untertanenpanzer steigt um 1.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostMaxAdd": 1
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -871,7 +871,7 @@
       "description": "Alle Untertanenpanzer bleiben 2,5 Sekunden länger aktiv.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostLifetimeAdd": 2.5
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -892,7 +892,8 @@
       "description": "Sind mindestens 2 Untertanenpanzer aktiv, erhalten alle +6 Punkte Schadensresistenz.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroLegionResistThreshold": 2,
+        "necroLegionResistAmount": 6
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -915,7 +916,7 @@
       "description": "Jeder Untertanenpanzer verursacht +4 % Schaden für jeden anderen aktiven Untertanenpanzer.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostPackDamagePerAlly": 0.04
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -937,7 +938,7 @@
       "description": "Jeder Untertanenpanzer erhält +3 % Feuerrate je aktivem Untertanen einschließlich sich selbst.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroFireRatePerAlly": 0.03
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -959,7 +960,8 @@
       "description": "Alle Untertanenpanzer greifen das Ziel an, das der Hauptpanzer zuletzt getroffen hat, und umfahren es zur ungeschützten Seite. Gegen dieses Ziel +10 % Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroSharedTarget": true,
+        "necroSharedTargetDamageMult": 1.1
       },
       "_note": {
         "buildrolle": "Engine",
@@ -982,7 +984,8 @@
       "description": "Untertanenpanzer innerhalb von 80 px zu einem anderen Untertanen erhalten +8 Punkte Schadensresistenz.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroPhalanxRadius": 80,
+        "necroPhalanxResist": 8
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -1005,7 +1008,7 @@
       "description": "Stirbt ein Untertanenpanzer, heilen alle übrigen um 8 % ihres maximalen Lebens. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroPackHealOnDeathPct": 0.08
       },
       "_note": {
         "buildrolle": "Sustain"
@@ -1026,7 +1029,7 @@
       "description": "Die Wiederbelebungschance nach einem Abschuss des Hauptpanzers steigt um 5 Prozentpunkte.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroReviveChanceAdd": 0.05
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1049,7 +1052,9 @@
       "description": "Sind mindestens 3 Untertanenpanzer aktiv, erhalten ihre Geschosse +15 % Größe und +10 % Projektiltempo.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroOverwhelmThreshold": 3,
+        "necroOverwhelmBulletSizeMult": 1.15,
+        "necroOverwhelmBulletSpeedMult": 1.1
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -1071,7 +1076,9 @@
       "description": "Ein Untertanenpanzer, der 8 Sekunden überlebt, erhält für den Rest seiner Lebenszeit +20 % Schaden und +12 % maximales Leben.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroVeteranAfterS": 8,
+        "necroVeteranDamageMult": 1.2,
+        "necroVeteranHpMult": 1.12
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -1093,7 +1100,9 @@
       "description": "Bewegt sich ein Untertanenpanzer auf sein Ziel zu, erhält er +15 % Bewegung und +15 % Schaden. Erreicht er dessen Seite oder Heck, zusätzlich +10 % Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroStormApproachSpeedMult": 1.15,
+        "necroStormApproachDamageMult": 1.15,
+        "necroStormFlankBonus": 0.1
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1116,7 +1125,10 @@
       "description": "Untertanenpanzer innerhalb von 96 px zum Hauptpanzer erhalten einen Schild in Höhe von 12 % ihres maximalen Lebens. Nach 2 Sekunden ohne Schaden lädt er mit 3 % pro Sekunde nach.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroWallRadius": 96,
+        "necroWallShieldPct": 0.12,
+        "necroWallRegenPerS": 0.03,
+        "necroWallRegenDelayS": 2.0
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -1139,7 +1151,9 @@
       "description": "Der älteste aktive Untertanenpanzer wird Offizier und gewährt allen anderen Untertanen innerhalb von 160 px +14 % Schaden und +8 % Feuerrate.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroOfficerRadius": 160,
+        "necroOfficerDamageMult": 1.14,
+        "necroOfficerFireRateBonus": 0.08
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1162,7 +1176,8 @@
       "description": "Jeder Abschuss durch einen Untertanenpanzer gewährt allen aktiven Untertanen +1 % Feuerrate bis Raumende, höchstens +30 %.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroAmmoExchangePerShot": 0.01,
+        "necroAmmoExchangeCap": 0.3
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -1184,7 +1199,8 @@
       "description": "Stirbt ein Untertanenpanzer, verursachen die nächsten 5 Schüsse jedes Überlebenden +25 % Schaden. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroErbmunitionShots": 5,
+        "necroErbmunitionDamagePct": 0.25
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -1206,7 +1222,8 @@
       "description": "Eine gelungene Wiederbelebungsprobe hat 20 % Chance, eine zweite Kopie desselben Gegnertyps mit 60 % Basiswert-Anteil zu erzeugen. Sie zählt gegen das Geisterlimit.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroDoubleReviveChance": 0.2,
+        "necroDoubleReviveStatPct": 0.6
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1228,7 +1245,7 @@
       "description": "Jeder Untertanenpanzer ignoriert einmal je Leben einen Treffer, der mehr als 30 % seines maximalen Lebens verursacht.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroHullThresholdPct": 0.3
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -1250,7 +1267,9 @@
       "description": "Gelingt eine Wiederbelebungsprobe bei vollem Geisterlimit, heilen alle aktiven Untertanen 20 % und erhalten bis Raumende +10 % Schaden. Abklingzeit 5 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCoreHealPct": 0.2,
+        "necroCoreDamageBonus": 0.1,
+        "necroCoreCooldownS": 5.0
       },
       "_note": {
         "buildrolle": "Sustain"
@@ -1271,7 +1290,7 @@
       "description": "Die Wiederbelebungschance nach einem Abschuss des Hauptpanzers steigt um 12 Prozentpunkte.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroReviveChanceAdd": 0.12
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1294,7 +1313,9 @@
       "description": "Elitegegner sind für Wiederbelebungsproben zulässig. Wiederbelebte Eliten erscheinen mit 65 % Basiswert-Anteil und belegen 2 Geisterplätze. Bosse bleiben ausgeschlossen.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroEliteRevive": true,
+        "necroEliteReviveStatPct": 0.65,
+        "necroEliteReviveSlots": 2
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -1316,7 +1337,8 @@
       "description": "Bei mindestens 2 aktiven Untertanenpanzern wird erlittener Geisterschaden gleichmäßig auf alle verteilt. Zusätzlich erhalten alle +10 Punkte Schadensresistenz.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroSharedWillThreshold": 2,
+        "necroSharedWillResist": 10
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -1339,7 +1361,7 @@
       "description": "Untertanenpanzer erhalten die Hälfte des Flanken- und Heckbonus des Hauptpanzers zusätzlich auf ihre eigenen Treffer.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroChorusOfDead": true
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1362,7 +1384,8 @@
       "description": "Der Raum merkt sich die letzten 3 Sterbeorte von Untertanenpanzern. Ein neuer Untertan, der dort erscheint, startet mit +25 % Leben und Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroGraveyardCount": 3,
+        "necroGraveyardBonus": 0.25
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1385,7 +1408,10 @@
       "description": "Das Geisterlimit steigt um 2. Jede gelungene Wiederbelebungsprobe erzeugt zusätzlich eine Kopie mit 50 % Basiswert-Anteil. Dafür verursachen alle Untertanenpanzer 15 % weniger Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "ghostMaxAdd": 2,
+        "necroGuaranteedReviveCopy": true,
+        "necroGuaranteedReviveStatPct": 0.5,
+        "ghostDamageMult": 0.85
       },
       "_note": {
         "buildrolle": "Skalierung",

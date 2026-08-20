@@ -8157,6 +8157,462 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 59. Nekromant-V2 Phase 7: Legion (25 Karten) -------------------------
+// ghost_036 bis ghost_060 -- deutlich mehr Untertanen, staerker in der
+// Gruppe. Zwei architektonische Neuerungen: occupiedGhostSlots() (Plaetze
+// statt reiner Anzahl, wegen ghost_056) und recomputeLegionCache() (die vom
+// Auftrag verlangte "nicht pro Frame"-Zaehler-Neuberechnung, nur an Spawn-/
+// Entfernen-Stellen). Positions-Auren (042/048/049) bleiben bewusst LIVE
+// pro Tick, weil ihre Mitgliedschaft von Bewegung abhaengt.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createGhost, killGhost, updateGhosts, occupiedGhostSlots, recomputeLegionCache } = await import('../src/game/ghost.js');
+  const { fireBullet } = await import('../src/game/tank.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+  const { getNecroStack } = await import('../src/game/necro.js');
+
+  const legionRoom = (playerUpgrades = {}, types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades,
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    st.walls = []; // isoliert Kollisionstests von generierten Waenden
+    // isSolid()/blocksSight() lesen aus dem GRID-Closure der Raumgenerierung,
+    // nicht aus state.walls -- an frei gewaehlten Testkoordinaten (auch
+    // ausserhalb des generierten Layouts) muss die Sichtlinie fuer
+    // updateGhosts()s clearLine()-Pruefung trotzdem frei sein.
+    st.isSolid = () => false;
+    st.blocksSight = () => false;
+    return st;
+  };
+  const mkEnemy = () => ({
+    cfg: { maxHp: 100, damage: 10, radius: 14 },
+    hp: 100,
+    alive: true,
+    type: 't_pink',
+    x: 0, y: 0, heading: 0,
+    affixes: [],
+  });
+  const push = (st, g) => {
+    st.ghosts.push(g);
+    recomputeLegionCache(st);
+    return g;
+  };
+
+  // (a) Struktur: 25 Karten, alle mit echtem core (kein "_todo"), NaN-Check
+  // gegen die upgradelose Nekromanten-Basis.
+  {
+    const ids = [];
+    for (let i = 36; i <= 60; i++) ids.push('ghost_' + String(i).padStart(3, '0'));
+    check(ids.every((id) => necroData.upgrades[id]), 'Phase 7: nicht alle 25 Karten ghost_036..ghost_060 existieren');
+    for (const id of ids) {
+      const def = necroData.upgrades[id];
+      check(def.core && def.core._todo !== 'effect', `Phase 7: ${id} hat noch keinen core-Wert`);
+    }
+    const basis = applyUpgrades(resolveCfg(tanksData, 'c_necro'), {}, necroData, 'mine', null);
+    for (const id of ids) {
+      const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { [id]: 1 }, necroData, 'mine', null);
+      for (const k of Object.keys(cfg)) {
+        const bad = (typeof cfg[k] === 'number' && Number.isNaN(cfg[k])) || (cfg[k] === undefined && basis[k] !== undefined);
+        check(!bad, `Phase 7: ${id} macht cfg.${k} zu NaN/undefined`);
+      }
+    }
+  }
+
+  // (b) Testschritt 1 (ghost_036 x10): Basislimit 3 + 10 = 13 gleichzeitige
+  // Untertanen, keine Sperre.
+  {
+    const st = legionRoom({ ghost_036: 10 });
+    st.rng = () => 0; // < balance.ghost.reviveChance (0.35) -> jede Probe gelingt
+    for (let i = 0; i < 13; i++) st.killTank(mkEnemy(), 'test', { killer: st.player });
+    check(occupiedGhostSlots(st) === 13, `Phase 7: ghost_036 x10 erlaubt nicht 13 gleichzeitige Untertanen (${occupiedGhostSlots(st)})`);
+    st.killTank(mkEnemy(), 'test', { killer: st.player }); // 14. Kill -> Deckel voll
+    check(occupiedGhostSlots(st) === 13, `Phase 7: das Limit (13) wird trotzdem ueberschritten (${occupiedGhostSlots(st)})`);
+  }
+
+  // (c) Testschritt 2 (ghost_039 "Rudelfeuer"): mit 3 aktiven Untertanen ist
+  // der Schaden je Einheit hoeher als mit nur einem.
+  {
+    const st1 = legionRoom({ ghost_039: 1 });
+    const g1 = push(st1, createGhost(st1, 0, 0, 0, 't_pink'));
+    const dmgAlone = Math.round(g1.cfg.damage * (st1.necroPackMult ?? 1));
+
+    const st3 = legionRoom({ ghost_039: 1 });
+    const g3a = push(st3, createGhost(st3, 0, 0, 0, 't_pink'));
+    push(st3, createGhost(st3, 10, 10, 0, 't_pink'));
+    push(st3, createGhost(st3, 20, 20, 0, 't_pink'));
+    const dmgGroup = Math.round(g3a.cfg.damage * (st3.necroPackMult ?? 1));
+    check(dmgGroup > dmgAlone, `Phase 7: ghost_039 erhoeht den Schaden nicht mit mehr Untertanen (${dmgAlone} -> ${dmgGroup})`);
+  }
+
+  // (d) Testschritt 3 (ghost_049 "Seelenoffizier"): der Offizier traegt den
+  // Ring, Einheiten INNERHALB des Radius sind staerker.
+  {
+    const st = legionRoom({ ghost_049: 1 });
+    const officer = push(st, createGhost(st, 0, 0, 0, 't_pink')); // aeltester -> Offizier
+    const near = push(st, createGhost(st, 50, 0, 0, 't_pink')); // 50px, < 160px
+    const far = push(st, createGhost(st, 400, 0, 0, 't_pink')); // 400px, > 160px
+    updateGhosts(st, 0); // dt=0: nur die Auren-Vorpaesse laufen, keine Bewegung/kein Feuer
+    check(officer.isOfficer, 'Phase 7: der aelteste Untertan wird nicht Offizier');
+    check(!near.isOfficer && !far.isOfficer, 'Phase 7: mehr als ein Offizier gleichzeitig');
+  }
+
+  // (e) Testschritt 4 ("Totenruf" ghost_044): die Chance steigt bei jeder
+  // weiteren Stufe linear weiter, die Karte ist NICHT einzigartig (bleibt
+  // im Pool waehlbar).
+  {
+    check(necroData.upgrades.ghost_044.isUnique === false, 'Phase 7: ghost_044 ist faelschlich einzigartig (waere nach 1x aus dem Pool)');
+    const one = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_044: 1 }, necroData, 'mine', null);
+    const ten = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_044: 10 }, necroData, 'mine', null);
+    check(Math.abs(one.necroReviveChanceAdd - 0.05) < 1e-9, `Phase 7: ghost_044 gibt bei Stufe 1 nicht +5pp (${one.necroReviveChanceAdd})`);
+    check(Math.abs(ten.necroReviveChanceAdd - 0.5) < 1e-9, `Phase 7: ghost_044 steigt nicht linear weiter (${ten.necroReviveChanceAdd} bei Stufe 10)`);
+  }
+
+  // (f) Testschritt 5 (ghost_056 "Elite-Reaktivierung"): ein wiederbelebter
+  // Elite-Untertan belegt 2 Geisterplaetze.
+  {
+    const st = legionRoom({ ghost_056: 1 });
+    st.rng = () => 0;
+    const elite = mkEnemy();
+    elite.affixes = ['twinshot'];
+    st.killTank(elite, 'test', { killer: st.player });
+    check(st.ghosts.length === 1, `Phase 7: ghost_056 erzeugt nicht genau einen Untertanen (${st.ghosts.length})`);
+    check(st.ghosts[0]?.slotCost === 2, `Phase 7: der wiederbelebte Elite-Untertan belegt nicht 2 Plaetze (${st.ghosts[0]?.slotCost})`);
+    check(occupiedGhostSlots(st) === 2, `Phase 7: occupiedGhostSlots zaehlt die 2 Plaetze nicht (${occupiedGhostSlots(st)})`);
+    // Gegenprobe im selben Test: OHNE die Karte wird eine Elite gar nicht
+    // erst wiederbelebt (canRevive-Gate).
+    const st2 = legionRoom({});
+    st2.rng = () => 0;
+    const elite2 = mkEnemy();
+    elite2.affixes = ['twinshot'];
+    st2.killTank(elite2, 'test', { killer: st2.player });
+    check(st2.ghosts.length === 0, `Phase 7: eine Elite wird auch OHNE ghost_056 wiederbelebt (${st2.ghosts.length})`);
+  }
+
+  // (g) recomputeLegionCache(): "nicht pro Frame" -- ein Geist, der OHNE den
+  // Aufruf ins Array gelangt, aendert den Cache noch NICHT; erst der
+  // explizite Aufruf (Spawn-/Entfernen-Stelle) aktualisiert ihn.
+  {
+    const st = legionRoom({ ghost_039: 1 });
+    check(st.necroPackMult === 1, `Phase 7: necroPackMult startet nicht neutral (${st.necroPackMult})`);
+    st.ghosts.push(createGhost(st, 0, 0, 0, 't_pink'), createGhost(st, 10, 10, 0, 't_pink'));
+    check(st.necroPackMult === 1, `Phase 7: necroPackMult aktualisiert sich OHNE recomputeLegionCache()-Aufruf (${st.necroPackMult})`);
+    recomputeLegionCache(st);
+    check(st.necroPackMult > 1, `Phase 7: recomputeLegionCache() aktualisiert necroPackMult nicht (${st.necroPackMult})`);
+  }
+
+  // (h) ghost_038 "Gemeinsame Ruestung": Schwellenwert-Resistenz.
+  {
+    const st = legionRoom({ ghost_038: 1 });
+    const g1 = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    check(st.necroLegionResistBonus === 0, `Phase 7: ghost_038 gewaehrt Resistenz mit nur 1 Untertan (${st.necroLegionResistBonus})`);
+    push(st, createGhost(st, 10, 10, 0, 't_pink'));
+    check(st.necroLegionResistBonus === 6, `Phase 7: ghost_038 gewaehrt bei 2 Untertanen nicht +6 Resistenz (${st.necroLegionResistBonus})`);
+  }
+
+  // (i) ghost_040 "Synchronverschluss": Feuerrate haengt an der Anzahl
+  // (sich selbst eingeschlossen) -- gemessen als tatsaechlicher Cooldown
+  // nach einem echten Schuss.
+  {
+    const st1 = legionRoom({ ghost_040: 1 });
+    const g1 = push(st1, createGhost(st1, 0, 0, 0, 't_pink'));
+    const e1 = st1.tanks.find((t) => t !== st1.player);
+    e1.x = g1.x + 40; e1.y = g1.y; g1.turret = 0; g1.heading = 0;
+    g1.cooldown = 0;
+    updateGhosts(st1, 0.001);
+    const cd1 = g1.cooldown;
+
+    const st3 = legionRoom({ ghost_040: 1 });
+    const g3 = push(st3, createGhost(st3, 0, 0, 0, 't_pink'));
+    push(st3, createGhost(st3, -50, -50, 0, 't_pink'));
+    push(st3, createGhost(st3, -60, -60, 0, 't_pink'));
+    const e3 = st3.tanks.find((t) => t !== st3.player);
+    e3.x = g3.x + 40; e3.y = g3.y; g3.turret = 0; g3.heading = 0;
+    g3.cooldown = 0;
+    updateGhosts(st3, 0.001);
+    const cd3 = g3.cooldown;
+    check(cd1 > 0 && cd3 > 0 && cd3 < cd1, `Phase 7: ghost_040 verkuerzt den Cooldown bei mehr Untertanen nicht (${cd1} vs ${cd3})`);
+  }
+
+  // (j) ghost_041 "Geteiltes Ziel": Untertanen greifen das zuletzt vom
+  // SPIELER getroffene Ziel an (statt des naechstgelegenen), mit Schadensbonus.
+  {
+    const st = legionRoom({ ghost_041: 1 }, ['t_pink', 't_pink']);
+    const [nearE, farE] = st.tanks.filter((t) => t !== st.player);
+    // Bewusst unterschiedliche RICHTUNGEN (nicht nur Distanzen), sonst kann
+    // die Turmausrichtung allein nicht zeigen, welches Ziel gewaehlt wurde.
+    nearE.x = 30; nearE.y = 0; // Richtung 0°, naeher
+    farE.x = 0; farE.y = -300; // Richtung -90°, weiter entfernt
+    st.necroLastPlayerHitTarget = farE; // Spieler hat das WEITER entfernte Ziel zuletzt getroffen
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    // Grosszuegiges dt (TURN_SPEED 4 rad/s), damit die Turmdrehung sicher
+    // konvergiert -- es geht hier nur um die ZIELWAHL, nicht um Timing.
+    updateGhosts(st, 1);
+    const angleToFar = Math.atan2(farE.y - g.y, farE.x - g.x);
+    const angleToNear = Math.atan2(nearE.y - g.y, nearE.x - g.x);
+    const diffFar = Math.abs(((g.turret - angleToFar + Math.PI) % (2 * Math.PI)) - Math.PI);
+    const diffNear = Math.abs(((g.turret - angleToNear + Math.PI) % (2 * Math.PI)) - Math.PI);
+    check(diffFar < diffNear, `Phase 7: ghost_041 zielt nicht auf das zuletzt getroffene (weiter entfernte) Ziel (Abweichung ${diffFar} vs ${diffNear})`);
+  }
+
+  // (k) ghost_042 "Phalanx": +Resistenz nur, solange ein ANDERER Untertan
+  // innerhalb von 80 px ist.
+  {
+    const st = legionRoom({ ghost_042: 1 });
+    const g1 = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const g2 = push(st, createGhost(st, 40, 0, 0, 't_pink')); // 40px < 80px
+    updateGhosts(st, 0);
+    check(g1.legionAuraResist === 8 && g2.legionAuraResist === 8, `Phase 7: ghost_042 gewaehrt nahen Untertanen keine +8 Resistenz (${g1.legionAuraResist}/${g2.legionAuraResist})`);
+    g2.x = 500; // weit weg
+    updateGhosts(st, 0);
+    check(g1.legionAuraResist === 0, `Phase 7: ghost_042 wirkt trotz Distanz weiter (${g1.legionAuraResist})`);
+  }
+
+  // (l) ghost_043 "Reihenwechsel": stirbt ein Untertan, heilen die UEBRIGEN
+  // um einen Anteil IHRES EIGENEN maximalen Lebens.
+  {
+    const st = legionRoom({ ghost_043: 1 });
+    const dying = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const survivor = push(st, createGhost(st, 50, 50, 0, 't_pink'));
+    survivor.hp = survivor.cfg.maxHp - 40;
+    const before = survivor.hp;
+    killGhost(st, dying, 'damage');
+    check(survivor.hp > before, `Phase 7: ghost_043 heilt die Ueberlebenden nicht (${before} -> ${survivor.hp})`);
+    check(Math.abs(survivor.hp - before - survivor.cfg.maxHp * 0.08) < 1e-6, `Phase 7: ghost_043s Heilbetrag stimmt nicht (${survivor.hp - before})`);
+  }
+
+  // (m) ghost_045 "Ueberzahl": ab 3 aktiven Untertanen groessere/schnellere
+  // Geschosse.
+  {
+    const st = legionRoom({ ghost_045: 1 });
+    const g1 = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const e = st.tanks.find((t) => t !== st.player);
+    e.x = g1.x + 40; e.y = g1.y; g1.turret = 0; g1.heading = 0; g1.cooldown = 0;
+    updateGhosts(st, 0.001);
+    const bulletFew = st.bullets[st.bullets.length - 1];
+    push(st, createGhost(st, -50, -50, 0, 't_pink'));
+    push(st, createGhost(st, -60, -60, 0, 't_pink'));
+    g1.cooldown = 0;
+    updateGhosts(st, 0.001);
+    const bulletMany = st.bullets[st.bullets.length - 1];
+    const speedFew = Math.hypot(bulletFew.vx, bulletFew.vy);
+    const speedMany = Math.hypot(bulletMany.vx, bulletMany.vy);
+    check(bulletMany.radius > bulletFew.radius && speedMany > speedFew, `Phase 7: ghost_045 vergroessert/beschleunigt Geschosse ab 3 Untertanen nicht (${bulletFew.radius}/${speedFew} vs ${bulletMany.radius}/${speedMany})`);
+  }
+
+  // (n) ghost_046 "Veteranen": einmalige Befoerderung nach necroVeteranAfterS
+  // Sekunden Ueberleben.
+  {
+    const st = legionRoom({ ghost_046: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const baseDmg = g.cfg.damage;
+    const baseHp = g.cfg.maxHp;
+    updateGhosts(st, 4); // < 8s -- noch nicht befoerdert
+    check(!g.isVeteran && g.cfg.damage === baseDmg, 'Phase 7: ghost_046 befoerdert zu frueh');
+    updateGhosts(st, 5); // gesamt 9s -- jetzt befoerdert
+    check(g.isVeteran, 'Phase 7: ghost_046 befoerdert nach 8s ueberlebter Zeit nicht');
+    check(g.cfg.damage === Math.round(baseDmg * 1.2), `Phase 7: ghost_046s Schadensbonus stimmt nicht (${g.cfg.damage} statt ${Math.round(baseDmg * 1.2)})`);
+    check(g.cfg.maxHp === Math.round(baseHp * 1.12), `Phase 7: ghost_046s LP-Bonus stimmt nicht (${g.cfg.maxHp} statt ${Math.round(baseHp * 1.12)})`);
+  }
+
+  // (o) ghost_047 "Sturmformation": Anflug-Tempobonus IMMER, Flankenbonus
+  // NUR wenn die Seite/das Heck erreicht ist.
+  {
+    const st = legionRoom({ ghost_047: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const e = st.tanks.find((t) => t !== st.player);
+    e.x = 400; e.y = 0; e.heading = 0; // Front des Ziels zeigt zum Geist -> "front"
+    const before = { x: g.x, y: g.y };
+    updateGhosts(st, 0.1);
+    const distMoved = Math.hypot(g.x - before.x, g.y - before.y);
+    const st0 = legionRoom({});
+    const g0 = push(st0, createGhost(st0, 0, 0, 0, 't_pink'));
+    const e0 = st0.tanks.find((t) => t !== st0.player);
+    e0.x = 400; e0.y = 0; e0.heading = 0;
+    updateGhosts(st0, 0.1);
+    const distMoved0 = Math.hypot(g0.x, g0.y);
+    check(distMoved > distMoved0, `Phase 7: ghost_047 beschleunigt den Anflug nicht (${distMoved0} vs ${distMoved})`);
+  }
+
+  // (p) ghost_048 "Schildwall": Regen nur in Reichweite UND erst nach der
+  // Verzoegerung ohne Schaden.
+  {
+    const st = legionRoom({ ghost_048: 1 });
+    const g = push(st, createGhost(st, st.player.x + 30, st.player.y, 0, 't_pink'));
+    g.shield = 0;
+    g.lastDamageAt = -1e9; // "laengst her"
+    updateGhosts(st, 1);
+    check(g.shield > 0, `Phase 7: ghost_048 laedt den Schild in Reichweite nicht auf (${g.shield})`);
+    const st2 = legionRoom({ ghost_048: 1 });
+    const g2 = push(st2, createGhost(st2, st2.player.x + 30, st2.player.y, 0, 't_pink'));
+    g2.shield = 0;
+    g2.lastDamageAt = st2.time; // GERADE getroffen
+    updateGhosts(st2, 1);
+    check(g2.shield === 0, `Phase 7: ghost_048 ignoriert die 2-s-Sperre nach einem Treffer (${g2.shield})`);
+  }
+
+  // (q) ghost_050 "Munitionsaustausch": +1 % je Untertanen-Schuss, gedeckelt
+  // bei 30 %.
+  {
+    const st = legionRoom({ ghost_050: 1 });
+    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const e = st.tanks.find((t) => t !== st.player);
+    e.x = g.x + 40; e.y = g.y; g.turret = 0; g.heading = 0;
+    for (let i = 0; i < 5; i++) {
+      g.cooldown = 0;
+      updateGhosts(st, 0.001);
+    }
+    const stack = getNecroStack(st, 'room', '_legionAmmoExchange');
+    check(Math.abs(stack - 0.05) < 1e-9, `Phase 7: ghost_050s Stapel waechst nicht mit jedem Schuss (${stack})`);
+    for (let i = 0; i < 40; i++) {
+      g.cooldown = 0;
+      updateGhosts(st, 0.001);
+    }
+    check(getNecroStack(st, 'room', '_legionAmmoExchange') <= 0.30 + 1e-9, `Phase 7: ghost_050 ueberschreitet den 30-%-Deckel (${getNecroStack(st, 'room', '_legionAmmoExchange')})`);
+  }
+
+  // (r) ghost_051 "Erbmunition": stirbt ein Untertan, bekommen die
+  // UEBERLEBENDEN eine "naechste 5 Schuesse +25 %"-Ladung.
+  {
+    const st = legionRoom({ ghost_051: 1 });
+    const dying = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const survivor = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    killGhost(st, dying, 'damage');
+    check(survivor.legionBulletBuffs?.length === 1, 'Phase 7: ghost_051 vergibt keine Ladung an Ueberlebende');
+    check(survivor.legionBulletBuffs[0].shotsLeft === 5, `Phase 7: ghost_051s Ladung deckt nicht 5 Schuesse ab (${survivor.legionBulletBuffs[0].shotsLeft})`);
+    const e = st.tanks.find((t) => t !== st.player);
+    e.x = survivor.x + 40; e.y = survivor.y; survivor.turret = 0; survivor.heading = 0; survivor.cooldown = 0;
+    updateGhosts(st, 0.001);
+    check(survivor.legionBulletBuffs.length === 1 && survivor.legionBulletBuffs[0].shotsLeft === 4, 'Phase 7: ghost_051s Ladung wird nicht pro Schuss verbraucht');
+    const shot = st.bullets[st.bullets.length - 1];
+    check(shot.damage === Math.round(survivor.cfg.damage * 1.25), `Phase 7: ghost_051s +25 % wirkt nicht auf den Schuss (${shot.damage} statt ${Math.round(survivor.cfg.damage * 1.25)})`);
+  }
+
+  // (s) ghost_052 "Mehrfachwiederbelebung": 20 % Chance auf eine zweite,
+  // schwaechere Kopie bei einer gelungenen Probe.
+  {
+    const st = legionRoom({ ghost_052: 1 });
+    st.rng = () => 0; // jede Chance (Basis- UND Doppel-Wurf) gelingt
+    st.killTank(mkEnemy(), 'test', { killer: st.player });
+    check(st.ghosts.length === 2, `Phase 7: ghost_052 erzeugt bei gelungener Chance keine zweite Kopie (${st.ghosts.length})`);
+    // Ein fester Wert 0,25 statt einer nach Aufrufreihenfolge gezaehlten
+    // Sequenz: killTank() ruft state.rng() auch fuer spawnParticles() mehrfach
+    // VOR dem Wiederbelebungs-Wurf auf (Anzahl nicht Teil des oeffentlichen
+    // Vertrags) -- ein reiner Aufruf-Index-Stub waere fragil. 0,25 liegt
+    // unter der Basis-Chance (0,35 -> gelingt) und ueber der 20-%-Doppel-
+    // Chance (-> verfehlt), unabhaengig davon, an welcher Stelle er greift.
+    const st2 = legionRoom({ ghost_052: 1 });
+    st2.rng = () => 0.25;
+    st2.killTank(mkEnemy(), 'test', { killer: st2.player });
+    check(st2.ghosts.length === 1, `Phase 7: ghost_052 erzeugt trotz verfehlter Chance eine zweite Kopie (${st2.ghosts.length})`);
+  }
+
+  // (t) ghost_053 "Verstaerkte Huelle": ignoriert EINMAL je Leben einen
+  // Treffer > 30 % des maximalen Lebens.
+  {
+    const st = legionRoom({ ghost_053: 1 });
+    st.tanks = [st.player]; // kein echter Gegner, der die Testkugel vorher abfaengt
+    const g = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    g.hp = g.cfg.maxHp;
+    const bigHit = g.cfg.maxHp * 0.5;
+    st.bullets.push(createBullet(g.x, g.y, 0, { speed: 1, radius: 20, owner: { type: 't_enemy_test' }, damage: bigHit }));
+    stepState(st, CMD, 1 / 60);
+    check(g.hp === g.cfg.maxHp, `Phase 7: ghost_053 ignoriert den ersten grossen Treffer nicht (${g.hp} statt ${g.cfg.maxHp})`);
+    st.bullets.push(createBullet(g.x, g.y, 0, { speed: 1, radius: 20, owner: { type: 't_enemy_test' }, damage: bigHit }));
+    stepState(st, CMD, 1 / 60);
+    check(g.hp < g.cfg.maxHp, `Phase 7: ghost_053 ignoriert einen ZWEITEN grossen Treffer im selben Leben (${g.hp})`);
+  }
+
+  // (u) ghost_054 "Legionskern": eine gelungene Probe AM VOLLEN Limit heilt
+  // + staerkt statt einen weiteren Untertanen zu erzeugen.
+  {
+    const st = legionRoom({ ghost_054: 1 });
+    st.rng = () => 0;
+    for (let i = 0; i < 3; i++) push(st, createGhost(st, 0, 0, 0, 't_pink')); // Basislimit voll
+    st.ghosts.forEach((g) => (g.hp = g.cfg.maxHp - 10));
+    const before = occupiedGhostSlots(st);
+    st.killTank(mkEnemy(), 'test', { killer: st.player });
+    check(occupiedGhostSlots(st) === before, `Phase 7: ghost_054 erzeugt trotz vollem Limit einen weiteren Untertanen (${before} -> ${occupiedGhostSlots(st)})`);
+    check(st.necroLegionKernActive, 'Phase 7: ghost_054 aktiviert den Schadensbonus nicht');
+    check(st.ghosts.every((g) => g.hp > g.cfg.maxHp - 10), 'Phase 7: ghost_054 heilt die vorhandenen Untertanen nicht');
+  }
+
+  // (v) ghost_057 "Gemeinsamer Wille": ab der Schwelle wird Schaden auf ALLE
+  // aktiven Untertanen verteilt statt nur den getroffenen zu treffen.
+  {
+    const st = legionRoom({ ghost_057: 1 });
+    st.tanks = [st.player]; // kein echter Gegner, der die Testkugel vorher abfaengt
+    const g1 = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    const g2 = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    g1.hp = g1.cfg.maxHp;
+    g2.hp = g2.cfg.maxHp;
+    const dmgVoll = 40;
+    st.bullets.push(createBullet(g1.x, g1.y, 0, { speed: 1, radius: 20, owner: { type: 't_enemy_test' }, damage: dmgVoll }));
+    stepState(st, CMD, 1 / 60);
+    check(g1.hp < g1.cfg.maxHp && g2.hp < g2.cfg.maxHp, `Phase 7: ghost_057 verteilt den Schaden nicht auf BEIDE Untertanen (${g1.hp}/${g2.hp})`);
+    check(g1.cfg.maxHp - g1.hp < dmgVoll, `Phase 7: ghost_057 laesst den getroffenen Untertanen den vollen Schaden nehmen (${g1.cfg.maxHp - g1.hp})`);
+  }
+
+  // (w) ghost_058 "Chor der Toten": Untertanen bekommen die Haelfte des
+  // globalen Flanken-/Heckbonus zusaetzlich auf ihre eigenen Treffer.
+  {
+    const mkFlankRoom = (ups) => {
+      const st = legionRoom(ups, ['t_pink']);
+      const target = st.tanks.find((t) => t !== st.player);
+      target.heading = 0;
+      target.hp = target.cfg.maxHp;
+      const g = push(st, createGhost(st, target.x, target.y - 40, Math.PI / 2, 't_pink')); // von der Seite
+      st.bullets.push(createBullet(target.x, target.y - 5, Math.PI / 2, { speed: 1, radius: 4, owner: g, damage: 100 }));
+      stepState(st, CMD, 1 / 60);
+      return target.cfg.maxHp - target.hp;
+    };
+    const withCard = mkFlankRoom({ ghost_058: 1 });
+    const withoutCard = mkFlankRoom({});
+    check(withCard > withoutCard, `Phase 7: ghost_058 verstaerkt Flankentreffer der Untertanen nicht (${withoutCard} vs ${withCard})`);
+  }
+
+  // (x) ghost_059 "Grabfeld": ein neuer Untertan an einem gemerkten
+  // Sterbeort erscheint staerker.
+  {
+    const st = legionRoom({ ghost_059: 1 });
+    const dying = push(st, createGhost(st, 111, 222, 0, 't_pink'));
+    killGhost(st, dying, 'damage');
+    check(st.necroGraveyardSpots.length === 1, 'Phase 7: ghost_059 merkt sich den Sterbeort nicht');
+    const onGrave = createGhost(st, 111, 222, 0, 't_pink');
+    const elsewhere = createGhost(st, 600, 600, 0, 't_pink');
+    check(onGrave.cfg.maxHp > elsewhere.cfg.maxHp && onGrave.cfg.damage > elsewhere.cfg.damage, `Phase 7: ghost_059 staerkt einen Untertan am Grabfeld nicht (${elsewhere.cfg.maxHp}/${elsewhere.cfg.damage} vs ${onGrave.cfg.maxHp}/${onGrave.cfg.damage})`);
+  }
+
+  // (y) ghost_060 "Armee der Toten": +2 Limit (ghostMaxAdd), garantierte
+  // Zusatzkopie je gelungener Probe, -15 % Schaden fuer ALLE Untertanen.
+  {
+    const st = legionRoom({ ghost_060: 1 });
+    st.rng = () => 0;
+    st.killTank(mkEnemy(), 'test', { killer: st.player });
+    check(st.ghosts.length === 2, `Phase 7: ghost_060 erzeugt keine garantierte Zusatzkopie (${st.ghosts.length})`);
+    const baseline = resolveGhostBaselineFor(st, 't_pink');
+    check(st.ghosts[0].cfg.damage < baseline, `Phase 7: ghost_060 senkt den Untertanen-Schaden nicht um 15 % (${st.ghosts[0].cfg.damage} vs Baseline ${baseline})`);
+    const cap = (st.data.balance.ghost?.maxActive ?? 3) + (st.player.cfg.ghostMaxAdd || 0);
+    check(cap === 5, `Phase 7: ghost_060 erhoeht das Limit nicht um 2 (${cap})`);
+  }
+  function resolveGhostBaselineFor(st, type) {
+    const withoutCard = legionRoom({});
+    withoutCard.rng = () => 0;
+    withoutCard.killTank(mkEnemy(), 'test', { killer: withoutCard.player });
+    return withoutCard.ghosts[0]?.cfg.damage ?? 0;
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

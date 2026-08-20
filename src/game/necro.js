@@ -517,6 +517,54 @@ export function buildNecroListeners(state, cfg) {
       },
     });
   }
+
+  // ---- Nekromant-V2 Phase 7 (Legion, 25 Karten) ----------------------------
+  // ghost_043 "Reihenwechsel": stirbt ein Untertan, heilen ALLE UEBRIGEN um
+  // einen Anteil ihres EIGENEN maximalen Lebens.
+  if (cfg.necroPackHealOnDeathPct) {
+    L.push({
+      reasons: DEATH_REASONS, scope: 'room', key: 'necro043',
+      fn: (st, gh) => {
+        for (const other of st.ghosts) {
+          if (!other.alive || other === gh) continue;
+          other.hp = Math.min(other.cfg.maxHp, other.hp + other.cfg.maxHp * cfg.necroPackHealOnDeathPct);
+        }
+      },
+    });
+  }
+
+  // ghost_051 "Erbmunition": stirbt ein Untertan, bekommen alle UEBERLEBENDEN
+  // eine "naechste 5 Schuesse"-Ladung (g.legionBulletBuffs, konsumiert in
+  // ghost.js: updateGhosts()).
+  if (cfg.necroErbmunitionShots) {
+    L.push({
+      reasons: DEATH_REASONS, scope: 'room', key: 'necro051',
+      fn: (st, gh) => {
+        for (const other of st.ghosts) {
+          if (!other.alive || other === gh) continue;
+          other.legionBulletBuffs = other.legionBulletBuffs || [];
+          other.legionBulletBuffs.push({
+            shotsLeft: cfg.necroErbmunitionShots,
+            damageMult: 1 + (cfg.necroErbmunitionDamagePct || 0),
+          });
+        }
+      },
+    });
+  }
+
+  // ghost_059 "Grabfeld": merkt sich die letzten 3 Sterbeorte VON
+  // UNTERTANEN -- FIFO, kein reset() noetig (state ist pro Raum frisch).
+  // ghost.js: createGhost() liest state.necroGraveyardSpots beim Spawnen.
+  if (cfg.necroGraveyardBonus) {
+    L.push({
+      reasons: DEATH_REASONS, scope: 'room', key: 'necro059',
+      fn: (st, gh) => {
+        if (!gh) return;
+        st.necroGraveyardSpots.push({ x: gh.x, y: gh.y });
+        if (st.necroGraveyardSpots.length > (cfg.necroGraveyardCount || 3)) st.necroGraveyardSpots.shift();
+      },
+    });
+  }
 }
 
 // Baseline-Schaden EINES Untertanen desselben Quelltyps OHNE jede
