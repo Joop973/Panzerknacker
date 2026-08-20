@@ -1,0 +1,18 @@
+{
+  "_comment": "Nekromant-V2 Phase 3 (Geisterpanzer-Basis): der feste Basiseinheiten-Typ 'ghost_tank' aus data/tanks.json:types (Upgradepool-v2 Phase 7) und die alte, zweistufige data/balance.json: ghost.spawnChance (necro 0.5 / ghost 0.33) sind hiermit archiviert. Ersetzt durch Typ-Vererbung (ein Untertan erbt den TYP und einen Anteil (baseStatPct) der Originalwerte des getoeteten Gegners statt eines eigenen, fest verdrahteten Basistyps) und eine einheitliche data/balance.json: ghost.reviveChance. Rueckholweg: diesen Eintrag zurueck nach data/tanks.json:types.ghost_tank kopieren, spawnChance zurueck nach data/balance.json: ghost, und src/game/ghost.js: resolveGhostCfg()/createGhost() auf die alte, typunabhaengige Fassung zuruecksetzen (Git-Historie vor Nekromant-V2 Phase 3 zeigt den exakten Vorzustand).",
+  "types_ghost_tank": {
+    "label": "Geisterpanzer",
+    "maxHp": 60,
+    "damage": 8,
+    "fireRate": 2.0,
+    "speedPct": 0.7,
+    "bulletSpeedPct": 0.8,
+    "rangePct": 0.65,
+    "weapon": "bullet",
+    "damageType": "physical"
+  },
+  "balance_ghost_spawnChance": {
+    "necro": 0.5,
+    "ghost": 0.33
+  }
+}

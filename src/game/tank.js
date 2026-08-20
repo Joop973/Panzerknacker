@@ -494,16 +494,18 @@ export function layMine(tank, state, throwOverride, forceEmp = false) {
 // Nekromant: Geisterbombe (Upgradepool-v2 Phase 6) -- ersetzt den
 // Bombenslot VOLLSTAENDIG, solange cfg.necromancer gesetzt ist. Kein Wurf,
 // keine Explosion, kein Fernzuender: ein Tastendruck erzeugt SOFORT einen
-// Geisterpanzer und zaehlt gegen dasselbe Limit wie kill-ausgeloeste
-// Geister (data/balance.json: ghost.maxActive/spawnChance, s. state.js:
-// killTank()). Am Limit passiert nichts -- kein Verbrauch, keine
-// Verdraengung (Festgelegte Entscheidungen: "Geistlimit"). Seit Phase 7
-// liefert tank (der Spieler selbst) nur noch Position/Blickrichtung des
-// Spawnpunkts -- createGhost() baut den festen Basistyp, keine Vorlage mehr.
-// Nutzerwunsch: eigene Abklingzeit (ghost.bombCooldownS, Standard 10 s) --
-// unabhaengig vom Geistlimit, das weiterhin ohne Verdraengung UND ohne
-// eigenen Verbrauch bleibt (ein Versuch am vollen Limit startet KEINE
-// Abklingzeit, genau wie er bisher schon nichts "verbraucht" hat).
+// Untertan und zaehlt gegen dasselbe Limit wie kill-ausgeloeste Untertanen
+// (data/balance.json: ghost.maxActive, s. state.js: killTank()). Am Limit
+// passiert nichts -- kein Verbrauch, keine Verdraengung (Festgelegte
+// Entscheidungen: "Geistlimit"). Seit Nekromant-V2 Phase 3 erbt der
+// entstehende Untertan einen ZUFAELLIGEN Typ aus dem aktuellen
+// Akt-Gegnerpool (state.actEnemyPool, run.js: unlockedEnemyTypes() ueber
+// buildCombatRoom() durchgereicht) statt eines festen Basistyps -- "man
+// weiss vorher nicht, was man bekommt" (Auftrag). Nutzerwunsch: eigene
+// Abklingzeit (ghost.bombCooldownS, Standard 10 s) -- unabhaengig vom
+// Geistlimit, das weiterhin ohne Verdraengung UND ohne eigenen Verbrauch
+// bleibt (ein Versuch am vollen Limit startet KEINE Abklingzeit, genau wie
+// er bisher schon nichts "verbraucht" hat).
 function spawnGhostBomb(tank, state) {
   // Epsilon wie bei fireBullet(): der Cooldown ist als Summe von
   // 1/60-Schritten nicht exakt darstellbar, ohne Toleranz bleibt die Bombe
@@ -517,7 +519,13 @@ function spawnGhostBomb(tank, state) {
   // kill-ausgeloesten Spawnwuerfel in state.js: killTank().
   const cap = (state.data.balance.ghost?.maxActive ?? 3) + (tank.cfg.ghostMaxAdd || 0);
   if (state.ghosts.length >= cap) return false;
-  state.ghosts.push(createGhost(state, tank.x, tank.y, tank.turret));
+  // Zufaelliger Typ aus dem Akt-Gegnerpool -- ueber den Seed-RNG
+  // (state.rng), nie Math.random. Ein leerer Pool (Testfixtures ohne
+  // actEnemyPool) faellt auf 't_brown' zurueck, den fruehesten/einfachsten
+  // Gegnertyp, statt den Wurf zu verweigern.
+  const pool = state.actEnemyPool && state.actEnemyPool.length ? state.actEnemyPool : ['t_brown'];
+  const sourceType = pool[Math.floor(state.rng() * pool.length) % pool.length];
+  state.ghosts.push(createGhost(state, tank.x, tank.y, tank.turret, sourceType));
   tank.ghostBombCooldown = state.data.balance.ghost?.bombCooldownS ?? 10;
   state.sounds.push({ name: 'shield', x: tank.x });
   state.spawnParticles?.(tank.x, tank.y, '#8ecaf0', 10, 90);

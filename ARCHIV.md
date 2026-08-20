@@ -259,3 +259,31 @@ entfernt, Legendär/Aktivkarte künstlich nicht-einzigartig gemacht,
 `maxStacks` künstlich wieder eingefügt, eine 5. Karte mit `requires`
 versehen — alle fünf Fälle einzeln absichtlich rot gemacht, Meldung
 geprüft, zurückgenommen).
+
+## Nekromant-V2 — Phase 3 (Geisterpanzer-Basis: ghost_tank + spawnChance)
+
+Section 2 der Auftragstabelle kehrt zwei Kernregeln der alten Spec um: „Keine
+Stat-Übernahme vom getöteten Gegner" → „Untertanen erben Typ und einen
+Anteil der Originalwerte"; „Feste 50 % / 33 % Spawnchance" → „Wiederbelebungschance
+als Grundmechanik". Beide alten Mechanismen sind damit ersetzt, nicht nur
+angepasst.
+
+| Was | Warum ersetzt | Datei | Zurückholen |
+|---|---|---|---|
+| `data/tanks.json: types.ghost_tank` (fester Basistyp aller Geister, Upgradepool-v2 Phase 7) | Untertanen erben jetzt den TYP des getöteten Gegners (`src/game/ghost.js: resolveGhostCfg()` baut auf `resolveCfg(data, sourceType)` auf) statt eines eigenen, typunabhängigen Basistyps | `archive/ghost-tank-v1.json` | Eintrag zurück nach `data/tanks.json: types.ghost_tank` kopieren, `ghost.js: resolveGhostCfg()`/`createGhost()` auf die alte, typunabhängige Fassung zurücksetzen (Git-Historie vor dieser Phase zeigt den exakten Vorzustand). |
+| `data/balance.json: ghost.spawnChance.necro/ghost` (0,5/0,33) | Ersetzt durch ein einziges `ghost.reviveChance` (0,35), das für jeden Kill auf der Nekromanten-Seite (Spieler ODER vorhandener Geist) gilt | `archive/ghost-tank-v1.json` | Wert zurück nach `data/balance.json: ghost.spawnChance`, `state.js: killTank()`s Spawnwürfel auf die alte, killerabhängige Zweiteilung zurückbauen. |
+
+**Bewusst NICHT archiviert** (bleiben im Code stehen, aktuell aber
+unerreichbar, weil kein lebendiges Upgrade sie mehr setzt — Wiederanschluss-
+punkt für Phase 8 dieses Auftrags, „Alpha und Verschmelzung"): der alte,
+kartengebundene Kommandanten-Mechanismus (`cfg.ghostCommander`/
+`ghostCommanderShield`/`ghostCommanderMultBonus`, `g.isCommander`,
+`commanderShieldUsed`) und die alte Wiederkehr-nach-dem-Tod-Familie
+(`cfg.ghostReviveChance`/`ghostReviveMaxUses`/`ghostReviveGrowth`,
+`g.reviveUsesLeft`/`reviveGrowthStacks`, `ghost.js: tryReviveGhost()`) samt
+Letztem-Willen (`ghostDeathZoneRadius`/`ghostDeathZoneDamage`). Alle 16 alten
+`ghost*`-`core`-Schlüssel aus `cfg.js` bleiben aus demselben Grund stehen.
+Diese Phase fügt daneben ein NEUES, immer aktives `g.isChampion` hinzu
+(dynamisch aus `balance.ghost.strengthWeights` berechnet, kein Karten-Gate)
+— beide Konzepte sind bewusst unterscheidbar benannt, um sie später nicht zu
+verwechseln.
