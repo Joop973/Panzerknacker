@@ -105,6 +105,12 @@ export function recordRoom(r) {
     shotsFired: r.shotsFired || 0,
     shotsHit: r.shotsHit || 0,
     magBlockedTime: Math.round((r.magBlockedTime || 0) * 100) / 100,
+    // Nekromant-V2 Phase 10: Untertanen erzeugt/gestorben (nach Grund)/
+    // verschmolzen, Wiederbelebungsquote, Championstaerke, Bossschuss-
+    // Anteil -- alle Rohzaehler aus genau EINEM Raum, main.js liest sie
+    // unveraendert aus state.js/ghost.js/bossai.js. null bei jedem
+    // Nicht-Nekromanten-Raum (main.js: teleNecro bleibt dann null).
+    necro: r.necro || null,
   });
 }
 
@@ -298,9 +304,39 @@ export function computeMetrics(runs) {
   const mostRejected = Object.entries(offered)
     .map(([id, o]) => [id, o - (chosen[id] || 0)])
     .sort((a, b) => b[1] - a[1]).slice(0, 5);
+  // Nekromant-V2 Phase 10: ueber ALLE Raeume ALLER Runs aufsummiert (Muster
+  // wie dmgByType oben) -- nur Raeume mit necro!=null zaehlen mit (andere
+  // Klassen/aeltere Runs vor diesem Merge liefern null).
+  let necroCreated = 0, necroFused = 0, necroReviveRolls = 0, necroReviveHits = 0;
+  let necroChampSum = 0, necroChampSamples = 0, necroBossPlayer = 0, necroBossGhost = 0;
+  const necroDied = { death_damage: 0, death_expire: 0, sacrifice: 0 };
+  for (const r of runs) for (const room of r.rooms || []) {
+    const nc = room.necro;
+    if (!nc) continue;
+    necroCreated += nc.created || 0;
+    necroFused += nc.fused || 0;
+    necroReviveRolls += nc.reviveRolls || 0;
+    necroReviveHits += nc.reviveHits || 0;
+    necroChampSum += nc.championStrengthSum || 0;
+    necroChampSamples += nc.championStrengthSamples || 0;
+    necroBossPlayer += nc.bossShotsAtPlayer || 0;
+    necroBossGhost += nc.bossShotsAtGhost || 0;
+    for (const k of Object.keys(necroDied)) necroDied[k] += nc.diedByReason?.[k] || 0;
+  }
+  const necroBossTotal = necroBossPlayer + necroBossGhost;
+  const necro = necroCreated || necroFused || necroReviveRolls
+    ? {
+        created: necroCreated,
+        fused: necroFused,
+        diedByReason: necroDied,
+        reviveQuotePct: necroReviveRolls ? Math.round((100 * necroReviveHits) / necroReviveRolls) : null,
+        avgChampionStrength: necroChampSamples ? Math.round(necroChampSum / necroChampSamples) : null,
+        bossShotsPlayerPct: necroBossTotal ? Math.round((100 * necroBossPlayer) / necroBossTotal) : null,
+      }
+    : null;
   return {
     runs: n, wins, winRate: Math.round((100 * wins) / n),
-    medianDeathRoom: median, causes,
+    medianDeathRoom: median, causes, necro,
     damagePerRun: dmgPerRun,
     minFps: minFps === Infinity ? null : minFps,
     neverChosen, mostRejected,
@@ -328,7 +364,16 @@ function refreshSummary() {
       .map((k) => `${k} ${m.damagePerRun[k]}`).join(' · ') + `<br>` +
     `Todesursachen: ${causes}<br>` +
     `Nie gewaehlt: ${m.neverChosen.join(', ') || '–'}<br>` +
-    `Am haeufigsten abgelehnt: ${m.mostRejected.map(([id, c]) => `${id} (${c})`).join(', ') || '–'}`;
+    `Am haeufigsten abgelehnt: ${m.mostRejected.map(([id, c]) => `${id} (${c})`).join(', ') || '–'}` +
+    // Nekromant-V2 Phase 10: nur bei mindestens einem Nekromanten-Raum ueber
+    // alle gespeicherten Runs (sonst waere die Zeile immer leer sichtbar).
+    (m.necro
+      ? `<br><b>Nekromant</b> Untertanen erzeugt ${m.necro.created} · verschmolzen ${m.necro.fused} · ` +
+        `gestorben (Schaden ${m.necro.diedByReason.death_damage} / Ablauf ${m.necro.diedByReason.death_expire} / ` +
+        `Opferung ${m.necro.diedByReason.sacrifice}) · Wiederbelebungsquote ${m.necro.reviveQuotePct ?? '–'} % · ` +
+        `⌀ Championstaerke ${m.necro.avgChampionStrength ?? '–'} · ` +
+        `Bossschuesse auf Spieler ${m.necro.bossShotsPlayerPct ?? '–'} %`
+      : '');
 }
 
 function refreshDebugView() {

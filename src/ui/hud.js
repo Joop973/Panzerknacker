@@ -7,6 +7,7 @@
 import { WIDTH, HEIGHT } from '../config.js';
 import { enemyCount, totalRooms } from '../game/run.js';
 import { resolveCfg } from '../game/cfg.js';
+import { occupiedGhostSlots } from '../game/ghost.js';
 
 function fmtTime(s) {
   const m = Math.floor(s / 60);
@@ -43,6 +44,12 @@ export function createHud(ctx) {
     if (p.cfg.necromancer) {
       const bcd = p.ghostBombCooldown || 0;
       ammoLine += bcd > 0 ? `  Geisterbombe ${bcd.toFixed(1)}s` : '  Geisterbombe ✓';
+      // Nekromant-V2 Phase 10 (HUD: "aktive Untertanen / Limit"): dieselbe
+      // Deckelformel wie ueberall sonst (ghost.js: pushGhost()/state.js:
+      // killTank()) -- occupiedGhostSlots() zaehlt PLAETZE (ein wieder-
+      // belebter Elite-Untertan belegt 2), nicht die reine Array-Laenge.
+      const cap = (run.data.balance?.ghost?.maxActive ?? 3) + (p.cfg.ghostMaxAdd || 0);
+      ammoLine += `  Untertanen ${occupiedGhostSlots(st)}/${cap}`;
     } else {
       ammoLine += `  Minen ${p.cfg.mines - liveMines}/${p.cfg.mines}`;
     }
@@ -243,6 +250,15 @@ export function createHud(ctx) {
     if (p.cfg.resist) rows.push(['Resistenz', `${p.cfg.resist} Punkte`]);
     if (p.cfg.pierce) rows.push(['Durchschlag', `${p.cfg.pierce}`]);
     if (p.cfg.shieldMax) rows.push(['Schildpool', `${Math.round(p.shield || 0)}/${p.cfg.shieldMax}`]);
+    // Nekromant-V2 Phase 10 (HUD: "Wiederbelebungschance"): die Chance, mit
+    // der ein Kill (durch den Nekromanten selbst oder einen Untertan) einen
+    // neuen Untertan erzeugt -- dieselbe Grundformel wie state.js: killTank()s
+    // Revive-Block, hier nur ohne den Elite-/Kill-spezifischen Bonus (der
+    // gilt situativ, nicht als Dauerwert).
+    if (p.cfg.necromancer) {
+      const chance = (run.data.balance?.ghost?.reviveChance ?? 0) + (p.cfg.necroReviveChanceAdd || 0);
+      rows.push(['Wiederbelebungschance', `${Math.round(chance * 100)} %`]);
+    }
     // Raum-Modifikator sichtbar machen: er veraendert genau diese Zahlen und
     // ist sonst nur in der Vorschau zu sehen.
     if (st.modifier?.name) rows.push(['Raum', st.modifier.name]);

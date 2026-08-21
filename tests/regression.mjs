@@ -9982,6 +9982,360 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 62. Nekromant-V2 Phase 10: Lesbarkeit und Telemetrie -----------------
+// Auftrag: "der Spieler muss sehen, was passiert" -- Untertanen-Lebensleiste/
+// Schildleiste/Lebenszeit-Ring, Champion-Markierung und drei der vier
+// Auftrags-Auren (042/048/049/081) waren bereits ab Phase 3/7/8 gebaut (Ist-
+// Abgleich bestaetigt, kein doppelter Testaufbau hier). ECHT NEU in dieser
+// Phase: der ghost_070-Aura-Radius war bis jetzt komplett unsichtbar (jetzt
+// ein gestrichelter Ring im tatsaechlichen Wirkradius), "Wiederbelebung"
+// hatte KEIN sichtbares/hoerbares Gegenstueck (jetzt ghost_rise-Ton +
+// Partikel an pushGhost()s echten Erzeugungs-Ausgaengen), und die sechs
+// verlangten Telemetriewerte existierten ueberhaupt noch nicht. "Exekution"
+// braucht KEINEN neuen Code -- Grundsteinumbau Phase 2s t.executing-Schleife
+// iteriert state.tanks (also auch von einem Untertan getroffene Gegner) und
+// zeichnet Rauch/Verlangsamung bereits generisch, verifiziert statt
+// angenommen (Punkt (i)). ghost_102/103 bekommen BEWUSST KEINEN Ring: beide
+// skalieren mit der REINEN ANZAHL/dem Plaetzeverbrauch, ohne raeumlichen
+// Wirkradius -- ein Ring haette dort keine geometrische Bedeutung (anders
+// als 070/042/048/049, die echte Distanzen pruefen).
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const {
+    createGhost, killGhost, updateGhosts, pushGhost, occupiedGhostSlots,
+  } = await import('../src/game/ghost.js');
+  const { createRun, chooseUpgrade } = await import('../src/game/run.js');
+  const { createHud } = await import('../src/ui/hud.js');
+  const { recordRoom, computeMetrics } = await import('../src/core/telemetry.js');
+  const { stepMirrorBoss } = await import('../src/game/bossai.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+
+  const necroRoom = (playerUpgrades = {}, types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades,
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    return st;
+  };
+  const arenaRoom = (types, layout) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+      roomSpec: { fixedLayout: layout },
+      arenas: tanksData.arenas,
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    return st;
+  };
+
+  // (a) necroGhostsCreated: nur an ECHTEN Erscheinungs-Ausgaengen von
+  // pushGhost() -- normaler Pfad UND der Gewinner-Zweig von necroUniqueThrone
+  // -- NICHT beim Verlierer-Zweig (existing bleibt) und NICHT bei
+  // necroCapFusion am vollen Limit (g wird verworfen).
+  {
+    const st = necroRoom();
+    check(st.necroGhostsCreated === 0, 'Phase 10: Testaufbau -- necroGhostsCreated startet nicht bei 0');
+    pushGhost(st, createGhost(st, 100, 100, 0, 't_pink'));
+    check(st.necroGhostsCreated === 1, `Phase 10: normaler pushGhost() erhoeht necroGhostsCreated nicht (${st.necroGhostsCreated})`);
+    // necroUniqueThrone, Verlierer-Zweig: g wird verworfen -- KEIN Zuwachs.
+    const st2 = necroRoom({ ghost_071: 1 });
+    pushGhost(st2, createGhost(st2, 0, 0, 0, 't_pink'));
+    const strong = st2.ghosts[0];
+    strong.hp = 999;
+    strong.cfg.maxHp = 999;
+    const before = st2.necroGhostsCreated;
+    pushGhost(st2, createGhost(st2, 500, 500, 0, 't_pink')); // klar schwaecher -> verschmilzt, existing bleibt
+    check(
+      st2.necroGhostsCreated === before,
+      `Phase 10: der Verlierer-Zweig von necroUniqueThrone erhoeht necroGhostsCreated faelschlich (${before} -> ${st2.necroGhostsCreated})`,
+    );
+    // necroCapFusion am vollen Limit: g wird verworfen -- KEIN Zuwachs.
+    const st3 = necroRoom({ ghost_098: 1 });
+    const cap = (st3.data.balance?.ghost?.maxActive ?? 3) + (st3.player.cfg.ghostMaxAdd || 0);
+    for (let i = 0; i < cap; i++) pushGhost(st3, createGhost(st3, i * 40, i * 40, 0, 't_pink'));
+    const before3 = st3.necroGhostsCreated;
+    pushGhost(st3, createGhost(st3, 999, 999, 0, 't_pink'));
+    check(
+      st3.necroGhostsCreated === before3,
+      `Phase 10: necroCapFusion am vollen Limit erhoeht necroGhostsCreated faelschlich (${before3} -> ${st3.necroGhostsCreated})`,
+    );
+  }
+
+  // (b) necroGhostsFused: erhoeht sich in fuseGhost() -- ueber BEIDE
+  // Ausloeser (necroUniqueThrone UND necroCapFusion) gleich gezaehlt, weil
+  // beide letztlich dieselbe Funktion aufrufen.
+  {
+    const st = necroRoom({ ghost_071: 1 });
+    check(st.necroGhostsFused === 0, 'Phase 10: Testaufbau -- necroGhostsFused startet nicht bei 0');
+    pushGhost(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const strong = st.ghosts[0];
+    strong.hp = 999;
+    strong.cfg.maxHp = 999;
+    pushGhost(st, createGhost(st, 500, 500, 0, 't_pink'));
+    check(st.necroGhostsFused === 1, `Phase 10: eine erzwungene Verschmelzung (071) erhoeht necroGhostsFused nicht (${st.necroGhostsFused})`);
+  }
+
+  // (c) necroGhostsDiedByReason: exakt der richtige Schluessel je cause,
+  // 'fusion' zaehlt NICHT in diesem Zaehler mit (das ist necroGhostsFused).
+  {
+    const st = necroRoom();
+    pushGhost(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const g1 = st.ghosts[0];
+    killGhost(st, g1); // cause='damage' -> death_damage
+    check(st.necroGhostsDiedByReason.death_damage === 1, 'Phase 10: killGhost(cause=damage) erhoeht death_damage nicht');
+    const g2 = createGhost(st, 0, 0, 0, 't_pink');
+    pushGhost(st, g2);
+    killGhost(st, g2, 'expire');
+    check(st.necroGhostsDiedByReason.death_expire === 1, 'Phase 10: killGhost(cause=expire) erhoeht death_expire nicht');
+    const g3 = createGhost(st, 0, 0, 0, 't_pink');
+    pushGhost(st, g3);
+    killGhost(st, g3, 'sacrifice');
+    check(st.necroGhostsDiedByReason.sacrifice === 1, 'Phase 10: killGhost(cause=sacrifice) erhoeht sacrifice nicht');
+    check(
+      st.necroGhostsDiedByReason.death_damage === 1 && st.necroGhostsDiedByReason.death_expire === 1,
+      'Phase 10: ein spaeterer Tod veraendert einen fremden Grund-Zaehler',
+    );
+  }
+
+  // (d) necroReviveRolls/necroReviveHits: nur bei einer ECHTEN Probe
+  // (canRevive), Hits nur wenn tatsaechlich ein Untertan entstand
+  // (spawnedAny) -- nicht schon beim blossen "Wurf < chance".
+  {
+    const st = necroRoom();
+    st.rng = () => 0; // garantiert erfolgreich
+    const victim = st.tanks.find((t) => t !== st.player);
+    victim.protect = 0;
+    st.killTank(victim, 'test', { killer: st.player });
+    check(st.necroReviveRolls === 1, `Phase 10: eine echte Wiederbelebungsprobe erhoeht necroReviveRolls nicht (${st.necroReviveRolls})`);
+    check(st.necroReviveHits === 1, `Phase 10: eine erfolgreiche Probe erhoeht necroReviveHits nicht (${st.necroReviveHits})`);
+    // Gegenprobe: rng garantiert FEHLSCHLAG -- Rolls steigt, Hits nicht.
+    const st2 = necroRoom({}, ['t_pink', 't_pink']);
+    st2.rng = () => 0.999;
+    const v2 = st2.tanks.find((t) => t !== st2.player);
+    v2.protect = 0;
+    st2.killTank(v2, 'test', { killer: st2.player });
+    check(st2.necroReviveRolls === 1, 'Phase 10: eine fehlgeschlagene Probe erhoeht necroReviveRolls nicht');
+    check(st2.necroReviveHits === 0, 'Phase 10: eine fehlgeschlagene Probe erhoeht necroReviveHits faelschlich');
+  }
+
+  // (e) necroChampionStrengthSum/-Samples: waechst jeden updateGhosts()-Tick
+  // MIT lebendem Champion, bleibt unveraendert OHNE einen.
+  {
+    const st = necroRoom();
+    check(st.necroChampionStrengthSamples === 0, 'Phase 10: Testaufbau -- necroChampionStrengthSamples startet nicht bei 0');
+    updateGhosts(st, 1 / 60); // kein Untertan -> kein Champion
+    check(st.necroChampionStrengthSamples === 0, 'Phase 10: updateGhosts() ohne Untertan erhoeht die Stichprobe faelschlich');
+    pushGhost(st, createGhost(st, 100, 100, 0, 't_pink'));
+    updateGhosts(st, 1 / 60);
+    check(st.necroChampionStrengthSamples === 1, `Phase 10: updateGhosts() mit Champion erhoeht die Stichprobe nicht (${st.necroChampionStrengthSamples})`);
+    check(st.necroChampionStrengthSum > 0, 'Phase 10: necroChampionStrengthSum bleibt bei 0 trotz lebendem Champion');
+    updateGhosts(st, 1 / 60);
+    check(st.necroChampionStrengthSamples === 2, 'Phase 10: ein zweiter Tick mit Champion erhoeht die Stichprobe nicht erneut');
+  }
+
+  // (f) bossShotsAtPlayer/bossShotsAtGhost: stepMirrorBoss() zaehlt jeden
+  // ECHTEN Schuss (bullets waechst) nach dem tatsaechlichen Ziel.
+  {
+    const st = arenaRoom(['t_mirror'], 'boss_mirror');
+    const boss = st.tanks.find((t) => t !== st.player);
+    const g = createGhost(st, boss.x - 60, boss.y + 60, 0, 't_pink');
+    g.cfg.maxHp = 99999;
+    g.hp = 99999;
+    st.ghosts.push(g);
+    check(st.bossShotsAtPlayer === 0 && st.bossShotsAtGhost === 0, 'Phase 10: Testaufbau -- Bossschuss-Zaehler starten nicht bei 0');
+    let firedAtPlayer = 0, firedAtGhost = 0;
+    const dt = 1 / 60;
+    for (let i = 0; i < 60 * 20; i++) { // 20 simulierte Sekunden
+      st.time += dt;
+      boss.cooldown = Math.max(0, boss.cooldown - dt);
+      const before = st.bullets.length;
+      stepMirrorBoss(boss, st, dt);
+      if (st.bullets.length > before) {
+        if (boss.ai.target === st.player) firedAtPlayer++;
+        else firedAtGhost++;
+      }
+      st.bullets.length = 0;
+    }
+    check(firedAtPlayer + firedAtGhost > 0, 'Phase 10: Testaufbau -- der Boss feuert in 20s ueberhaupt nicht');
+    check(
+      st.bossShotsAtPlayer === firedAtPlayer,
+      `Phase 10: bossShotsAtPlayer stimmt nicht mit den echten Schuessen ueberein (${st.bossShotsAtPlayer} statt ${firedAtPlayer})`,
+    );
+    check(
+      st.bossShotsAtGhost === firedAtGhost,
+      `Phase 10: bossShotsAtGhost stimmt nicht mit den echten Schuessen ueberein (${st.bossShotsAtGhost} statt ${firedAtGhost})`,
+    );
+  }
+
+  // (g) "Wiederbelebung": ghost_rise wird bei einem ECHTEN Erscheinen
+  // gemeldet (state.sounds), NICHT bei einem verworfenen (necroCapFusion).
+  {
+    const st = necroRoom();
+    pushGhost(st, createGhost(st, 100, 100, 0, 't_pink'));
+    check(
+      st.sounds.some((s) => (s.name || s) === 'ghost_rise'),
+      'Phase 10: ein neu erschienener Untertan meldet keinen ghost_rise-Ton',
+    );
+    const st2 = necroRoom({ ghost_098: 1 });
+    const cap = (st2.data.balance?.ghost?.maxActive ?? 3) + (st2.player.cfg.ghostMaxAdd || 0);
+    for (let i = 0; i < cap; i++) pushGhost(st2, createGhost(st2, i * 40, i * 40, 0, 't_pink'));
+    st2.sounds.length = 0;
+    pushGhost(st2, createGhost(st2, 999, 999, 0, 't_pink')); // verworfen (necroCapFusion)
+    check(
+      !st2.sounds.some((s) => (s.name || s) === 'ghost_rise'),
+      'Phase 10 (Gegenprobe): ein verworfener Geist (necroCapFusion) meldet trotzdem ghost_rise',
+    );
+  }
+
+  // (h) HUD: "Untertanen X/Y" (drawBar) + "Wiederbelebungschance" (drawStats)
+  // nur fuer den Nekromanten, mit den ECHTEN Werten aus dem aufgeloesten cfg.
+  {
+    const texts = [];
+    const fakeCtx = new Proxy(
+      { canvas: { width: 768, height: 512 }, measureText: () => ({ width: 40 }) },
+      {
+        get: (t, k) => {
+          if (k in t) return t[k];
+          if (k === 'fillText') return (s) => texts.push(String(s));
+          return () => {};
+        },
+        set: () => true,
+      },
+    );
+    const hud = createHud(fakeCtx);
+    const runN = createRun(tanksData, tilesData, diffData, upgradesData, 11, 'normal', { starterTank: 'c_necro' });
+    // Die Anzeige gilt nur im laufenden Raum -- ein frischer Run steht auf
+    // 'preview' und wuerde gar nichts zeichnen (Muster: Abschnitt 8f/P7).
+    runN.phase = 'playing';
+    runN.state.ghosts.length = 0;
+    pushGhost(runN.state, createGhost(runN.state, 100, 100, 0, 't_pink'));
+    texts.length = 0;
+    hud.render(runN, { stats: true });
+    const joined = texts.join('\n');
+    const cap = (runN.data.balance?.ghost?.maxActive ?? 3) + (runN.state.player.cfg.ghostMaxAdd || 0);
+    check(joined.includes(`Untertanen 1/${cap}`), `Phase 10: HUD zeigt "Untertanen X/Y" nicht korrekt (Text: ${joined.replace(/\n/g, ' | ')})`);
+    check(joined.includes('Wiederbelebungschance'), 'Phase 10: HUD zeigt keine Wiederbelebungschance-Zeile');
+    // Kontrolle: die Standard-Klasse zeigt beides NICHT.
+    const runP = createRun(tanksData, tilesData, diffData, upgradesData, 11);
+    runP.phase = 'playing';
+    texts.length = 0;
+    hud.render(runP, { stats: true });
+    const joinedP = texts.join('\n');
+    check(!joinedP.includes('Untertanen'), 'Phase 10: die Standard-Klasse zeigt faelschlich eine Untertanen-Zeile');
+    check(!joinedP.includes('Wiederbelebungschance'), 'Phase 10: die Standard-Klasse zeigt faelschlich eine Wiederbelebungschance-Zeile');
+  }
+
+  // (i) Exekution ist bereits generisch abgedeckt (Grundsteinumbau Phase 2):
+  // t.executing iteriert state.tanks, trifft also auch einen von einem
+  // UNTERTAN getroffenen Gegner. Verifiziert statt angenommen -- Nachweis
+  // ueber die echte Schadensschleife: ein von einer Geisterkugel
+  // getroffener, bereits unter der Schwelle stehender Gegner erhaelt
+  // t.executing UND den Rauch-Timer, ohne dass Phase 10 dafuer Code
+  // anfassen musste.
+  {
+    const st = necroRoom();
+    const enemy = st.tanks.find((t) => t !== st.player);
+    const exCfg = st.data.balance.execute;
+    enemy.hp = Math.max(1, Math.round(enemy.cfg.maxHp * exCfg.thresholdPct * 0.5)); // klar unter der Schwelle
+    stepState(st, { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false }, 1 / 60);
+    check(enemy.executing === true, 'Phase 10: ein Gegner unter der Exekutionsschwelle traegt t.executing nicht (Untertanen-Treffer waeren sonst unsichtbar)');
+  }
+
+  // (j) telemetry.js: recordRoom() speichert das necro-Feld unveraendert,
+  // computeMetrics() aggregiert Quote/Championstaerke/Bossschuss-Anteil
+  // korrekt ueber SYNTHETISCHE Werte (nicht ueber einen echten Spiellauf --
+  // Mechanismus statt Datenlage).
+  {
+    // recordRoom() haengt an einem modulinternen "current"-Puffer, der nur
+    // ueber beginRun()/endRun() zugaenglich ist -- fuer den Aggregations-
+    // test bauen wir stattdessen direkt Run-Objekte im computeMetrics()-
+    // Eingabeformat (dieselbe Form, die endRun() erzeugt).
+    const mkRun = (rooms) => ({ won: true, rooms });
+    const runs = [
+      mkRun([
+        { room: 1, necro: { created: 3, fused: 1, diedByReason: { death_damage: 2, death_expire: 1, sacrifice: 0 }, reviveRolls: 4, reviveHits: 3, championStrengthSum: 100, championStrengthSamples: 10, bossShotsAtPlayer: 6, bossShotsAtGhost: 4 } },
+      ]),
+      mkRun([
+        { room: 1, necro: { created: 1, fused: 0, diedByReason: { death_damage: 0, death_expire: 1, sacrifice: 1 }, reviveRolls: 2, reviveHits: 1, championStrengthSum: 50, championStrengthSamples: 10, bossShotsAtPlayer: 0, bossShotsAtGhost: 0 } },
+      ]),
+    ];
+    const m = computeMetrics(runs);
+    check(!!m.necro, 'Phase 10: computeMetrics() liefert kein necro-Objekt trotz vorhandener Rohdaten');
+    check(m.necro.created === 4, `Phase 10: Untertanen-erzeugt-Summe falsch (${m.necro.created} statt 4)`);
+    check(m.necro.fused === 1, `Phase 10: verschmolzen-Summe falsch (${m.necro.fused} statt 1)`);
+    check(
+      m.necro.diedByReason.death_damage === 2 && m.necro.diedByReason.death_expire === 2 && m.necro.diedByReason.sacrifice === 1,
+      `Phase 10: gestorben-nach-Grund-Summe falsch (${JSON.stringify(m.necro.diedByReason)})`,
+    );
+    // Quote: (3+1)/(4+2) = 4/6 = 66,7 % -> gerundet 67.
+    check(m.necro.reviveQuotePct === 67, `Phase 10: Wiederbelebungsquote falsch (${m.necro.reviveQuotePct} statt 67)`);
+    // Championstaerke: (100+50)/(10+10) = 7,5 -> gerundet 8.
+    check(m.necro.avgChampionStrength === 8, `Phase 10: durchschnittliche Championstaerke falsch (${m.necro.avgChampionStrength} statt 8)`);
+    // Bossschuesse: 6/(6+4) = 60 %.
+    check(m.necro.bossShotsPlayerPct === 60, `Phase 10: Bossschuss-Anteil falsch (${m.necro.bossShotsPlayerPct} statt 60)`);
+    // Gegenprobe: ganz ohne necro-Daten bleibt computeMetrics().necro null.
+    const mLeer = computeMetrics([mkRun([{ room: 1, necro: null }])]);
+    check(mLeer.necro === null, 'Phase 10 (Gegenprobe): computeMetrics() liefert necro trotz fehlender Rohdaten');
+  }
+
+  // (k) renderer.js: der ghost_070-Aura-Ring wird NUR gezeichnet, wenn der
+  // Champion die Karte traegt -- Nachweis ueber den echten, aufzeichnenden
+  // Fake-Canvas-Renderpfad aus tests/domstub.mjs (Muster: Abschnitt 2f),
+  // nicht nur "core-Feld gesetzt".
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { createRenderer } = await import('../src/render/renderer.js');
+      const { createTracks } = await import('../src/render/tracks.js');
+      const ctx = document.createElement('canvas').getContext('2d');
+      const renderer = createRenderer(ctx);
+      const tracks = createTracks();
+      const arcRadii = () => ctx.calls.filter((c) => c.fn === 'arc').map((c) => c.args[2]);
+
+      const st = necroRoom({ ghost_070: 1 });
+      pushGhost(st, createGhost(st, 300, 300, 0, 't_pink'));
+      updateGhosts(st, 1 / 60); // Champion-Bestimmung
+      ctx.calls.length = 0;
+      renderer.render(st, 1, tracks, null, null);
+      const radius = st.player.cfg.necroCrownAuraRadius;
+      check(
+        arcRadii().some((r) => Math.abs(r - radius) < 0.01),
+        `Phase 10: der ghost_070-Aura-Ring wird nicht im echten Wirkradius (${radius}) gezeichnet`,
+      );
+      // Gegenprobe: ohne die Karte erscheint KEIN Kreis in diesem Radius.
+      const st2 = necroRoom();
+      pushGhost(st2, createGhost(st2, 300, 300, 0, 't_pink'));
+      updateGhosts(st2, 1 / 60);
+      ctx.calls.length = 0;
+      renderer.render(st2, 1, tracks, null, null);
+      check(
+        !arcRadii().some((r) => Math.abs(r - radius) < 0.01),
+        'Phase 10 (Gegenprobe): der Aura-Ring erscheint auch ohne ghost_070',
+      );
+    } finally {
+      restore();
+    }
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

@@ -65,7 +65,14 @@
     },
     "shield": {
       "_comment": "Schildladung verbraucht: weich und aufsteigend, klar getrennt von 'player_death' (Leben) und 'reflect' (zurueckgeworfene Kugel).",
-      "steps": [{ "freq": 300, "slideTo": 520, "dur": 0.18, "vol": 0.1, "wave": "triangle" }]
+      "steps": [{ "freq": 300, "slideTo": 520, "dur": 0.18, "wave": "triangle", "vol": 0.1 }]
+    },
+    "ghost_rise": {
+      "_comment": "Nekromant-V2 Phase 10: ein Untertan erscheint (ghost.js: pushGhost()) -- bis dahin voellig lautlos/unsichtbar. Zwei tiefe, aufsteigende Sinustoene mit kleinem Versatz (unheimlicher/getragener als 'shield's einzelner Triangle-Slide, klar getrennt von 'combo'/Verschmelzung).",
+      "steps": [
+        { "freq": 140, "slideTo": 260, "dur": 0.22, "wave": "sine", "vol": 0.09 },
+        { "freq": 200, "slideTo": 360, "dur": 0.18, "wave": "sine", "vol": 0.06, "at": 0.08 }
+      ]
     },
     "mine": {
       "steps": [{ "freq": 700, "dur": 0.06, "vol": 0.08, "wave": "square" }]

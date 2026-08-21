@@ -265,6 +265,11 @@ async function init() {
   let teleShotsFired = 0;
   let teleShotsHit = 0;
   let teleMagBlocked = 0;
+  // Nekromant-V2 Phase 10 (Lesbarkeit und Telemetrie): raumweite Rohzaehler
+  // aus state.js/ghost.js/bossai.js, unveraendert abgelesen (wachsen dort
+  // monoton, state selbst ist pro Raum frisch -- kein Delta-Sync noetig,
+  // anders als die RUNWEITEN necroStacks).
+  let teleNecro = null;
   // Phase 11b: schlechtester Logik-/Render-Frame IM AKTUELLEN RAUM, nur fuer
   // die Debug-Anzeige -- bewusst nicht in der Telemetrie (die hat mit
   // minFps schon ihre eigene, persistierte Kennzahl seit Phase 1).
@@ -287,6 +292,7 @@ async function init() {
     teleShotsFired = 0;
     teleShotsHit = 0;
     teleMagBlocked = 0;
+    teleNecro = null;
   }
 
   // Momentaufnahme des laufenden Raums (jeden Tick, sehr billig).
@@ -312,6 +318,21 @@ async function init() {
     teleShotsFired = st.playerShots;
     teleShotsHit = st.playerHits;
     teleMagBlocked = st.magBlockedTime;
+    // Nekromant-V2 Phase 10: nur befuellen, wenn ueberhaupt Nekromanten-
+    // Zaehler existieren (jede state.js-Instanz hat sie seit Phase 10 immer,
+    // aber nur fuer die Klasse c_necro passiert dort je etwas) -- ein reines
+    // null spart main.js einen zweiten "war das ueberhaupt ein Nekromant"-Check.
+    teleNecro = {
+      created: st.necroGhostsCreated,
+      fused: st.necroGhostsFused,
+      diedByReason: { ...st.necroGhostsDiedByReason },
+      reviveRolls: st.necroReviveRolls,
+      reviveHits: st.necroReviveHits,
+      championStrengthSum: st.necroChampionStrengthSum,
+      championStrengthSamples: st.necroChampionStrengthSamples,
+      bossShotsAtPlayer: st.bossShotsAtPlayer,
+      bossShotsAtGhost: st.bossShotsAtGhost,
+    };
   }
 
   function flushRoomTelemetry() {
@@ -334,6 +355,7 @@ async function init() {
       shotsFired: teleShotsFired,
       shotsHit: teleShotsHit,
       magBlockedTime: teleMagBlocked,
+      necro: teleNecro,
     });
     run.scrapThisRoom = 0;
   }

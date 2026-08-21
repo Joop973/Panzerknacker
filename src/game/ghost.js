@@ -355,6 +355,10 @@ function fuseGhost(state, winner, loser, overrideFrac) {
   state.spawnParticles?.(winner.x, winner.y, '#e8b44a', 14, 130);
   state.texts.push({ x: winner.x, y: winner.y - 20, text: 'Verschmolzen!', age: 0, life: 0.7, color: '#e8b44a' });
   state.sounds.push({ name: 'combo', x: winner.x });
+  // Nekromant-V2 Phase 10 (Telemetrie): "verschmolzen" -- EINZIGER Ort, an
+  // dem eine Verschmelzung wirklich stattfindet (pushGhost() ruft immer
+  // diese Funktion, nie direkt).
+  state.necroGhostsFused = (state.necroGhostsFused || 0) + 1;
 }
 
 // ghost_065 "Seelenheilung": der aktuelle Champion heilt sich um einen Anteil
@@ -377,6 +381,23 @@ function healChampionOnAllyDeath(state, diedGhost) {
 // Thron" EIN einziger Mechanismus statt sechsmal dupliziert. Ohne
 // necroUniqueThrone unveraendertes Verhalten (reiner Push). g ist ein bereits
 // fertig konstruierter Geist (aus createGhost()).
+//
+// Nekromant-V2 Phase 10 (Lesbarkeit und Telemetrie): "Wiederbelebung ... ein
+// kurzer, unterscheidbarer Effekt" -- bis dahin erschien ein Untertan (egal
+// ob per Kill-Wuerfel, Geisterbombe oder Raumstart) OHNE jedes sichtbare
+// oder hoerbare Zeichen. Ein neuer, EIGENER Ton (ghost_rise, aufsteigend,
+// unterscheidbar von 'combo'/Verschmelzung und 'shield'/Schild) + ein
+// heller Partikelstoss + der necroGhostsCreated-Zaehler sitzen an genau EINER
+// Stelle -- den beiden echten "g erscheint wirklich"-Ausgaengen von
+// pushGhost() (normaler Pfad + der Gewinner-Zweig von necroUniqueThrone).
+// Die beiden Verwerfungs-Zweige (existing gewinnt, necroCapFusion am
+// vollen Limit) loesen ihn bewusst NICHT aus -- dort erscheint g nie.
+function spawnGhostAppearEffect(state, g) {
+  state.necroGhostsCreated = (state.necroGhostsCreated || 0) + 1;
+  state.spawnParticles?.(g.x, g.y, '#7fe6c8', 10, 90);
+  state.sounds.push({ name: 'ghost_rise', x: g.x });
+}
+
 export function pushGhost(state, g) {
   const pc = state.player?.cfg;
   if (pc?.necroUniqueThrone) {
@@ -389,6 +410,7 @@ export function pushGhost(state, g) {
         const idx = state.ghosts.indexOf(existing);
         if (idx >= 0) state.ghosts[idx] = g;
         else state.ghosts.push(g);
+        spawnGhostAppearEffect(state, g);
       } else {
         fuseGhost(state, existing, g);
       }
@@ -421,6 +443,7 @@ export function pushGhost(state, g) {
     }
   }
   state.ghosts.push(g);
+  spawnGhostAppearEffect(state, g);
   recomputeLegionCache(state);
 }
 
@@ -577,7 +600,12 @@ export function killGhost(state, g, cause = 'damage') {
   // ihn nur nie ein Aufrufer erzeugt. Wie 'expire' oben ohne Wiederkehr/
   // Phylakterium/Todeszone (eine ABSICHTLICHE Opferung soll nicht "durch
   // Glueck ueberleben").
-  onGhostRemoved(state, g, cause === 'expire' ? 'death_expire' : cause === 'sacrifice' ? 'sacrifice' : 'death_damage');
+  const reason = cause === 'expire' ? 'death_expire' : cause === 'sacrifice' ? 'sacrifice' : 'death_damage';
+  // Nekromant-V2 Phase 10 (Telemetrie): "gestorben (nach Grund
+  // aufgeschluesselt)" -- derselbe reason-Wert, den onGhostRemoved() gleich
+  // bekommt, EINMAL berechnet statt zweimal dupliziert.
+  state.necroGhostsDiedByReason[reason] = (state.necroGhostsDiedByReason[reason] || 0) + 1;
+  onGhostRemoved(state, g, reason);
   // Nekromant-V2 Phase 7 (Legion): killGhost() ist der EINZIGE Entfernungs-
   // Trichter (Schaden UND Ablauf) -- die "bei Spawn UND Entfernen neu
   // berechnen, NICHT pro Frame"-Vorgabe des Auftrags braucht deshalb nur
@@ -687,6 +715,14 @@ export function updateGhosts(state, dt) {
       bestStrength = strength;
       champion = g;
     }
+  }
+  // Nekromant-V2 Phase 10 (Telemetrie): "durchschnittliche Championstaerke"
+  // -- eine ZEITGEWICHTETE Stichprobe (jeder Tick mit lebendem Champion
+  // zaehlt einmal), kein einmaliger Schnappschuss am Raumende. main.js
+  // teilt necroChampionStrengthSum/Samples am Ende, nicht hier.
+  if (champion) {
+    state.necroChampionStrengthSum = (state.necroChampionStrengthSum || 0) + bestStrength;
+    state.necroChampionStrengthSamples = (state.necroChampionStrengthSamples || 0) + 1;
   }
   for (const g of aliveGhosts) {
     const becameChampion = g === champion && !g.isChampion;
