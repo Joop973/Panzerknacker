@@ -10336,6 +10336,343 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 63. Nekromant-V2 Phase 11: Balance und Abnahme ------------------------
+// Die Schlussabnahme des gesamten Auftrags (25 nummerierte Punkte). Ist-
+// Abgleich VOR dem Testbau ergab: die meisten Punkte sind schon durch
+// Abschnitt 55-62 (Phasen 0-10) mit eigenen Zahlen bewacht -- Mapping-
+// Tabelle (Muster "Upgrade-/Klassenpool-System v2 + Nekromant -- Phase 9
+// (Abnahme)"):
+//   Daten          1 -> 55(a)/(b)      2 -> 55(c)         3 -> 55(b)+37(a)
+//                  4 -> 58/59/60/61(a) 5 -> HIER (a), NEU 6 -> HIER (b), NEU
+//   Grundmechanik  7 -> 43(b)          8 -> 42(b2)+60(f)  9 -> 62(b)/(c),
+//                                                          verschaerft HIER (c)
+//                  10 -> 60            11 -> 43/59
+//   Stapelung      12 -> 37(c)+HIER (d), NEU (Skalierung selbst)
+//                  13 -> 37(c)/(d)+HIER (e), NEU (Shop/Truhe/Ereignis/Reroll,
+//                        Vorschau-ohne-Wahl, neuer Run)
+//                  14 -> Applier-Konstruktion (cfg.js: lvl-Faktor ohne
+//                        Deckel) + HIER (d) UI-Nachweis, NEU
+//   Systeme        15 -> 56            16 -> 56           17 -> HIER (f), NEU
+//                  18 -> 60(e)         19 -> 57            20 -> 58
+//                  21 -> 61 Testschritt 4
+//   Bosskorridor   22 -> Abschnitt 45 (Untergrenze)  23 -> Abschnitt 45 (Obergrenze)
+//                  24 -> 41(l)         25 -> 41(j)+Abschnitt 5
+// Echte Luecken (kein bestehender Test deckt sie ab), NEU HIER: (a) Punkt 5
+// ERSCHOEPFEND ueber alle 105 Karten statt stichprobenbasiert (Abschnitt
+// 61(b) sampelt nur 60 Seeds -- eine seltene Karte koennte darin fehlen,
+// ohne dass das auffiele); (b) Punkt 6 am ECHTEN gemergten Pool (die
+// bestehende Mechanismus-Probe in Abschnitt 38(c)/(2) Upgradepool-v2 nutzt
+// einen synthetischen Drei-Karten-Pool, nicht die realen 105 Karten); (c)
+// Punkt 9 auf LISTENER-Ebene (Abschnitt 62 zaehlt nur die vier Zaehler
+// distinkt hoch -- ob ein Listener, der NUR auf einen Grund hoert, wirklich
+// NIE fuer die anderen drei feuert, ist damit noch nicht bewiesen); (d)
+// Punkte 12/14 an der ECHTEN Skalierungsformel (cfg-Wert bei Stufe 1/10/
+// 100/1000, nicht nur "bleibt im Pool") + der UI-Text zeigt bei hoher Stufe
+// kein "MAX"/"/Y"; (e) Punkt 13s Shop/Truhe/Ereignis/Reroll-Wortlaut (alle
+// vier laufen durch denselben drawOne()/buildCandidates()-Choker, aber das
+// war bisher nirgends direkt an drawOne() gezeigt) + "nur angezeigt bleibt
+// verfuegbar" + "neuer Run macht wieder verfuegbar"; (f) Punkt 17 mit einer
+// gezielt VERFAELSCHTEN aktuellen Kraft (Loser-Geist hat einen aufgeblaehten
+// cfg.damage, der klar von seinem baseDamage abweicht) -- bestehende Tests
+// pruefen den Uebertragungs-MECHANISMUS, aber nie explizit, dass eine
+// aufgeblaehte AKTUELLE Kraft ignoriert wird.
+// "Doppelte Pool-Eintraege erzeugen kein zweites Exemplar" (Teil von Punkt
+// 13) ist STRUKTURELL unmoeglich (JS-Objektschluessel in upgrades_necro.json
+// sind zwingend eindeutig, Abschnitt 55(a) bewacht das bereits) -- keine
+// eigene Testzeile noetig.
+{
+  const { buildCandidates, rollOffers, drawOne } = await import('../src/game/upgradepool.js');
+  const { createRun, chooseUpgrade } = await import('../src/game/run.js');
+  const { createGhost, pushGhost, killGhost } = await import('../src/game/ghost.js');
+  const { createState } = await import('../src/game/state.js');
+  const { hashSeed, rngFor, mulberry32 } = await import('../src/core/rng.js');
+  const mergedUpgrades = { ...upgradesData, upgrades: { ...upgradesData.upgrades, ...necroData.upgrades } };
+
+  const necroIds = Object.keys(necroData.upgrades);
+  check(necroIds.length === 105, `Phase 11: ${necroIds.length} Karten im Pool statt 105 (Testvoraussetzung)`);
+
+  const necroRoom = (playerUpgrades = {}, types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades,
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    return st;
+  };
+
+  // (a) Punkt 5, ERSCHOEPFEND: buildCandidates() direkt (kein RNG, kein
+  // Sampling) fuer ALLE 105 Karten einzeln gegenpruefen -- keine erscheint
+  // fuer die Standardklasse, JEDE erscheint fuer c_necro. Pro Karte ein
+  // MINIMALES chosen, das nur DEREN EIGENE requires-Vorbedingungen erfuellt
+  // (nicht global fuer alle 105 Karten): ein globales chosen haette Karten
+  // wie ghost_071 (selbst isUnique UND requires-Ziel von ghost_072/073/085)
+  // fuer sich selbst als "schon gewaehlt" markiert und faelschlich
+  // ausgeschlossen -- per Gegenprobe am eigenen Testaufbau gefunden.
+  {
+    let leakedForPlayer = [];
+    let missingForNecro = [];
+    for (const id of necroIds) {
+      const def = necroData.upgrades[id];
+      const chosenFor = {};
+      for (const r of def.requires || []) chosenFor[r] = 1;
+      const opts = {
+        chosen: chosenFor, roomIndex: 999, balance: tanksData.balance,
+        banned: new Set(), selectedUniqueUpgradeIds: new Set(),
+        // ghost_056 traegt tag:'elite' -- EXCLUDED_TAGS haelt Tag 'elite'
+        // grundsaetzlich aus dem normalen Angebot heraus (reserviert fuer
+        // den automatischen 4.-Karte-Elite-Bonus, UMBAUPLAN-LP Phase 9),
+        // erreichbar nur ueber includeTag. Kein Sonderfall der Karte selbst,
+        // sondern derselbe Mechanismus wie bei jeder anderen elite-Karte.
+        ...(def.tag === 'elite' ? { includeTag: 'elite' } : {}),
+      };
+      const forPlayer = buildCandidates(mergedUpgrades, { ...opts, starterTank: 'player' });
+      if (forPlayer.some((d) => d.id === id)) leakedForPlayer.push(id);
+      const forNecro = buildCandidates(mergedUpgrades, { ...opts, starterTank: 'c_necro' });
+      if (!forNecro.some((d) => d.id === id)) missingForNecro.push(id);
+    }
+    check(
+      leakedForPlayer.length === 0,
+      `Phase 11: ${leakedForPlayer.length} Nekromant-Karte(n) erscheinen fuer die Standardklasse (${leakedForPlayer.join(',')})`,
+    );
+    check(missingForNecro.length === 0, `Phase 11: ${missingForNecro.length} Nekromant-Karte(n) erscheinen NICHT fuer c_necro (${missingForNecro.join(',')})`);
+  }
+
+  // (b) Punkt 6, am ECHTEN gemergten Pool statt eines synthetischen
+  // Drei-Karten-Pools (Abschnitt 38(c)/(2)): rollOffers() ueber viele Seeds
+  // in Raum 9 -- mindestens ein Angebot besteht aus DREI ghost_0XX-Karten
+  // gleichzeitig (Anhang A Paragraph 19, jetzt am realen 105-Karten-Bestand
+  // nachgewiesen statt nur am Mechanismus).
+  {
+    let found = false;
+    for (let seed = 0; seed < 400 && !found; seed++) {
+      const offers = rollOffers(mergedUpgrades, {
+        chosen: {}, roomIndex: 9, rng: mulberry32(seed * 13 + 3), balance: tanksData.balance,
+        count: 3, equippedSecondary: 'mine', banned: new Set(), starterTank: 'c_necro',
+      });
+      if (offers.length === 3 && offers.every((o) => !o.fallback && o.id.startsWith('ghost_'))) found = true;
+    }
+    check(found, 'Phase 11: kein Angebot mit drei Nekromant-Signaturkarten gleichzeitig in 400 Seeds gefunden');
+  }
+
+  // (c) Punkt 9, auf LISTENER-Ebene: vier frische Test-Listener, je EINEM
+  // Grund zugeordnet, werden ueber ECHTE Ausloeser (killTank->Wiederbelebung
+  // fuer nichts hier gebraucht -- direkt killGhost()/pushGhost()-Fusion)
+  // angesprochen. Jeder Listener darf NUR fuer seinen eigenen Grund feuern.
+  {
+    // KEIN necroUniqueThrone von Anfang an -- sonst wuerde bereits das
+    // zweite/dritte pushGhost() (waehrend das jeweils vorherige, LAENGST
+    // tote Geistobjekt noch als Array-Leiche herumliegt, s. u.) selbst
+    // schon eine echte Fusion ausloesen und den Zaehler verfaelschen. Der
+    // Flag wird erst kurz vor dem eigentlichen Fusions-Trigger gesetzt.
+    const st = necroRoom();
+    const hits = { death_damage: 0, death_expire: 0, fusion: 0, sacrifice: 0 };
+    for (const reason of ['death_damage', 'death_expire', 'fusion', 'sacrifice']) {
+      st.necroListeners.push({
+        reasons: [reason], scope: 'room', key: `test_${reason}`,
+        fn: () => { hits[reason]++; },
+      });
+    }
+    // Jede Erzeugung wird in einer EIGENEN Variable gehalten -- killGhost()
+    // entfernt ein totes Geistobjekt NICHT sofort aus state.ghosts (das
+    // macht erst updateGhosts()s Filter spaeter), st.ghosts[0] wuerde nach
+    // dem ersten Tod also weiterhin auf die Leiche zeigen statt auf den
+    // naechsten frisch gepushten Geist -- per Gegenprobe am eigenen
+    // Testaufbau gefunden.
+    const g1 = createGhost(st, 0, 0, 0, 't_pink');
+    pushGhost(st, g1);
+    killGhost(st, g1); // cause='damage' -> death_damage
+    const g2 = createGhost(st, 10, 10, 0, 't_pink');
+    pushGhost(st, g2);
+    killGhost(st, g2, 'expire');
+    const g3 = createGhost(st, 20, 20, 0, 't_pink');
+    pushGhost(st, g3);
+    killGhost(st, g3, 'sacrifice');
+    // fusion: necroUniqueThrone erzwingt bei ZWEI gleichzeitig lebenden
+    // Untertanen eine sofortige Verschmelzung -- reicht als Ausloeser,
+    // braucht keine Karte (fuseGhost() faellt ohne core-Werte auf feste
+    // Vorgaben zurueck).
+    st.player.cfg.necroUniqueThrone = true;
+    const g4 = createGhost(st, 30, 30, 0, 't_pink');
+    pushGhost(st, g4); // erster lebender Untertan -> normaler Pfad
+    const g5 = createGhost(st, 500, 500, 0, 't_pink'); // baugleich -> Gleichstand, existing (g4) gewinnt
+    pushGhost(st, g5); // loest die Verschmelzung aus
+
+    check(hits.death_damage === 1, `Phase 11: der death_damage-Listener feuert nicht genau einmal (${hits.death_damage})`);
+    check(hits.death_expire === 1, `Phase 11: der death_expire-Listener feuert nicht genau einmal (${hits.death_expire})`);
+    check(hits.sacrifice === 1, `Phase 11: der sacrifice-Listener feuert nicht genau einmal (${hits.sacrifice})`);
+    check(hits.fusion === 1, `Phase 11: der fusion-Listener feuert nicht genau einmal (${hits.fusion})`);
+    // Kreuzpruefung: KEIN Listener feuert fuer einen fremden Grund (jeder
+    // Zaehler steht bei genau 1, nicht mehr -- vier Ausloeser, vier Treffer
+    // insgesamt waeren bei falscher Verdrahtung z. B. 4/0/0/0 oder aehnlich).
+    const total = hits.death_damage + hits.death_expire + hits.sacrifice + hits.fusion;
+    check(total === 4, `Phase 11: insgesamt ${total} statt 4 Listener-Treffer -- ein Listener feuert fuer einen fremden Grund`);
+  }
+
+  // (d) Punkte 12+14, an der ECHTEN Skalierungsformel: eine echte, NICHT
+  // einzigartige Nekromant-Karte (ghost_001, core.ghostHpMult -- ein
+  // MULTIPLIKATIVER core-Applier-Schluessel, Math.pow(mult, lvl) in cfg.js)
+  // bei Stufe 1/10/100/1000 -- der cfg-Effekt muss WEITERHIN exponentiell
+  // nach applyUpgrades()s Formel wachsen, keine Klemmung. Zusaetzlich: die
+  // UI zeigt bei hoher Stufe kein "MAX"/"/Y" (upgradescreen.js zeigt bei
+  // isUnique:false nur "(Stufe N)").
+  {
+    const id = 'ghost_001';
+    const def = necroData.upgrades[id];
+    check(def?.isUnique !== true, 'Phase 11: Testvoraussetzung -- ghost_001 sollte NICHT isUnique sein');
+    check(typeof def?.core?.ghostHpMult === 'number', 'Phase 11: Testvoraussetzung -- ghost_001 hat kein core.ghostHpMult (mehr)');
+    const mult = def.core.ghostHpMult;
+    let prevValue = 1;
+    for (const stufe of [1, 10, 100, 1000]) {
+      const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { [id]: stufe }, necroData, 'mine', null);
+      const expected = Math.pow(mult, stufe);
+      check(
+        Math.abs((cfg.ghostHpMult || 1) - expected) < 1e-6 * expected,
+        `Phase 11: ghost_001 bei Stufe ${stufe} skaliert nicht nach Math.pow(mult, Stufe) (${cfg.ghostHpMult} statt ${expected})`,
+      );
+      check(cfg.ghostHpMult > prevValue, `Phase 11: ghost_001s Effekt waechst bei Stufe ${stufe} nicht weiter (${prevValue} -> ${cfg.ghostHpMult}) -- Klemmung?`);
+      prevValue = cfg.ghostHpMult;
+    }
+    // UI: kein Deckeltext bei hoher Stufe.
+    const offerLike = { id, name: def.name, level: 1000, isUnique: false, rarity: def.rarity };
+    const lvl = offerLike.isUnique ? '' : ` (Stufe ${offerLike.level})`;
+    check(!/MAX|\/\d/.test(lvl), `Phase 11: UI-Text zeigt bei Stufe 1000 einen Deckelhinweis (${lvl})`);
+  }
+
+  // (e) Punkt 13, Rest: drawOne() (Choker fuer Shop/Verbannen/Vierte
+  // Karte/Ereignis-Kartenoption -- run.js ruft ihn an genau diesen vier
+  // Stellen auf) respektiert isUnique+selectedUniqueUpgradeIds; "nur
+  // angezeigt und nicht gewaehlt bleibt verfuegbar" ueber einen ECHTEN
+  // chooseUpgrade()-Aufruf, der die ANDERE Karte waehlt; "ein neuer Run
+  // macht es wieder verfuegbar".
+  {
+    // rarity common/uncommon (kein rarityGates-Mindestraum), kein requires
+    // (kein zweiter Gate-Grund), tag != 'elite' (kein includeTag noetig) --
+    // sonst wuerde die spaetere Verfuegbarkeitspruefung aus einem ANDEREN
+    // Grund als isUnique fehlschlagen und faelschlich diesen Mechanismus
+    // treffen (per Gegenprobe am eigenen Testaufbau gefunden: die erste
+    // Wahl fiel auf eine requires-Karte).
+    const isSimple = (id) => {
+      const d = necroData.upgrades[id];
+      return !d.requires?.length && d.tag !== 'elite' && (d.rarity === 'common' || d.rarity === 'uncommon');
+    };
+    const uniqueId = necroIds.find((id) => necroData.upgrades[id].isUnique && isSimple(id));
+    const otherId = necroIds.find((id) => !necroData.upgrades[id].isUnique && isSimple(id));
+    check(!!uniqueId && !!otherId, 'Phase 11: Testvoraussetzung -- keine passenden Testkarten gefunden');
+
+    // drawOne() (Choker fuer Shop/Verbannen/Vierte Karte/Ereignis) filtert
+    // ueber DENSELBEN buildCandidates()-Aufruf wie rollOffers() -- direkt
+    // gegen den Kandidatenpool geprueft statt gegen Zufallsstichproben (eine
+    // seltene common-Karte unter ~40 gleich gewichteten waere in nur 100
+    // Ziehungen nicht zuverlaessig getroffen worden, per Gegenprobe am
+    // eigenen Testaufbau gefunden -- reines Ziehungspech haette einen echten
+    // Fehler unbemerkt gelassen).
+    const drawOneCandidates = buildCandidates(mergedUpgrades, {
+      chosen: {}, roomIndex: 99, balance: tanksData.balance,
+      starterTank: 'c_necro', selectedUniqueUpgradeIds: new Set([uniqueId]), banned: new Set(),
+    });
+    check(
+      !drawOneCandidates.some((d) => d.id === uniqueId),
+      'Phase 11: drawOne()/buildCandidates() liefert eine bereits gewaehlte einzigartige Karte (Shop/Verbannen/Vierte Karte/Ereignis waeren betroffen)',
+    );
+    // Zusaetzlich ein echter drawOne()-Aufruf, dass die Funktion selbst
+    // (nicht nur buildCandidates direkt) denselben Filter anwendet.
+    const drawn = drawOne(mergedUpgrades, {
+      chosen: {}, roomIndex: 99, rng: mulberry32(1), balance: tanksData.balance,
+      starterTank: 'c_necro', selectedUniqueUpgradeIds: new Set([uniqueId]),
+    }, new Set(), new Set());
+    check(drawn?.id !== uniqueId, 'Phase 11: drawOne() selbst liefert eine bereits gewaehlte einzigartige Karte');
+
+    // Vorschau ohne Wahl: die Karte wird ANGEBOTEN, aber die ANDERE gewaehlt.
+    const run = createRun(tanksData, tilesData, diffData, mergedUpgrades, 4242, 'normal', { starterTank: 'c_necro' });
+    const offerFor = (id) => ({
+      id, name: necroData.upgrades[id].name, description: necroData.upgrades[id].description,
+      tag: necroData.upgrades[id].tag, tags: necroData.upgrades[id].tags || [],
+      rarity: necroData.upgrades[id].rarity, level: (run.upgrades[id] || 0) + 1,
+      isUnique: !!necroData.upgrades[id].isUnique,
+    });
+    run.phase = 'upgrade';
+    run.pendingOffers = [offerFor(uniqueId), offerFor(otherId)];
+    chooseUpgrade(run, 1); // waehlt otherId, NICHT die einzigartige
+    check(!run.selectedUniqueUpgradeIds.has(uniqueId), 'Phase 11: eine nur ANGEBOTENE (nicht gewaehlte) einzigartige Karte wird trotzdem als gewaehlt eingetragen');
+    check(
+      buildCandidates(mergedUpgrades, {
+        chosen: run.upgrades, roomIndex: run.roomIndex, balance: tanksData.balance,
+        banned: run.bannedUpgrades, starterTank: run.starterTank, selectedUniqueUpgradeIds: run.selectedUniqueUpgradeIds,
+      }).some((d) => d.id === uniqueId),
+      'Phase 11: eine nur angebotene einzigartige Karte ist danach nicht mehr verfuegbar',
+    );
+
+    // Jetzt wirklich waehlen -> verschwindet. run.phase erneut setzen: der
+    // erste chooseUpgrade()-Aufruf hat ihn ueber afterRoomDone() bereits
+    // weitergezogen (chooseUpgrade() ist sonst ein No-op) -- per Gegenprobe
+    // am eigenen Testaufbau gefunden.
+    run.phase = 'upgrade';
+    run.pendingOffers = [offerFor(uniqueId), offerFor(otherId)];
+    chooseUpgrade(run, 0);
+    check(run.selectedUniqueUpgradeIds.has(uniqueId), 'Phase 11: eine echt gewaehlte einzigartige Karte landet nicht in selectedUniqueUpgradeIds');
+    check(
+      !buildCandidates(mergedUpgrades, {
+        chosen: run.upgrades, roomIndex: run.roomIndex, balance: tanksData.balance,
+        banned: run.bannedUpgrades, starterTank: run.starterTank, selectedUniqueUpgradeIds: run.selectedUniqueUpgradeIds,
+      }).some((d) => d.id === uniqueId),
+      'Phase 11: eine gewaehlte einzigartige Karte bleibt weiter verfuegbar',
+    );
+
+    // Neuer Run: wieder verfuegbar.
+    const run2 = createRun(tanksData, tilesData, diffData, mergedUpgrades, 4243, 'normal', { starterTank: 'c_necro' });
+    check(!run2.selectedUniqueUpgradeIds.has(uniqueId), 'Phase 11: ein neuer Run erbt bereits gewaehlte einzigartige Karten des vorigen Runs');
+    check(
+      buildCandidates(mergedUpgrades, {
+        chosen: run2.upgrades, roomIndex: run2.roomIndex, balance: tanksData.balance,
+        banned: run2.bannedUpgrades, starterTank: run2.starterTank, selectedUniqueUpgradeIds: run2.selectedUniqueUpgradeIds,
+      }).some((d) => d.id === uniqueId),
+      'Phase 11: ein neuer Run macht eine einzigartige Karte nicht wieder verfuegbar',
+    );
+  }
+
+  // (f) Punkt 17: applyFusionTransfer() (ghost.js) rechnet den Schadens-
+  // zuwachs bei JEDER Verschmelzung IMMER von winner.baseDamage (dem
+  // UNVERAENDERTEN Basiswert) mal der AUFAKKUMULIERTEN Rate -- nicht vom
+  // bereits geboosteten AKTUELLEN cfg.damage der vorigen Verschmelzung.
+  // Zwei Verschmelzungen nacheinander muessen deshalb LINEAR wachsen
+  // (baseDamage * (1 + 2*dmgFrac)), nicht KOMPONDIEREND (baseDamage *
+  // (1+dmgFrac)^2) -- genau das waere das im Code-Kommentar benannte
+  // "exponentielle Aufschaukeln", das die Basiswert-Regel verhindern soll.
+  {
+    const st = necroRoom({ ghost_071: 1 });
+    const champ = createGhost(st, 0, 0, 0, 't_pink');
+    pushGhost(st, champ);
+    const baseDmg = champ.baseDamage;
+    const dmgFrac = necroData.upgrades.ghost_071.core.necroFusionDamagePct; // aus den Daten, nicht hartkodiert
+    // Testvoraussetzung: linear und kompondierend muessen sich klar
+    // unterscheidbar auseinanderentwickeln, sonst waere die Probe stumpf.
+    const linear2 = Math.round(baseDmg * (1 + 2 * dmgFrac));
+    const compounding2 = Math.round(Math.round(baseDmg * (1 + dmgFrac)) * (1 + dmgFrac));
+    check(linear2 !== compounding2, 'Phase 11: Testvoraussetzung -- linear/kompondierend ergeben denselben Wert, Probe stumpf');
+
+    pushGhost(st, createGhost(st, 100, 100, 0, 't_pink')); // baugleich -> Gleichstand, champ (existing) gewinnt
+    pushGhost(st, createGhost(st, 200, 200, 0, 't_pink')); // zweite Verschmelzung
+    check(st.ghosts.length === 1 && st.ghosts[0] === champ, 'Phase 11: Testvoraussetzung -- zwei Verschmelzungen liefen nicht wie erwartet (champ haette beide absorbieren muessen)');
+    check(champ.fusionCount === 2, `Phase 11: Testvoraussetzung -- fusionCount nach zwei Verschmelzungen nicht 2 (${champ.fusionCount})`);
+    check(
+      champ.cfg.damage === linear2,
+      `Phase 11: der Schadenszuwachs nach zwei Verschmelzungen ist nicht linear (${champ.cfg.damage} statt ${linear2}, Basiswert ${baseDmg})`,
+    );
+    check(
+      champ.cfg.damage !== compounding2,
+      `Phase 11: der Schadenszuwachs rechnet vom bereits geboosteten AKTUELLEN Wert statt vom Basiswert (${champ.cfg.damage} entspricht dem kompondierenden Ergebnis)`,
+    );
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

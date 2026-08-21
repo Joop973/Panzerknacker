@@ -364,8 +364,7 @@
       },
       "_note": {
         "buildrolle": "Engine"
-      },
-      "_todo": "balance"
+      }
     },
     "ghost_017": {
       "id": "ghost_017",
@@ -613,8 +612,7 @@
       "_note": {
         "buildrolle": "Burst",
         "balanceHinweis": "Nutzt die Exekutionsmechanik des Spiels."
-      },
-      "_todo": "balance"
+      }
     },
     "ghost_027": {
       "id": "ghost_027",
@@ -760,8 +758,7 @@
       "_note": {
         "buildrolle": "Burst",
         "balanceHinweis": "Nutzt Zielsuche und Exekution."
-      },
-      "_todo": "balance"
+      }
     },
     "ghost_033": {
       "id": "ghost_033",
@@ -1872,8 +1869,7 @@
       "_note": {
         "buildrolle": "Sicherheit",
         "balanceHinweis": "Rettet den Champion, nicht den Hauptpanzer."
-      },
-      "_todo": "balance"
+      }
     },
     "ghost_080": {
       "id": "ghost_080",
@@ -1945,8 +1941,7 @@
       "_note": {
         "buildrolle": "Burst",
         "balanceHinweis": "Nutzt die Exekutionsmechanik des Spiels."
-      },
-      "_todo": "balance"
+      }
     },
     "ghost_083": {
       "id": "ghost_083",
@@ -1993,8 +1988,7 @@
       "_note": {
         "buildrolle": "Sicherheit",
         "balanceHinweis": "Rettet den Champion, nicht den Hauptpanzer."
-      },
-      "_todo": "balance"
+      }
     },
     "ghost_085": {
       "id": "ghost_085",
