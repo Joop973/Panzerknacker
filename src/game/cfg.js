@@ -585,7 +585,7 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.necroShieldPctPerDeath) {
       cfg.necroShieldPctPerDeath = (cfg.necroShieldPctPerDeath || 0) + c.necroShieldPctPerDeath * lvl;
       cfg.necroShieldDurationS = Math.max(cfg.necroShieldDurationS || 0, c.necroShieldDurationS || 0);
-      cfg.necroShieldCapPct = Math.max(cfg.necroShieldCapPct || 0, c.necroShieldCapPct || 0);
+      // Auftrag Abschnitt 9: kein Deckel mehr -- die Karte stapelt unbegrenzt.
     }
     if (c.necroGadgetCooldownReduceS) {
       cfg.necroGadgetCooldownReduceS = (cfg.necroGadgetCooldownReduceS || 0) + c.necroGadgetCooldownReduceS * lvl;
@@ -620,7 +620,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroResistAmount = Math.max(cfg.necroResistAmount || 0, c.necroResistAmount || 0);
       cfg.necroResistDurationS = Math.max(cfg.necroResistDurationS || 0, c.necroResistDurationS || 0);
     }
-    if (c.necroOverflowShieldCapPct) cfg.necroOverflowShieldCapPct = Math.max(cfg.necroOverflowShieldCapPct || 0, c.necroOverflowShieldCapPct);
+    // Auftrag Abschnitt 9: ghost_023 wandelt den GESAMTEN Ueberlauf in Schild
+    // um (kein Prozentdeckel mehr) -- reines Freischalt-Flag statt Zahl.
+    if (c.necroOverflowToShield) cfg.necroOverflowToShield = true;
     if (c.necroFireBurstWindowS) {
       cfg.necroFireBurstWindowS = c.necroFireBurstWindowS;
       cfg.necroFireBurstPct = Math.max(cfg.necroFireBurstPct || 0, c.necroFireBurstPct || 0);
@@ -711,10 +713,10 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroOfficerDamageMult = Math.max(cfg.necroOfficerDamageMult || 1, c.necroOfficerDamageMult || 1);
       cfg.necroOfficerFireRateBonus = Math.max(cfg.necroOfficerFireRateBonus || 0, c.necroOfficerFireRateBonus || 0);
     }
-    if (c.necroAmmoExchangePerShot) {
-      cfg.necroAmmoExchangePerShot = Math.max(cfg.necroAmmoExchangePerShot || 0, c.necroAmmoExchangePerShot);
-      cfg.necroAmmoExchangeCap = Math.max(cfg.necroAmmoExchangeCap || 0, c.necroAmmoExchangeCap || 0);
-    }
+    // Auftrag Abschnitt 9: kein Deckel mehr -- der Stapel waechst mit jedem
+    // Schuss unbegrenzt (ghost.js: updateGhosts() rechnet ihn ueber
+    // fireRateFactor() in eine stabile Feuerrate um).
+    if (c.necroAmmoExchangePerShot) cfg.necroAmmoExchangePerShot = Math.max(cfg.necroAmmoExchangePerShot || 0, c.necroAmmoExchangePerShot);
     if (c.necroErbmunitionShots) {
       cfg.necroErbmunitionShots = Math.max(cfg.necroErbmunitionShots || 0, c.necroErbmunitionShots);
       cfg.necroErbmunitionDamagePct = Math.max(cfg.necroErbmunitionDamagePct || 0, c.necroErbmunitionDamagePct || 0);
@@ -769,7 +771,10 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.necroCrownBulletSpeedPct) cfg.necroCrownBulletSpeedPct = (cfg.necroCrownBulletSpeedPct || 0) + c.necroCrownBulletSpeedPct * lvl;
     if (c.necroCrownRangePct) cfg.necroCrownRangePct = (cfg.necroCrownRangePct || 0) + c.necroCrownRangePct * lvl;
     if (c.necroCrownShieldOnCrownPct) cfg.necroCrownShieldOnCrownPct = Math.max(cfg.necroCrownShieldOnCrownPct || 0, c.necroCrownShieldOnCrownPct);
-    if (c.necroCrownLifetimeBonusS) cfg.necroCrownLifetimeBonusS = (cfg.necroCrownLifetimeBonusS || 0) + c.necroCrownLifetimeBonusS * lvl;
+    // necroCrownLifetimeBonusS (ghost_068 alt) ist ersatzlos entfernt -- der
+    // Champion hat seit der Champion-Ueberarbeitung standardmaessig keine
+    // Lebensdauer mehr, eine Lebensdauer-Verlaengerung waere wirkungslos.
+    // ghost_068 nutzt jetzt necroCrownHpPct (Zeile oben), kein eigenes Feld.
     if (c.necroCrownCritChanceAdd) cfg.necroCrownCritChanceAdd = (cfg.necroCrownCritChanceAdd || 0) + c.necroCrownCritChanceAdd * lvl;
     if (c.necroCrownCritMultAdd) cfg.necroCrownCritMultAdd = (cfg.necroCrownCritMultAdd || 0) + c.necroCrownCritMultAdd * lvl;
     if (c.necroCrownAuraRadius) {
@@ -782,18 +787,20 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroFusionHpPct = Math.max(cfg.necroFusionHpPct || 0, c.necroFusionHpPct || 0);
       cfg.necroFusionDamagePct = Math.max(cfg.necroFusionDamagePct || 0, c.necroFusionDamagePct || 0);
       cfg.necroFusionFireRatePct = Math.max(cfg.necroFusionFireRatePct || 0, c.necroFusionFireRatePct || 0);
-      cfg.necroFusionMinLifetimeS = Math.max(cfg.necroFusionMinLifetimeS || 0, c.necroFusionMinLifetimeS || 0);
+      // necroFusionMinLifetimeS (ghost_071 alt) ist ersatzlos entfernt --
+      // Champion hat standardmaessig keine Lebensdauer mehr.
     }
     if (c.necroFusionHpPctBonus) cfg.necroFusionHpPctBonus = (cfg.necroFusionHpPctBonus || 0) + c.necroFusionHpPctBonus * lvl;
     if (c.necroFusionDamagePctBonus) cfg.necroFusionDamagePctBonus = (cfg.necroFusionDamagePctBonus || 0) + c.necroFusionDamagePctBonus * lvl;
     if (c.necroFusionFireRatePctBonus) cfg.necroFusionFireRatePctBonus = (cfg.necroFusionFireRatePctBonus || 0) + c.necroFusionFireRatePctBonus * lvl;
-    if (c.necroFusionLifetimeExtendS) cfg.necroFusionLifetimeExtendS = (cfg.necroFusionLifetimeExtendS || 0) + c.necroFusionLifetimeExtendS * lvl;
+    // ghost_073 "Endloser Anspruch" (angepasst): Schild statt Lebensdauer-
+    // Verlaengerung, s. ghost.js: fuseGhost().
+    if (c.necroFusionShieldOnFusionPct) cfg.necroFusionShieldOnFusionPct = Math.max(cfg.necroFusionShieldOnFusionPct || 0, c.necroFusionShieldOnFusionPct);
     if (c.necroCrownBulletSizePct) cfg.necroCrownBulletSizePct = (cfg.necroCrownBulletSizePct || 0) + c.necroCrownBulletSizePct * lvl;
     if (c.necroFusionBulletSizePctPerFusion) cfg.necroFusionBulletSizePctPerFusion = (cfg.necroFusionBulletSizePctPerFusion || 0) + c.necroFusionBulletSizePctPerFusion * lvl;
-    if (c.necroCrownLifestealToPlayerPct) {
-      cfg.necroCrownLifestealToPlayerPct = (cfg.necroCrownLifestealToPlayerPct || 0) + c.necroCrownLifestealToPlayerPct * lvl;
-      cfg.necroCrownLifestealShieldCapPct = Math.max(cfg.necroCrownLifestealShieldCapPct || 0, c.necroCrownLifestealShieldCapPct || 0);
-    }
+    // Auftrag Abschnitt 9: kein Schild-Deckel mehr (ghost_075 "Raubseele") --
+    // der Ueberlauf-Schild waechst wie der Schild-Punktepool unbegrenzt.
+    if (c.necroCrownLifestealToPlayerPct) cfg.necroCrownLifestealToPlayerPct = (cfg.necroCrownLifestealToPlayerPct || 0) + c.necroCrownLifestealToPlayerPct * lvl;
     if (c.necroCrownEveryNShots) {
       cfg.necroCrownEveryNShots = Math.max(cfg.necroCrownEveryNShots || 0, c.necroCrownEveryNShots);
       cfg.necroCrownExtraShotDamagePct = Math.max(cfg.necroCrownExtraShotDamagePct || 0, c.necroCrownExtraShotDamagePct || 0);
@@ -820,7 +827,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroChampionExecThreshold = Math.max(cfg.necroChampionExecThreshold || 0, c.necroChampionExecThreshold);
       cfg.necroChampionExecDurationS = Math.max(cfg.necroChampionExecDurationS || 0, c.necroChampionExecDurationS || 0);
     }
-    if (c.necroCrownNoLifetimeDecay) cfg.necroCrownNoLifetimeDecay = true;
+    // necroCrownNoLifetimeDecay (ghost_083 alt) ist ersatzlos entfernt --
+    // ghost_083 nutzt jetzt necroCrownDamagePct/necroCrownHpPct (s. oben),
+    // da der Champion standardmaessig ohnehin keine Lebensdauer mehr hat.
     if (c.necroCrownImmortalKingHealPct) {
       cfg.necroCrownImmortalKingHealPct = Math.max(cfg.necroCrownImmortalKingHealPct || 0, c.necroCrownImmortalKingHealPct);
       cfg.necroCrownImmortalKingInvulnS = Math.max(cfg.necroCrownImmortalKingInvulnS || 0, c.necroCrownImmortalKingInvulnS || 0);
@@ -856,7 +865,7 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroHybridPerAllyDmgPct = (cfg.necroHybridPerAllyDmgPct || 0) + c.necroHybridPerAllyDmgPct * lvl;
       cfg.necroHybridFlankBonusPct = (cfg.necroHybridFlankBonusPct || 0) + (c.necroHybridFlankBonusPct || 0) * lvl;
       cfg.necroHybridReviveDeathBonusPct = Math.max(cfg.necroHybridReviveDeathBonusPct || 0, c.necroHybridReviveDeathBonusPct || 0);
-      cfg.necroHybridReviveDeathBonusCap = Math.max(cfg.necroHybridReviveDeathBonusCap || 0, c.necroHybridReviveDeathBonusCap || 0);
+      // Auftrag Abschnitt 9: kein Deckel mehr (ghost_088 "Blutige Formation").
     }
     if (c.necroSacrificeHealPct) {
       cfg.necroSacrificeHealPct = Math.max(cfg.necroSacrificeHealPct || 0, c.necroSacrificeHealPct);
@@ -902,7 +911,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.necroKeystoneThroneDmgPct) {
       cfg.necroKeystoneThroneDmgPct = Math.max(cfg.necroKeystoneThroneDmgPct || 0, c.necroKeystoneThroneDmgPct);
       cfg.necroKeystoneThroneShieldPct = Math.max(cfg.necroKeystoneThroneShieldPct || 0, c.necroKeystoneThroneShieldPct || 0);
-      cfg.necroKeystoneThroneDmgCap = Math.max(cfg.necroKeystoneThroneDmgCap || 0, c.necroKeystoneThroneDmgCap || 0);
+      // Auftrag Abschnitt 9: kein Schadensdeckel mehr (ghost_097
+      // "Thron aus Gebein") -- der versteckte Schild-Deckel in necro.js
+      // faellt ebenfalls, s. dort.
     }
     if (c.necroCapFusion) {
       cfg.necroCapFusion = true;

@@ -173,7 +173,7 @@
       "player": true,
       "necromancer": true,
       "label": "Nekromant",
-      "desc": "Getötete Gegner werden mit 50 % Chance zu kämpfenden Geisterpanzern (Kills durch einen Geist: 33 %). Die Bombentaste beschwört statt einer Mine sofort einen Geist.",
+      "desc": "Getötete Gegner werden mit 35 % Grundchance zu kämpfenden Geisterpanzern -- egal ob der Kill vom Hauptpanzer, dem Champion oder einem gewöhnlichen Untertanenpanzer stammt. Karten erhöhen die Chance weiter. Die Bombentaste beschwört statt einer Mine sofort einen Geist.",
       "maxHp": 95,
       "damage": 8,
       "speed": "normal",

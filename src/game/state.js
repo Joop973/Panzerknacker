@@ -924,9 +924,22 @@ export function createState(data, tiles, opts) {
           // der Geisterbombe (tank.js: spawnGhostBomb()). Der Deckel-
           // Vergleich zaehlt seit Phase 7 belegte PLAETZE (occupiedGhostSlots),
           // nicht die reine Anzahl.
+          //
+          // BUGFIX (Auftrag Abschnitt 4, "ghost_098 funktioniert im normalen
+          // Spielablauf nicht"): ohne ghost_098 bricht die Schleife am vollen
+          // Limit weiterhin sofort ab (unveraendertes Verhalten). MIT
+          // necroCapFusion (098) wird pushGhost() dagegen IMMER aufgerufen,
+          // auch am Deckel -- ihre eigene Verschmelzungslogik (s. ghost.js)
+          // entscheidet dann selbst, ob der neue Geist verworfen und
+          // stattdessen der schwaechste vorhandene in den Champion
+          // verschmolzen wird. Ohne diesen Fix erreichte ein durch einen
+          // Abschuss ausgeloester Wiederbelebungsversuch pushGhost() am
+          // vollen Limit NIE (fruehes break hier), egal ob der Kill vom
+          // Hauptpanzer, dem Champion oder einem gewoehnlichen Geist stammte
+          // -- alle drei laufen durch GENAU diese eine Schleife.
           let spawnedAny = false;
           for (let i = 0; i < n; i++) {
-            if (occupiedGhostSlots(state) >= ghostCap) break;
+            if (occupiedGhostSlots(state) >= ghostCap && !pc.necroCapFusion) break;
             // ghost_056: ein wiederbelebter ELITE-Gegner erscheint mit einem
             // eigenen (hoeheren) Basiswert-Anteil und belegt 2 Plaetze.
             // ghost_104: die GARANTIERTE Probe (falls sie diese war) spawnt
@@ -946,12 +959,14 @@ export function createState(data, tiles, opts) {
             const revived = createGhost(state, tank.x, tank.y, tank.heading, tank.type, overrides);
             // ghost_088 "Blutige Formation" (Nekromant-V2 Phase 9): der
             // NAECHSTE wiederbelebte Untertan bekommt +X% Schaden JE
-            // Geistertod in diesem Raum, gedeckelt -- VOR pushGhost()
-            // angewendet, damit eine evtl. Verschmelzung (necroUniqueThrone)
-            // den bereits erhoehten Wert korrekt uebertraegt.
+            // Geistertod in diesem Raum -- UNBEGRENZT (Auftrag Abschnitt 9:
+            // die alte, hier entfernte 80-%-Deckelung war eine kuenstliche
+            // Obergrenze) -- VOR pushGhost() angewendet, damit eine evtl.
+            // Verschmelzung (necroUniqueThrone) den bereits erhoehten Wert
+            // korrekt uebertraegt.
             if (pc.necroHybridReviveDeathBonusPct) {
               const deaths = getNecroStack(state, 'room', '_deaths');
-              const bonus = Math.min(pc.necroHybridReviveDeathBonusCap || Infinity, deaths * pc.necroHybridReviveDeathBonusPct);
+              const bonus = deaths * pc.necroHybridReviveDeathBonusPct;
               revived.cfg.damage = Math.round(revived.cfg.damage * (1 + bonus));
             }
             pushGhost(state, revived);
@@ -1024,7 +1039,13 @@ export function createState(data, tiles, opts) {
     // der Sterbeposition, ueber denselben pushGhost()-Hook wie jede andere
     // Erzeugungsstelle (wertet "Einziger Thron" also korrekt mit aus).
     createReplacementGhost(gh, cfg) {
-      if (occupiedGhostSlots(state) >= (state.data.balance?.ghost?.maxActive ?? 3) + (state.player?.cfg?.ghostMaxAdd || 0)) {
+      // ghost_098 "Auslese der Legion": am vollen Limit trotzdem versuchen --
+      // pushGhost() verschmilzt dann den schwaechsten Untertan in den
+      // Champion, statt den Ersatz stillschweigend zu verweigern.
+      if (
+        occupiedGhostSlots(state) >= (state.data.balance?.ghost?.maxActive ?? 3) + (state.player?.cfg?.ghostMaxAdd || 0) &&
+        !cfg.necroCapFusion
+      ) {
         return null;
       }
       const g = createGhost(state, gh.x, gh.y, gh.heading, gh.type, { baseStatPctOverride: cfg.necroHybridReplacementStatPct });
@@ -1042,7 +1063,9 @@ export function createState(data, tiles, opts) {
       const cap = (state.data.balance?.ghost?.maxActive ?? 3) + (p.cfg.ghostMaxAdd || 0);
       const pool = state.actEnemyPool && state.actEnemyPool.length ? state.actEnemyPool : ['t_brown'];
       for (let i = 0; i < count; i++) {
-        if (occupiedGhostSlots(state) >= cap) break;
+        // ghost_098: am vollen Limit nicht abbrechen, sondern pushGhost()
+        // erreichen lassen (verschmilzt dort statt zu verweigern).
+        if (occupiedGhostSlots(state) >= cap && !p.cfg.necroCapFusion) break;
         const srcType = pool[Math.floor(state.rng() * pool.length)];
         pushGhost(state, createGhost(state, p.x, p.y, p.turret, srcType, { baseStatPctOverride: statPct }));
       }
@@ -1062,7 +1085,8 @@ export function createState(data, tiles, opts) {
   // Wiederkehr-Familie bei 'expire' ohnehin (s. ghost.js).
   if (
     player.cfg.necroStartGhostPct &&
-    occupiedGhostSlots(state) < (state.data.balance?.ghost?.maxActive ?? 3) + (player.cfg.ghostMaxAdd || 0)
+    (occupiedGhostSlots(state) < (state.data.balance?.ghost?.maxActive ?? 3) + (player.cfg.ghostMaxAdd || 0) ||
+      player.cfg.necroCapFusion)
   ) {
     const pool = actEnemyPool && actEnemyPool.length ? actEnemyPool : ['t_brown'];
     const srcType = pool[Math.floor(state.rng() * pool.length)];
@@ -1655,8 +1679,10 @@ export function stepState(state, cmd, dt) {
         // ghost_075 "Raubseele" (Nekromant-V2 Phase 8): der CHAMPION heilt den
         // Hauptpanzer um einen Anteil des VERURSACHTEN Schadens (jeder Treffer,
         // nicht nur ein Kill wie das aeltere Seelensog unten). Ueberlauf ueber
-        // volles Leben hinaus wird zu Schild, gedeckelt auf einen Anteil des
-        // maximalen Lebens.
+        // volles Leben hinaus wird UNBEGRENZT zu Schild (Auftrag Abschnitt 9:
+        // die alte, hier entfernte 15-%-Deckelung war eine kuenstliche
+        // Obergrenze -- der Schild-Punktepool selbst kennt ohnehin keinen
+        // Speicherdeckel, s. absorbWithShieldPool()).
         if (b.owner?.isGhost && b.owner.isChampion && t !== state.player) {
           const stealPct = state.player?.cfg?.necroCrownLifestealToPlayerPct;
           if (stealPct && state.player.alive) {
@@ -1665,10 +1691,7 @@ export function stepState(state, cmd, dt) {
             const toHp = Math.min(room, heal);
             state.player.hp += toHp;
             heal -= toHp;
-            if (heal > 0) {
-              const cap = state.player.cfg.maxHp * (state.player.cfg.necroCrownLifestealShieldCapPct || 0);
-              state.player.shield = Math.min(cap, (state.player.shield || 0) + heal);
-            }
+            if (heal > 0) state.player.shield = (state.player.shield || 0) + heal;
           }
         }
         // ghost_082 "Kronjaeger" (Nekromant-V2 Phase 8, nur Champion): hebt die

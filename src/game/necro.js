@@ -283,8 +283,10 @@ export function buildNecroListeners(state, cfg) {
 
   // ghost_014 "Lebensfunke" + ghost_023 "Ueberlaufende Seele" (requires 014):
   // Heilung mit interner Abklingzeit; Ueberlauf (ueber volles Leben hinaus)
-  // wird bei gesetztem necroOverflowShieldCapPct in Schild umgewandelt statt
-  // verworfen zu werden.
+  // wird bei aktivem necroOverflowToShield VOLLSTAENDIG in Schild umgewandelt
+  // statt verworfen zu werden -- keine eigene Deckelung mehr (Auftrag
+  // Abschnitt 9), der Schild-Punktepool selbst ist bereits unbegrenzt
+  // (absorbWithShieldPool() in state.js kennt keinen Deckel).
   if (cfg.necroHealPctPerDeath) {
     L.push({
       reasons: DEATH_REASONS, scope: 'room', key: 'necro014', cooldownS: cfg.necroHealCooldownS,
@@ -294,15 +296,14 @@ export function buildNecroListeners(state, cfg) {
         const heal = p.cfg.maxHp * cfg.necroHealPctPerDeath;
         const overflow = Math.max(0, p.hp + heal - p.cfg.maxHp);
         p.hp = Math.min(p.cfg.maxHp, p.hp + heal);
-        if (overflow > 0 && cfg.necroOverflowShieldCapPct) {
-          const cap = p.cfg.maxHp * cfg.necroOverflowShieldCapPct;
-          p.shield = Math.min(cap, (p.shield || 0) + overflow);
+        if (overflow > 0 && cfg.necroOverflowToShield) {
+          p.shield = (p.shield || 0) + overflow;
         }
       },
     });
   }
 
-  // ghost_015 "Aschenhaut": stapelt bis zu einem Deckel, verfaellt nach einer
+  // ghost_015 "Aschenhaut": stapelt OHNE Obergrenze, verfaellt nach einer
   // festen Dauer -- ueber tank.necroShieldStackAmount/-ExpiresAt (eigene
   // Felder auf dem Spieler-Panzer, nicht das generische necroTimedStacks:
   // ein Timed-Stack allein kennt seinen Anteil am geteilten Schild-Pool
@@ -313,11 +314,10 @@ export function buildNecroListeners(state, cfg) {
       fn: (st) => {
         const p = st.player;
         if (!p) return;
-        const capAmt = p.cfg.maxHp * cfg.necroShieldCapPct;
         const incAmt = p.cfg.maxHp * cfg.necroShieldPctPerDeath;
         const curAmt = p.necroShieldStackAmount || 0;
-        const nextAmt = Math.min(capAmt, curAmt + incAmt);
-        p.shield = (p.shield || 0) + (nextAmt - curAmt);
+        const nextAmt = curAmt + incAmt;
+        p.shield = (p.shield || 0) + incAmt;
         p.necroShieldStackAmount = nextAmt;
         p.necroShieldStackExpiresAt = st.time + cfg.necroShieldDurationS;
       },
@@ -627,9 +627,11 @@ export function buildNecroListeners(state, cfg) {
           target.cfg.maxHp = Math.round(target.cfg.maxHp + gh.baseMaxHp * cfg.necroHybridRandomTransferPct);
           target.cfg.damage = Math.round(target.cfg.damage + gh.baseDamage * cfg.necroHybridRandomTransferPct);
         }
+        // Auftrag Abschnitt 9: kein Schild-Deckel (weiterer, im Kartentext nie
+        // erwaehnter versteckter Cap, gefunden bei der Durchsicht auf
+        // vergleichbare Faelle).
         if (st.player?.alive && cfg.necroHybridRandomTransferShieldPct) {
-          const cap = st.player.cfg.maxHp;
-          st.player.shield = Math.min(cap, (st.player.shield || 0) + cap * cfg.necroHybridRandomTransferShieldPct);
+          st.player.shield = (st.player.shield || 0) + st.player.cfg.maxHp * cfg.necroHybridRandomTransferShieldPct;
         }
       },
     });
@@ -687,20 +689,17 @@ export function buildNecroListeners(state, cfg) {
   // die EINZIGE Karte dieser Phase mit 'fusion' in ihren eigenen reasons,
   // moeglich weil der generische Dispatcher jeden Listener unabhaengig
   // filtert (die automatische _deaths-Buchfuehrung bleibt trotzdem fusion-
-  // frei, s. countsAsGhostDeath()). Gedeckelter, permanenter Raum-Stapel
-  // (Muster wie ghost_050s _legionAmmoExchange aus Phase 7 -- manueller
-  // Cap-Check vor dem Addieren, weil necroDamagePct() sonst unbegrenzt
-  // waechst).
+  // frei, s. countsAsGhostDeath()). Auftrag Abschnitt 9: WEDER der
+  // Schadensstapel NOCH der Schild-Zuwachs sind noch gedeckelt -- der alte
+  // Schild-Deckel bei genau 1x maxHp war zudem im Kartentext nie erwaehnt
+  // ("versteckte Obergrenze").
   if (cfg.necroKeystoneThroneDmgPct) {
     L.push({
       reasons: [...DEATH_REASONS, 'fusion'], scope: 'room', key: 'necro097',
       fn: (st) => {
-        const cur = getNecroStack(st, 'room', '_hybridThroneDmg');
-        const cap = cfg.necroKeystoneThroneDmgCap || Infinity;
-        if (cur < cap) addNecroStack(st, 'room', '_hybridThroneDmg', Math.min(cfg.necroKeystoneThroneDmgPct, cap - cur));
+        addNecroStack(st, 'room', '_hybridThroneDmg', cfg.necroKeystoneThroneDmgPct);
         if (st.player?.alive) {
-          const shieldCap = st.player.cfg.maxHp;
-          st.player.shield = Math.min(shieldCap, (st.player.shield || 0) + shieldCap * cfg.necroKeystoneThroneShieldPct);
+          st.player.shield = (st.player.shield || 0) + st.player.cfg.maxHp * cfg.necroKeystoneThroneShieldPct;
         }
       },
     });
@@ -803,4 +802,19 @@ export function necroSpeedPct(state) {
 }
 export function necroResistBonus(state) {
   return getNecroTimedStack(state, '_timedResistHaerte') + getNecroTimedStack(state, '_timedHybridChampSacrificeResist');
+}
+
+// Wandelt eine (potenziell unbegrenzt grosse) Feuerraten-Prozentbonus-Summe
+// in einen Nachladezeit-Faktor um, OHNE eine kuenstliche Obergrenze (Auftrag
+// Abschnitt 9: die alte Formel Math.max(0.1, 1 - pct) deckelte die Feuerrate
+// auf hoechstens 10x -- verboten). `cooldown = basis / (1 + pct)` naehert
+// sich bei wachsendem pct asymptotisch 0 an, wird aber nie negativ oder Null
+// (division-by-zero-sicher fuer jedes endliche pct >= 0) -- "mathematisch
+// stabil, unbegrenzt skalierend". Ein negativer pct (aktuell nirgends im
+// Kartenpool erzeugbar) wird defensiv auf 0 geklemmt, NICHT als weitere
+// Obergrenze auf positive Werte gedacht, sondern ausschliesslich um
+// (basis/(1+negativ)) nie <= 0 werden zu lassen.
+export function fireRateFactor(pct) {
+  const p = Math.max(0, pct || 0);
+  return 1 / (1 + p);
 }
