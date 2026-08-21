@@ -248,6 +248,18 @@ html, body {
   opacity: 0.7;
 }
 
+/* Nekromant-V2 Phase 9: "ersetzt dein Gadget"-Warnung, VOR der Wahl
+   sichtbar (Auftrag: "sonst verliert der Spieler unbemerkt sein Gadget") --
+   eigene, auffaellige Farbe statt der gedaempften cardmeta-Zeile. Gilt fuer
+   Kartenangebot UND Shopregal (beide zeigen dieselbe Warnung). */
+.cards .card .pv-warn,
+.shopcards .shopcard .pv-warn {
+  display: block;
+  font-size: 11px;
+  color: #ff8a5c;
+  font-weight: bold;
+}
+
 /* Rahmenfarbe nach Seltenheit (Upgradepool-v2 Phase 1: 5 statt 3 Stufen;
    Nekromant-V2 Phase 1: 'unique' -> 'uncommon' umbenannt, dieselben fuenf
    Farben bleiben an derselben Stelle in der Reihenfolge common < uncommon <

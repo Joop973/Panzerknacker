@@ -36,7 +36,7 @@ import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
 import { resolveCfg, isBossCfg } from './cfg.js';
 import { explodeAt } from './mine.js';
-import { onGhostRemoved, addNecroStack, getNecroStack } from './necro.js';
+import { onGhostRemoved, addNecroStack, getNecroStack, addNecroTimedStack } from './necro.js';
 import { flankZone } from './armor.js';
 
 const TURN_SPEED = 4; // rad/s -- Drehen von Rumpf UND Turm Richtung Ziel
@@ -235,6 +235,14 @@ export function createGhost(state, x, y, heading = 0, sourceType, overrides) {
     unassailableUsed: false, // ghost_079: einmal pro Raum
     invulnUntil: 0, // ghost_079/084: kurzzeitige Unverwundbarkeit nach einem toedlichen Treffer
     immortalKingReadyAt: 0, // ghost_084: eigene Abklingzeit
+    // Nekromant-V2 Phase 9 (Hybride und Aktivkarten): weitere Felder je
+    // Geist-Instanz.
+    hybridBuffPct: 0, // ghost_086: zeitlich befristeter Schadensbonus
+    hybridBuffUntil: 0,
+    isReplacement: false, // ghost_090: der Ersatz darf sich nicht selbst ersetzen
+    isAncestor: false, // ghost_105: nur DIESER Untertan loest den Tod-/Fusionsbuff aus
+    championKills: 0, // ghost_093: Abschuesse NUR waehrend dieser Geist Champion war
+    crownMassHpBonus: 0, // ghost_103: live nachgefuehrter, delta-basierter Bonus
   };
   // ghost_080 "Kronenerbe" (Nekromant-V2 Phase 8): stirbt der Champion, merkt
   // killGhost() 60% seiner Fusionsboni (state.necroCrownHeir) fuer ein
@@ -278,24 +286,32 @@ function applyFusionTransfer(g, hpFrac, dmgFrac, frFrac) {
 // schliesst ihn explizit aus) -- onGhostRemoved() wird trotzdem aufgerufen
 // (fuer eine kuenftige, ausdruecklich auf 'fusion' lauschende Karte), nur
 // OHNE die _deaths-Buchfuehrung/Stapel-Effekte der death_*-Grunde.
-function fuseGhost(state, winner, loser) {
+// `overrideFrac` (Nekromant-V2 Phase 9, ghost_098 "Auslese der Legion"):
+// eine EIGENSTAENDIGE Uebertragungsrate, unabhaengig von 071/072/085 --
+// 098 loest gar nicht am Geisterlimit-Bypass von 071 aus (necroUniqueThrone),
+// sondern nur, wenn das Limit bereits VOLL ist (s. pushGhost()). Mit
+// overrideFrac gesetzt werden 071/072/085 komplett uebersprungen, damit
+// sich zwei unabhaengige Verschmelzungs-Karten nicht gegenseitig verzerren.
+function fuseGhost(state, winner, loser, overrideFrac) {
   const pc = state.player?.cfg;
-  let hpFrac = pc?.necroFusionHpPct ?? 0.3;
-  let dmgFrac = pc?.necroFusionDamagePct ?? 0.3;
-  let frFrac = pc?.necroFusionFireRatePct ?? 0.12;
-  // ghost_072 "Seelenauslese" (requires ghost_071): zusaetzlicher Anteil JE
-  // Verschmelzung, additiv zur Grundrate von 071.
-  hpFrac += pc?.necroFusionHpPctBonus || 0;
-  dmgFrac += pc?.necroFusionDamagePctBonus || 0;
-  frFrac += pc?.necroFusionFireRatePctBonus || 0;
-  // ghost_085 "Seelenkoloss" ERSETZT die Uebertragungswerte von 071/072,
-  // statt zu addieren -- eigenes `replaces`-Datenfeld auf der Karte selbst
-  // (core.necroFusionReplace), sonst wuerden sich beide Karten gleichzeitig
-  // stumm verdoppeln.
-  if (pc?.necroFusionReplace) {
-    hpFrac = pc.necroFusionReplaceHpPct ?? 0.5;
-    dmgFrac = pc.necroFusionReplaceDamagePct ?? 0.5;
-    frFrac = pc.necroFusionReplaceFireRatePct ?? 0.2;
+  let hpFrac = overrideFrac?.hpFrac ?? pc?.necroFusionHpPct ?? 0.3;
+  let dmgFrac = overrideFrac?.dmgFrac ?? pc?.necroFusionDamagePct ?? 0.3;
+  let frFrac = overrideFrac?.frFrac ?? pc?.necroFusionFireRatePct ?? 0.12;
+  if (!overrideFrac) {
+    // ghost_072 "Seelenauslese" (requires ghost_071): zusaetzlicher Anteil JE
+    // Verschmelzung, additiv zur Grundrate von 071.
+    hpFrac += pc?.necroFusionHpPctBonus || 0;
+    dmgFrac += pc?.necroFusionDamagePctBonus || 0;
+    frFrac += pc?.necroFusionFireRatePctBonus || 0;
+    // ghost_085 "Seelenkoloss" ERSETZT die Uebertragungswerte von 071/072,
+    // statt zu addieren -- eigenes `replaces`-Datenfeld auf der Karte selbst
+    // (core.necroFusionReplace), sonst wuerden sich beide Karten gleichzeitig
+    // stumm verdoppeln.
+    if (pc?.necroFusionReplace) {
+      hpFrac = pc.necroFusionReplaceHpPct ?? 0.5;
+      dmgFrac = pc.necroFusionReplaceDamagePct ?? 0.5;
+      frFrac = pc.necroFusionReplaceFireRatePct ?? 0.2;
+    }
   }
   const gainedHp = Math.round(loser.baseMaxHp * hpFrac);
   applyFusionTransfer(winner, hpFrac, dmgFrac, frFrac);
@@ -324,6 +340,13 @@ function fuseGhost(state, winner, loser) {
   // Verlust eines ANDEREN Untertanen. loser !== winner ist hier immer wahr.
   healChampionOnAllyDeath(state, loser);
   loser.alive = false;
+  // ghost_105 "Herrschaft ueber den Tod": "Stirbt ODER VERSCHMILZT er" -- der
+  // Urahnenuntertan kann auch als Verschmelzungs-Verlierer enden.
+  const pc105 = state.player?.cfg;
+  if (loser.isAncestor && pc105?.necroAncestorBuffOnDeath) {
+    addNecroTimedStack(state, '_timedAncestorDmg', pc105.necroAncestorBuffDmgPct || 0, pc105.necroAncestorBuffDurationS || 0);
+    addNecroTimedStack(state, '_timedAncestorFR', pc105.necroAncestorBuffFRPct || 0, pc105.necroAncestorBuffDurationS || 0);
+  }
   onGhostRemoved(state, loser, 'fusion');
   // Sichtbarkeit (Auftrag: "Verschmelzung mit kurzem Effekt, sonst ist das
   // System unlesbar"): kurzer Partikelstoss + Text am Winner, eigener Ton
@@ -370,6 +393,30 @@ export function pushGhost(state, g) {
         fuseGhost(state, existing, g);
       }
       recomputeLegionCache(state);
+      return;
+    }
+  }
+  // ghost_098 "Auslese der Legion" (Nekromant-V2 Phase 9): "Wuerde bei
+  // VOLLEM Geisterlimit ein weiterer ... erscheinen, verschmilzt der
+  // SCHWAECHSTE in den Champion" -- anders als 071 (das den Champion IMMER
+  // absorbieren laesst, unabhaengig vom Limit) greift das hier NUR, wenn
+  // kein Platz mehr frei ist. Der neu ankommende Geist `g` erscheint dabei
+  // selbst NICHT (er wird verworfen) -- das Ereignis "es waere einer
+  // erschienen" loest nur die Verschmelzung eines bereits VORHANDENEN
+  // schwaechsten Untertanen in den Champion aus.
+  if (pc?.necroCapFusion) {
+    const cap = (state.data.balance?.ghost?.maxActive ?? 3) + (pc.ghostMaxAdd || 0);
+    if (occupiedGhostSlots(state) >= cap) {
+      const champion = state.ghosts.find((x) => x.alive && x.isChampion) || state.ghosts.find((x) => x.alive);
+      let weakest = null;
+      for (const x of state.ghosts) {
+        if (!x.alive || x === champion) continue;
+        if (!weakest || x.hp < weakest.hp) weakest = x;
+      }
+      if (champion && weakest) {
+        fuseGhost(state, champion, weakest, { hpFrac: pc.necroCapFusionHpPct, dmgFrac: pc.necroCapFusionDamagePct, frFrac: 0 });
+        recomputeLegionCache(state);
+      }
       return;
     }
   }
@@ -476,11 +523,61 @@ export function killGhost(state, g, cause = 'damage') {
       fusionCount: Math.floor((g.fusionCount || 0) * cfg.necroCrownHeirPct),
     };
   }
+  // ghost_094 "Erbe des Herrschers" (Nekromant-V2 Phase 9): stirbt der
+  // Champion, erhaelt der HAUPTPANZER (nicht ein anderer Untertan) einen
+  // Anteil seines ANGESAMMELTEN Bonus -- gemessen als Delta zum eigenen
+  // Basiswert (g.cfg.damage - g.baseDamage bzw. maxHp), das erfasst
+  // Kronen- UND Fusionsboni gemeinsam, ohne beide Quellen getrennt
+  // nachrechnen zu muessen. Direkter, EINMALIGER Zuschlag auf cfg.damage
+  // (haelt bis Raumende, da cfg fuer den Rest des Raums nicht neu aufgeloest
+  // wird) + Schild aus dem Lebensbonus-Anteil.
+  if (g.isChampion && cfg?.necroCrownDeathDmgTransferPct && state.player?.alive) {
+    const dmgBonus = Math.max(0, g.cfg.damage - g.baseDamage);
+    const hpBonus = Math.max(0, g.cfg.maxHp - g.baseMaxHp);
+    state.player.cfg.damage = Math.round(state.player.cfg.damage + dmgBonus * cfg.necroCrownDeathDmgTransferPct);
+    const shieldCap = state.player.cfg.maxHp;
+    state.player.shield = Math.min(
+      shieldCap,
+      (state.player.shield || 0) + hpBonus * (cfg.necroCrownDeathHpShieldPct || 0),
+    );
+  }
+  // ghost_100 "Ersatzkoerper" (Nekromant-V2 Phase 9): stirbt der Champion,
+  // WAEHREND ein weiterer Untertan aktiv ist, uebernimmt der GESUENDESTE
+  // Ueberlebende (nicht der naechste Neuling wie bei 080) die Haelfte der
+  // raumweiten Kronen- und Fusionsboni -- dieselbe Delta-Messung wie 094,
+  // aber additiv auf die cfg des Ueberlebenden statt auf den Spieler.
+  // "Einmal pro Raum".
+  if (g.isChampion && cfg?.necroSuccessionPct && !state.necroSuccessionUsed) {
+    const survivors = state.ghosts.filter((x) => x.alive && x !== g);
+    if (survivors.length) {
+      state.necroSuccessionUsed = true;
+      let healthiest = survivors[0];
+      for (const s of survivors) if (s.hp > healthiest.hp) healthiest = s;
+      const dmgBonus = Math.max(0, g.cfg.damage - g.baseDamage);
+      const hpBonus = Math.max(0, g.cfg.maxHp - g.baseMaxHp);
+      healthiest.cfg.damage = Math.round(healthiest.cfg.damage + dmgBonus * cfg.necroSuccessionPct);
+      const gained = Math.round(hpBonus * cfg.necroSuccessionPct);
+      healthiest.cfg.maxHp += gained;
+      healthiest.hp += gained;
+    }
+  }
+  // ghost_105 "Herrschaft ueber den Tod": stirbt der Urahnenuntertan (Schaden
+  // ODER Ablauf), erhaelt der Hauptpanzer einen zeitlich befristeten Buff.
+  if (g.isAncestor && cfg?.necroAncestorBuffOnDeath) {
+    addNecroTimedStack(state, '_timedAncestorDmg', cfg.necroAncestorBuffDmgPct || 0, cfg.necroAncestorBuffDurationS || 0);
+    addNecroTimedStack(state, '_timedAncestorFR', cfg.necroAncestorBuffFRPct || 0, cfg.necroAncestorBuffDurationS || 0);
+  }
   // Nekromant-V2 Phase 5 (Ereignis-/Stapelschicht): zentrales Ereignis fuer
   // JEDEN echten Geistertod -- NACH den beiden obigen "ueberlebt doch"-
   // Zweigen, ein geretteter Geist ist kein Geistertod. cause ('damage'/
   // 'expire') ist 1:1 die Auslöser-Tabelle aus dem Auftrag.
-  onGhostRemoved(state, g, cause === 'expire' ? 'death_expire' : 'death_damage');
+  // Nekromant-V2 Phase 9: 'sacrifice' (ghost_031/089/096, "Die Opferung
+  // zaehlt als Geistertod") ist die dritte moegliche cause -- NECRO_REASONS/
+  // countsAsGhostDeath() unterstuetzen den Grund seit Phase 5, bisher hat
+  // ihn nur nie ein Aufrufer erzeugt. Wie 'expire' oben ohne Wiederkehr/
+  // Phylakterium/Todeszone (eine ABSICHTLICHE Opferung soll nicht "durch
+  // Glueck ueberleben").
+  onGhostRemoved(state, g, cause === 'expire' ? 'death_expire' : cause === 'sacrifice' ? 'sacrifice' : 'death_damage');
   // Nekromant-V2 Phase 7 (Legion): killGhost() ist der EINZIGE Entfernungs-
   // Trichter (Schaden UND Ablauf) -- die "bei Spawn UND Entfernen neu
   // berechnen, NICHT pro Frame"-Vorgabe des Auftrags braucht deshalb nur
@@ -650,6 +747,44 @@ export function updateGhosts(state, dt) {
         g.legionAuraResist = playerCfg.necroPhalanxResist || 0;
         g.phalanxRingActive = true;
         break;
+      }
+    }
+  }
+  // ghost_102 "Kronengarde" (Nekromant-V2 Phase 9, nur Champion): +Resistenz
+  // JE ANDEREM aktivem Untertan -- additiv auf legionAuraResist (bereits die
+  // "gesammelte" Naeheresistenz-Ablage). Ist der Champion ALLEIN, gibt es
+  // stattdessen alle necroCrownGuardSoloIntervalS Sekunden einen Schild-Schub
+  // -- eigener Timer je Geist-Instanz (g.crownGuardShieldTimer), tickt nur,
+  // solange der Champion tatsaechlich allein ist (kein Fortlaufen im
+  // Hintergrund).
+  if (playerCfg?.necroCrownGuardResistPerAlly) {
+    const champ = aliveGhosts.find((g) => g.isChampion);
+    if (champ) {
+      if (aliveGhosts.length > 1) {
+        champ.legionAuraResist = (champ.legionAuraResist || 0) + playerCfg.necroCrownGuardResistPerAlly * (aliveGhosts.length - 1);
+      } else if (playerCfg.necroCrownGuardSoloShieldPct) {
+        champ.crownGuardShieldTimer = (champ.crownGuardShieldTimer || 0) + dt;
+        if (champ.crownGuardShieldTimer >= (playerCfg.necroCrownGuardSoloIntervalS || 5)) {
+          champ.crownGuardShieldTimer = 0;
+          champ.shield = (champ.shield || 0) + champ.cfg.maxHp * playerCfg.necroCrownGuardSoloShieldPct;
+        }
+      }
+    }
+  }
+  // ghost_103 "Massenkrone" (nur Champion, live): +maxHp JE Geisterplatz
+  // ueber dem Schwellenwert -- delta-basiert nachgefuehrt (Muster wie
+  // Veteranen-Befoerderung), damit hp konsistent zum gewachsenen/
+  // geschrumpften Deckel bleibt, wenn sich die Platzzahl aendert.
+  if (playerCfg?.necroCrownMassHpPerSlot) {
+    const champ = aliveGhosts.find((g) => g.isChampion);
+    if (champ) {
+      const overSlots = Math.max(0, occupiedGhostSlots(state) - (playerCfg.necroCrownMassSlotThreshold || 3));
+      const targetBonus = Math.round(champ.baseMaxHp * playerCfg.necroCrownMassHpPerSlot * overSlots);
+      const prevBonus = champ.crownMassHpBonus || 0;
+      if (targetBonus !== prevBonus) {
+        champ.cfg.maxHp += targetBonus - prevBonus;
+        champ.hp += targetBonus - prevBonus;
+        champ.crownMassHpBonus = targetBonus;
       }
     }
   }
@@ -867,11 +1002,43 @@ export function updateGhosts(state, dt) {
           : 1;
       // ghost_078 "Alpha-Schuss": jeder N-te Schuss macht +X % Schaden.
       const alphaMult = isAlphaShot ? playerCfg?.necroCrownAlphaShotDamageMult || 1 : 1;
+      // ghost_086 "Totenmarsch" (Nekromant-V2 Phase 9): zeitlich befristeter
+      // Bonus auf JEDEM Untertanen nach einem Geistertod (nicht nur Champion).
+      const hybridMult = (g.hybridBuffUntil || 0) > state.time ? 1 + (g.hybridBuffPct || 0) : 1;
+      // ghost_099 "Kroenungszug" (nur Champion, live): +X% je ANDEREM
+      // aktivem Untertan, ZUSAETZLICH zum halb-permanenten Anteil aus
+      // necro.js (state.necroCoronationPermDmgPct, auf Toden gesammelt).
+      const crownProcMult =
+        g.isChampion && playerCfg?.necroCrownProcPerAllyPct
+          ? 1 + playerCfg.necroCrownProcPerAllyPct * Math.max(0, aliveGhosts.length - 1) + (state.necroCoronationPermDmgPct || 0)
+          : g.isChampion
+            ? 1 + (state.necroCoronationPermDmgPct || 0)
+            : 1;
+      // ghost_103 "Massenkrone" (keystone, nur Champion, live): +X% Schaden
+      // je Geisterplatz UEBER dem Schwellenwert.
+      const massMult =
+        g.isChampion && playerCfg?.necroCrownMassDmgPerSlot
+          ? 1 +
+            playerCfg.necroCrownMassDmgPerSlot *
+              Math.max(0, occupiedGhostSlots(state) - (playerCfg.necroCrownMassSlotThreshold || 3))
+          : 1;
       // ghost_060 "Armee der Toten"/allgemeine ghostDamageMult-Karten wirken
       // bereits ueber g.cfg.damage (resolveGhostCfg()) -- hier nur die
       // dynamischen, NICHT in die cfg gebackenen Legion-/Champion-Multiplikatoren.
       let dmg = Math.round(
-        g.cfg.damage * packMult * officerDmgMult * stormDmgMult * kernMult * soloMult * eliteBossMult * anchorMult * fusionStackMult * alphaMult,
+        g.cfg.damage *
+          packMult *
+          officerDmgMult *
+          stormDmgMult *
+          kernMult *
+          soloMult *
+          eliteBossMult *
+          anchorMult *
+          fusionStackMult *
+          alphaMult *
+          hybridMult *
+          crownProcMult *
+          massMult,
       );
       // ghost_051 "Erbmunition": "naechste 5 Schuesse" je Untertan, analog
       // player.necroBulletBuffs -- konsumiert EINMAL pro Abzug.
@@ -936,7 +1103,12 @@ export function updateGhosts(state, dt) {
       const ammoExchangePct = getNecroStack(state, 'room', '_legionAmmoExchange');
       // ghost_062 "Einsamer Waechter": +Feuerrate solange allein.
       const soloFireRatePct = aliveGhosts.length === 1 ? playerCfg?.necroSoloFireRatePct || 0 : 0;
-      const fireRatePct = (state.necroLegionFireRatePct || 0) + officerFireRatePct + ammoExchangePct + soloFireRatePct;
+      // ghost_103 "Massenkrone": ist AUSSER dem Champion kein Platz belegt,
+      // zusaetzlich +X% Feuerrate.
+      const massSoloFireRatePct =
+        g.isChampion && occupiedGhostSlots(state) <= (g.slotCost || 1) ? playerCfg?.necroCrownMassSoloFireRatePct || 0 : 0;
+      const fireRatePct =
+        (state.necroLegionFireRatePct || 0) + officerFireRatePct + ammoExchangePct + soloFireRatePct + massSoloFireRatePct;
       g.cooldown = g.cfg.fireCooldown * Math.max(0.1, 1 - fireRatePct);
       if (playerCfg?.necroAmmoExchangePerShot) {
         const cap = playerCfg.necroAmmoExchangeCap || 0;

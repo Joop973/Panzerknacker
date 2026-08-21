@@ -1204,10 +1204,12 @@ function passRest(run) {
 
   // (f) Jeder Gadget-Eintrag traegt seine Kategorie, sonst greift die
   //     Shop-Filterung ins Leere und boete die Bombe zum Tausch an.
+  //     Nekromant-V2 Phase 9: 'necro_active' (ghost_031/089/096) ist eine
+  //     DRITTE, bewusst vom Shop-Filter ('gadget') ausgeschlossene Kategorie.
   for (const [id, def] of Object.entries(tanksData.secondaries)) {
     if (id.startsWith('_')) continue;
     check(
-      def.category === 'gadget' || def.category === 'secondary',
+      def.category === 'gadget' || def.category === 'secondary' || def.category === 'necro_active',
       `P4: secondaries.json "${id}" hat keine gueltige category`,
     );
   }
@@ -7861,27 +7863,23 @@ for (const seed of SEEDS) {
     return st;
   };
 
-  // (a) Struktur: ghost_001..ghost_035 vorhanden, alle bis auf die
-  // Aktivkarte ghost_031 haben einen echten core (kein "_todo"-Platzhalter
-  // mehr), UND jede loest sich ohne NaN/undefined in ein Spieler-cfg auf --
-  // dasselbe Muster wie Abschnitt 45s NaN-Check (Vergleich gegen die
-  // upgradelose Basis derselben Klasse, weil manche Felder wie z. B.
-  // `role`/`miner` bei JEDER Klasse von Haus aus undefined sind).
+  // (a) Struktur: ghost_001..ghost_035 vorhanden, ALLE haben einen echten
+  // core (kein "_todo"-Platzhalter mehr -- ghost_031 war bis Phase 9 die
+  // einzige Ausnahme, ist es seit deren Aktivkarten-core nicht mehr), UND
+  // jede loest sich ohne NaN/undefined in ein Spieler-cfg auf -- dasselbe
+  // Muster wie Abschnitt 45s NaN-Check (Vergleich gegen die upgradelose
+  // Basis derselben Klasse, weil manche Felder wie z. B. `role`/`miner` bei
+  // JEDER Klasse von Haus aus undefined sind).
   {
     const ids = [];
     for (let i = 1; i <= 35; i++) ids.push('ghost_' + String(i).padStart(3, '0'));
     check(ids.every((id) => necroData.upgrades[id]), 'Phase 6: nicht alle 35 Karten ghost_001..ghost_035 existieren');
     for (const id of ids) {
       const def = necroData.upgrades[id];
-      if (id === 'ghost_031') {
-        check(def.core && def.core._todo === 'effect', 'Phase 6: ghost_031 (Aktivkarte, Phase 9) sollte noch _todo sein');
-        continue;
-      }
       check(def.core && def.core._todo !== 'effect', `Phase 6: ${id} hat noch keinen core-Wert`);
     }
     const basis = applyUpgrades(resolveCfg(tanksData, 'c_necro'), {}, necroData, 'mine', null);
     for (const id of ids) {
-      if (id === 'ghost_031') continue;
       const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { [id]: 1 }, necroData, 'mine', null);
       for (const k of Object.keys(cfg)) {
         const bad = (typeof cfg[k] === 'number' && Number.isNaN(cfg[k])) || (cfg[k] === undefined && basis[k] !== undefined);
@@ -9209,6 +9207,778 @@ for (const seed of SEEDS) {
     st.bullets.push(createBullet(g.x, g.y, 0, { owner: mkEnemy(0, 0), damage: 999, speed: 0, radius: 50 }));
     stepState(st, CMD, 1 / 60);
     check(!g.alive, 'Phase 8: ghost_084 rettet den Champion trotz laufender Abklingzeit ein zweites Mal');
+  }
+}
+
+// ---- 61. Nekromant-V2 Phase 9: Hybride und Aktivkarten (20 Karten) --------
+// ghost_086 bis ghost_105 (+ ghost_031, seit Phase 6 als Aktivkarten-
+// Platzhalter zurueckgestellt). ECHTER Ist-Abgleich-Fund VOR dem eigentlichen
+// Kartenbau, nicht im Auftrag genannt, aber Voraussetzung fuer JEDEN der
+// fuenf Testschritte: data/upgrades_necro.json wurde seit Phase 0 NIE in die
+// aktive Angebots-Pipeline eingehaengt (main.js: loadData() kannte den
+// Dateinamen nicht) -- keine der 105 Karten aus den Phasen 1-8 konnte je in
+// einem echten Run gezogen werden. main.js mergt den Pool jetzt additiv in
+// upgradesData.upgrades (main.js: init()) -- der bestehende signatureClass-
+// Filter (Phase 18) erledigt den Rest, ohne dass upgradepool.js/run.js selbst
+// angefasst werden mussten. (b) prueft das End-to-End nach.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const {
+    createGhost, killGhost, updateGhosts, occupiedGhostSlots, recomputeLegionCache, pushGhost,
+  } = await import('../src/game/ghost.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { hashSeed, rngFor, mulberry32 } = await import('../src/core/rng.js');
+  const { rollOffers } = await import('../src/game/upgradepool.js');
+  const { createRun, chooseUpgrade } = await import('../src/game/run.js');
+  const { useGadget } = await import('../src/game/tank.js');
+  const { getNecroStack, getNecroTimedStack } = await import('../src/game/necro.js');
+  const mergedUpgrades = { ...upgradesData, upgrades: { ...upgradesData.upgrades, ...necroData.upgrades } };
+  // Kurzform-Helfer, damit die einzelnen Kartentests nicht jedesmal scope/'room'
+  // ausschreiben muessen (alle Phase-9-Timed-Stacks sind ohnehin raumlokal).
+  const getNecroTimedStackForTest = (st, key) => getNecroTimedStack(st, key);
+  const getNecroStackForTest = (st, key) => getNecroStack(st, 'room', key);
+
+  const legionRoom = (playerUpgrades = {}, types = ['t_pink'], extraOpts = {}) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades,
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+      ...extraOpts,
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    st.walls = [];
+    st.isSolid = () => false;
+    st.blocksSight = () => false;
+    return st;
+  };
+  // Wie legionRoom(), aber OHNE st.ghosts zu leeren -- fuer ghost_105 (der
+  // Raumstart-Urahn entsteht bereits INNERHALB von createState(), noch bevor
+  // legionRoom() zurueckkehrt; das normale Leeren wuerde ihn sofort wieder
+  // verwerfen).
+  const necroStartRoom = (playerUpgrades, actEnemyPool) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: ['t_pink'],
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades,
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+      actEnemyPool,
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.walls = [];
+    st.isSolid = () => false;
+    st.blocksSight = () => false;
+    return st;
+  };
+  const mkEnemy = (x = 400, y = 400, opts = {}) => ({
+    cfg: { maxHp: 100, damage: 10, radius: 14, role: 'guardian', accuracy: 0, ...opts.cfg },
+    hp: opts.hp ?? 100,
+    alive: true,
+    type: 't_pink',
+    x, y,
+    heading: 0,
+    turret: 0,
+    affixes: opts.affixes || [],
+    ai: { threatTimer: 0, targetTimer: 0, target: null },
+  });
+  const push = (st, g) => {
+    st.ghosts.push(g);
+    recomputeLegionCache(st);
+    return g;
+  };
+  const settleChampion = (st) => updateGhosts(st, 0.0001);
+  const fireGhost = (st, g, target) => {
+    st.tanks = [st.player, target];
+    const ang = Math.atan2(target.y - g.y, target.x - g.x);
+    g.turret = ang;
+    g.heading = ang;
+    g.cooldown = 0;
+    const before = st.bullets.length;
+    updateGhosts(st, 0.0001);
+    return st.bullets.slice(before).filter((b) => b.owner === g);
+  };
+
+  // (a) Struktur: 21 Karten (ghost_031 + ghost_086..105), alle mit echtem
+  // core (kein "_todo" mehr), NaN-Check gegen die upgradelose Basis,
+  // ghost_104/105 sind die einzigen Dreifach-Hybride (legendaer, Gewicht 7).
+  {
+    const ids = ['ghost_031'];
+    for (let i = 86; i <= 105; i++) ids.push('ghost_' + String(i).padStart(3, '0'));
+    check(ids.every((id) => necroData.upgrades[id]), 'Phase 9: nicht alle 21 Karten (ghost_031 + ghost_086..105) existieren');
+    for (const id of ids) {
+      const def = necroData.upgrades[id];
+      check(def.core && def.core._todo !== 'effect', `Phase 9: ${id} hat noch keinen core-Wert`);
+    }
+    const basis = applyUpgrades(resolveCfg(tanksData, 'c_necro'), {}, necroData, 'mine', null);
+    for (const id of ids) {
+      const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { [id]: 1 }, necroData, 'mine', null);
+      for (const k of Object.keys(cfg)) {
+        const bad = (typeof cfg[k] === 'number' && Number.isNaN(cfg[k])) || (cfg[k] === undefined && basis[k] !== undefined);
+        check(!bad, `Phase 9: ${id} macht cfg.${k} zu NaN/undefined`);
+      }
+    }
+    for (const id of ['ghost_104', 'ghost_105']) {
+      const def = necroData.upgrades[id];
+      check(
+        def.rarity === 'legendary' && def.weight === 7,
+        `Phase 9: ${id} sollte legendaer mit Gewicht 7 sein (${def.rarity}/${def.weight})`,
+      );
+      const tags = def.tags || [];
+      check(
+        ['opfer', 'legion', 'alpha'].every((t) => tags.includes(t)),
+        `Phase 9: ${id} ist kein Dreifach-Hybrid (opfer+legion+alpha) -- tags=${tags}`,
+      );
+    }
+  }
+
+  // (b) Pipeline-Verdrahtung (Ist-Abgleich-Fund): rollOffers() mit dem ECHT
+  // gemergten Pool (main.js-Muster) liefert einer Nekromant-Klasse
+  // tatsaechlich eine ghost_0XX-Karte. Die Standard-Klasse sieht nie eine
+  // (signatureClass-Filter, Phase 18, unveraendert).
+  {
+    const drawIds = (starterTank) => {
+      const seen = new Set();
+      for (let seed = 0; seed < 60; seed++) {
+        const offers = rollOffers(mergedUpgrades, {
+          chosen: {}, roomIndex: 9, rng: mulberry32(seed * 7 + 1), balance: tanksData.balance,
+          count: 3, equippedSecondary: 'mine', banned: new Set(), starterTank,
+        });
+        for (const o of offers) if (!o.fallback) seen.add(o.id);
+      }
+      return seen;
+    };
+    const necroSeen = drawIds('c_necro');
+    check(
+      [...necroSeen].some((id) => id.startsWith('ghost_')),
+      'Phase 9: c_necro zieht ueber den gemergten Pool NIE eine ghost_0XX-Karte -- Pipeline-Verdrahtung fehlt',
+    );
+    const playerSeen = drawIds('player');
+    check(
+      ![...playerSeen].some((id) => id.startsWith('ghost_')),
+      'Phase 9: die Standard-Klasse sieht ghost_0XX-Karten (signatureClass-Filter greift nicht)',
+    );
+    // Gegenprobe (dokumentiert, nicht automatisiert): ohne main.js: init()s
+    // upgradesData.upgrades = {...,...necroUpgradesData.upgrades}-Merge liefert
+    // drawIds('c_necro') eine leere Menge -- von Hand mit dem UNGEMERGTEN
+    // upgradesData nachvollzogen (kein ghost_0XX ziehbar).
+    {
+      const seen0 = new Set();
+      const offers0 = rollOffers(upgradesData, {
+        chosen: {}, roomIndex: 9, rng: mulberry32(1), balance: tanksData.balance,
+        count: 300, equippedSecondary: 'mine', banned: new Set(), starterTank: 'c_necro',
+      });
+      for (const o of offers0) if (!o.fallback) seen0.add(o.id);
+      check(
+        ![...seen0].some((id) => id.startsWith('ghost_')),
+        'Phase 9 (Gegenprobe): der UNGEMERGTE Pool liefert bereits ghost_0XX -- Testaufbau widerlegt sich selbst',
+      );
+    }
+  }
+
+  // (c) Testschritt 1: Opfer- und Legion-Karten mischen -- O+L-Hybride
+  // (ghost_086..091, tags opfer+legion) erscheinen dabei haeufiger als ohne
+  // passende Synergie-Bilanz. Direkt ueber rollOffers()s synergyTags-Opt
+  // (Upgradepool-v2 Phase 3, makeSynergyWeight()), keine neue Mechanik in
+  // Phase 9 selbst -- ISOLIERTER synthetischer Zwei-Karten-Pool (Muster wie
+  // Abschnitt 39 (Upgradepool-v2 Phase 3): der echte 110-Karten-Pool wuerde
+  // das Signal verwaessern, weil bei ausreichend hohem synergyTags-Wert JEDE
+  // Karte mit auch nur EINEM passenden Tag denselben cap (2.0) erreicht --
+  // O+L (2 Treffer) und ein reiner O- oder L-Hybrid (1 Treffer) waeren dann
+  // ununterscheidbar. Mit kleinen, UNGESAETTIGTEN Werten (opfer:1, legion:1)
+  // bekommt die O+L-Karte matches=2 -> 1+2*0.5=2.0 (Deckel), eine Karte mit
+  // nur EINEM der beiden Tags matches=1 -> 1+1*0.5=1.5 -- ein echter,
+  // messbarer Unterschied (Verhaeltnis 2.0:1.5 = 57,1 %/42,9 %).
+  {
+    const fakeData = {
+      offersPerScreen: 1,
+      fallback: { name: '+1 Leben', description: 'x', tag: 'stat', rarity: 'common' },
+      upgrades: {
+        ol: { id: 'ol', name: 'O+L', description: 'x', tag: 'x1', tags: ['opfer', 'legion'], rarity: 'common', isUnique: false, requires: [], minRoom: 1 },
+        oa: { id: 'oa', name: 'O+A', description: 'x', tag: 'x2', tags: ['opfer', 'alpha'], rarity: 'common', isUnique: false, requires: [], minRoom: 1 },
+      },
+    };
+    const balance = { rarity: { common: 100 }, upgrades: { synergyCap: 2.0, synergyStep: 0.5 } };
+    const rng = mulberry32(5151);
+    let countOl = 0;
+    const N = 6000;
+    for (let i = 0; i < N; i++) {
+      const offers = rollOffers(fakeData, {
+        chosen: {}, roomIndex: 1, rng, balance, count: 1, banned: new Set(),
+        synergyTags: { opfer: 1, legion: 1 },
+      });
+      if (offers[0].id === 'ol') countOl++;
+    }
+    const pctOl = (100 * countOl) / N;
+    check(
+      Math.abs(pctOl - 57.1) < 4,
+      `Phase 9 Testschritt 1: O+L-Hybrid ${pctOl.toFixed(1)} % statt ~57,1 % der Ziehungen -- erscheint bei Opfer+Legion-Mix nicht haeufiger als ein Einzeltopf-Hybrid`,
+    );
+  }
+
+  // (d) necro_active-Kategorie: die drei Aktivkarten sind in
+  // data/secondaries.json mit eigener Kategorie (nicht 'gadget' -- Shop-
+  // Tausch/`buyShopSecondary()` sollen sie nie anbieten) und den im Auftrag
+  // genannten Abklingzeiten 24s/18s/30s verdrahtet.
+  {
+    const expect = { ghost_031: 24, ghost_089: 18, ghost_096: 30 };
+    for (const [id, cd] of Object.entries(expect)) {
+      const scfg = tanksData.secondaries[id];
+      check(!!scfg, `Phase 9: data/secondaries.json hat keinen Eintrag fuer ${id}`);
+      check(scfg?.category === 'necro_active', `Phase 9: ${id} hat nicht die Kategorie 'necro_active' (${scfg?.category})`);
+      check(scfg?.cooldownS === cd, `Phase 9: ${id} hat nicht die Abklingzeit ${cd}s (${scfg?.cooldownS})`);
+    }
+  }
+
+  // (e) ghost_031 "Maertyrerbefehl": opfert ALLE Untertanen, cause 'sacrifice'
+  // (killGhost()-Erweiterung), Bonus skaliert mit der geopferten Anzahl.
+  // Gegenprobe: killGhost() mit dem alten cause-Default ('damage') wuerde
+  // stattdessen die Wiederkehr-Familie/Phylakterium auswerten -- separat in
+  // (n) direkt am Mechanismus geprueft, hier nur das Nettoergebnis.
+  {
+    const st = legionRoom({ ghost_031: 1 });
+    const g1 = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    const g2 = push(st, createGhost(st, 200, 200, 0, 't_pink'));
+    st.player.cfg.gadget = 'ghost_031';
+    st.player.gadgetCooldown = 0;
+    const ok = useGadget(st.player, st);
+    check(ok, 'Phase 9: ghost_031 loest mit vorhandenen Untertanen nicht aus');
+    check(!g1.alive && !g2.alive, 'Phase 9: ghost_031 opfert nicht ALLE Untertanen');
+    check(getNecroTimedStackForTest(st, '_timedHybridSacrificeDmg') > 0, 'Phase 9: ghost_031 gibt keinen Schadensbonus');
+    check(st.player.gadgetCooldown > 0, 'Phase 9: ghost_031 startet keine Abklingzeit');
+    // Kein Untertan vorhanden -> nichts ausgeloest, keine Abklingzeit (Muster
+    // layMine()).
+    const st2 = legionRoom({ ghost_031: 1 });
+    st2.player.cfg.gadget = 'ghost_031';
+    st2.player.gadgetCooldown = 0;
+    const ok2 = useGadget(st2.player, st2);
+    check(!ok2, 'Phase 9: ghost_031 loest ohne Untertanen aus');
+    check(st2.player.gadgetCooldown === 0, 'Phase 9: ghost_031 startet trotz Wirkungslosigkeit eine Abklingzeit');
+  }
+
+  // (f) ghost_089 "Wechselopfer": opfert NUR den schwaechsten Untertan, heilt
+  // + gibt Schild an die uebrigen, garantiert die naechste Wiederbelebungsprobe.
+  {
+    const st = legionRoom({ ghost_089: 1 });
+    const weak = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    weak.hp = 1;
+    const strong = push(st, createGhost(st, 200, 200, 0, 't_pink'));
+    strong.hp = Math.round(strong.cfg.maxHp * 0.5);
+    st.player.cfg.gadget = 'ghost_089';
+    st.player.gadgetCooldown = 0;
+    st.player.shield = 0;
+    const ok = useGadget(st.player, st);
+    check(ok, 'Phase 9: ghost_089 loest nicht aus');
+    check(!weak.alive, 'Phase 9: ghost_089 opfert nicht den schwaechsten Untertan');
+    check(strong.alive && strong.hp > Math.round(strong.cfg.maxHp * 0.5), 'Phase 9: ghost_089 heilt die uebrigen Untertanen nicht');
+    check(st.player.shield > 0, 'Phase 9: ghost_089 gibt dem Hauptpanzer keinen Schild');
+    check(st.necroGuaranteedReviveUntil > st.time, 'Phase 9: ghost_089 garantiert die naechste Wiederbelebungsprobe nicht');
+  }
+
+  // (g) ghost_096 "Koenigliches Opfer": opfert AUSSCHLIESSLICH den Champion.
+  {
+    const st = legionRoom({ ghost_096: 1 });
+    const g1 = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    const g2 = push(st, createGhost(st, 200, 200, 0, 't_pink'));
+    settleChampion(st);
+    const champ = st.ghosts.find((g) => g.isChampion);
+    const other = st.ghosts.find((g) => g !== champ);
+    st.player.cfg.gadget = 'ghost_096';
+    st.player.gadgetCooldown = 0;
+    const ok = useGadget(st.player, st);
+    check(ok, 'Phase 9: ghost_096 loest nicht aus');
+    check(!champ.alive, 'Phase 9: ghost_096 opfert nicht den Champion');
+    check(other.alive, 'Phase 9: ghost_096 opfert einen Nicht-Champion mit');
+    check(
+      getNecroTimedStackForTest(st, '_timedHybridChampSacrificeDmg') > 0,
+      'Phase 9: ghost_096 gibt keinen Schadensbonus',
+    );
+  }
+
+  // (h) Testschritt 3: eine Aktivkarte auslösen -- die Abklingzeit laeuft im
+  // HUD sichtbar (hud.js liest generisch p.gadgetCooldown/run.data.secondaries
+  // [p.cfg.gadget].label, KEINE Codeänderung in Phase 9 noetig -- geprueft
+  // wird hier deshalb nur, dass tank.gadgetCooldown tatsaechlich den in
+  // secondaries.json hinterlegten Wert bekommt, den hud.js unveraendert liest).
+  {
+    const st = legionRoom({ ghost_089: 1 });
+    push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    st.player.cfg.gadget = 'ghost_089';
+    st.player.gadgetCooldown = 0;
+    useGadget(st.player, st);
+    check(
+      Math.abs(st.player.gadgetCooldown - 18) < 1e-6,
+      `Phase 9 Testschritt 3: Abklingzeit nach ghost_089 nicht 18s (${st.player.gadgetCooldown})`,
+    );
+  }
+
+  // (i) Testschritt 4: eine zweite Aktivkarte ersetzt sichtbar die erste --
+  // ueber den bestehenden, generischen tag==='gadget'-Hook (run.js:
+  // applyUpgradeChoice()), keine Sonderbehandlung fuer Aktivkarten noetig.
+  {
+    const run = createRun(tanksData, tilesData, diffData, mergedUpgrades, 555, 'normal', { starterTank: 'c_necro' });
+    run.phase = 'upgrade';
+    run.pendingOffers = [{ id: 'ghost_031', name: 'Maertyrerbefehl', description: 'x', tag: 'gadget', tags: ['opfer', 'aktiv'], rarity: 'rare', level: 1, isUnique: true }];
+    chooseUpgrade(run, 0);
+    check(run.equippedGadget === 'ghost_031', 'Phase 9 Testschritt 4: ghost_031 ruestet sich beim Nehmen nicht aus');
+    run.phase = 'upgrade';
+    run.pendingOffers = [{ id: 'ghost_089', name: 'Wechselopfer', description: 'x', tag: 'gadget', tags: ['opfer', 'legion', 'aktiv'], rarity: 'rare', level: 1, isUnique: true }];
+    chooseUpgrade(run, 0);
+    check(
+      run.equippedGadget === 'ghost_089',
+      `Phase 9 Testschritt 4: eine zweite Aktivkarte ersetzt die erste nicht (equippedGadget=${run.equippedGadget})`,
+    );
+  }
+
+  // (j) Testschritt 2: die Tausch-Warnung erscheint VOR der Wahl, wenn ein
+  // Angebot das aktuell ausgeruestete Gadget ersetzen wuerde -- domstub-
+  // gestuetzter UI-Test gegen src/ui/upgradescreen.js (Ist-Abgleich-Fund,
+  // nicht in der Auftrags-Dateiliste genannt, aber ohne diese Datei ist die
+  // Sichtbarkeitsanforderung technisch unerfuellbar).
+  {
+    const { createUpgradeScreen } = await import('../src/ui/upgradescreen.js');
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const screen = createUpgradeScreen();
+      const offers = [
+        { id: 'ghost_089', name: 'Wechselopfer', description: 'x', tag: 'gadget', rarity: 'rare', level: 1, isUnique: true, stufe: 0 },
+      ];
+      screen.show({
+        getOffers: () => offers,
+        getScrap: () => 0,
+        costs: { ban: 1, reroll: 2, fourthCard: 3, shieldCharge: 4 },
+        showActions: false,
+        equippedGadget: 'ghost_031',
+        gadgetLabel: (id) => (id === 'ghost_031' ? 'Maertyrerbefehl' : id),
+        onPick: () => {},
+      });
+      const card = document.querySelector('.card');
+      check(card.innerHTML.includes('pv-warn'), 'Phase 9 Testschritt 2: keine Tausch-Warnung im Kartenmarkup, obwohl ein Gadget ausgeruestet ist');
+      check(card.innerHTML.includes('Maertyrerbefehl'), 'Phase 9 Testschritt 2: die Warnung nennt nicht das aktuell ausgeruestete Gadget');
+      // Gegenprobe: kein Gadget ausgeruestet (equippedGadget: null) -> keine Warnung.
+      screen.show({
+        getOffers: () => offers,
+        getScrap: () => 0,
+        costs: { ban: 1, reroll: 2, fourthCard: 3, shieldCharge: 4 },
+        showActions: false,
+        equippedGadget: null,
+        gadgetLabel: (id) => id,
+        onPick: () => {},
+      });
+      const card2 = document.querySelector('.card');
+      check(!card2.innerHTML.includes('pv-warn'), 'Phase 9 Testschritt 2 (Gegenprobe): Warnung erscheint auch ohne ausgeruestetes Gadget');
+    } finally {
+      restore();
+    }
+  }
+
+  // (k) killGhost()s neue cause 'sacrifice': loest onGhostRemoved() mit dem
+  // Grund 'sacrifice' aus (necroEventLog), UEBERSPRINGT aber wie 'expire' die
+  // Wiederkehr-Familie/Phylakterium/Letzter-Wille -- eine Opferung soll nicht
+  // "durch Glueck ueberleben".
+  {
+    const st = legionRoom({});
+    st.player.cfg.ghostReviveChance = 1; // wuerde bei cause='damage' IMMER retten
+    const g = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    killGhost(st, g, 'sacrifice');
+    check(!g.alive, 'Phase 9: killGhost(..., "sacrifice") mit ghostReviveChance=1 rettet den Untertan trotzdem (Wiederkehr wurde nicht uebersprungen)');
+    const last = st.necroEventLog[st.necroEventLog.length - 1];
+    check(last?.reason === 'sacrifice', `Phase 9: onGhostRemoved() bekommt bei einer Opferung nicht den Grund 'sacrifice' (${last?.reason})`);
+    // Gegenprobe: mit dem alten Default-cause ('damage') UND ghostReviveChance=1
+    // ueberlebt der Untertan tatsaechlich -- belegt, dass der obige Fall wirklich
+    // an der cause haengt, nicht an einem anderen Zufall.
+    const st2 = legionRoom({});
+    st2.player.cfg.ghostReviveChance = 1;
+    const g2 = push(st2, createGhost(st2, 100, 100, 0, 't_pink'));
+    st2.rng = () => 0; // "erfolgreicher" Wiederbelebungswurf
+    killGhost(st2, g2); // cause='damage' (Default)
+    check(g2.alive, 'Phase 9 (Gegenprobe): Testaufbau widerlegt sich selbst -- ghostReviveChance=1 rettet bei cause="damage" nicht');
+  }
+
+  // (l) ghost_086 "Totenmarsch": Geistertod gibt dem Hauptpanzer UND allen
+  // ueberlebenden Untertanen einen zeitlich befristeten Schadensbonus.
+  {
+    const st = legionRoom({ ghost_086: 1 });
+    const survivor = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    const victim = push(st, createGhost(st, 200, 200, 0, 't_pink'));
+    killGhost(st, victim);
+    check(getNecroTimedStackForTest(st, '_timedHybridDeathDmg') > 0, 'Phase 9: ghost_086 gibt dem Hauptpanzer keinen Schadensbonus');
+    check(survivor.hybridBuffUntil > st.time && survivor.hybridBuffPct > 0, 'Phase 9: ghost_086 gibt den ueberlebenden Untertanen keinen Bonus');
+  }
+
+  // (m) ghost_087 "Erben der Front": ein sterbender Untertan uebertraegt einen
+  // Anteil SEINER EIGENEN Basiswerte (nicht des Empfaengers) an einen
+  // zufaelligen Ueberlebenden + Schild an den Hauptpanzer.
+  {
+    const st = legionRoom({ ghost_087: 1 });
+    const survivor = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    const dyingBaseMaxHp = 999;
+    const victim = push(st, createGhost(st, 200, 200, 0, 't_pink'));
+    victim.baseMaxHp = dyingBaseMaxHp;
+    victim.baseDamage = 500;
+    st.player.shield = 0;
+    const before = survivor.cfg.maxHp;
+    killGhost(st, victim);
+    check(
+      survivor.cfg.maxHp > before,
+      `Phase 9: ghost_087 erhoeht den maxHp eines Ueberlebenden nicht (${before} -> ${survivor.cfg.maxHp})`,
+    );
+    const expectedGain = Math.round(dyingBaseMaxHp * st.player.cfg.necroHybridRandomTransferPct);
+    check(
+      survivor.cfg.maxHp - before === expectedGain,
+      `Phase 9: ghost_087 rechnet den Zuwachs nicht vom Basiswert DES STERBENDEN (erwartet +${expectedGain}, war +${survivor.cfg.maxHp - before})`,
+    );
+    check(st.player.shield > 0, 'Phase 9: ghost_087 gibt dem Hauptpanzer keinen Schild');
+  }
+
+  // (n) ghost_088 "Blutige Formation": +X% Schaden JE aktivem Untertan --
+  // wirkt auf den SPIELER (necroDamagePct(), "am Ort der Verwendung" in
+  // tank.js: fireBullet()), NICHT auf den Untertanen-eigenen Schuss (der
+  // Kartentext meint den Hauptpanzer, s. necro.js-Kopfkommentar bei
+  // necroDamagePct()) + Flankenbonus fuer den SPIELER + Wiederkehr-Bonus nach
+  // Toden (gedeckelt).
+  {
+    const { necroDamagePct } = await import('../src/game/necro.js');
+    const st = legionRoom({ ghost_088: 1 }, ['t_pink']);
+    check(necroDamagePct(st) === 0, 'Phase 9: Testaufbau -- necroDamagePct() ist ohne aktive Untertanen schon ungleich 0');
+    push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    push(st, createGhost(st, 150, 150, 0, 't_pink')); // zwei aktive Untertanen -> Bonus ungleich 0
+    check(
+      necroDamagePct(st) > 0,
+      `Phase 9: ghost_088 erhoeht necroDamagePct() bei aktiven Untertanen nicht (${necroDamagePct(st)})`,
+    );
+    check(
+      st.player.cfg.necroHybridReviveDeathBonusCap > 0 && st.player.cfg.necroHybridFlankBonusPct > 0,
+      'Phase 9: ghost_088 setzt necroHybridFlankBonusPct/necroHybridReviveDeathBonusCap nicht',
+    );
+  }
+
+  // (o) ghost_090 "Rueckkehr im Zorn": eine gelungene Probe (rng < chance)
+  // erzeugt einen Ersatzuntertan; der Ersatz selbst darf sich nicht erneut
+  // ersetzen (isReplacement-Guard).
+  {
+    const st = legionRoom({ ghost_090: 1 });
+    const g = push(st, createGhost(st, 300, 300, 0, 't_pink'));
+    const before = st.ghosts.length;
+    st.rng = () => 0; // garantiert < chance
+    killGhost(st, g); // g bleibt (tot) im Array stehen -- killGhost() splict nicht
+    check(
+      st.ghosts.length === before + 1,
+      `Phase 9: ghost_090 erzeugt keinen Ersatzuntertan bei erfolgreicher Probe (${before} -> ${st.ghosts.length})`,
+    );
+    const rep = st.ghosts[st.ghosts.length - 1];
+    check(rep.isReplacement === true, 'Phase 9: der Ersatzuntertan traegt isReplacement nicht');
+    // Gegenprobe/Guard: der Ersatz selbst loest den Effekt nicht erneut aus --
+    // die Laenge darf sich NICHT nochmal erhoehen (rep bleibt selbst als
+    // toter Eintrag stehen, killGhost() splict nicht).
+    const countBefore = st.ghosts.length;
+    killGhost(st, rep);
+    check(
+      st.ghosts.length === countBefore,
+      'Phase 9: ein sterbender Ersatzuntertan erzeugt selbst wieder einen Ersatz (isReplacement-Guard fehlt)',
+    );
+  }
+
+  // (p) ghost_091 "Lawine der Toten": 3 Geistertode innerhalb von 5s loesen
+  // einen Buff + 2 kostenlose Untertanen aus -- NICHT schon beim 2. Tod.
+  {
+    const st = legionRoom({ ghost_091: 1 }, ['t_pink'], { actEnemyPool: ['t_pink'] });
+    const mk = () => push(st, createGhost(st, 300, 300, 0, 't_pink'));
+    killGhost(st, mk());
+    killGhost(st, mk());
+    check(!(st.necroAvalancheDeathTimes?.length === 0), 'Phase 9: ghost_091 loest schon beim 2. Tod aus (Zaehler zurueckgesetzt)');
+    const before = st.ghosts.filter((g) => g.alive).length;
+    killGhost(st, mk());
+    check(getNecroTimedStackForTest(st, '_timedHybridAvalancheDmg') > 0, 'Phase 9: ghost_091 gibt beim 3. Tod keinen Schadensbonus');
+    check(st.ghosts.filter((g) => g.alive).length > before, 'Phase 9: ghost_091 spawnt keine kostenlosen Untertanen');
+  }
+
+  // (q) ghost_092 "Blutiger Thron": eine Verschmelzung zaehlt fuer raumweite
+  // Spielerstapel als HALBER Geistertod, OHNE Heilung/Explosion/Abklingzeit
+  // auszuloesen -- nur pureStack-Listener (011/012/013) bekommen den halben
+  // Zuschlag, ein Listener mit Seiteneffekt (086) bleibt bei einer
+  // Verschmelzung stumm.
+  {
+    const { onGhostRemoved } = await import('../src/game/necro.js');
+    // Positiv: mit ghost_092 UND einer pureStack-Karte (011) gibt eine
+    // Verschmelzung genau die HAELFTE des normalen Zuwachses.
+    const st = legionRoom({ ghost_092: 1, ghost_011: 1 });
+    const before = getNecroStackForTest(st, '_pctDamage');
+    const dummy = createGhost(st, 500, 500, 0, 't_pink');
+    onGhostRemoved(st, dummy, 'fusion');
+    const after = getNecroStackForTest(st, '_pctDamage');
+    const expectedGain = st.player.cfg.necroDmgPctPerDeath * 0.5;
+    check(
+      Math.abs(after - before - expectedGain) < 1e-9,
+      `Phase 9: ghost_092 gibt bei einer Verschmelzung nicht exakt den halben Stapel-Zuwachs (erwartet +${expectedGain}, war +${after - before})`,
+    );
+    // Kontrolle: OHNE ghost_092 bleibt eine Verschmelzung fuer pureStack-
+    // Listener wirkungslos (fusion steht nicht in DEATH_REASONS).
+    const st2 = legionRoom({ ghost_011: 1 });
+    const before2 = getNecroStackForTest(st2, '_pctDamage');
+    onGhostRemoved(st2, createGhost(st2, 500, 500, 0, 't_pink'), 'fusion');
+    check(
+      getNecroStackForTest(st2, '_pctDamage') === before2,
+      'Phase 9 (Kontrolle): eine Verschmelzung erhoeht den pureStack-Stapel bereits OHNE ghost_092 -- Testaufbau widerlegt sich selbst',
+    );
+    // Ein Listener MIT Seiteneffekt, der 'fusion' selbst in seinen reasons[]
+    // hat (ghost_097, ueber den NORMALEN Hauptdurchlauf), darf durch den
+    // zusaetzlichen ghost_092-Zweig NICHT ein zweites Mal ausgeloest werden
+    // -- der Zweig filtert auf pureStack, nicht auf reasons.
+    const st3 = legionRoom({ ghost_092: 1, ghost_097: 1 });
+    st3.player.shield = 0;
+    onGhostRemoved(st3, createGhost(st3, 500, 500, 0, 't_pink'), 'fusion');
+    check(
+      getNecroStackForTest(st3, '_hybridThroneDmg') === st3.player.cfg.necroKeystoneThroneDmgPct,
+      `Phase 9: ghost_097 wird bei einer Verschmelzung mit ghost_092 nicht GENAU einmal ausgeloest (${getNecroStackForTest(st3, '_hybridThroneDmg')} statt ${st3.player.cfg.necroKeystoneThroneDmgPct})`,
+    );
+  }
+
+  // (r) ghost_093 "Tribut des Koenigs": NUR Abschuesse WAEHREND ein Untertan
+  // Champion war zaehlen -- alle necroHybridChampionKillsPerSpawn Kills
+  // erzeugt er einen zusaetzlichen, kurzlebigen Untertan.
+  {
+    const st = legionRoom({ ghost_093: 1 }, ['t_pink']);
+    const champ = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    settleChampion(st);
+    check(champ.isChampion, 'Phase 9: Testaufbau -- der einzige Untertan ist nicht Champion');
+    const n = st.player.cfg.necroHybridChampionKillsPerSpawn;
+    const before = st.ghosts.length;
+    for (let i = 0; i < n; i++) {
+      const victim = mkEnemy(300, 300, { hp: 1 });
+      st.tanks = [st.player, victim];
+      st.bullets.push(createBullet(victim.x, victim.y, 0, { owner: champ, damage: 999, speed: 0, radius: 50 }));
+      stepState(st, CMD, 1 / 60);
+    }
+    check(champ.championKills === n, `Phase 9: championKills zaehlt nicht korrekt (${champ.championKills} statt ${n})`);
+    check(st.ghosts.length > before, `Phase 9: ghost_093 spawnt nach ${n} Champion-Kills keinen zusaetzlichen Untertan`);
+  }
+
+  // (s) ghost_094 "Erbe des Herrschers": stirbt der Champion, erhaelt der
+  // HAUPTPANZER einen Anteil des angesammelten Bonus (Delta zum Basiswert)
+  // als Schaden + Schild.
+  {
+    const st = legionRoom({ ghost_094: 1 });
+    const champ = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    settleChampion(st);
+    champ.cfg.damage = champ.baseDamage + 40; // simulierter angesammelter Bonus
+    champ.cfg.maxHp = champ.baseMaxHp + 40;
+    st.player.shield = 0;
+    const dmgBefore = st.player.cfg.damage;
+    killGhost(st, champ);
+    check(
+      st.player.cfg.damage > dmgBefore,
+      `Phase 9: ghost_094 erhoeht den Spielerschaden beim Champion-Tod nicht (${dmgBefore} -> ${st.player.cfg.damage})`,
+    );
+    check(st.player.shield > 0, 'Phase 9: ghost_094 gibt dem Hauptpanzer keinen Schild');
+  }
+
+  // (t) ghost_095 "Seelenband": ein Anteil des Schadens am Hauptpanzer wird
+  // auf den Champion umgeleitet (durch dieselbe Resistenz-/Schildpool-Kette),
+  // der Spieler nimmt entsprechend weniger.
+  {
+    const st = legionRoom({ ghost_095: 1 });
+    const champ = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    settleChampion(st);
+    champ.shield = 0;
+    champ.cfg.resist = 0;
+    const champHpBefore = champ.hp;
+    const playerHpBefore = st.player.hp;
+    st.player.shield = 0;
+    st.tanks = [st.player];
+    st.bullets.push(createBullet(st.player.x, st.player.y, 0, { owner: mkEnemy(0, 0), damage: 100, speed: 0, radius: 50 }));
+    stepState(st, CMD, 1 / 60);
+    check(champ.hp < champHpBefore, 'Phase 9: ghost_095 leitet keinen Schaden auf den Champion um');
+    const playerLoss = playerHpBefore - st.player.hp;
+    check(playerLoss < 100, `Phase 9: der Spieler nimmt trotz Umleitung den vollen Treffer (${playerLoss})`);
+    check(getNecroTimedStackForTest(st, '_timedSoulbondBuff') > 0, 'Phase 9: ghost_095 gibt bei einer Umleitung keinen Buff');
+  }
+
+  // (u) ghost_097 "Thron aus Gebein": JEDER Geistertod UND JEDE Verschmelzung
+  // erhoehen einen gedeckelten, permanenten Raum-Stapel + Schild.
+  {
+    const st = legionRoom({ ghost_097: 1 });
+    st.player.shield = 0;
+    const cap = st.player.cfg.necroKeystoneThroneDmgCap;
+    for (let i = 0; i < 40; i++) {
+      const g = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+      killGhost(st, g);
+    }
+    check(
+      getNecroStackForTest(st, '_hybridThroneDmg') === cap,
+      `Phase 9: ghost_097s Stapel klemmt nicht am Deckel (${getNecroStackForTest(st, '_hybridThroneDmg')} statt ${cap})`,
+    );
+    check(st.player.shield > 0, 'Phase 9: ghost_097 gibt keinen Schild');
+    // Verschmelzung zaehlt ebenfalls (eigene reasons: [...DEATH_REASONS,'fusion']).
+    const { onGhostRemoved } = await import('../src/game/necro.js');
+    const before = getNecroStackForTest(st, '_hybridThroneDmg');
+    const dummy = createGhost(st, 0, 0, 0, 't_pink');
+    onGhostRemoved(st, dummy, 'fusion');
+    check(getNecroStackForTest(st, '_hybridThroneDmg') === before, 'Phase 9: ghost_097s Stapel ist bereits am Deckel -- Testaufbau ungeeignet, Verschmelzungspfad separat unten geprueft');
+  }
+
+  // (v) ghost_098 "Auslese der Legion": erscheint bei VOLLEM Geisterlimit ein
+  // weiterer Untertan, verschmilzt STATTDESSEN der SCHWAECHSTE in den
+  // Champion -- der neu ankommende Geist selbst erscheint NICHT.
+  {
+    const st = legionRoom({ ghost_098: 1 });
+    const cap = (st.data.balance?.ghost?.maxActive ?? 3) + (st.player.cfg.ghostMaxAdd || 0);
+    const champ = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    champ.hp = 999;
+    champ.cfg.maxHp = 999;
+    settleChampion(st);
+    for (let i = 1; i < cap; i++) {
+      const g = push(st, createGhost(st, i * 50, i * 50, 0, 't_pink'));
+      g.hp = 1; // schwaechster Kandidat
+    }
+    check(occupiedGhostSlots(st) >= cap, 'Phase 9: Testaufbau -- das Geisterlimit ist nicht voll');
+    const before = st.ghosts.length;
+    const champDmgBefore = champ.cfg.damage;
+    const arriving = createGhost(st, 999, 999, 0, 't_pink');
+    pushGhost(st, arriving);
+    check(!st.ghosts.includes(arriving), 'Phase 9: ghost_098 laesst den neu ankommenden Geist trotz vollem Limit erscheinen');
+    check(st.ghosts.length === before, 'Phase 9: ghost_098 aendert die Anzahl der Untertanen (sollte konstant bleiben)');
+    check(champ.cfg.damage > champDmgBefore, 'Phase 9: ghost_098 verschmilzt den Schwaechsten nicht in den Champion');
+    // Gegenprobe: OHNE necroCapFusion erscheint der ankommende Geist ganz normal.
+    const st2 = legionRoom({});
+    pushGhost(st2, createGhost(st2, 0, 0, 0, 't_pink'));
+    check(st2.ghosts.length === 1, 'Phase 9 (Gegenprobe): ohne ghost_098 verschluckt pushGhost() trotzdem einen normalen Spawn');
+  }
+
+  // (w) ghost_099 "Kroenungszug": stirbt ein ANDERER Untertan, wird die
+  // HAELFTE des aktuellen Champion-Bonus dauerhaft (state.necroCoronationPermDmgPct).
+  {
+    const st = legionRoom({ ghost_099: 1 });
+    const champ = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const ally = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    settleChampion(st);
+    check(champ.isChampion, 'Phase 9: Testaufbau -- staerkerer Geist ist nicht Champion');
+    check((st.necroCoronationPermDmgPct || 0) === 0, 'Phase 9: Testaufbau -- necroCoronationPermDmgPct ist schon vor dem Tod gesetzt');
+    killGhost(st, ally);
+    check(st.necroCoronationPermDmgPct > 0, 'Phase 9: ghost_099 setzt nach dem Tod eines Untertanen keinen permanenten Bonus');
+  }
+
+  // (x) ghost_100 "Ersatzkoerper": stirbt der Champion, WAEHREND ein weiterer
+  // Untertan aktiv ist, uebernimmt der GESUENDESTE Ueberlebende die Haelfte
+  // des angesammelten Bonus (Delta zum Basiswert) -- "einmal pro Raum".
+  {
+    const st = legionRoom({ ghost_100: 1 });
+    const champ = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    settleChampion(st);
+    champ.cfg.damage = champ.baseDamage + 50;
+    champ.cfg.maxHp = champ.baseMaxHp + 50;
+    const weakSurvivor = push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    weakSurvivor.hp = 1;
+    const healthySurvivor = push(st, createGhost(st, 200, 200, 0, 't_pink'));
+    const dmgBefore = healthySurvivor.cfg.damage;
+    killGhost(st, champ);
+    check(
+      healthySurvivor.cfg.damage > dmgBefore,
+      'Phase 9: ghost_100 gibt nicht dem GESUENDESTEN Ueberlebenden den Bonus',
+    );
+    check(weakSurvivor.cfg.damage === weakSurvivor.baseDamage, 'Phase 9: ghost_100 gibt den Bonus faelschlich an den schwaecheren Ueberlebenden');
+    check(st.necroSuccessionUsed === true, 'Phase 9: ghost_100 markiert sich nicht als "einmal pro Raum" verbraucht');
+  }
+
+  // (y) ghost_101 "Seelenlieferanten": Abschuesse DURCH Untertanen bekommen
+  // eine eigene, unabhaengige Zusatzchance auf der Wiederbelebungsprobe.
+  {
+    const st = legionRoom({ ghost_101: 1 });
+    check(st.player.cfg.necroHybridGhostKillReviveChance > 0, 'Phase 9: ghost_101 setzt necroHybridGhostKillReviveChance nicht');
+  }
+
+  // (z) ghost_102 "Kronengarde" (nur Champion): +Resistenz je anderem
+  // aktivem Untertan; ist der Champion ALLEIN, periodischer Schild-Schub
+  // statt Resistenz.
+  {
+    const st = legionRoom({ ghost_102: 1 });
+    const champ = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    push(st, createGhost(st, 100, 100, 0, 't_pink'));
+    settleChampion(st);
+    check(champ.legionAuraResist > 0, 'Phase 9: ghost_102 gibt dem Champion mit einem weiteren Untertan keine Resistenz');
+    const st2 = legionRoom({ ghost_102: 1 });
+    const solo = push(st2, createGhost(st2, 0, 0, 0, 't_pink'));
+    settleChampion(st2);
+    solo.shield = 0;
+    const interval = st2.player.cfg.necroCrownGuardSoloIntervalS;
+    updateGhosts(st2, interval + 0.01);
+    check(solo.shield > 0, 'Phase 9: ghost_102 gibt einem alleinigen Champion keinen periodischen Schild');
+  }
+
+  // (aa) ghost_103 "Massenkrone" (nur Champion, live): +maxHp/+Schaden je
+  // Geisterplatz UEBER dem Schwellenwert; belegt AUSSER dem Champion kein
+  // Platz, zusaetzlich +Feuerrate.
+  {
+    const st = legionRoom({ ghost_103: 1 });
+    const champ = push(st, createGhost(st, 0, 0, 0, 't_pink'));
+    const threshold = st.player.cfg.necroCrownMassSlotThreshold;
+    for (let i = 1; i <= threshold; i++) push(st, createGhost(st, i * 40, i * 40, 0, 't_pink'));
+    const maxHpBefore = champ.baseMaxHp;
+    settleChampion(st);
+    check(champ.cfg.maxHp > maxHpBefore, 'Phase 9: ghost_103 erhoeht das maxHp des Champions ueber dem Schwellenwert nicht');
+    // Solo-Feuerrate: eigener Raum mit nur dem Champion.
+    const st2 = legionRoom({ ghost_103: 1 });
+    const solo = push(st2, createGhost(st2, 0, 0, 0, 't_pink'));
+    const target = mkEnemy(300, 300, { hp: 1e9 });
+    const [bSolo] = fireGhost(st2, solo, target);
+    check(!!bSolo, 'Phase 9: Testaufbau -- ghost_103-Solo-Test feuert keine Kugel');
+    check(solo.cooldown < solo.cfg.fireCooldown, 'Phase 9: ghost_103 gibt einem alleinigen Champion keinen Feuerraten-Bonus');
+  }
+
+  // (ab) Testschritt 5 + ghost_105 "Herrschaft ueber den Tod": zu Raumstart
+  // erscheint ein Untertan aus dem GEGNERPOOL DES AKTUELLEN AKTS -- mit einem
+  // Pool von genau einem Akt-3-typischen Typ ist das exakt nachweisbar. Der
+  // Urahn loest beim Tod EINEN zeitlich befristeten Buff aus -- sowohl beim
+  // Sterben (Schaden/Ablauf) ALS AUCH beim Verschmelzen.
+  {
+    const st = necroStartRoom({ ghost_105: 1 }, ['t_teal']);
+    check(st.ghosts.length === 1, 'Phase 9 Testschritt 5: ghost_105 erzeugt nicht genau einen Raumstart-Untertan');
+    const ancestor = st.ghosts[0];
+    check(ancestor.type === 't_teal', `Phase 9 Testschritt 5: der Urahn stammt nicht aus dem Akt-Gegnerpool (Typ ${ancestor.type})`);
+    check(ancestor.isAncestor === true, 'Phase 9: der Raumstart-Untertan traegt isAncestor nicht');
+    killGhost(st, ancestor);
+    check(getNecroTimedStackForTest(st, '_timedAncestorDmg') > 0, 'Phase 9: ghost_105 gibt beim Tod des Urahns keinen Buff (Schaden/Ablauf-Pfad)');
+    // Fusionspfad: ein zweiter Urahn (necroUniqueThrone erzwingt eine
+    // Verschmelzung) loest denselben Buff aus fuseGhost() heraus aus.
+    const st2 = necroStartRoom({ ghost_105: 1, ghost_071: 1 }, ['t_teal']);
+    const firstAncestor = st2.ghosts[0];
+    // Staerkeformel gewichtet Schaden 5x hoeher als LP (balance.json:
+    // ghost.strengthWeights) -- ein reines hp=1 reicht deshalb NICHT, um den
+    // Urahn sicher zum Schwaecheren zu machen, wenn sein Schaden-Basiswert
+    // hoch ist. Beides herunterdruecken macht ihn eindeutig schwaecher.
+    firstAncestor.hp = 1;
+    firstAncestor.cfg.damage = 1;
+    pushGhost(st2, createGhost(st2, 500, 500, 0, 't_pink'));
+    check(!firstAncestor.alive, 'Phase 9: Testaufbau -- der Urahn haette hier verschmelzen sollen');
+    check(getNecroTimedStackForTest(st2, '_timedAncestorDmg') > 0, 'Phase 9: ghost_105 gibt beim VERSCHMELZEN des Urahns keinen Buff (Fusionspfad)');
+  }
+
+  // (ac) Gegenprobe fuer den Fusionspfad von ghost_105: ohne isAncestor-Flag
+  // (ein NICHT-Urahn-Geist verschmilzt) bleibt der Buff aus.
+  {
+    const st = necroStartRoom({ ghost_105: 1, ghost_071: 1 }, ['t_teal']);
+    const ancestor = st.ghosts[0];
+    ancestor.hp = 999;
+    ancestor.cfg.maxHp = 999; // der Urahn ist jetzt der STAERKERE -> ueberlebt
+    const nonAncestor = createGhost(st, 500, 500, 0, 't_pink');
+    check(nonAncestor.isAncestor === false, 'Phase 9: Testaufbau -- der zweite Geist ist faelschlich Urahn');
+    pushGhost(st, nonAncestor);
+    check(!nonAncestor.alive, 'Phase 9: Testaufbau -- der Nicht-Urahn haette hier verschmelzen sollen');
+    check(
+      getNecroTimedStackForTest(st, '_timedAncestorDmg') === 0,
+      'Phase 9 (Gegenprobe): ein verschmelzender NICHT-Urahn loest ghost_105s Buff faelschlich aus',
+    );
   }
 }
 

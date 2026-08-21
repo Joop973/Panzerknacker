@@ -24,7 +24,14 @@ import { updateMines, explodeAt } from './mine.js';
 import { fireMortar, updateMortars } from './mortar.js';
 import { updateTraps } from './trap.js';
 import { createGhost, updateGhosts, killGhost, occupiedGhostSlots, recomputeLegionCache, pushGhost } from './ghost.js';
-import { tickNecroTimers, buildNecroListeners, applyVirtualNecroDeaths, necroResistBonus } from './necro.js';
+import {
+  tickNecroTimers,
+  buildNecroListeners,
+  applyVirtualNecroDeaths,
+  necroResistBonus,
+  addNecroTimedStack,
+  getNecroStack,
+} from './necro.js';
 import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
 import { applyTypeEffects } from './damagetypes.js';
@@ -358,6 +365,18 @@ export function createState(data, tiles, opts) {
     // Raum frisch, kein reset() noetig).
     necroCrownHeir: null,
     necroCrownHeirUsed: false,
+    // Nekromant-V2 Phase 9: ghost_089/104 garantieren "die naechste
+    // Wiederbelebungsprobe" -- Fenster (089) bzw. Einmal-Flag (104), beide
+    // sofort nach Verbrauch zurueckgesetzt (s. killTank()s Revive-Block).
+    necroGuaranteedReviveUntil: 0,
+    necroCircleGuaranteedRevive: false,
+    necroCircleReviveStatPct: 0,
+    // ghost_099 "Kroenungszug": raumweiter, dauerhafter Schadensbonus NUR
+    // fuer den CHAMPION (ghost.js liest ihn, necro.js: necroDamagePct()
+    // wirkt bewusst NICHT darauf -- das ist der Hauptpanzer-Kanal).
+    necroCoronationPermDmgPct: 0,
+    // ghost_100 "Ersatzkoerper": einmal pro Raum.
+    necroSuccessionUsed: false,
     necroStacks: {},
     necroRunStackGain: {},
     necroRunStacksBase: necroRunStacksBase || {},
@@ -849,8 +868,24 @@ export function createState(data, tiles, opts) {
           // Anteil sichere Zusatz-Untertanen. Nekromant-V2 Phase 7
           // (ghost_044/055 "Totenruf"): necroReviveChanceAdd kommt vom
           // Spieler-cfg dazu, ebenfalls ohne Deckel.
-          const chance = (gcfg.reviveChance ?? 0) + (pc.necroReviveChanceAdd || 0);
-          const n = rollGhostSpawnCount(chance, state.rng);
+          // ghost_101 "Seelenlieferanten" (Nekromant-V2 Phase 9): Abschuesse
+          // DURCH Untertanen (killer?.isGhost) bekommen zusaetzlich eine
+          // EIGENE, unabhaengige Chance obendrauf -- additiv ohne Deckel wie
+          // necroReviveChanceAdd selbst.
+          const ghostKillBonus = killer?.isGhost ? pc.necroHybridGhostKillReviveChance || 0 : 0;
+          const chance = (gcfg.reviveChance ?? 0) + (pc.necroReviveChanceAdd || 0) + ghostKillBonus;
+          // ghost_089 "Wechselopfer" (Gadget) / ghost_104 "Kreislauf der
+          // Verdammten" (keystone): beide garantieren "die naechste
+          // Wiederbelebungsprobe" -- ein aktives Zeitfenster (089) bzw. ein
+          // einmaliges Flag (104) erzwingt hier mindestens 1 Untertan, wird
+          // danach sofort verbraucht (kein Nachwirken auf die UEBERNAECHSTE
+          // Probe).
+          const guaranteed = state.necroGuaranteedReviveUntil > state.time || state.necroCircleGuaranteedRevive;
+          const n = guaranteed ? Math.max(1, rollGhostSpawnCount(chance, state.rng)) : rollGhostSpawnCount(chance, state.rng);
+          if (guaranteed) {
+            state.necroGuaranteedReviveUntil = 0;
+            state.necroCircleGuaranteedRevive = false;
+          }
           // ghost_054 "Legionskern": die Probe war erfolgreich (n>0), aber
           // KEIN Platz mehr frei -- statt eines wirkungslosen Wurfs heilen
           // und staerken sich die vorhandenen Untertanen bis Raumende.
@@ -879,16 +914,32 @@ export function createState(data, tiles, opts) {
             if (occupiedGhostSlots(state) >= ghostCap) break;
             // ghost_056: ein wiederbelebter ELITE-Gegner erscheint mit einem
             // eigenen (hoeheren) Basiswert-Anteil und belegt 2 Plaetze.
+            // ghost_104: die GARANTIERTE Probe (falls sie diese war) spawnt
+            // mit einem eigenen, hoeheren Basiswert-Anteil -- nur beim ersten
+            // Durchlauf (i===0), die Garantie deckt genau EINEN Untertan.
             const overrides =
               isElite && pc.necroEliteRevive
                 ? { baseStatPctOverride: pc.necroEliteReviveStatPct, slotCost: pc.necroEliteReviveSlots || 2 }
-                : null;
+                : i === 0 && guaranteed && state.necroCircleReviveStatPct
+                  ? { baseStatPctOverride: state.necroCircleReviveStatPct }
+                  : null;
             // Nekromant-V2 Phase 8: pushGhost() statt eines direkten
             // state.ghosts.push() -- EINZIGER Ort, der "Einziger Thron"
             // (necroUniqueThrone, ghost_071) auswertet. An allen sechs
             // Erzeugungsstellen gleich, damit die Verschmelzung nicht
             // fuenffach dupliziert werden muss.
-            pushGhost(state, createGhost(state, tank.x, tank.y, tank.heading, tank.type, overrides));
+            const revived = createGhost(state, tank.x, tank.y, tank.heading, tank.type, overrides);
+            // ghost_088 "Blutige Formation" (Nekromant-V2 Phase 9): der
+            // NAECHSTE wiederbelebte Untertan bekommt +X% Schaden JE
+            // Geistertod in diesem Raum, gedeckelt -- VOR pushGhost()
+            // angewendet, damit eine evtl. Verschmelzung (necroUniqueThrone)
+            // den bereits erhoehten Wert korrekt uebertraegt.
+            if (pc.necroHybridReviveDeathBonusPct) {
+              const deaths = getNecroStack(state, 'room', '_deaths');
+              const bonus = Math.min(pc.necroHybridReviveDeathBonusCap || Infinity, deaths * pc.necroHybridReviveDeathBonusPct);
+              revived.cfg.damage = Math.round(revived.cfg.damage * (1 + bonus));
+            }
+            pushGhost(state, revived);
             spawnedAny = true;
             // ghost_052 "Mehrfachwiederbelebung": zusaetzliche Chance auf eine
             // ZWEITE, schwaechere Kopie.
@@ -943,6 +994,36 @@ export function createState(data, tiles, opts) {
         });
       }
     },
+    // ghost_090 "Rueckkehr im Zorn" (Nekromant-V2 Phase 9): necro.js kann
+    // ghost.js NICHT importieren (Zirkelimport -- ghost.js importiert schon
+    // aus necro.js), deshalb reicht state.js diese Methode als Umweg durch
+    // (Muster wie applyStatus oben). Erzeugt einen geschwaechten Ersatz an
+    // der Sterbeposition, ueber denselben pushGhost()-Hook wie jede andere
+    // Erzeugungsstelle (wertet "Einziger Thron" also korrekt mit aus).
+    createReplacementGhost(gh, cfg) {
+      if (occupiedGhostSlots(state) >= (state.data.balance?.ghost?.maxActive ?? 3) + (state.player?.cfg?.ghostMaxAdd || 0)) {
+        return null;
+      }
+      const g = createGhost(state, gh.x, gh.y, gh.heading, gh.type, { baseStatPctOverride: cfg.necroHybridReplacementStatPct });
+      g.lifetimeMax = cfg.necroHybridReplacementLifetimeS;
+      g.lifetime = cfg.necroHybridReplacementLifetimeS;
+      pushGhost(state, g);
+      return g;
+    },
+    // ghost_091 "Lawine der Toten": spawnt `count` KOSTENLOSE Untertanen
+    // (kein Wiederbelebungswurf) mit einem eigenen Basiswert-Anteil --
+    // derselbe Akt-Gegnerpool wie ghost_033/spawnGhostBomb.
+    spawnFreeGhosts(count, statPct) {
+      const p = state.player;
+      if (!p) return;
+      const cap = (state.data.balance?.ghost?.maxActive ?? 3) + (p.cfg.ghostMaxAdd || 0);
+      const pool = state.actEnemyPool && state.actEnemyPool.length ? state.actEnemyPool : ['t_brown'];
+      for (let i = 0; i < count; i++) {
+        if (occupiedGhostSlots(state) >= cap) break;
+        const srcType = pool[Math.floor(state.rng() * pool.length)];
+        pushGhost(state, createGhost(state, p.x, p.y, p.turret, srcType, { baseStatPctOverride: statPct }));
+      }
+    },
   };
   // Nekromant-V2 Phase 6: die Bruecke von Phase 5s reiner Infrastruktur zu
   // echten Karten -- EINMAL pro Raumaufbau, NACH der vollstaendigen
@@ -972,6 +1053,10 @@ export function createState(data, tiles, opts) {
     g.baseDamage = g.cfg.damage;
     g.lifetimeMax = player.cfg.necroStartGhostLifetimeS;
     g.lifetime = player.cfg.necroStartGhostLifetimeS;
+    // ghost_105 "Herrschaft ueber den Tod" (Nekromant-V2 Phase 9): markiert
+    // GENAU diesen Raumstart-Untertan als "Urahn" -- nur sein Tod/seine
+    // Verschmelzung loest den Buff aus, s. ghost.js: killGhost()/fuseGhost().
+    if (player.cfg.necroAncestorBuffOnDeath) g.isAncestor = true;
     // Nekromant-V2 Phase 8: pushGhost() statt eines direkten Push (Muster
     // s. killTank()s Wiederbelebungs-Block) -- hier praktisch immer ein
     // reiner Push (state.ghosts ist zu Raumbeginn leer), aus Konsistenz aber
@@ -1435,7 +1520,13 @@ export function stepState(state, cmd, dt) {
           b.owner?.isGhost && state.player?.cfg?.necroSharedTarget && t === state.necroLastPlayerHitTarget
             ? (state.player.cfg.necroSharedTargetDamageMult || 1) - 1
             : 0;
-        const flankMult = baseFlankMult * (1 + ghostFlankBonus) * (1 + sharedTargetBonus);
+        // ghost_088 "Blutige Formation" (Nekromant-V2 Phase 9): zusaetzlicher
+        // Flanken-/Heckbonus NUR fuer den SPIELER selbst (own), oben drauf
+        // auf den globalen Flanken-Multiplikator -- getrennt von
+        // ghostFlankBonus, das ausschliesslich Untertanen-Treffer betrifft.
+        const hybridPlayerFlankBonus =
+          own && flankZoneHit !== 'front' ? state.player?.cfg?.necroHybridFlankBonusPct || 0 : 0;
+        const flankMult = baseFlankMult * (1 + ghostFlankBonus) * (1 + sharedTargetBonus) * (1 + hybridPlayerFlankBonus);
         // ghost_070 "Herrscheraura" (Nekromant-V2 Phase 8): Gegner innerhalb
         // des Champion-Radius (b.owner.necroAuraWeakened, in ghost.js:
         // updateGhosts() jeden Tick markiert) verursachen weniger Schaden UND
@@ -1474,6 +1565,31 @@ export function stepState(state, cmd, dt) {
           // davon wissen muss.
           killer: b.owner,
         };
+        // ghost_095 "Seelenband" (Nekromant-V2 Phase 9): ein Anteil des
+        // Schadens AM HAUPTPANZER wird auf den Champion umgeleitet -- NUR
+        // gegen echte Gegnertreffer (own bedeutet hier "der SPIELER hat
+        // geschossen", nicht relevant fuer Schaden AM Spieler; die
+        // eigentliche Bedingung ist t===state.player). Der umgeleitete
+        // Anteil laeuft durch dieselbe Resistenz-/Schildpool-Kette wie jeder
+        // andere Geistertreffer (applyResistToAmount/absorbWithShieldPool,
+        // Phase 2), damit der Champion seine eigene Abwehr behaelt.
+        if (t === state.player && !own && state.player.cfg.necroSoulbondPct) {
+          const champion = state.ghosts.find((g) => g.alive && g.isChampion);
+          if (champion) {
+            const redirect = Math.round(schaden * state.player.cfg.necroSoulbondPct);
+            schaden -= redirect;
+            let dmg = applyResistToAmount(champion.cfg, state.data.balance?.resist, redirect);
+            dmg = absorbWithShieldPool(state, champion, dmg);
+            champion.hp -= dmg;
+            if (champion.hp <= 0) killGhost(state, champion);
+            addNecroTimedStack(
+              state,
+              '_timedSoulbondBuff',
+              state.player.cfg.necroSoulbondBuffPct || 0,
+              state.player.cfg.necroSoulbondBuffDurationS || 0,
+            );
+          }
+        }
         state.applyDamage(t, schaden, cause, trefferMeta);
         // Telemetrie (Phase 2): Treffer auf Panzer, nicht Waende.
         if (own) state.playerHits++;
@@ -1560,6 +1676,25 @@ export function stepState(state, cmd, dt) {
             const heal = Math.round(schaden * lifestealPct);
             if (heal > 0) {
               state.player.hp = Math.min(state.player.cfg.maxHp, state.player.hp + heal);
+            }
+          }
+          // ghost_093 "Tribut des Koenigs" (Nekromant-V2 Phase 9): NUR
+          // Abschuesse DES CHAMPIONS zaehlen -- eigener Zaehler auf dem
+          // Geist selbst (nicht raumweit, "der Champion" kann wechseln,
+          // aber der Zaehler soll ihm persoenlich folgen, nicht der Rolle).
+          if (b.owner.isChampion && state.player?.cfg?.necroHybridChampionKillsPerSpawn) {
+            b.owner.championKills = (b.owner.championKills || 0) + 1;
+            const pcHyb = state.player.cfg;
+            if (b.owner.championKills % pcHyb.necroHybridChampionKillsPerSpawn === 0) {
+              const g = createGhost(state, b.owner.x, b.owner.y, b.owner.heading, b.owner.type, {
+                baseStatPctOverride: pcHyb.necroHybridChampionSpawnStatPct,
+              });
+              g.lifetimeMax = pcHyb.necroHybridChampionSpawnLifetimeS;
+              g.lifetime = pcHyb.necroHybridChampionSpawnLifetimeS;
+              // "Mit Einziger Thron verschmilzt er sofort" -- ergibt sich von
+              // selbst: pushGhost() wertet necroUniqueThrone bereits generisch
+              // aus, kein Sonderfall noetig.
+              pushGhost(state, g);
             }
           }
         }
