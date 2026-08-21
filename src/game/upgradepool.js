@@ -152,7 +152,11 @@ function dedupeKey(d) {
 //   includeTag     -- nur dieser Tag (umgeht die EXCLUDED_TAGS, z. B. 'elite')
 //   onlyRarity     -- nur diese Seltenheit (z. B. 'legendary' fuer Treasure)
 //   bypassRoomGate -- minRoom + rarityGates ignorieren
-function buildCandidates(upgradesData, opts) {
+// Nekromant-V2 Phase 11: exportiert (vorher modulintern) fuer einen
+// erschoepfenden Abnahme-Test (Punkt 4/5: alle 105 Karten direkt gegen den
+// Filter statt gegen eine seeds-basierte Stichprobe pruefen) -- reine
+// Sichtbarkeitsaenderung, kein Verhaltensunterschied fuer bestehende Aufrufer.
+export function buildCandidates(upgradesData, opts) {
   const {
     chosen = {},
     roomIndex = 1,

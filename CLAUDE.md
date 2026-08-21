@@ -5892,6 +5892,163 @@ die sechs verlangten Telemetriewerte existierten noch gar nicht.
   **Nächste Sitzung: Phase 11** (Balance und Abnahme, letzte Phase des
   Auftrags).
 
+### Nekromant-V2 — Phase 11 (Balance und Abnahme) — gemergt
+Die Schlussabnahme des **gesamten** `AUFTRAG-NEKROMANT-V2.md` (25 nummerierte
+Punkte). **Keine Balance-Werte in `data/balance.json` geändert** — die vier
+im Auftrag benannten Ausreißer-Kombinationen wurden programmatisch vermessen
+(Details unten) und liegen in sinnvollen Grenzen. Ist-Abgleich zuerst (Muster
+„Upgrade-/Klassenpool-System v2 + Nekromant — Phase 9 (Abnahme)"): eine
+Mapping-Tabelle im Kopfkommentar von `tests/regression.mjs` Abschnitt 63
+ordnet jeden der 25 Punkte einem bestehenden Test (Abschnitte 4/5/37/41-62)
+zu — **19 der 25 Punkte waren bereits mit eigener Gegenprobe abgedeckt**,
+nur 6 echte Lücken sind neu getestet.
+- **(a) Punkt 5, ERSCHÖPFEND**: die bestehende Stichprobe (Abschnitt 61(b),
+  60 Seeds) hätte eine seltene Karte theoretisch übersehen können. Neu:
+  `buildCandidates()` (dafür aus `upgradepool.js` **exportiert**, reine
+  Sichtbarkeitsänderung) direkt für **alle 105 Karten einzeln** aufgerufen —
+  keine erscheint für die Standardklasse, jede erscheint für `c_necro`.
+  **Zwei echte Testaufbau-Fallen dabei gefunden** (beide per Gegenprobe am
+  eigenen Test bestätigt, nicht am Code): ein GLOBALES `chosen`-Objekt (alle
+  requires-Ziele auf einmal vorbelegt) markierte `ghost_071` fälschlich als
+  „schon gewählt" für sich selbst, weil es sowohl `isUnique` als auch
+  requires-Ziel von `ghost_072/073/085` ist — behoben über ein pro Karte
+  MINIMALES `chosen`. `ghost_056` trägt `tag: "elite"` (der reservierte
+  Elite-Bonus-Tag aus UMBAUPLAN-LP Phase 9) und ist deshalb absichtlich
+  **nie** über den normalen Pool ziehbar, nur über `includeTag: 'elite'` —
+  kein Bug, sondern derselbe Mechanismus wie bei jeder anderen
+  Elite-Bonus-Karte, im Test entsprechend beruecksichtigt.
+- **(b) Punkt 6, am ECHTEN 105-Karten-Pool**: die bestehende Mechanismus-
+  probe (Abschnitt 38(c)) nutzt einen synthetischen Drei-Karten-Pool;
+  `rollOffers()` über 400 Seeds am realen gemergten Pool bestätigt, dass ein
+  Angebot aus drei `ghost_0XX`-Karten gleichzeitig tatsächlich vorkommt.
+- **(c) Punkt 9, auf LISTENER-Ebene verschärft**: Abschnitt 62 zählt bereits
+  vier GETRENNTE Zähler hoch, beweist aber nicht, dass ein Listener, der nur
+  auf EINEN Grund hört, wirklich nie für die anderen drei feuert. Neu: vier
+  frische Test-Listener (`reasons: [reason]`), über echte Auslöser
+  (`killGhost(cause='damage'/'expire'/'sacrifice')`, `pushGhost()`-Fusion via
+  `necroUniqueThrone`) angesprochen — jeder feuert exakt einmal, nur für
+  seinen eigenen Grund. **Zwei Testaufbau-Fehler beim ersten Anlauf**: (1)
+  `killGhost()` entfernt ein totes Geistobjekt NICHT sofort aus
+  `state.ghosts` (das macht erst `updateGhosts()`s Filter später) —
+  `st.ghosts[0]` zeigte nach dem ersten Tod weiter auf die Leiche statt auf
+  den nächsten frisch gepushten Geist, jede Erzeugung wird jetzt in einer
+  eigenen Variablen gehalten. (2) `necroUniqueThrone` von Anfang an aktiv zu
+  lassen hätte schon die death_expire/sacrifice-Vorbereitung selbst zu
+  Fusionen gemacht (jeder zweite `pushGhost()` verschmilzt automatisch, wenn
+  ein Untertan lebt) — der Flag wird jetzt erst kurz vor dem eigentlichen
+  Fusions-Trigger gesetzt.
+- **(d) Punkte 12+14, an der ECHTEN Skalierungsformel**: die bestehende
+  Probe (Abschnitt 37(c)) zeigt nur, dass eine nicht-einzigartige Karte bei
+  hoher Stufe im POOL bleibt — nicht, dass ihr `cfg`-Effekt weiter *nach
+  ihrer Formel* wächst. Neu: `ghost_001` (`core.ghostHpMult`, ein
+  MULTIPLIKATIVER core-Applier-Schlüssel) bei Stufe 1/10/100/1000 gegen
+  `Math.pow(mult, Stufe)` geprüft — keine Klemmung. Dazu ein UI-Text-Nachweis
+  (`upgradescreen.js` zeigt bei `isUnique:false` nur „(Stufe N)", kein
+  „MAX"/„/Y").
+- **(e) Punkt 13, Shop/Truhe/Ereignis/Reroll + „nur angezeigt bleibt
+  verfügbar" + „neuer Run macht wieder verfügbar"**: `drawOne()` (der
+  gemeinsame Choker für Shop-Kauf/Verbannen/Vierte-Karte/Ereignis-
+  Kartenoption — alle vier rufen ihn über `run.js: poolOpts()` mit
+  denselben Optionen auf) respektiert `isUnique`/`selectedUniqueUpgradeIds`
+  — direkt gegen `buildCandidates()` geprüft, **nicht** nur über
+  Zufallsstichproben aus `drawOne()` selbst (die erste Fassung sampelte 100
+  Ziehungen aus ~40 gleich gewichteten Common-Karten und hätte die konkrete
+  Testkarte nicht zuverlässig getroffen — reines Ziehungspech hätte einen
+  echten Fehler unbemerkt gelassen, per Gegenprobe an der eigenen
+  Testschwäche gefunden). Ein echter, über `createRun()`+`chooseUpgrade()`
+  gefahrener Ablauf bestätigt: eine nur ANGEBOTENE (nicht gewählte) einzig-
+  artige Karte bleibt verfügbar, eine wirklich gewählte verschwindet, ein
+  neuer `createRun()`-Aufruf macht sie wieder verfügbar. **Testaufbau-Falle**:
+  `chooseUpgrade()` prüft `run.phase === 'upgrade'` und setzt ihn über
+  `afterRoomDone()` auf `'preview'` zurück — ein zweiter Aufruf ohne
+  erneutes `run.phase = 'upgrade'` ist ein stiller No-op (per Gegenprobe am
+  eigenen Testaufbau gefunden, nicht am Code).
+- **(f) Punkt 17, neu verstanden statt nur neu formuliert**: „überträgt
+  Basiswerte, nicht aktuelle Werte" bedeutet NICHT (wie ein erster
+  Testentwurf annahm) „die Karte des Verlierers wird transferiert, nicht
+  seine aktuelle" — `applyFusionTransfer()` liest beim Schaden/Feuerrate gar
+  keinen Loser-Wert, sondern skaliert **des Gewinners eigenes**
+  `baseDamage` mit der aufakkumulierten Rate (nur bei HP wird ein absoluter
+  Anteil von `loser.baseMaxHp` addiert). Die eigentliche Regel: JEDE
+  Verschmelzung rechnet vom UNVERÄNDERTEN `winner.baseDamage`, nie vom schon
+  geboosteten `winner.cfg.damage` — das verhindert das im Code-Kommentar
+  benannte „exponentielle Aufschaukeln". Neuer Test: zwei Verschmelzungen
+  nacheinander ergeben LINEARES Wachstum (`baseDamage * (1+2*dmgFrac)`),
+  nicht KOMPONDIERENDES (`(baseDamage*(1+dmgFrac))*(1+dmgFrac)`) — beide
+  Werte sind als Testvoraussetzung explizit auf Unterscheidbarkeit geprüft,
+  bevor der eigentliche Vergleich läuft.
+- **Balance-Durchgang**: keine echte Mehrfach-Playtesting-Session möglich
+  (`localStorage.runs` ist in dieser Umgebung durchgehend leer, wie schon
+  in mehreren früheren Phasen dokumentiert) — stattdessen ein programmatisches
+  Messskript (Muster: die zahlreichen Bot-/Simulationsmessungen früherer
+  Phasen) für die vier im Auftrag benannten Ausreißer-Kombinationen:
+  - **`ghost_036`+`ghost_060` (Limit)**: `ghost_036` auf Stufe 10 +
+    `ghost_060` ergibt einen Deckel von 15 gleichzeitigen Untertanen.
+    `updateGhosts()` bei vollem Deckel: **0,088 ms/Tick** — weit unter dem
+    6-ms-Frame-Budget (Phase 11b). `ghostDamageMult` (060, −15 %) greift wie
+    dokumentiert.
+  - **`ghost_057`+`ghost_081`+`ghost_102` (Resistenzdeckel)**: bei 2/5/8
+    gleichzeitig lebenden Untertanen sinkt der genommene Schaden auf
+    83 %/67 %/56 % — spürbar, aber **nicht unverwundbar**, auch nahe am
+    Geisterlimit. Punkt 14 verbietet ausdrücklich einen Deckel; die additive
+    (nicht multiplikative) Resistenzformel hält die Kombination trotzdem in
+    einem spielbaren Rahmen.
+  - **`ghost_085`+`ghost_072` (Fusion)**: zehn Verschmelzungen mit beiden
+    Karten aktiv ergeben exakt den erwarteten linearen Faktor **6,00×**
+    (085 ERSETZT 071/072s Übertragungsrate vollständig, kein doppeltes
+    Aufaddieren) — bestätigt denselben Mechanismus wie Testschritt (f), nur
+    mit den echten Kartenwerten statt synthetischen.
+  - **`ghost_104` (garantierte Probe)**: nach 5 Toden/Verschmelzungen löst
+    `necroCircleGuaranteedRevive` zuverlässig aus, übersteht selbst einen
+    fast sicher scheiternden Würfelwurf (`rng() = 0.999`), und wird nach
+    einmaligem Verbrauch korrekt wieder auf `false` gesetzt — kein
+    dauerhafter Freifahrtschein.
+  - Ergebnis: **keine der vier Kombinationen musste angepasst werden.**
+- **Sechs verbliebene `_todo: "balance"`-Marker finalisiert** (entfernt,
+  keine Wertänderung): `ghost_016`/`026`/`032`/`079`/`082`/`084` — ihre
+  Zahlenwerte standen bereits vollständig ausformuliert im `core`-Objekt
+  (nicht als Platzhalter), der Marker bedeutete „noch nicht am Spielgefühl
+  geprüft", nicht „noch unausgefüllt". Werte im Vergleich zu Topf-Geschwistern
+  gleicher Seltenheit plausibel, keine der vier oben vermessenen Ausreißer-
+  Kombinationen betrifft sie. Entfernung als gezielte Textersetzung (nicht
+  über `JSON.stringify()` der ganzen Datei) — ein `JSON.parse`+`stringify`-
+  Durchlauf hätte `2.0`→`2` normalisiert und unnötiges Diff-Rauschen über die
+  ganze Datei erzeugt, per eigenem Testlauf gefunden und verworfen.
+- **Neuer Testabschnitt 63** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt einzeln bestanden — je absichtlich rot gemacht: `signatureClass`-
+  Filter in `buildCandidates()` deaktiviert (röted (a) UND den bestehenden
+  Abschnitt-61(b)-Test gemeinsam), `onGhostRemoved()`s Grund-Filter
+  deaktiviert (röted (c) UND zwei bestehende Phase-5/9-Tests gemeinsam),
+  `ghostHpMult`-Skalierung auf einen Deckel bei Stufe 3 zurückgebaut (röted
+  (d) an allen drei höheren Stufen), `isUnique`-Gate in `buildCandidates()`
+  komplett deaktiviert bzw. nur den `selectedUniqueUpgradeIds`-Zweig entfernt
+  (röted (e) jeweils gemeinsam mit dem bestehenden Phase-1-Test),
+  `applyFusionTransfer()` auf den bereits geboosteten AKTUELLEN Wert
+  umgestellt (röted (f) an beiden Prüfungen). `dedupeKey()` probeweise auf
+  die alte Ein-Tag-Regel zurückgesetzt röted zwar den bestehenden
+  Phase-2-Test (b), nicht aber den neuen Punkt-6-Test selbst — die 105
+  Nekromant-Karten haben 30 verschiedene `tag`-Werte, ein Tag-Kollisions-
+  Bug wäre bei der realen Kartenvielfalt oft genug vermeidbar, um in einer
+  400-Seed-Stichprobe nicht zuverlässig aufzufallen; die MECHANISMUS-Probe
+  aus Abschnitt 38 bleibt deshalb die tragende Absicherung für Punkt 6, der
+  neue Test bestätigt nur, dass der aktuelle 105-Karten-Bestand die Regel
+  tatsächlich ausnutzt.
+- `ARCHIV.md` bereits vollständig (Phase 0 hatte die alte Spec + beide
+  ersetzten Aufträge schon eingetragen, verifiziert statt neu ergänzt).
+  `CLAUDE.md`s technische Abschnitte dokumentieren `ghost.*`/`resist`/
+  `pierce`/`aggro`/`boss.fixate`/die Seltenheitsstufe „Ungewöhnlich" bereits
+  aus den jeweiligen Bauphasen (Phasen 1/2/5 dieses Auftrags) — keine
+  Dopplung hier, nur verifiziert statt blind neu geschrieben.
+- `sw.js`-Cache auf `v114` erhöht (+ `telemetry.js: GAME_VERSION`
+  mitgezogen) — `data/upgrades_necro.json` (bereits in `ASSETS`) hat sich
+  inhaltlich geändert (sechs `_todo`-Marker entfernt).
+- Playwright-Smoke (Startseite lädt, keine Konsolenfehler) bestanden.
+  **Damit ist der komplette `AUFTRAG-NEKROMANT-V2.md` (Phasen 0–11)
+  abgearbeitet — der Nekromant hat seinen vollständigen 105-Karten-
+  Signaturpool mit drei Build-Pfaden (Opfer/Legion/Alpha), einem
+  dynamischen Champion-System, Verschmelzung, Ressourcen (Resistenz,
+  Schildpool, Durchschlag) und einem ausbalancierten Bosskampf-Korridor.**
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
