@@ -10,7 +10,7 @@ import { createBullet } from './bullet.js';
 import { createMine } from './mine.js';
 import { createGhost, occupiedGhostSlots, pushGhost, killGhost } from './ghost.js';
 import { statusSpeedMult } from './status.js';
-import { necroDamagePct, necroFireRatePct, necroSpeedPct, addNecroTimedStack } from './necro.js';
+import { necroDamagePct, necroFireRatePct, necroSpeedPct, addNecroTimedStack, fireRateFactor } from './necro.js';
 import { CELL } from '../config.js';
 
 let nextTankId = 1;
@@ -403,11 +403,12 @@ export function fireBullet(tank, state, pressed) {
   // Phase 7b: Gegnerschuesse klingen tiefer als eigene und werden ueber ihre
   // x-Position im Stereobild geortet -- "wer schiesst woher?" ohne Hinsehen.
   state.sounds.push({ name: tank === state.player ? 'shoot' : 'shoot_enemy', x: tank.x });
-  // Nekromant-V2 Phase 6: raumweite/zeitliche Feuerrate-Prozentsaetze senken
-  // den Nachladezeit-Faktor -- Math.max(0.1, ...) verhindert einen
-  // Nachladewert von 0/negativ bei extremem Stapelaufbau (dieselbe
-  // Schutzklammer, die andere gedeckelte Faktoren im Projekt schon nutzen).
-  tank.cooldown = tank.cfg.fireCooldown * (tank.berserkerFire || 1) * Math.max(0.1, 1 - necroPctFireRate);
+  // Nekromant-V2 Phase 6/Nachschliff: raumweite/zeitliche Feuerrate-Prozentsaetze
+  // erhoehen die Feuerrate OHNE Obergrenze -- fireRateFactor() rechnet als
+  // Kehrwert (1/(1+pct)) statt der alten, bei pct>=0.9 gedeckelten Formel
+  // Math.max(0.1, 1-pct). Division durch 0/negative Werte ist dadurch
+  // strukturell ausgeschlossen, ohne eine neue Spielobergrenze einzufuehren.
+  tank.cooldown = tank.cfg.fireCooldown * (tank.berserkerFire || 1) * fireRateFactor(necroPctFireRate);
   // Einmal-Ladungen verbrauchen (ghost_017/018/019): EIN Abzug zaehlt fuer
   // JEDE aktive Ladung als ein Schuss, unabhaengig davon, wie viele Kugeln
   // dieser Abzug erzeugt hat (Streuschuss/Doppelrohr).
@@ -577,7 +578,11 @@ function spawnGhostBomb(tank, state) {
   // (occupiedGhostSlots), nicht die reine Anzahl -- ein wiederbelebter
   // Elite-Untertan (ghost_056) belegt 2.
   const cap = (state.data.balance.ghost?.maxActive ?? 3) + (tank.cfg.ghostMaxAdd || 0);
-  if (occupiedGhostSlots(state) >= cap) return false;
+  // ghost_098 "Auslese der Legion": am vollen Limit NICHT verweigern, sondern
+  // pushGhost() erreichen lassen -- das verschmilzt dort den schwaechsten
+  // gewoehnlichen Untertan in den Champion. Ohne die Karte bleibt es bei der
+  // alten Verweigerung (kein Wurf, kein Verbrauch, keine Abklingzeit).
+  if (occupiedGhostSlots(state) >= cap && !tank.cfg.necroCapFusion) return false;
   // Zufaelliger Typ aus dem Akt-Gegnerpool -- ueber den Seed-RNG
   // (state.rng), nie Math.random. Ein leerer Pool (Testfixtures ohne
   // actEnemyPool) faellt auf 't_brown' zurueck, den fruehesten/einfachsten

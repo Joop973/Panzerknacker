@@ -282,6 +282,17 @@ Nekromanten komplett entfernt (Karten UND Shop-Kauf gesperrt).
 Frühere Merges (PRs #9–#12): Portrait-Auto-Pause-Fix, echtes
 Handy-Vollbild (`100dvh` + `viewport-fit=cover`), Grafik-Sprites +
 App-Icon, diese `CLAUDE.md`.
+**Neuester Stand** (dieser Abschnitt oben ist historisch, seither sind der
+komplette `AUFTRAG-GRUNDSTEINUMBAU.md`, `AUFTRAG-NEKROMANT-V2.md` und zuletzt
+der **Champion-Nachschliff** gemergt — Details in den jeweils eigenen
+Abschnitten weiter unten, chronologisch sortiert): der Champion ist jetzt
+STICKY (nie mehr durch Staerkevergleich ersetzt, Basiswerte aus
+`championStatPct` × aktuellen Spielerwerten), die Fusions-„falscher Panzer"-
+Rechnung ist korrigiert, `ghost_098` funktioniert jetzt an allen sechs
+Erzeugungsstellen einschließlich der echten `killTank()`/Geisterbomben-Wege,
+„Blutiger Thron" ist ueber ein neues generisches `requiresAnyOf`-Gate an
+funktionierende Voraussetzungen gebunden, sieben zuvor kuenstliche Deckel in
+Nekromanten-Karten sind entfernt.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -6049,7 +6060,246 @@ nur 6 echte Lücken sind neu getestet.
   dynamischen Champion-System, Verschmelzung, Ressourcen (Resistenz,
   Schildpool, Durchschlag) und einem ausbalancierten Bosskampf-Korridor.**
 
+### Champion-Nachschliff (Nutzerauftrag, zehn Punkte) — gemergt
+Vollstaendige Ueberarbeitung des Champion-/Verschmelzungs-/Upgrade-Systems
+aus dem Nekromant-V2-Auftrag, ausgeloest durch zehn vom Nutzer nachgewiesene
+Fehler und verbindliche Grundregeln. **Kein neues Ressourcensystem** (explizit
+gefordert: „keine Seelenenergie") — alle Fixes bauen auf den bestehenden
+`state.necroStacks`/`shield`/`hp`-Mechanismen auf.
+- **Champion ist jetzt STICKY statt dynamisch neu bewertet.** Der Kern-
+  Architekturwechsel, der die meisten der zehn Punkte gleichzeitig loest:
+  `ghost.js: promoteToChampion(state, g)` (neu) setzt `isChampion` EINMALIG
+  und berechnet die Champion-Basiswerte NICHT mehr aus dem geerbten Typ
+  (Phase 3 des Nekromant-Auftrags), sondern aus `championStatPct` (0,7, neues
+  `data/balance.json: ghost.championStatPct`) mal den AKTUELLEN Spielerwerten
+  (`maxHp`/`damage`) — exakt das im Auftrag verlangte Beispiel (100/20 →
+  70/14). `ghost.js: ensureChampion(state)` (neu, exportiert) befoerdert nur,
+  wenn NOCH KEIN Champion lebt (`state.ghosts.some(g=>g.alive&&g.isChampion)`)
+  — ein bereits lebender Champion wird NIE mehr durch einen Staerkevergleich
+  ersetzt (Auftrag Abschnitt 2.1, wortgleiches Verbot). Aufgerufen an
+  GENAU zwei Stellen: `pushGhost()` (nach jedem echten Spawn) und am Anfang
+  von `updateGhosts()` (Sicherheitsnetz, idempotent — tut nichts, wenn schon
+  ein Champion lebt). Der alte, komplett dynamische Neubewertungs-Block in
+  `updateGhosts()` (jeden Tick `aliveGhosts.find(strongest)`, mit
+  `becameChampion`-Sonderfall fuer einmalige Kroenungsboni) ist ersatzlos
+  entfernt — die Kronenboni (`necroCrown*`) werden weiterhin live gegen
+  `g.isChampion` ausgewertet, aber `g.isChampion` selbst aendert sich nicht
+  mehr pro Tick.
+- **Champion zaehlt strukturell NIE gegen das Geistlimit** (Auftrag 2.3):
+  `occupiedGhostSlots()` schloss den Champion schon seit Upgradepool-v2
+  Phase 7 aus — bestaetigt UND an allen sechs Erzeugungsstellen konsequent
+  durchgezogen (`state.js: killTank()`s Revive-Schleife, `createReplacementGhost`,
+  `spawnFreeGhosts`, der Raumstart-Ancestor-Hook; `tank.js: spawnGhostBomb()`),
+  die vorher teils VOR `pushGhost()` schon abgebrochen haben, wenn das Limit
+  (faelschlich ohne Champion-Ausnahme mitgezaehlt) voll schien.
+- **Champion-Lebensdauer**: `promoteToChampion()` setzt `lifetime`/`lifetimeMax`
+  auf `Infinity` — `updateGhosts()`s Ablauf-Schleife prueft jetzt `if
+  (!g.isChampion) { g.lifetime -= dt; ... }`, ein Champion verfaellt nie mehr
+  per Timer (Auftrag 2.4). Drei Karten, deren einziger Zweck die jetzt
+  bedeutungslose Lebensdauer war, sind NEU BELEGT statt nutzlos angeboten zu
+  werden (reine Wiederverwendung bestehender `necroCrown*`-Felder, kein neues
+  Feld): `ghost_068` „Langer Anspruch" → dauerhaft +18 % maximales Leben
+  (`necroCrownHpPct`), `ghost_083` „Ewiger Thron" → dauerhaft +25 %
+  Schaden/+25 % maximales Leben (`necroCrownDamagePct`+`necroCrownHpPct`,
+  hoehere Werte passend zur `epic`-Seltenheit), `ghost_073` „Endloser
+  Anspruch" → jede Verschmelzung gewaehrt statt einer Lebensdauer-Verlaengerung
+  einen Schild in Hoehe von 15 % des maximalen Lebens (neuer, minimaler
+  `core`-Schluessel `necroFusionShieldOnFusionPct`, ausgewertet in
+  `fuseGhost()`). `ghost_071`s Beschreibung/`core` verliert den Satz „Restlebenszeit
+  steigt auf mindestens 10 Sekunden"/das Feld `necroFusionMinLifetimeS`.
+- **„Einziger Thron" (ghost_071) neu ausgewertet** (Auftrag Abschnitt 3):
+  `pushGhost()` prueft `necroUniqueThrone` VOR jedem anderen Zweig — existiert
+  bereits ein Champion, verschmilzt der neu ankommende Geist SOFORT und
+  bedingungslos in ihn (`fuseGhost()`), unabhaengig von dessen eigenen Werten
+  (der Champion gewinnt „per Konstruktion"). Existiert noch keiner (allererster
+  Spawn), faellt der Geist durch den normalen Pfad und wird selbst zum ersten
+  Champion. `updateGhosts()` faengt zusaetzlich den Randfall „Karte wird
+  aktiviert, waehrend schon mehrere gewoehnliche Geister existieren" ab
+  (einmaliger Sweep, verschmilzt alle Nicht-Champions in den Champion).
+- **FEHLER „Verschmelzungen rechnen aus dem falschen Panzer" behoben**
+  (Auftrag Abschnitt 5, der schwerwiegendste der zehn Punkte): `applyFusionTransfer()`
+  ist komplett neu geschrieben — jeder Uebertragungsbetrag wird IMMER aus den
+  BASISWERTEN DES VERSCHMOLZENEN (`loser.baseMaxHp`/`baseDamage`) berechnet,
+  nie aus denen des Champions. Neues additives Bonus-Modell statt des alten,
+  selbstreferenziellen Raten-Modells: `g.fusionHpBonus`/`fusionDamageBonus`/
+  `fusionFireRateBonus` (ersetzen `fusionHpFrac`/`fusionDamageFrac`/
+  `fusionFireRateFrac`) sind Betraege, die sich bei jeder Verschmelzung per
+  `grantFusionBonus()` UNGERUNDET aufaddieren; `champion.cfg.damage =
+  champion.baseDamage + champion.fusionDamageBonus` wird bei jedem Zuwachs neu
+  berechnet — dadurch ist Wachstum ueber mehrere Verschmelzungen linear
+  (Auftragsbeispiel exakt nachgerechnet: Champion-Basis 25, verschmolzener
+  Geist 10 Basis-LP, 30 % Rate → 25+3=28, nicht die alte fehlerhafte Rechnung
+  vom Champion-Basiswert aus). Feuerrate wird dimensionsrichtig als Kehrwert
+  (1/Nachladezeit) transferiert, nicht als Sekundenwert. `ghost_072`
+  (Zusatzrate je Verschmelzung), `ghost_085` (ERSETZT statt addiert, ueber
+  einen eigenen `overrideFrac`-Parameter) und `ghost_098` (s. u.) laufen alle
+  ueber dieselbe korrigierte Funktion.
+- **FEHLER „Auslese der Legion (ghost_098) funktioniert im normalen
+  Spielablauf nicht" behoben** (Auftrag Abschnitt 4, der Kern-Bug): alle
+  SECHS Erzeugungsstellen brachen am vollen Limit VOR `pushGhost()` fruehzeitig
+  ab (`if (occupiedGhostSlots(state) >= ghostCap) break/return`), sodass
+  `pushGhost()`s eigentliche Fusionslogik fuer `necroCapFusion` NIE erreicht
+  wurde. Fix an allen sechs Stellen: die Vorab-Sperre gilt nur noch OHNE
+  aktives `necroCapFusion` (`... && !pc.necroCapFusion`). Betroffen und
+  gefixt: `state.js: killTank()`s Kill-Wiederbelebungs-Schleife (deckt
+  Hauptpanzer-, Champion- UND Untertan-Kills gemeinsam ab — alle drei laufen
+  durch dieselbe Schleife), `createReplacementGhost()`, `spawnFreeGhosts()`,
+  der Raumstart-Ancestor-Hook (alle vier in `state.js`), sowie
+  `tank.js: spawnGhostBomb()` (die Geisterbombe — ein durch sie ausgeloester
+  Verschmelzungsvorgang zaehlt jetzt als Erfolg: `useSecondary()` liefert
+  `true`, die Abklingzeit startet). `pushGhost()`s eigentliche
+  `necroCapFusion`-Fusionslogik (schwaechsten GEWOEHNLICHEN Untertan in den
+  Champion verschmelzen, Champion selbst nie als Ziel) war bereits korrekt
+  gebaut und brauchte keine Aenderung — nur ihre Erreichbarkeit war der Bug.
+  Mit `ghost_071` GLEICHZEITIG aktiv hat `necroUniqueThrone` in `pushGhost()`
+  Vorrang (steht als erster Zweig vor dem `necroCapFusion`-Zweig).
+- **Champion-Boni koennen strukturell nicht mehr auf gewoehnliche Geister
+  „ueberspringen"** (Auftrag Abschnitt 6): eine direkte Folge der Sticky-
+  Architektur — ein ehemaliger Champion behaelt seine Boni nur, solange er
+  selbst noch lebt UND `isChampion` traegt; stirbt er, wird er entfernt
+  (kein „Ex-Champion mit Restbonus" moeglich). Ein neuer Champion entsteht
+  ausschliesslich ueber `promoteToChampion()` und liest seine `necroCrown*`-Boni
+  danach LIVE aus dem Spieler-cfg — nie von einem Vorgaenger uebernommen
+  (Fusionsboni sind die einzige Ausnahme und werden explizit ueber
+  `state.necroCrownHeir` transferiert, nur mit `ghost_080`).
+- **FEHLER „Blutiger Thron (ghost_092) ohne Nutzen anbietbar" behoben**
+  (Auftrag Abschnitt 7): neues, generisches Gating-Schema `requiresAnyOf` in
+  `upgradepool.js: buildCandidates()` — eine Liste von ODER-Gruppen, JEDE
+  Gruppe braucht mindestens eine bereits gewaehlte id (UND ueber Gruppen, ODER
+  innerhalb einer Gruppe), zusaetzlich zum bestehenden `requires` (reines UND
+  ueber Einzel-ids). `ghost_092` bekommt
+  `requiresAnyOf: [["ghost_071","ghost_098"], ["ghost_011","ghost_012","ghost_013"]]`
+  — erscheint nur, wenn mindestens eine funktionierende Fusionsquelle UND
+  mindestens eine der drei `pureStack`-Zaehlerkarten aktiv ist. Gilt
+  automatisch fuer Angebot/Shop/Truhe/Reroll (alle vier laufen durch
+  `buildCandidates()`). Die Karteneffekte selbst (Verschmelzung zaehlt als
+  halber Geistertod fuer `ghost_011`/`012`/`013`, kein zweites Ausloesen von
+  Heilung/Explosion/Abklingzeitreduktion) sind unveraendert.
+- **FEHLER „falsche Nekromanten-Klassenbeschreibung" behoben** (Auftrag
+  Abschnitt 8): `data/tanks.json: types.c_necro.desc` nannte noch die laengst
+  archivierte zweistufige 50 %/33 %-Chance (Kills durch Spieler/Geist) —
+  ersetzt durch den tatsaechlichen, seit Nekromant-V2 Phase 3 geltenden
+  einheitlichen 35-%-Basiswert fuer Kills durch Hauptpanzer, Champion UND
+  gewoehnlichen Untertan gleichermassen. **Der tatsaechliche Wert (`balance.json:
+  ghost.reviveChance` 0,35) wurde NICHT geaendert** — nur der irrefuehrende
+  Text korrigiert.
+- **FEHLER „verbotene Obergrenzen in Upgrade-Effekten" behoben** (Auftrag
+  Abschnitt 9, umfangreichster Einzelpunkt): ALLE genannten und beim
+  Durchsuchen zusaetzlich gefundenen kuenstlichen Deckel entfernt, jeweils in
+  Code UND Kartentext UND `cfg.js`-Applier-Kommentar:
+  - `ghost_015` „Aschenhaut" (Schild-Stapel, war 20 %) — waechst jetzt
+    unbegrenzt mit jedem Geistertod.
+  - `ghost_023` „Ueberlaufende Seele" (war 25 %) — `necroOverflowShieldCapPct`
+    (Zahl) ist durch `necroOverflowToShield` (reines Freischalt-Flag) ersetzt,
+    verwandelt den GESAMTEN Ueberlauf in Schild.
+  - `ghost_050` „Munitionsaustausch" (war 30 %) — der Feuerraten-Stapel
+    waechst unbegrenzt.
+  - `ghost_075` „Raubseele" (war 15 %) — der Ueberlauf-Schild ist unbegrenzt.
+  - `ghost_088` „Blutige Formation" (war 80 %) — der Wiederkehr-Schadensbonus
+    des naechsten wiederbelebten Untertanen ist unbegrenzt.
+  - `ghost_097` „Thron aus Gebein" (war 60 % Schaden **plus** ein im
+    Kartentext nie erwaehnter versteckter Schild-Deckel bei genau 1×maxHp) —
+    BEIDE entfernt.
+  - Zwei WEITERE, beim systematischen Durchsuchen auf „vergleichbare
+    versteckte Obergrenzen" gefundene, im Kartentext nie erwaehnte
+    Schild-Deckel (nicht in der Auftragsliste namentlich genannt, aber von
+    Auftrag Abschnitt 9 explizit als Suchauftrag verlangt): `ghost_087`
+    „Erben der Front" (Schild-Anteil war bei 1×maxHp gekappt) und `ghost_094`
+    „Erbe des Herrschers" (derselbe versteckte 1×maxHp-Deckel) — beide
+    entfernt, der generische Schild-Punktepool (`absorbWithShieldPool()`,
+    Nekromant-V2 Phase 2) kannte ohnehin nie einen Speicherdeckel.
+  - **Feuerrate ohne Obergrenze, mathematisch stabil**: die alte Formel
+    `Math.max(0.1, 1 - pct)` deckelte die Feuerrate faktisch bei `pct ≥ 0.9`
+    (10 % Mindest-Cooldown) — ersetzt durch `necro.js: fireRateFactor(pct) =
+    1/(1+pct)` (Kehrwert-Modell, dieselbe Bauart wie die bestehende
+    Resistenz-Formel `Schaden/(1+Resistenz/Divisor)`), verwendet an BEIDEN
+    Stellen, die die alte Formel nutzten (`tank.js: fireBullet()` fuer den
+    Hauptpanzer, `ghost.js: updateGhosts()` fuer Untertanen-Feuerraten-Stapel).
+    Nie negativ, nie Division durch 0, waechst aber ohne Obergrenze weiter.
+  - Sechs entsprechende `cfg.js`-Applier-Zeilen (`necroShieldCapPct`,
+    `necroOverflowShieldCapPct`→umbenannt, `necroAmmoExchangeCap`,
+    `necroCrownLifestealShieldCapPct`, `necroHybridReviveDeathBonusCap`,
+    `necroKeystoneThroneDmgCap`) sind entfernt bzw. umbenannt — kein Ersatz-
+    Deckel irgendeiner Form eingefuehrt.
+  - **Bewusst NICHT angefasst**: die normale `hp ≤ maxHp`-Klammer (mehrfach
+    per `Math.min(cfg.maxHp, ...)` bei Heilungen) — das ist keine kuenstliche
+    Obergrenze auf einen Upgrade-Effekt, sondern die im Auftrag selbst
+    ausdruecklich verlangte „normale aktuelle-LP ≤ maximale-LP"-Beziehung.
+    Ebenso unangetastet: der generische Krit-Deckel (`balance.json: crit.cap`,
+    UMBAUPLAN-LP Phase 7) — ein Klassen-/Kernsystem ausserhalb des
+    Nekromanten-Signaturpools, nicht Teil dieses Auftrags.
+- **Nekromant-V2 Phase 1 („Stapelregel gilt fuer beide Auftraege") bereits
+  vollstaendig, keine Aenderung noetig**: `isUnique`/`maxStacks`-Abschaffung war
+  schon gebaut — nicht-einzigartige Karten (`isUnique: false`, alle
+  betroffenen Ghost-Karten dieses Nachschliffs eingeschlossen) waren schon vor
+  diesem Auftrag unbegrenzt stapelbar, `isUnique: true`-Karten schon vorher
+  nach einmaliger Wahl aus dem Pool verschwunden — verifiziert statt neu
+  gebaut.
+- **Geaenderte Dateien**: `src/game/ghost.js` (Kernumbau: `promoteToChampion`/
+  `ensureChampion`/`grantFusionBonus` neu, `applyFusionTransfer`/`fuseGhost`/
+  `pushGhost`/`killGhost`/`occupiedGhostSlots`/`updateGhosts` umgeschrieben,
+  `fuseGhost` fuer Tests exportiert), `src/game/state.js` (drei Cap-Bypass-
+  Fixes + zwei entfernte versteckte Schild-Deckel), `src/game/tank.js`
+  (`spawnGhostBomb()`-Cap-Bypass, `fireRateFactor()` statt der alten Formel),
+  `src/game/necro.js` (`fireRateFactor()` neu + vier entfernte Deckel:
+  `ghost_015`/`023`/`097`/`087`), `src/game/cfg.js` (sechs entfernte/umbenannte
+  Applier-Zeilen fuer Deckel-Felder), `src/game/upgradepool.js`
+  (`requiresAnyOf`-Gating neu), `data/balance.json`
+  (`ghost.championStatPct` neu + `_comment_ghost` aktualisiert),
+  `data/tanks.json` (`c_necro.desc` korrigiert), `data/upgrades_necro.json`
+  (elf Karten geaendert: 068/071/073/083 Champion-Neubelegung, 015/023/050/
+  075/088/092/097 Cap-Entfernung bzw. `requiresAnyOf`), `sw.js`+`telemetry.js`
+  (Version `v115`).
+- **Tests**: `tests/regression.mjs` — die komplette Nekromant-V2-Testbasis
+  (Abschnitte 42/43/45/58/59/60/61/62/63, mehrere hundert Einzelpruefungen)
+  mediengerecht auf die neue Sticky-Architektur umgestellt. Zentrales
+  wiederkehrendes Testmuster, an ueber zwanzig Stellen angewendet: ein solo
+  gepushter Testgeist wuerde durch `ensureChampion()` SOFORT selbst befoerdert
+  und dabei seine manuell gesetzten Werte verlieren — ein zuerst per
+  `pushGhost()` gesetzter „Anker"-Geist haelt den Champion-Titel, damit der
+  eigentlich zu pruefende Geist gewoehnlich bleibt (`push()`, der alte rohe
+  Test-Helfer ohne Champion-Bestimmung, wird dadurch an vielen Stellen durch
+  `pushGhost()` ersetzt bzw. um einen Anker ergaenzt). Zweites wiederkehrendes
+  Muster: „Champion zaehlt nie gegen das Limit" bedeutet, dass Testschleifen,
+  die vorher `cap`-mal spawnten, jetzt `cap + 1`-mal spawnen muessen (1
+  Champion + `cap` Gewoehnliche), um das Limit wirklich zu fuellen — an sieben
+  Stellen korrigiert. Fuenf NEUE Tests fuer Luecken, die beim Gegenprobe-Bau
+  erst auffielen (keine davon war vorher indirekt mitgetestet): (1) der
+  echte `killTank()`-Wiederbelebungsweg fuer `ghost_098` (Abschnitt 61(v2),
+  vorher pruefte nur der direkte `pushGhost()`-Aufruf — Gegenprobe zeigte
+  0 rote Tests trotz zurueckgenommenem Fix, bis dieser Test ergaenzt war),
+  (2) derselbe Weg ueber die echte Geisterbombe (`useSecondary()`,
+  Abschnitt 61(v3)), (3) `requiresAnyOf` direkt gegen `buildCandidates()`
+  in allen vier Kombinationen (Abschnitt 63(a2)), (4)/(5) die Sticky-
+  Champion-Regel selbst explizit als „ersetzt NIE durch Vergleich"
+  (Abschnitt 43(m)/(m3), ersetzt die alte, jetzt explizit verbotene
+  „Titel wechselt dynamisch"-Testaussage). Mehrere Tests mussten inhaltlich
+  umgedacht werden, nicht nur umbenannt: die Basiswert-Uebertragung wird jetzt
+  gegen einen SEPARATEN Kontroll-Geist gemessen (Champion-Basis ≠ Basis eines
+  gewoehnlichen, nie befoerderten Geistes — beide Werte unterscheiden sich
+  strukturell, ein Test, der beide gleichsetzt, misst den falschen
+  Mechanismus). **Sieben gezielte Gegenproben am echten Quellcode** (Sticky-
+  Champion-Ersetzung, Fusion-„falscher Panzer", `ghost_098` ueber `killTank()`,
+  `ghost_098` ueber die Geisterbombe, `requiresAnyOf`-Filter, `ghost_015`s
+  Deckel-Wiedereinbau) — jede hat genau die erwarteten, benannten Pruefpunkte
+  rot gemacht, sonst nichts, danach zurueckgesetzt. `tests/gamepad.mjs`/
+  `tests/music.mjs` bleiben gruen; Playwright-Smoke (Nekromant waehlen, Run
+  starten, Raum betreten, 6 Sekunden echte Simulation, keine Konsolenfehler)
+  bestanden.
+- **Renderer/HUD brauchten KEINE Aenderung** (verifiziert, nicht nur
+  angenommen): der bestehende goldene Ring (`renderer.js: drawGhosts()`,
+  `if (g.isCommander || g.isChampion)`) erfuellt die Sichtbarkeits-Anforderung
+  (Auftrag 2.5, „klar erkennbarer goldener Marker") bereits vollstaendig,
+  jetzt zusaetzlich korrekt, weil `isChampion` nicht mehr pro Frame flackert.
+  Kein dediziertes Champion-Sprite vorhanden — bleibt offen (s. To-do).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **Dediziertes Champion-Sprite** (optional, kein Blocker): der Champion
+      teilt sich weiterhin `body_ghost.png`/`turret_ghost.png` mit allen
+      gewöhnlichen Untertanen, nur der goldene Ring unterscheidet ihn. Ein
+      eigenes, golden eingefärbtes Sprite („goldener transparenter
+      Geisterpanzer") war die im Champion-Nachschliff-Auftrag genannte
+      *Wunschrichtung*, kein Muss — bei Bedarf/gelieferter Grafik ergänzen.
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
       ersetzt (s. o.), bis ein neues Bosskonzept entsteht. Beim Neubau die
@@ -6194,7 +6444,13 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   werden gezaehlt, nicht heruntergezaehlt (bildratenunabhaengig). Werte in
   `data/status.json`. Haengt bis Phase 6 an keiner Quelle — nur
   `state.applyStatus()` (Debugtasten 1/2/3 bei `?debug=1`).
-- `src/game/ghost.js` — Untertanen/Geisterpanzer. Seit Nekromant-V2 Phase 3
+- `src/game/ghost.js` — Untertanen/Geisterpanzer. **Champion-Nachschliff**
+  (aktuellster Umbau, s. eigener Abschnitt oben): `isChampion` ist STICKY
+  (`promoteToChampion()`/`ensureChampion()`, nie mehr per-Tick neu bewertet),
+  Champion-Basiswerte kommen aus `championStatPct` × den AKTUELLEN
+  Spielerwerten (nicht mehr vom Typ geerbt), Fusionsboni sind additive Betraege
+  (`fusionHpBonus`/`fusionDamageBonus`/`fusionFireRateBonus`) aus den
+  Basiswerten DES VERSCHMOLZENEN, nie des Champions. Seit Nekromant-V2 Phase 3
   grundlegend neu (ersetzt den festen `ghost_tank`-Basistyp aus
   Upgradepool-v2 Phase 7, archiviert in `archive/ghost-tank-v1.json`):
   **Typ-Vererbung** — `resolveGhostCfg(data, sourceType, playerCfg)` baut

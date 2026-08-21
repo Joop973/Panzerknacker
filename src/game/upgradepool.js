@@ -22,6 +22,11 @@
 //    (isUnique: true) ist nach der ersten Wahl fuer den Rest des Runs weg
 //    (chosen[id] >= 1 ODER opts.selectedUniqueUpgradeIds, s. u.).
 //  - unerfuellte requires / zu frueher Raum -> raus.
+//  - Nachschliff ("Blutiger Thron"-Fix): optionales `requiresAnyOf`, eine
+//    Liste von ODER-Gruppen -- JEDE Gruppe braucht mindestens eine bereits
+//    gewaehlte id (UND ueber Gruppen, ODER innerhalb einer Gruppe). Generisch
+//    zusaetzlich zu `requires` (reines UND ueber Einzel-ids), gilt fuer
+//    Angebot/Shop/Truhe/Reroll gleichermassen.
 //  - Tags `weapon` und `elite` sind hier ausgeschlossen, bis auf die Karten
 //    in WEAPON_ALLOWLIST (Phase 18: doppelrohr, flak).
 //  - Verbannte ids (Phase 3, Schrott-Aktion) werden uebersprungen.
@@ -226,6 +231,18 @@ export function buildCandidates(upgradesData, opts) {
       if (gate && roomIndex < gate) continue;
     }
     if (def.requires && def.requires.some((req) => (chosen[req] || 0) <= 0)) continue;
+    // Nachschliff Abschnitt 7 ("Blutiger Thron kann ohne Nutzen angeboten
+    // werden"): generisches UND-von-ODER-Gate, unabhaengig vom einfachen
+    // `requires` (das ist reines UND ueber Einzel-ids). `requiresAnyOf` ist
+    // eine Liste von Gruppen -- JEDE Gruppe muss mindestens eine bereits
+    // gewaehlte id enthalten. Gilt fuer Angebot, Shop, Truhe UND Reroll
+    // gleichermassen, weil alle vier Wege durch buildCandidates() laufen.
+    if (
+      def.requiresAnyOf &&
+      def.requiresAnyOf.some((group) => !group.some((req) => (chosen[req] || 0) > 0))
+    ) {
+      continue;
+    }
     candidates.push(def);
   }
   return candidates;

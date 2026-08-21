@@ -332,12 +332,11 @@
       "isUnique": false,
       "weight": 100,
       "requires": [],
-      "description": "Jeder Geistertod erzeugt für 8 Sekunden einen Schild in Höhe von 4 % des maximalen Spielerlebens. Stapelt bis 20 %.",
+      "description": "Jeder Geistertod erzeugt für 8 Sekunden einen Schild in Höhe von 4 % des maximalen Spielerlebens. Stapelt ohne Obergrenze.",
       "signatureClass": "c_necro",
       "core": {
         "necroShieldPctPerDeath": 0.04,
-        "necroShieldDurationS": 8.0,
-        "necroShieldCapPct": 0.2
+        "necroShieldDurationS": 8.0
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -528,10 +527,10 @@
       "requires": [
         "ghost_014"
       ],
-      "description": "Heilung durch Geistertode, die über volles Leben hinausgeht, wird vollständig in Schild umgewandelt, bis zu 25 % des maximalen Lebens.",
+      "description": "Heilung durch Geistertode, die über volles Leben hinausgeht, wird vollständig in Schild umgewandelt.",
       "signatureClass": "c_necro",
       "core": {
-        "necroOverflowShieldCapPct": 0.25
+        "necroOverflowToShield": true
       },
       "_note": {
         "buildrolle": "Sustain",
@@ -1173,11 +1172,10 @@
       "isUnique": false,
       "weight": 55,
       "requires": [],
-      "description": "Jeder Abschuss durch einen Untertanenpanzer gewährt allen aktiven Untertanen +1 % Feuerrate bis Raumende, höchstens +30 %.",
+      "description": "Jeder Abschuss durch einen Untertanenpanzer gewährt allen aktiven Untertanen +1 % Feuerrate bis Raumende, ohne Obergrenze.",
       "signatureClass": "c_necro",
       "core": {
-        "necroAmmoExchangePerShot": 0.01,
-        "necroAmmoExchangeCap": 0.3
+        "necroAmmoExchangePerShot": 0.01
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -1593,10 +1591,10 @@
       "isUnique": false,
       "weight": 100,
       "requires": [],
-      "description": "Die Gesamtdauer und die verbleibende Lebenszeit des Champions steigen um 4 Sekunden.",
+      "description": "Der Champion erhält dauerhaft +18 % maximales Leben.",
       "signatureClass": "c_necro",
       "core": {
-        "necroCrownLifetimeBonusS": 4
+        "necroCrownHpPct": 0.18
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -1663,14 +1661,13 @@
       "isUnique": true,
       "weight": 12,
       "requires": [],
-      "description": "Sobald ein zweiter Untertanenpanzer erscheinen würde, verschmilzt der schwächere sofort mit dem Champion. Der Champion erhält bis Raumende 30 % des Basis-Lebens und Basis-Schadens sowie 12 % der Basis-Feuerrate des Verschmolzenen. Seine Restlebenszeit steigt auf mindestens 10 Sekunden. Verschmelzung ist kein Geistertod.",
+      "description": "Sobald ein zweiter Untertanenpanzer erscheinen würde, verschmilzt der schwächere sofort mit dem Champion. Der Champion erhält bis Raumende 30 % des Basis-Lebens und Basis-Schadens sowie 12 % der Basis-Feuerrate des Verschmolzenen. Verschmelzung ist kein Geistertod.",
       "signatureClass": "c_necro",
       "core": {
         "necroUniqueThrone": true,
         "necroFusionHpPct": 0.3,
         "necroFusionDamagePct": 0.3,
-        "necroFusionFireRatePct": 0.12,
-        "necroFusionMinLifetimeS": 10
+        "necroFusionFireRatePct": 0.12
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1709,8 +1706,7 @@
       "tag": "fusion",
       "tags": [
         "alpha",
-        "fusion",
-        "dauer"
+        "fusion"
       ],
       "rarity": "uncommon",
       "isUnique": false,
@@ -1718,10 +1714,10 @@
       "requires": [
         "ghost_071"
       ],
-      "description": "Jede Verschmelzung setzt die verbleibende Lebenszeit des Champions auf seine aktuelle Gesamtdauer und erhöht diese um weitere 6 Sekunden.",
+      "description": "Jede Verschmelzung gewährt dem Champion zusätzlich einen Schild in Höhe von 15 % seines maximalen Lebens.",
       "signatureClass": "c_necro",
       "core": {
-        "necroFusionLifetimeExtendS": 6
+        "necroFusionShieldOnFusionPct": 0.15
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -1766,11 +1762,10 @@
       "isUnique": false,
       "weight": 55,
       "requires": [],
-      "description": "Der Champion heilt den Hauptpanzer um 2 % seines verursachten Schadens. Über volles Leben hinaus wird die Heilung zu Schild, bis 15 % des maximalen Lebens.",
+      "description": "Der Champion heilt den Hauptpanzer um 2 % seines verursachten Schadens. Über volles Leben hinaus wird die Heilung zu Schild, ohne Obergrenze.",
       "signatureClass": "c_necro",
       "core": {
-        "necroCrownLifestealToPlayerPct": 0.02,
-        "necroCrownLifestealShieldCapPct": 0.15
+        "necroCrownLifestealToPlayerPct": 0.02
       },
       "_note": {
         "buildrolle": "Sustain",
@@ -1956,10 +1951,11 @@
       "isUnique": true,
       "weight": 12,
       "requires": [],
-      "description": "Der Champion verliert keine Lebenszeit mehr. Er bleibt bestehen, bis er stirbt oder der Raum endet.",
+      "description": "Der Champion erhält dauerhaft +25 % Schaden und +25 % maximales Leben.",
       "signatureClass": "c_necro",
       "core": {
-        "necroCrownNoLifetimeDecay": true
+        "necroCrownDamagePct": 0.25,
+        "necroCrownHpPct": 0.25
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -2078,13 +2074,12 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Der Hauptpanzer verursacht +5 % Schaden je aktivem Untertanenpanzer, und seine Flanken- und Hecktreffer zusätzlich +10 %. Der nächste wiederbelebte Untertan erhält +8 % Schaden je Geistertod im aktuellen Raum, höchstens +80 %.",
+      "description": "Der Hauptpanzer verursacht +5 % Schaden je aktivem Untertanenpanzer, und seine Flanken- und Hecktreffer zusätzlich +10 %. Der nächste wiederbelebte Untertan erhält +8 % Schaden je Geistertod im aktuellen Raum, ohne Obergrenze.",
       "signatureClass": "c_necro",
       "core": {
         "necroHybridPerAllyDmgPct": 0.05,
         "necroHybridFlankBonusPct": 0.1,
-        "necroHybridReviveDeathBonusPct": 0.08,
-        "necroHybridReviveDeathBonusCap": 0.8
+        "necroHybridReviveDeathBonusPct": 0.08
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -2192,7 +2187,18 @@
       },
       "_note": {
         "buildrolle": "Engine"
-      }
+      },
+      "requiresAnyOf": [
+        [
+          "ghost_071",
+          "ghost_098"
+        ],
+        [
+          "ghost_011",
+          "ghost_012",
+          "ghost_013"
+        ]
+      ]
     },
     "ghost_093": {
       "id": "ghost_093",
@@ -2306,12 +2312,11 @@
       "isUnique": true,
       "weight": 7,
       "requires": [],
-      "description": "Jeder Geistertod und jede Verschmelzung gewähren dem Hauptpanzer bis Raumende +3 % Schaden und einen Schild in Höhe von 1,5 % seines maximalen Lebens, höchstens +60 % Schaden.",
+      "description": "Jeder Geistertod und jede Verschmelzung gewähren dem Hauptpanzer bis Raumende +3 % Schaden und einen Schild in Höhe von 1,5 % seines maximalen Lebens, ohne Obergrenze.",
       "signatureClass": "c_necro",
       "core": {
         "necroKeystoneThroneDmgPct": 0.03,
-        "necroKeystoneThroneShieldPct": 0.015,
-        "necroKeystoneThroneDmgCap": 0.6
+        "necroKeystoneThroneShieldPct": 0.015
       },
       "_note": {
         "buildrolle": "Skalierung"
