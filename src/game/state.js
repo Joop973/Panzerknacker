@@ -383,6 +383,21 @@ export function createState(data, tiles, opts) {
     necroTimedStacks: {},
     necroCooldownReadyAt: {},
     necroEventLog: [],
+    // Nekromant-V2 Phase 10 (Lesbarkeit und Telemetrie): raumweite Rohzaehler
+    // fuer main.js/telemetry.js -- werden dort nur ABGELESEN (nie
+    // zurueckgeschrieben), wie ghostKills/playerShots weiter unten. Erzeugt
+    // in ghost.js: pushGhost() (created)/fuseGhost() (fused)/killGhost()
+    // (diedByReason), Wiederbelebungsquote in killTank()s Revive-Block,
+    // Championstaerke jeden updateGhosts()-Tick, Bossschuesse in bossai.js.
+    necroGhostsCreated: 0,
+    necroGhostsFused: 0,
+    necroGhostsDiedByReason: { death_damage: 0, death_expire: 0, sacrifice: 0 },
+    necroReviveRolls: 0,
+    necroReviveHits: 0,
+    necroChampionStrengthSum: 0,
+    necroChampionStrengthSamples: 0,
+    bossShotsAtPlayer: 0,
+    bossShotsAtGhost: 0,
     roomContext: roomContext || null, // { elite, boss } -- raumabhaengige Karten
     // LP-Skalierung dieses Raums (Phase 2) -- gemerkt, damit die zweite
     // Welle (updateWave) dieselben Werte bekommt wie die erste.
@@ -963,6 +978,14 @@ export function createState(data, tiles, opts) {
             }
           }
           if (spawnedAny) recomputeLegionCache(state);
+          // Nekromant-V2 Phase 10 (Telemetrie): "Wiederbelebungsquote" heisst
+          // -- wie oft fuehrte eine ECHTE Probe (canRevive) auch tatsaechlich
+          // zu mindestens einem neuen Untertan (spawnedAny), NICHT nur "der
+          // Wurf war < chance" (der kann am vollen Limit trotzdem ins Leere
+          // laufen). state.necroReviveHits/necroReviveRolls sind reine
+          // Rohzaehler, main.js liest sie unveraendert.
+          state.necroReviveRolls++;
+          if (spawnedAny) state.necroReviveHits++;
         }
       }
     },

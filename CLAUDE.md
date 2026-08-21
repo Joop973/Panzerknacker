@@ -5793,6 +5793,105 @@ Aktivkarten für den Gadgetslot.
   `starterTank: 'c_necro'`, keine Konsolenfehler) bestanden. **Nächste
   Sitzung: Phase 10** (Lesbarkeit und Telemetrie).
 
+### Nekromant-V2 — Phase 10 (Lesbarkeit und Telemetrie) — gemergt
+„Der Spieler muss sehen, was passiert" — bei bis zu acht autonomen
+Untertanen mit Auren, Lebenszeiten und einem Champion die Grenze zwischen
+„starker Build" und „unübersichtliches Flimmern". **Ist-Abgleich zuerst**:
+Lebensleiste/Schildleiste/Lebenszeit-Ring der Untertanen, die
+Champion-Markierung und drei der vier Auftrags-Auren (`ghost_042`/`048`/
+`049`/`081`) waren bereits seit Phase 3/7/8 gebaut — kein doppelter
+Testaufbau dafür. Echte Lücken: `ghost_070`s Aura-Radius war komplett
+unsichtbar, „Wiederbelebung" hatte kein sichtbares/hörbares Gegenstück, und
+die sechs verlangten Telemetriewerte existierten noch gar nicht.
+- **`ghost_070` „Herrscheraura"**: neuer gestrichelter Ring im TATSÄCHLICHEN
+  Wirkradius (`necroCrownAuraRadius`) um den Champion, rot (schwächt
+  Gegner/stärkt Untertanen darin) — bewusst ein GROSSER, gestrichelter Kreis
+  statt der kleinen panzergroßen Ringe (r+6..r+18) der Nahbereichs-Auren, um
+  ihn klar unterscheidbar zu halten. **`ghost_102`/`103` bekommen bewusst
+  KEINEN Ring**: beide skalieren rein mit Anzahl/Plätzeverbrauch, ohne
+  räumlichen Wirkradius — ein Ring hätte dort keine geometrische Bedeutung
+  (anders als 070/042/048/049, die echte Distanzen prüfen). Das ist auch die
+  bewusste Antwort auf die Clutter-Sorge des Auftrags selbst: mehr Ringe ohne
+  räumlichen Sinn wären reines Rauschen bei acht Einheiten.
+- **„Wiederbelebung" (neuer Ton `ghost_rise` + heller Partikelstoß)**:
+  `ghost.js: pushGhost()` bekommt einen neuen, gemeinsamen Helfer
+  `spawnGhostAppearEffect()`, aufgerufen an den beiden ECHTEN
+  Erscheinungs-Ausgängen (normaler Pfad + der Gewinner-Zweig von
+  `necroUniqueThrone`) — NICHT im Verlierer-Zweig (der ankommende Geist wird
+  absorbiert, existiert nie eigenständig) und NICHT bei `necroCapFusion` am
+  vollen Limit (der Geist wird verworfen). Derselbe Helfer erhöht auch
+  `state.necroGhostsCreated` — ein Ort für Effekt UND Telemetrie, kein
+  zweiter Zähl-Pfad. Verschmelzung (`fuseGhost()`, Partikel+Text+`combo`-Ton)
+  und Exekution (Grundsteinumbau Phase 2) waren bereits gebaut — Exekution
+  ausdrücklich VERIFIZIERT statt angenommen: `t.executing` iteriert
+  `state.tanks`, trifft also automatisch auch einen von einem Untertan
+  getroffenen Gegner, ohne dass diese Phase dafür etwas anfassen musste
+  (Testabschnitt 62i).
+- **Sechs Telemetriewerte, alle als Rohzähler auf `state`** (Muster wie
+  `state.ghostKills`, main.js liest sie unverändert, kein Delta-Sync nötig —
+  `state` selbst ist pro Raum frisch): `necroGhostsCreated` (`pushGhost()`),
+  `necroGhostsFused` (`fuseGhost()`, EINZIGER Ort, an dem eine Verschmelzung
+  wirklich stattfindet — deckt beide Auslöser `necroUniqueThrone`/
+  `necroCapFusion` gleich ab), `necroGhostsDiedByReason` (`{death_damage,
+  death_expire, sacrifice}`, in `killGhost()` — derselbe `reason`-Wert, der
+  gleich an `onGhostRemoved()` geht, EINMAL berechnet statt dupliziert),
+  `necroReviveRolls`/`necroReviveHits` (`state.js: killTank()`s
+  Revive-Block — „Quote" heißt „wie oft führte eine ECHTE Probe
+  (`canRevive`) auch tatsächlich zu mindestens einem neuen Untertan
+  (`spawnedAny`)", nicht nur „der Wurf war < chance", der am vollen Limit
+  trotzdem ins Leere laufen kann), `necroChampionStrengthSum`/
+  `necroChampionStrengthSamples` (jeden `updateGhosts()`-Tick MIT lebendem
+  Champion — eine ZEITGEWICHTETE Stichprobe, kein einmaliger Schnappschuss
+  am Raumende), `bossShotsAtPlayer`/`bossShotsAtGhost` (`bossai.js`).
+- **Echter Bugfund beim eigenen Testbau: die Bossschuss-Zähler zählten
+  PHANTOMSCHÜSSE.** `roleTurret()` (`ai_turrets.js`) gibt `true` zurück,
+  sobald Zielkegel/Sichtlinie erfüllt sind — das ist nur die ABSICHT zu
+  feuern, NICHT die Garantie, dass ein Geschoss entsteht. `fireBullet()`
+  selbst gated nochmal auf `tank.cooldown`/Magazin und kann trotzdem
+  `false` liefern, mehrere Ticks in Folge, solange der Cooldown noch läuft.
+  Die ursprüngliche Fassung zählte bei `if (fire)` — ein eigener Test mit
+  echten simulierten Sekunden maß **678 statt 46** tatsächliche Schüsse
+  (Faktor ~14,7×). Fix: der Zähler hängt jetzt am RÜCKGABEWERT von
+  `fireBullet()`, nicht am `fire`-Flag. **Weiterhin nur über isolierte
+  Tests erreichbar**: Bossräume spawnen laut „Bosse (Platzhalter)"-
+  Entscheidung `t_black` statt `t_mirror`/`t_phalanx` — dieser Codepfad
+  läuft im echten Spiel derzeit nie, die Telemetrie wird also bis zum
+  Bossneubau immer `0/0` zeigen. Kein Bug, sondern dieselbe akzeptierte
+  Lücke wie beim Reaktor-Rätsel — hier explizit dokumentiert, damit ein
+  „0 %"-Wert in echten Runs nicht als neuer Fehler missverstanden wird.
+- **HUD**: `drawBar()` (`hud.js`) zeigt „Untertanen X/Y" (dieselbe
+  Deckelformel wie überall sonst — `occupiedGhostSlots()` zählt PLÄTZE,
+  nicht die reine Array-Länge) nur bei `p.cfg.necromancer`. `drawStats()`
+  bekommt eine „Wiederbelebungschance"-Zeile (Grundchance +
+  `necroReviveChanceAdd`, als %). Die „aktive Aktivkarte mit Abklingzeit"
+  aus dem Auftrag ist bereits erreicht: `ghost_031`/`089`/`096` registrieren
+  sich seit Phase 9 wie jedes andere Gadget (`p.cfg.gadget`), die
+  bestehende generische Gadget-Zeile in `ammoLine`/`drawStats()` zeigt sie
+  unverändert — keine Codeänderung nötig, nur verifiziert.
+- **`telemetry.js`**: `recordRoom()` speichert ein neues `necro`-Feld
+  (`null` bei jedem Nicht-Nekromanten-Raum), `computeMetrics()` aggregiert
+  über ALLE Räume ALLER Runs (Muster wie `dmgByType`) — Quote/⌀
+  Championstärke/Bossschuss-Anteil als gerundete Prozent-/Zahlenwerte, `null`
+  ganz ohne Nekromanten-Daten (kein irreführender 0-Wert). Debug-Ansicht
+  zeigt eine neue Zeile, nur wenn mindestens ein Nekromanten-Raum
+  aufgezeichnet wurde.
+- **Neuer Testabschnitt 62** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt einzeln bestanden — u. a. den o. g. Bossschuss-Fund selbst
+  aufgedeckt): alle sechs Zähler mit ihren jeweiligen Abgrenzungen (erzeugt
+  vs. verworfen, Grund-Aufschlüsselung, Rolls vs. Hits, zeitgewichtete
+  Stichprobe), HUD-Zeilen vorhanden für den Nekromanten/abwesend für die
+  Standard-Klasse, `ghost_rise` bei echtem Erscheinen aber nicht bei einem
+  verworfenen Geist, Exekution über den echten `stepState()`-Pfad,
+  `telemetry.js`-Aggregation mit SYNTHETISCHEN Werten (nicht über einen
+  echten Spiellauf), der `ghost_070`-Ring über den echten, aufzeichnenden
+  Fake-Canvas-Renderpfad (inkl. Gegenprobe ohne die Karte).
+- Kein `sw.js`-Bump (reine Code-/Datenänderung — der neue `ghost_rise`-Sound
+  ist ein JSON-Eintrag in der bereits gecachten `data/sounds.json`, kein
+  neues Asset). Playwright-Smoke (Nekromant wählen, Run starten, Snapshot
+  bestätigt `starterTank: 'c_necro'`, keine Konsolenfehler) bestanden.
+  **Nächste Sitzung: Phase 11** (Balance und Abnahme, letzte Phase des
+  Auftrags).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -5901,7 +6000,11 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `pushGhost()` angewendet); `state.necroLastPlayerHitTarget`/`ghost_093`s
   Champion-Kill-Zähler + Spawn und `ghost_095`s Schadensumleitung auf den
   Champion (durch dieselbe Resistenz-/Schildpool-Kette) sitzen in der
-  Haupt-Trefferschleife.
+  Haupt-Trefferschleife. Nekromant-V2 Phase 10: derselbe Revive-Block zählt
+  jetzt `state.necroReviveRolls`/`necroReviveHits` — Rolls bei jeder ECHTEN
+  Probe (`canRevive`), Hits nur wenn wirklich ein Untertan entstand
+  (`spawnedAny`), nicht schon bei „Wurf < Chance" (kann am vollen Limit ins
+  Leere laufen).
 - `src/game/armor.js` — gerichtete Panzerung (Phase 4): `armorBlocks`,
   `reflectBullet`, `isLive`. Seit Grundsteinumbau Phase 1 ist `isLive(b)`
   nur noch `!!b.reflected` (kein Bandenschuss mehr, `hasWallBounced()` ist
@@ -6014,7 +6117,15 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Faktoren in der Feuer-Schadenskette (`hybridMult` für `ghost_086`s
   zeitlich befristeten Untertanen-Bonus, `crownProcMult` für `ghost_099`s
   live Je-Verbündeten-Bonus PLUS den halb-permanenten Anteil aus
-  `state.necroCoronationPermDmgPct`).
+  `state.necroCoronationPermDmgPct`). Nekromant-V2 Phase 10 (Lesbarkeit und
+  Telemetrie): `pushGhost()` ruft einen neuen Helfer `spawnGhostAppearEffect()`
+  an den beiden ECHTEN Erscheinungs-Ausgängen (Ton `ghost_rise` + Partikel +
+  `state.necroGhostsCreated`-Zähler) — nicht im Verlierer-Zweig von
+  `necroUniqueThrone` oder bei `necroCapFusion` am Limit, da dort kein
+  eigenständiger Geist entsteht. `fuseGhost()`/`killGhost()` zählen
+  zusätzlich `state.necroGhostsFused`/`state.necroGhostsDiedByReason`.
+  `updateGhosts()`s Champion-Bestimmung sampelt `state.necroChampionStrengthSum`/
+  `-Samples` jeden Tick mit lebendem Champion (zeitgewichtete Stichprobe).
 - `src/game/necro.js` (Nekromant-V2 Phase 5, seit Phase 6 angeschlossen) —
   Ereignis-/Stapelschicht für den 105-Karten-Pool `data/upgrades_necro.json`.
   `onGhostRemoved(state, ghost, reason)` ist das zentrale Ereignis (vier
@@ -6073,6 +6184,11 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   5er-Formation); bypassen `DRIVES`/`updateEnemy()`, Turm/Feuern bleibt
   die normale `roleTurret()`-Logik. Zielwahl (Upgradepool-v2 Phase 5):
   zeitgesteuerter Wechsel zwischen Spieler-Fixierung und `ai.js: pickTarget`.
+  Nekromant-V2 Phase 10: `state.bossShotsAtPlayer`/`bossShotsAtGhost` zählen
+  NUR echte Treffer von `fireBullet()`s RÜCKGABEWERT, nicht `roleTurret()`s
+  bloße Feuerabsicht (echter Bugfund, s. eigener Abschnitt oben — `if (fire)`
+  allein zählte ein Vielfaches der echten Schüsse). Läuft im echten Spiel
+  aktuell nie (Bosse sind Platzhalter, s. u.).
 - `src/game/cfg.js` — Panzer-cfg + alle Upgrade-Effekte. Der Kern ist seit
   UMBAUPLAN-LP Phase 10 EINE generische `core`-Schleife (eine neue Karte
   braucht keine Codezeile, nur ihren `core`-Eintrag in `upgrades.json`);
@@ -6158,7 +6274,11 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - `src/core/telemetry.js` — Run-Telemetrie in `localStorage.runs` +
   Debug-Ansicht. **Die Aufzeichnung läuft IMMER**, `?debug=1` blendet nur
   die Ansicht ein (dort eingeklappt, aufklappbar). Reine Beobachtung,
-  keine Spiellogik.
+  keine Spiellogik. Nekromant-V2 Phase 10: `recordRoom()` speichert ein
+  neues `necro`-Feld (Untertanen erzeugt/gestorben-nach-Grund/verschmolzen,
+  Wiederbelebungsquote-Rohdaten, Championstärke-Rohdaten, Bossschüsse),
+  `null` bei jedem Nicht-Nekromanten-Raum; `computeMetrics()` aggregiert
+  über alle Runs zu Quote/⌀ Championstärke/Bossschuss-Anteil in Prozent.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
   bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v113`; dabei

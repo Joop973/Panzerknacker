@@ -97,7 +97,25 @@ export function stepMirrorBoss(tank, state, dt) {
   // Upgradepool-v2 Phase 5: nur noch true, wenn das Ziel wirklich der
   // Spieler ist -- sonst warnt der Gefahrensinn vor Schuessen auf einen Geist.
   tank.aimingAtPlayer = fire && target === state.player;
-  if (fire) fireBullet(tank, state);
+  if (fire) {
+    // Nekromant-V2 Phase 10 (Telemetrie): "Anteil der Bossschuesse auf
+    // Spieler gegen Untertanen" -- Rohzaehler, main.js liest sie unveraendert.
+    // ECHTER Testfund: roleTurret()==true ist nur die ABSICHT zu feuern
+    // (Zielkegel/Sichtlinie erfuellt) -- fireBullet() selbst gated NOCHMAL
+    // auf tank.cooldown/Magazin und kann trotzdem `false` liefern (mehrere
+    // Ticks in Folge, solange der Cooldown noch laeuft). Der Zaehler muss
+    // deshalb den RUECKGABEWERT von fireBullet() lesen, nicht das fire-Flag
+    // -- sonst zaehlt er ein Vielfaches der echten Schuesse (Gegenprobe:
+    // mit `if (fire) counter++` statt `if (fireBullet(...))` maß der eigene
+    // Test 678 statt 46 echte Schuesse in 20 simulierten Sekunden).
+    // (Aktuell nur ueber isolierte Tests erreichbar: Bossraeume spawnen laut
+    // "Bosse (Platzhalter)"-Entscheidung t_black statt t_mirror/t_phalanx,
+    // dieser Codepfad laeuft im echten Spiel derzeit nie -- s. CLAUDE.md.)
+    if (fireBullet(tank, state)) {
+      if (target === state.player) state.bossShotsAtPlayer++;
+      else state.bossShotsAtGhost++;
+    }
+  }
 }
 
 // Die Phalanx: fuenf Panzer rotieren als starre Formation um die Raummitte
@@ -129,5 +147,12 @@ export function stepPhalanxBoss(tank, state, dt) {
   tank.fixatedOnPlayer = fixated; // sichtbares Signal (renderer.js: Turmgluehen)
   const fire = tank.turretStunTimer > 0 ? false : roleTurret(tank, state, dt);
   tank.aimingAtPlayer = fire && target === state.player;
-  if (fire) fireBullet(tank, state);
+  if (fire) {
+    // Nekromant-V2 Phase 10 (Telemetrie): Zaehler haengt am Rueckgabewert
+    // von fireBullet(), nicht am fire-Flag -- s. stepMirrorBoss() oben.
+    if (fireBullet(tank, state)) {
+      if (target === state.player) state.bossShotsAtPlayer++;
+      else state.bossShotsAtGhost++;
+    }
+  }
 }

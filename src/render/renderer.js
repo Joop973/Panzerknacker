@@ -1038,6 +1038,22 @@ export function createRenderer(ctx) {
         ctx.arc(x, y, r + 18, 0, Math.PI * 2);
         ctx.stroke();
       }
+      // ghost_070 "Herrscheraura" (Nekromant-V2 Phase 9, nur Champion): bis
+      // Phase 10 komplett unsichtbar -- die Aura veraendert Schaden in einem
+      // echten Wirkradius (necroCrownAuraRadius), ohne dass der Radius
+      // irgendwo zu sehen war. Anders als die kleinen, panzergrossen Ringe
+      // oben (r+6..r+18): ein GESTRICHELTER Kreis im TATSAECHLICHEN Radius,
+      // rot (schwaecht Gegner/staerkt Untertanen darin), damit er von den
+      // engen Nahbereichs-Auren klar unterscheidbar bleibt.
+      if (g.isChampion && state.player?.cfg?.necroCrownAuraRadius) {
+        ctx.strokeStyle = 'rgba(220,80,70,0.55)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.arc(x, y, state.player.cfg.necroCrownAuraRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       // Lebensdauer (Phase 3, NEU): schrumpfender Ring -- "ein anderer
       // Todes-Ausloeser als Schaden" braucht ein sichtbares Gegenstueck,
