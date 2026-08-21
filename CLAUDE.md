@@ -5615,6 +5615,184 @@ Der laut Auftrag „aufwendigste Teil": Champion und Fusion. `ghost_061` bis
   `starterTank: 'c_necro'`, keine Konsolenfehler) bestanden. **Nächste
   Sitzung: Phase 9** (Hybride und Aktivkarten, 20 Karten).
 
+### Nekromant-V2 — Phase 9 (Hybride und Aktivkarten, 20 Karten) — gemergt
+`ghost_086` bis `ghost_105` (+ `ghost_031`, seit Phase 6 als Aktivkarten-
+Platzhalter mit `core: {"_todo":"effect"}` zurückgestellt) — 20 Hybridkarten,
+die zwei oder drei Pfade (Opfer/Legion/Alpha) gleichzeitig bedienen, plus drei
+Aktivkarten für den Gadgetslot.
+- **Ist-Abgleich-Fund vor dem eigentlichen Kartenbau, nicht im Auftrag
+  genannt, aber Voraussetzung für JEDEN der fünf Testschritte**:
+  `data/upgrades_necro.json` war seit Phase 0 **nie in die aktive
+  Angebots-Pipeline eingehängt** — `src/main.js: loadData()` kannte den
+  Dateinamen nicht, `upgradesData.upgrades` (das `upgradepool.js`/`run.js`
+  tatsächlich lesen) enthielt die 105 Karten nie. Keine einzige der in den
+  Phasen 1–8 gebauten Karten konnte je in einem echten Run gezogen werden
+  (per `grep` verifiziert: außerhalb von `tests/regression.mjs` gab es keine
+  einzige Lesestelle). **Fix**: `main.js: loadData()` lädt `upgrades_necro`
+  jetzt mit, `init()` mergt additiv
+  `upgradesData.upgrades = {...upgradesData.upgrades, ...necroUpgradesData.upgrades}`
+  — derselbe Objektschlüssel, den `upgradepool.js`/`run.js` ohnehin lesen.
+  Der bestehende `signatureClass`-Filter (Phase 18 des LP-Umbaus) erledigt
+  den Rest **ohne jede Änderung** an `upgradepool.js`/`run.js` — alle 105
+  Karten tragen `signatureClass: "c_necro"` seit Phase 0. Testabschnitt
+  61(b) prüft das End-to-End (echter `rollOffers()`-Aufruf mit einem
+  gemergten Pool, c_necro zieht `ghost_0XX`, `player` nie) + eine Kontrolle
+  gegen den ungemergten `upgradesData` (liefert nie eine `ghost_0XX`-id).
+- **Hybride tragen alle beteiligten Pfad-Tags, KEIN `requires`**
+  (Auftragsvorgabe: „ein Hybrid ist eine Einladung zum Mischen"): 6 O+L
+  (`ghost_086`–`091`), 6 O+Alpha (`092`–`097`), 6 L+Alpha (`098`–`103`), 2
+  Dreifach-Hybride O+L+Alpha (`104`/`105`, legendär, Gewicht 7). Die
+  Synergiegewichtung selbst ist unverändert (Upgradepool-v2 Phase 3,
+  `makeSynergyWeight()`) — Phase 9 baut daran nichts Neues, nutzt sie nur.
+- **Drei Aktivkarten registrieren ein Gadget** (`ghost_031`/`089`/`096`,
+  alle `tag: "gadget"`, `isUnique: true`): das Spiel hat **keinen dritten
+  Knopf** — der bestehende, generische `run.js: applyUpgradeChoice()`-Hook
+  (`if (offer.tag === 'gadget') run.equippedGadget = offer.id;`, seit P4)
+  registriert sie **ohne jede Codeänderung** wie jedes andere Gadget; eine
+  zweite Aktivkarte ersetzt die erste dadurch automatisch (Testschritt 4).
+  `tank.js: useGadget()` bekommt drei neue `else if`-Zweige:
+  `ghost_031` „Märtyrerbefehl" (opfert ALLE Untertanen, Bonus skaliert mit
+  der Anzahl — die Timed-Stack-API erneuert nur die Dauer, deshalb wird die
+  Gesamtstärke in EINEM Aufruf gesetzt statt N sich überschreibenden),
+  `ghost_089` „Wechselopfer" (opfert nur den schwächsten, heilt+schildet die
+  übrigen, garantiert die nächste Wiederbelebungsprobe), `ghost_096`
+  „Königliches Opfer" (opfert ausschließlich den Champion). Alle drei folgen
+  dem `layMine()`-Muster: `used` wird VOR dem Effekt anhand eines
+  vorhandenen Ziels bestimmt — ohne Untertan passiert nichts, insbesondere
+  **keine Abklingzeit** (Testschritt: „nichts zu opfern → keine Wirkung UND
+  kein Verbrauch").
+- **`killGhost()` bekommt eine dritte `cause`: `'sacrifice'`**
+  (`state.js: 'damage'|'expire'|'sacrifice'`) — mappt auf `onGhostRemoved`s
+  Grund `'sacrifice'` (seit Phase 5 in `NECRO_REASONS`/`countsAsGhostDeath()`
+  vorbereitet, aber bis jetzt nie erzeugt). Wie `'expire'` überspringt
+  `'sacrifice'` die drei kartengebundenen Todes-Mechaniken (Phylakterium,
+  Wiederkehr-Familie, Letzter Wille) — „eine ABSICHTLICHE Opferung soll
+  nicht durch Glück überleben". Gegenprobe bestanden: die alte Zuordnung
+  (`'sacrifice'` fiel auf `'death_damage'` zurück) hätte einen geopferten
+  Untertan mit `ghostReviveChance: 1` gerettet — der Test fängt das.
+- **`necro_active` als dritte Gadget-Kategorie** (`data/secondaries.json`,
+  NICHT `'gadget'`): `run.js: buyShopSecondary()` und `roomscreens.js`
+  filtern den Shop-Tausch explizit auf `category === 'gadget'` — die drei
+  Aktivkarten sollen dort **nie** auftauchen (zweites, von der ohnehin
+  bestehenden Nekromant-Shop-Sperre unabhängiges Sicherheitsnetz).
+  Abklingzeiten wie im Auftrag: 24 s/18 s/30 s.
+- **Tausch-Warnung VOR der Wahl** (Testschritt 2, Ist-Abgleich-Fund über die
+  Auftrags-Dateiliste hinaus — die nennt nur `hud.js`, ohne diese Datei ist
+  „vor der Wahl sichtbar" aber technisch unerfüllbar): `upgradescreen.js`
+  und `roomscreens.js` (Shop-Kartenregal) zeigen bei
+  `o.tag === 'gadget' && ctx.equippedGadget && ctx.equippedGadget !== o.id`
+  ein `.pv-warn`-Element „Ersetzt: <Name>" direkt in der Karte —
+  `ctx.gadgetLabel(id)`/`ctx.secondariesData[id]?.label` lösen den Namen
+  auf. `main.js` reicht `equippedGadget`/`gadgetLabel` neu an den
+  Upgrade-Screen durch. `hud.js` brauchte dagegen **keine** Änderung
+  (verifiziert, nicht angenommen): die bestehende, generische
+  Abklingzeit-/Label-Anzeige (`run.data.secondaries?.[p.cfg.gadget]?.label`,
+  `p.gadgetCooldown`) funktioniert für die drei neuen Einträge unverändert,
+  weil sie demselben `label`/`cooldownS`-Schema folgen wie die fünf
+  Basis-Gadgets (Testschritt 3).
+- **`ghost_105` „Herrschaft über den Tod"** (Testschritt 5): der
+  Raumstart-Untertan (`ghost_033`-Hook, `state.js`) zieht seinen Typ aus
+  `state.actEnemyPool` (Akt-Gegnerpool, seit Phase 3 vorhanden — keine neue
+  Aktzuordnung nötig, die „Fundament"-Anbindung war schon da) und trägt
+  fortan `isAncestor: true`. Stirbt (Schaden/Ablauf, `killGhost()`) ODER
+  verschmilzt (`fuseGhost()`, als Verlierer) **genau dieser eine** Untertan,
+  löst er einen zeitlich befristeten Schaden-/Feuerraten-Buff für den
+  Hauptpanzer aus — beide Pfade rufen denselben `addNecroTimedStack()`-Block,
+  kein zweiter Mechanismus. Gegenprobe: ein NICHT-Urahn-Geist, der
+  stattdessen verschmilzt, löst den Buff nicht aus (eigener Testblock (ac)).
+- **`ghost_098` „Auslese der Legion"**: `pushGhost()` bekommt einen zweiten
+  Sonderfall NACH `necroUniqueThrone` — ist das Geisterlimit VOLL, wird der
+  neu ankommende Geist **verworfen** (erscheint nicht), stattdessen
+  verschmilzt der bereits vorhandene SCHWÄCHSTE Nicht-Champion in den
+  Champion (`fuseGhost(..., {hpFrac, dmgFrac, frFrac})` mit einem eigenen
+  `overrideFrac`-Parameter, unabhängig von 071/072/085s Übertragungsraten —
+  zwei unabhängige Verschmelzungs-Karten sollen sich nicht gegenseitig
+  verzerren).
+- **`ghost_092` „Blutiger Thron"**: eine Verschmelzung zählt für raumweite
+  `pureStack`-Spielerstapel (011/012/013) als **halber** Geistertod, ohne
+  Heilung/Explosion/Abklingzeit auszulösen — ein zweiter, auf `pureStack`
+  gefilterter Durchlauf in `onGhostRemoved()` NACH dem normalen
+  `reasons`-Durchlauf (unabhängig davon, ob ein Listener `'fusion'` selbst
+  in seinen `reasons[]` hat — der neue Zweig filtert auf `l.pureStack`, ein
+  Seiteneffekt-Listener wie `ghost_097` bekommt dadurch **kein** zweites
+  Auslösen).
+- **`ghost_099` „Krönungszug"**: stirbt ein ANDERER Untertan, wird die
+  HÄLFTE des aktuellen Champion-Bonus (`necroCrownProcPerAllyPct × lebende
+  ANDERE Untertanen`) **dauerhaft** (`state.necroCoronationPermDmgPct`,
+  raumweit, überdauert einen Champion-Wechsel — bewusst NICHT in
+  `necroDamagePct()` aufgenommen, das ist die Spieler-Formel; der Bonus
+  wirkt nur auf den jeweils aktuellen Champion, live in `ghost.js:
+  updateGhosts()`s Feuer-Multiplikatorkette).
+- **`ghost_100` „Ersatzkörper"**: stirbt der Champion, während ein weiterer
+  Untertan lebt, übernimmt der GESÜNDESTE Überlebende (nicht der nächste
+  Neuling wie bei `ghost_080`) die Hälfte des angesammelten Bonus
+  (Delta zum Basiswert, dieselbe Messung wie `ghost_094`) — „einmal pro
+  Raum" (`state.necroSuccessionUsed`).
+- **`ghost_087`/`ghost_094`**: zwei weitere „Transfer"-Karten, bewusst NICHT
+  über `ghost.js: applyFusionTransfer()` (das rechnet relativ zum
+  EMPFÄNGER-Basiswert) — `ghost_087` überträgt einen Anteil der Basiswerte
+  DES STERBENDEN an einen zufälligen Überlebenden, `ghost_094` einen Anteil
+  des Deltas DES CHAMPIONS an den Hauptpanzer. Zwei unterschiedliche
+  Bezugsgrößen, deshalb zwei eigene, kleine Rechnungen statt einer
+  geteilten Funktion mit widersprüchlicher Semantik.
+- **`ghost_090`/`ghost_091` brauchen `state.js`-Umwege** (Zirkelimport-
+  Vermeidung, `necro.js` kann `ghost.js` nicht importieren — das importiert
+  bereits aus `necro.js`): zwei neue Methoden auf dem `state`-Objekt,
+  `createReplacementGhost(gh, cfg)` (`ghost_090`, Ersatz mit reduziertem
+  Basiswert-Anteil, `isReplacement`-Flag verhindert Kettenreaktionen) und
+  `spawnFreeGhosts(count, statPct)` (`ghost_091`, kostenlose Untertanen ohne
+  Wiederbelebungswurf) — Muster wie das bestehende `state.applyStatus`.
+- **`ghost_091` „Lawine der Toten": echter Bug beim eigenen Testbau
+  gefunden und in `necro.js` gefixt** (nicht nur der Test angepasst): der
+  Listener trug ursprünglich `cooldownS: cfg.necroKeystoneAvalancheCooldownS`
+  (20 s) als generisches `l.cooldownS`-Gate — das sperrt aber die reine
+  Zähl-Buchführung selbst, nicht nur die Auslöse-Belohnung.
+  `necroCooldownReady()` setzt die Abklingzeit beim ERSTEN erlaubten Aufruf
+  sofort, lange bevor 3 Tode gezählt werden konnten — der 2./3. Tod
+  innerhalb des 5-s-Fensters kam dadurch nie mehr durch (20 s > 5 s), die
+  Lawine konnte praktisch nie auslösen. Fix: eine eigene, manuelle
+  Abklingzeit (`state.necroAvalancheCooldownUntil`), erst gesetzt NACHDEM
+  die Lawine wirklich ausgelöst hat — Muster wie `ghost_054`s
+  `necroCoreCooldownUntil`.
+- **Sieben gezielte Gegenproben am echten Quellcode** (temporär im Diff
+  gebrochen, Suite lief rot, dann zurückgesetzt): Pipeline-Mechanismus,
+  `killGhost()`s `'sacrifice'`-Zuordnung, `ghost_098`s Verdrängungs-Fusion,
+  `ghost_092`s Halb-Zuschlag, `ghost_099`s permanenter Bonus, `ghost_100`s
+  Nachfolge, `ghost_095`s Schadensumleitung — jede Gegenprobe hat genau die
+  erwarteten, benannten Prüfpunkte rot gemacht, sonst nichts.
+- **Neuer Testabschnitt 61** (`tests/regression.mjs`): Struktur (21 Karten,
+  echter `core`, NaN-Check, `ghost_104`/`105` legendär+Gewicht 7+alle drei
+  Tags), Pipeline-Verdrahtung mit Kontrolle gegen den ungemergten Pool,
+  Testschritt 1 (O+L-Hybrid-Gewichtung an einem ISOLIERTEN Zwei-Karten-Pool
+  — Muster wie Abschnitt 39: der echte 110-Karten-Pool hätte das Signal
+  verwässert, weil ein zu hoher `synergyTags`-Wert praktisch jede Karte mit
+  auch nur einem passenden Tag auf denselben Deckel treibt und O+L dadurch
+  von O+Alpha/L+Alpha ununterscheidbar würde), `necro_active`-Kategorie +
+  Abklingzeiten, alle drei Aktivkarten-Mechanismen (inkl. „nichts zu
+  opfern" → kein Verbrauch), Testschritt 3 (Abklingzeitwert exakt), 4
+  (zweite Aktivkarte ersetzt sichtbar die erste, über `run.js`), 2
+  (Tausch-Warnung domstub-geprüft inkl. Gegenprobe „ohne Gadget keine
+  Warnung"), `killGhost()`s `'sacrifice'`-Pfad, sowie ein Mechanismustest
+  je der übrigen 17 Hybrid-/Keystone-/Engine-Karten (086–088, 090–105) —
+  `ghost_088` bewusst über `necroDamagePct(st)` gemessen, NICHT über einen
+  abgefeuerten Untertanen-Schuss (die Karte wirkt auf den SPIELER, ein
+  erster, falscher Testentwurf hätte das Gegenteil geprüft und wäre
+  trivial grün geblieben, weil der Untertanen-Schaden davon unberührt ist).
+- Kein `sw.js`-Bump durch DIESE Phase allein nötig gewesen, aber **jetzt
+  erforderlich**: `data/upgrades_necro.json` wird durch den Pipeline-Fix
+  zum ersten Mal wirklich vom laufenden Spiel geladen (vorher nur von
+  `tests/regression.mjs`). `sw.js` auf `v113` gebumpt (+
+  `telemetry.js: GAME_VERSION` mitgezogen), `data/upgrades_necro.json` neu
+  in `ASSETS` aufgenommen. **Zwei weitere, ältere Lücken beim
+  Durchprüfen der `ASSETS`-Liste gefunden**: `src/game/necro.js` (seit
+  Phase 5) und `src/game/mortar.js` (seit Grundsteinumbau Phase 3) fehlten
+  dort ebenfalls — beide sind ES-Module-Importe und wurden dadurch bisher
+  nur über den `network-first`-Fetch-Handler lazy nachgecacht, nie beim
+  ersten Offline-Install; jetzt ergänzt.
+- Playwright-Smoke (Nekromant wählen, Run starten, Snapshot bestätigt
+  `starterTank: 'c_necro'`, keine Konsolenfehler) bestanden. **Nächste
+  Sitzung: Phase 10** (Lesbarkeit und Telemetrie).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -5714,7 +5892,16 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Trefferschleifen-Richtungen gelesen), `ghost_075`/`082` direkt nach
   `applyTypeEffects()` in der Haupt-Trefferschleife, das
   `rg.invulnUntil`-Gate + `ghost_079`/`084`s Rettungsblock in der
-  Geist-vs-Geschoss-Kollisionsschleife (VOR `killGhost()`).
+  Geist-vs-Geschoss-Kollisionsschleife (VOR `killGhost()`). Nekromant-V2
+  Phase 9: `killTank()`s Wiederbelebungsblock kennt jetzt eine GARANTIERTE
+  nächste Probe (`state.necroGuaranteedReviveUntil`/`necroCircleGuaranteedRevive`,
+  `ghost_089`/`104`, beide sofort nach Verbrauch zurückgesetzt) und
+  `ghost_101`s eigenen Chance-Bonus bei Untertan-Kills; `ghost_088`s
+  Bonus für den nächsten wiederbelebten Untertan (gedeckelt, VOR
+  `pushGhost()` angewendet); `state.necroLastPlayerHitTarget`/`ghost_093`s
+  Champion-Kill-Zähler + Spawn und `ghost_095`s Schadensumleitung auf den
+  Champion (durch dieselbe Resistenz-/Schildpool-Kette) sitzen in der
+  Haupt-Trefferschleife.
 - `src/game/armor.js` — gerichtete Panzerung (Phase 4): `armorBlocks`,
   `reflectBullet`, `isLive`. Seit Grundsteinumbau Phase 1 ist `isLive(b)`
   nur noch `!!b.reflected` (kein Bandenschuss mehr, `hasWallBounced()` ist
@@ -5727,7 +5914,10 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `moveTank()` bremst seit Grundsteinumbau Phase 2 einen Panzer mit
   `tank.executing` (Exekutionsschwelle) über `balance.execute.slowMult`.
   `liveBulletsOf`/`magazineOf` sind seither exportiert (state.js braucht sie
-  für die `magBlockedTime`-Telemetrie).
+  für die `magBlockedTime`-Telemetrie). Nekromant-V2 Phase 9: `useGadget()`
+  bekommt drei Opfer-Aktivkarten-Zweige (`ghost_031`/`089`/`096`, alle über
+  `state.js: killGhost(..., 'sacrifice')` — die neue dritte `cause`) nach
+  demselben "ohne Ziel keine Wirkung, kein Verbrauch"-Muster wie `layMine()`.
 - `src/game/mortar.js` — Mörser-Waffe (Grundsteinumbau Phase 3, `t_green`):
   `fireMortar`/`updateMortars`. Kein physisches Geschoss (`state.mortars`
   statt `state.bullets`) — Deflektor/Frontpanzerung greifen dadurch
@@ -5803,7 +5993,28 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Basiswerte (Phase 3), Fusionsboni (`g.fusionHpFrac`/`-DamageFrac`/
   `-FireRateFrac`/`fusionCount`, pro Instanz — die einzigen, die
   `state.necroCrownHeir`/`createGhost()`s Kronenerbe-Zweig übertragen),
-  Kronenboni (stateless, kein Übertragungsbedarf).
+  Kronenboni (stateless, kein Übertragungsbedarf). Nekromant-V2 Phase 9
+  (Hybride und Aktivkarten): `pushGhost()` bekommt einen zweiten
+  Sonderfall NACH `necroUniqueThrone` — `necroCapFusion` (`ghost_098`)
+  verschmilzt bei VOLLEM Geisterlimit den vorhandenen SCHWÄCHSTEN
+  Nicht-Champion in den Champion, statt den ankommenden Geist erscheinen
+  zu lassen. `fuseGhost()` bekommt einen optionalen 4. Parameter
+  `overrideFrac` (eigene, von 071/072/085 unabhängige Übertragungsrate) und
+  einen `isAncestor`-Zweig (`ghost_105`, Buff beim Verschmelzen des
+  Urahns). `killGhost(state, g, 'sacrifice')` (dritte `cause`, s. tank.js:
+  `useGadget()`) überspringt wie `'expire'` die drei kartengebundenen
+  Todes-Mechaniken; zusätzlich Delta-basierte Bonusübertragung an den
+  Spieler (`ghost_094`, Champion-Tod) bzw. den gesündesten Überlebenden
+  (`ghost_100`, `state.necroSuccessionUsed`) und der Urahn-Buff-Zweig
+  (`ghost_105`, Schaden/Ablauf-Pfad). `updateGhosts()`s Live-Auren-
+  Vorpass bekommt zwei weitere Champion-Karten (`ghost_102` „Kronengarde":
+  Resistenz je anderem Untertan oder periodischer Solo-Schild;
+  `ghost_103` „Massenkrone": delta-nachgeführter `maxHp`-Bonus je
+  Geisterplatz über der Schwelle, plus Solo-Feuerrate) sowie zwei neue
+  Faktoren in der Feuer-Schadenskette (`hybridMult` für `ghost_086`s
+  zeitlich befristeten Untertanen-Bonus, `crownProcMult` für `ghost_099`s
+  live Je-Verbündeten-Bonus PLUS den halb-permanenten Anteil aus
+  `state.necroCoronationPermDmgPct`).
 - `src/game/necro.js` (Nekromant-V2 Phase 5, seit Phase 6 angeschlossen) —
   Ereignis-/Stapelschicht für den 105-Karten-Pool `data/upgrades_necro.json`.
   `onGhostRemoved(state, ghost, reason)` ist das zentrale Ereignis (vier
@@ -5833,7 +6044,26 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   durch. `necroDamagePct`/`necroFireRatePct`/`necroSpeedPct`/
   `necroResistBonus(state)` summieren am Ort der Verwendung (`tank.js`/
   `state.js`) über eine feste, bekannte Liste reservierter Schlüssel (s.
-  eigener CLAUDE.md-Abschnitt „Phase 6" oben).
+  eigener CLAUDE.md-Abschnitt „Phase 6" oben). **Phase 9** (Hybride und
+  Aktivkarten): `onGhostRemoved()` bekommt einen zweiten, NACH dem
+  normalen `reasons`-Durchlauf laufenden Zweig, der bei `reason ===
+  'fusion' && cfg.necroFusionHalfDeathForStacks` (`ghost_092`) ALLE
+  `pureStack`-Listener (unabhängig von deren eigenen `reasons[]`) mit
+  `mult: 0.5` erneut aufruft — eine Verschmelzung zählt damit als halber
+  Geistertod für raumweite Spielerstapel, ohne Seiteneffekt-Listener
+  (Heilung/Explosion/Abklingzeit) ein zweites Mal auszulösen.
+  `buildNecroListeners()` bekommt acht neue Einträge (`ghost_086`/`087`/
+  `090`/`091`/`097`/`099`/`104`, alle mit `DEATH_REASONS`, `ghost_097`/`104`
+  zusätzlich mit `'fusion'` in ihren eigenen `reasons[]`). `ghost_091`
+  „Lawine der Toten" nutzt bewusst KEIN generisches `l.cooldownS` — das
+  würde schon die reine Todes-Zählung sperren, bevor 3 Tode innerhalb des
+  5-s-Fensters gezählt werden können (echter Bugfund beim eigenen Testbau,
+  gefixt: eine manuelle `state.necroAvalancheCooldownUntil`, erst gesetzt
+  NACH einem erfolgreichen Auslösen). `necroDamagePct()` bekommt sechs
+  weitere Timed-Stack-Terme (`ghost_086`/`091`/`095`/`096`/`104`/`105`)
+  plus `ghost_088`s LIVE Je-Untertan-Term (aus `state.necroActiveGhostCount`,
+  NICHT `state.necroCoronationPermDmgPct` — das wirkt laut Kartentext nur
+  auf den Champion, s. `ghost.js`).
 - `src/game/ai.js` — Gegner-KI-Dispatcher + Zielsystem (Upgradepool-v2
   Phase 5): `resolveTarget`/`pickTarget`/`updateTargeting`/`registerThreat`
   wählen zwischen Spieler und Geistern statt hart auf `state.player` zu
@@ -5861,6 +6091,9 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   echte `state.necroListeners`-Einträge übersetzt werden (Details im
   Phase-6-Abschnitt oben) — derselbe generische Muster-Bruch wie bei
   `ghost*`, nur eine Ebene weiter (Listener statt direkter cfg-Wert).
+  Nekromant-V2 Phase 9 fügt ~40 weitere `if (c.xyz)`-Zweige für die
+  20 Hybrid-/Keystone-Karten hinzu — keine neue Applier-Architektur, nur
+  mehr Zeilen derselben Schleife.
 - `src/game/upgradepool.js` — Auswahl-Pool. Filter in `buildCandidates()`:
   `rarity` (fünf Stufen + `rarityGates`, Upgradepool-v2 Phase 1),
   `isUnique` (Nekromant-V2 Phase 1: ersetzt `maxStacks` ersatzlos — eine
@@ -5928,7 +6161,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   keine Spiellogik.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v112`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v113`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

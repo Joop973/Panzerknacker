@@ -60,7 +60,30 @@ import { createHud } from './ui/hud.js';
 import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
-  const names = ['tanks', 'tiles', 'difficulty', 'upgrades', 'balance', 'events', 'input', 'options', 'arenas', 'transformations', 'secondaries', 'modifiers', 'limits', 'sounds', 'status'];
+  const names = [
+    'tanks',
+    'tiles',
+    'difficulty',
+    'upgrades',
+    'balance',
+    'events',
+    'input',
+    'options',
+    'arenas',
+    'transformations',
+    'secondaries',
+    'modifiers',
+    'limits',
+    'sounds',
+    'status',
+    // Nekromant-V2 Phase 9 (echter Ist-Abgleich-Fund): der 105-Karten-
+    // Signaturpool war seit Phase 0 nie an die echte Angebots-Pipeline
+    // angeschlossen -- data/upgrades_necro.json wurde bisher AUSSCHLIESSLICH
+    // von tests/regression.mjs direkt importiert, main.js kannte die Datei
+    // gar nicht. Ohne diesen Eintrag koennte KEINE der 105 Karten (Phasen
+    // 1-8 dieses Auftrags) jemals in einem echten Run erscheinen.
+    'upgrades_necro',
+  ];
   const out = [];
   for (const n of names) {
     let res;
@@ -84,8 +107,31 @@ async function loadData() {
 }
 
 async function init() {
-  const [tanksData, tilesData, diffData, upgradesData, balanceData, eventsData, inputCfg, optionsData, arenasData, transformData, secondariesData, modifiersData, limitsData, soundsData, statusData] =
-    await loadData();
+  const [
+    tanksData,
+    tilesData,
+    diffData,
+    upgradesData,
+    balanceData,
+    eventsData,
+    inputCfg,
+    optionsData,
+    arenasData,
+    transformData,
+    secondariesData,
+    modifiersData,
+    limitsData,
+    soundsData,
+    statusData,
+    necroUpgradesData,
+  ] = await loadData();
+  // Nekromant-V2 Phase 9: der 105-Karten-Signaturpool wird in den ALLGEMEINEN
+  // Angebotspool gemischt (nicht als zweites Parallelsystem) -- jede Karte
+  // traegt bereits signatureClass: "c_necro" (upgradepool.js filtert seit
+  // Upgradepool-v2 Phase 18 automatisch danach), fremde Klassen sehen davon
+  // also weiterhin nichts. upgradesData.offersPerScreen (u. a. Top-Level-
+  // Felder) bleiben unangetastet, nur .upgrades wird erweitert.
+  upgradesData.upgrades = { ...upgradesData.upgrades, ...necroUpgradesData.upgrades };
   // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
   // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
   // sind (Geschoss-Lifetime/Cap/Immunitaet, Minen-Radius/Fuse/Kette).
@@ -665,6 +711,13 @@ async function init() {
         unlocked: run.transformations,
         threshold: run.data.transformations?.threshold,
         hasDash: (run.upgrades.dash || 0) > 0,
+        // Nekromant-V2 Phase 9: "Ersetzt dein Gadget"-Warnung im Kartenangebot
+        // (upgradescreen.js) -- braucht das aktuell ausgeruestete Gadget UND
+        // seinen Anzeigenamen. run.data.secondaries deckt sowohl die fuenf
+        // Basis-Gadgets als auch die drei neuen Aktivkarten ab (beide tragen
+        // ein label-Feld dort).
+        equippedGadget: run.equippedGadget,
+        gadgetLabel: (id) => run.data.secondaries?.[id]?.label || id,
         onPick: (idx) => {
           // Telemetrie: gewaehlte Karte + abgelehnte Alternativen (id + tag).
           const offers = run.pendingOffers;

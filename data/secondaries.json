@@ -40,5 +40,22 @@
     "hits": 3,
     "placeDistPx": 48,
     "cooldownS": 4.0
+  },
+
+  "_comment_necro_active": "Nekromant-V2 Phase 9: die drei Aktivkarten (ghost_031/089/096) registrieren beim Nehmen ueber denselben generischen tag==='gadget'-Hook (run.js: applyUpgradeChoice()) ein Gadget wie die fuenf obigen -- NUR die Werte hier (label/cooldownS) kommen aus dieser Datei, alle Wirkungswerte (Opferprozente, Buffhoehen) stehen als core-Schluessel auf der Karte selbst in data/upgrades_necro.json. category ist bewusst NICHT 'gadget', sondern 'necro_active': run.js: buyShopSecondary() UND roomscreens.js filtern den Shop-Tausch explizit auf category==='gadget' -- diese drei sollen dort NIE auftauchen (der Nekromant hat ohnehin keinen Shop-Gadget-Zugriff, aber die Trennung ist auch ein zweites, unabhaengiges Sicherheitsnetz). tank.js: useGadget() liest sie trotzdem generisch ueber denselben state.data.secondaries?.[g]-Lookup wie die fuenf Basis-Gadgets.",
+  "ghost_031": {
+    "category": "necro_active",
+    "label": "OPFERBEFEHL",
+    "cooldownS": 24.0
+  },
+  "ghost_089": {
+    "category": "necro_active",
+    "label": "WECHSELOPFER",
+    "cooldownS": 18.0
+  },
+  "ghost_096": {
+    "category": "necro_active",
+    "label": "KÖNIGSOPFER",
+    "cooldownS": 30.0
   }
 }

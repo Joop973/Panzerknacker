@@ -832,6 +832,112 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroFusionReplaceDamagePct = Math.max(cfg.necroFusionReplaceDamagePct || 0, c.necroFusionReplaceDamagePct || 0);
       cfg.necroFusionReplaceFireRatePct = Math.max(cfg.necroFusionReplaceFireRatePct || 0, c.necroFusionReplaceFireRatePct || 0);
     }
+    // Nekromant-V2 Phase 9 (Hybride und Aktivkarten, 20 Karten): weitere
+    // necroHybrid*/necroKeystone*/necroCrown*/necroActive*/necro*-Felder.
+    // Aktivkarten (ghost_031/089/096) tragen zusaetzlich `necroActiveKind`
+    // (Text-Kennung, kein Zahlwert) -- tank.js: useGadget() liest sie darueber
+    // aus. Nur EINE Aktivkarte kann gleichzeitig ausgeruestet sein
+    // (run.equippedGadget), Max statt Summe waere hier irrefuehrend, deshalb
+    // reicht ein simples ||=.
+    if (c.necroActiveKind) cfg.necroActiveKind = cfg.necroActiveKind || c.necroActiveKind;
+    if (c.necroActiveDmgPct) cfg.necroActiveDmgPct = Math.max(cfg.necroActiveDmgPct || 0, c.necroActiveDmgPct);
+    if (c.necroActiveFireRatePct) cfg.necroActiveFireRatePct = Math.max(cfg.necroActiveFireRatePct || 0, c.necroActiveFireRatePct);
+    if (c.necroActiveDurationS) cfg.necroActiveDurationS = Math.max(cfg.necroActiveDurationS || 0, c.necroActiveDurationS);
+    if (c.necroHybridDeathPlayerDmgPct) {
+      cfg.necroHybridDeathPlayerDmgPct = Math.max(cfg.necroHybridDeathPlayerDmgPct || 0, c.necroHybridDeathPlayerDmgPct);
+      cfg.necroHybridDeathGhostDmgPct = Math.max(cfg.necroHybridDeathGhostDmgPct || 0, c.necroHybridDeathGhostDmgPct || 0);
+      cfg.necroHybridDeathBuffDurationS = Math.max(cfg.necroHybridDeathBuffDurationS || 0, c.necroHybridDeathBuffDurationS || 0);
+    }
+    if (c.necroHybridRandomTransferPct) {
+      cfg.necroHybridRandomTransferPct = Math.max(cfg.necroHybridRandomTransferPct || 0, c.necroHybridRandomTransferPct);
+      cfg.necroHybridRandomTransferShieldPct = Math.max(cfg.necroHybridRandomTransferShieldPct || 0, c.necroHybridRandomTransferShieldPct || 0);
+    }
+    if (c.necroHybridPerAllyDmgPct) {
+      cfg.necroHybridPerAllyDmgPct = (cfg.necroHybridPerAllyDmgPct || 0) + c.necroHybridPerAllyDmgPct * lvl;
+      cfg.necroHybridFlankBonusPct = (cfg.necroHybridFlankBonusPct || 0) + (c.necroHybridFlankBonusPct || 0) * lvl;
+      cfg.necroHybridReviveDeathBonusPct = Math.max(cfg.necroHybridReviveDeathBonusPct || 0, c.necroHybridReviveDeathBonusPct || 0);
+      cfg.necroHybridReviveDeathBonusCap = Math.max(cfg.necroHybridReviveDeathBonusCap || 0, c.necroHybridReviveDeathBonusCap || 0);
+    }
+    if (c.necroSacrificeHealPct) {
+      cfg.necroSacrificeHealPct = Math.max(cfg.necroSacrificeHealPct || 0, c.necroSacrificeHealPct);
+      cfg.necroSacrificeShieldPct = Math.max(cfg.necroSacrificeShieldPct || 0, c.necroSacrificeShieldPct || 0);
+      cfg.necroSacrificeGuaranteeWindowS = Math.max(cfg.necroSacrificeGuaranteeWindowS || 0, c.necroSacrificeGuaranteeWindowS || 0);
+    }
+    if (c.necroHybridReplacementChance) {
+      cfg.necroHybridReplacementChance = Math.max(cfg.necroHybridReplacementChance || 0, c.necroHybridReplacementChance);
+      cfg.necroHybridReplacementStatPct = Math.max(cfg.necroHybridReplacementStatPct || 0, c.necroHybridReplacementStatPct || 0);
+      cfg.necroHybridReplacementLifetimeS = Math.max(cfg.necroHybridReplacementLifetimeS || 0, c.necroHybridReplacementLifetimeS || 0);
+    }
+    if (c.necroKeystoneAvalancheWindowS) {
+      cfg.necroKeystoneAvalancheWindowS = Math.max(cfg.necroKeystoneAvalancheWindowS || 0, c.necroKeystoneAvalancheWindowS);
+      cfg.necroKeystoneAvalancheCount = Math.max(cfg.necroKeystoneAvalancheCount || 0, c.necroKeystoneAvalancheCount || 0);
+      cfg.necroKeystoneAvalancheSpawn = Math.max(cfg.necroKeystoneAvalancheSpawn || 0, c.necroKeystoneAvalancheSpawn || 0);
+      cfg.necroKeystoneAvalancheStatPct = Math.max(cfg.necroKeystoneAvalancheStatPct || 0, c.necroKeystoneAvalancheStatPct || 0);
+      cfg.necroKeystoneAvalancheDmgPct = Math.max(cfg.necroKeystoneAvalancheDmgPct || 0, c.necroKeystoneAvalancheDmgPct || 0);
+      cfg.necroKeystoneAvalancheFRPct = Math.max(cfg.necroKeystoneAvalancheFRPct || 0, c.necroKeystoneAvalancheFRPct || 0);
+      cfg.necroKeystoneAvalancheDurationS = Math.max(cfg.necroKeystoneAvalancheDurationS || 0, c.necroKeystoneAvalancheDurationS || 0);
+      cfg.necroKeystoneAvalancheCooldownS = Math.max(cfg.necroKeystoneAvalancheCooldownS || 0, c.necroKeystoneAvalancheCooldownS || 0);
+    }
+    if (c.necroFusionHalfDeathForStacks) cfg.necroFusionHalfDeathForStacks = true;
+    if (c.necroHybridChampionKillsPerSpawn) {
+      cfg.necroHybridChampionKillsPerSpawn = Math.max(cfg.necroHybridChampionKillsPerSpawn || 0, c.necroHybridChampionKillsPerSpawn);
+      cfg.necroHybridChampionSpawnStatPct = Math.max(cfg.necroHybridChampionSpawnStatPct || 0, c.necroHybridChampionSpawnStatPct || 0);
+      cfg.necroHybridChampionSpawnLifetimeS = Math.max(cfg.necroHybridChampionSpawnLifetimeS || 0, c.necroHybridChampionSpawnLifetimeS || 0);
+    }
+    if (c.necroCrownDeathDmgTransferPct) {
+      cfg.necroCrownDeathDmgTransferPct = Math.max(cfg.necroCrownDeathDmgTransferPct || 0, c.necroCrownDeathDmgTransferPct);
+      cfg.necroCrownDeathHpShieldPct = Math.max(cfg.necroCrownDeathHpShieldPct || 0, c.necroCrownDeathHpShieldPct || 0);
+    }
+    if (c.necroSoulbondPct) {
+      cfg.necroSoulbondPct = Math.max(cfg.necroSoulbondPct || 0, c.necroSoulbondPct);
+      cfg.necroSoulbondBuffPct = Math.max(cfg.necroSoulbondBuffPct || 0, c.necroSoulbondBuffPct || 0);
+      cfg.necroSoulbondBuffDurationS = Math.max(cfg.necroSoulbondBuffDurationS || 0, c.necroSoulbondBuffDurationS || 0);
+    }
+    if (c.necroSacrificeChampionDmgPct) {
+      cfg.necroSacrificeChampionDmgPct = Math.max(cfg.necroSacrificeChampionDmgPct || 0, c.necroSacrificeChampionDmgPct);
+      cfg.necroSacrificeChampionFRPct = Math.max(cfg.necroSacrificeChampionFRPct || 0, c.necroSacrificeChampionFRPct || 0);
+      cfg.necroSacrificeChampionResist = Math.max(cfg.necroSacrificeChampionResist || 0, c.necroSacrificeChampionResist || 0);
+      cfg.necroSacrificeChampionDurationS = Math.max(cfg.necroSacrificeChampionDurationS || 0, c.necroSacrificeChampionDurationS || 0);
+    }
+    if (c.necroKeystoneThroneDmgPct) {
+      cfg.necroKeystoneThroneDmgPct = Math.max(cfg.necroKeystoneThroneDmgPct || 0, c.necroKeystoneThroneDmgPct);
+      cfg.necroKeystoneThroneShieldPct = Math.max(cfg.necroKeystoneThroneShieldPct || 0, c.necroKeystoneThroneShieldPct || 0);
+      cfg.necroKeystoneThroneDmgCap = Math.max(cfg.necroKeystoneThroneDmgCap || 0, c.necroKeystoneThroneDmgCap || 0);
+    }
+    if (c.necroCapFusion) {
+      cfg.necroCapFusion = true;
+      cfg.necroCapFusionHpPct = Math.max(cfg.necroCapFusionHpPct || 0, c.necroCapFusionHpPct || 0);
+      cfg.necroCapFusionDamagePct = Math.max(cfg.necroCapFusionDamagePct || 0, c.necroCapFusionDamagePct || 0);
+    }
+    if (c.necroCrownProcPerAllyPct) {
+      cfg.necroCrownProcPerAllyPct = Math.max(cfg.necroCrownProcPerAllyPct || 0, c.necroCrownProcPerAllyPct);
+      if (c.necroCrownProcHalfPermanent) cfg.necroCrownProcHalfPermanent = true;
+    }
+    if (c.necroSuccessionPct) cfg.necroSuccessionPct = Math.max(cfg.necroSuccessionPct || 0, c.necroSuccessionPct);
+    if (c.necroHybridGhostKillReviveChance) cfg.necroHybridGhostKillReviveChance = Math.max(cfg.necroHybridGhostKillReviveChance || 0, c.necroHybridGhostKillReviveChance);
+    if (c.necroCrownGuardResistPerAlly) {
+      cfg.necroCrownGuardResistPerAlly = Math.max(cfg.necroCrownGuardResistPerAlly || 0, c.necroCrownGuardResistPerAlly);
+      cfg.necroCrownGuardSoloShieldPct = Math.max(cfg.necroCrownGuardSoloShieldPct || 0, c.necroCrownGuardSoloShieldPct || 0);
+      cfg.necroCrownGuardSoloIntervalS = Math.max(cfg.necroCrownGuardSoloIntervalS || 0, c.necroCrownGuardSoloIntervalS || 0);
+    }
+    if (c.necroCrownMassDmgPerSlot) {
+      cfg.necroCrownMassDmgPerSlot = Math.max(cfg.necroCrownMassDmgPerSlot || 0, c.necroCrownMassDmgPerSlot);
+      cfg.necroCrownMassHpPerSlot = Math.max(cfg.necroCrownMassHpPerSlot || 0, c.necroCrownMassHpPerSlot || 0);
+      cfg.necroCrownMassSlotThreshold = Math.max(cfg.necroCrownMassSlotThreshold || 0, c.necroCrownMassSlotThreshold || 0);
+      cfg.necroCrownMassSoloFireRatePct = Math.max(cfg.necroCrownMassSoloFireRatePct || 0, c.necroCrownMassSoloFireRatePct || 0);
+    }
+    if (c.necroKeystoneCircleThreshold) {
+      cfg.necroKeystoneCircleThreshold = Math.max(cfg.necroKeystoneCircleThreshold || 0, c.necroKeystoneCircleThreshold);
+      cfg.necroKeystoneCircleReviveStatPct = Math.max(cfg.necroKeystoneCircleReviveStatPct || 0, c.necroKeystoneCircleReviveStatPct || 0);
+      cfg.necroKeystoneCircleDmgPct = Math.max(cfg.necroKeystoneCircleDmgPct || 0, c.necroKeystoneCircleDmgPct || 0);
+      cfg.necroKeystoneCircleDurationS = Math.max(cfg.necroKeystoneCircleDurationS || 0, c.necroKeystoneCircleDurationS || 0);
+    }
+    if (c.necroAncestorBuffOnDeath) {
+      cfg.necroAncestorBuffOnDeath = true;
+      cfg.necroAncestorBuffDmgPct = Math.max(cfg.necroAncestorBuffDmgPct || 0, c.necroAncestorBuffDmgPct || 0);
+      cfg.necroAncestorBuffFRPct = Math.max(cfg.necroAncestorBuffFRPct || 0, c.necroAncestorBuffFRPct || 0);
+      cfg.necroAncestorBuffDurationS = Math.max(cfg.necroAncestorBuffDurationS || 0, c.necroAncestorBuffDurationS || 0);
+    }
   }
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;

@@ -112,7 +112,17 @@ export function createUpgradeScreen() {
       const meta = o.fallback
         ? ''
         : `<span class="cardmeta">${o.tag} · ${RARITY[o.rarity] || o.rarity}</span>`;
-      card.innerHTML = `<strong>${o.name}${plus}${lvl}</strong><span>${o.description}</span>${meta}`;
+      // Nekromant-V2 Phase 9 (Ist-Abgleich-Fund, nicht im Auftrag-Dateiliste
+      // genannt, aber ohne diese Datei ist "vor der Wahl sichtbar" technisch
+      // unmoeglich): ein Angebot mit tag==='gadget' ersetzt beim Nehmen
+      // still das aktuell ausgeruestete Gadget (run.js:
+      // applyUpgradeChoice()s generischer Hook) -- OHNE Warnung wuerde der
+      // Spieler sein Gadget unbemerkt verlieren (Testschritt 2).
+      const swapWarn =
+        o.tag === 'gadget' && ctx.equippedGadget && ctx.equippedGadget !== o.id
+          ? `<span class="pv-warn">Ersetzt: ${ctx.gadgetLabel?.(ctx.equippedGadget) ?? ctx.equippedGadget}</span>`
+          : '';
+      card.innerHTML = `<strong>${o.name}${plus}${lvl}</strong><span>${o.description}</span>${swapWarn}${meta}`;
       card.addEventListener('click', () => {
         el.classList.add('hidden');
         ctx.onPick(i);

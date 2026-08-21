@@ -202,6 +202,23 @@ export function onGhostRemoved(state, ghost, reason) {
     if (!necroCooldownReady(state, l.key, l.cooldownS)) continue;
     l.fn(state, ghost, reason, l.pureStack ? stackMult : 1);
   }
+
+  // ghost_092 "Blutiger Thron" (Nekromant-V2 Phase 9): "Verschmelzungen
+  // zaehlen fuer raumweite Spielerstapel als HALBER Geistertod. Sie loesen
+  // KEINE Heilung, Explosionen, Druckwellen oder Abklingzeitreduktion aus."
+  // -- deshalb bewusst NICHT ueber die normale reasons-Filterung oben (die
+  // wuerde JEDEN death_damage/death_expire-Listener treffen, auch jene mit
+  // einem Seiteneffekt), sondern ein zweiter, auf pureStack:true
+  // eingeschraenkter Durchlauf, unabhaengig von l.reasons (011/012/013
+  // deklarieren 'fusion' dort ohnehin nicht). Dasselbe Prinzip wie
+  // applyVirtualNecroDeaths(), nur mit halbem statt vollem Gewicht.
+  if (reason === 'fusion' && pc?.necroFusionHalfDeathForStacks) {
+    for (const l of state.necroListeners) {
+      if (!l.pureStack) continue;
+      if (!necroCooldownReady(state, l.key + '_fusion', l.cooldownS)) continue;
+      l.fn(state, ghost, reason, 0.5);
+    }
+  }
 }
 
 // ---- Virtuelle Tode (Pruefstein fuer die saubere Trennung) ---------------
@@ -565,6 +582,166 @@ export function buildNecroListeners(state, cfg) {
       },
     });
   }
+
+  // ---- Nekromant-V2 Phase 9 (Hybride und Aktivkarten, 20 Karten) ----------
+  // ghost_086 "Totenmarsch": Geistertod (Schaden/Ablauf -- Auftrag nennt
+  // ausdruecklich "Ablauf der Lebenszeit loest aus, Verschmelzung nicht",
+  // deshalb DEATH_REASONS statt der volleren countsAsGhostDeath-Liste, die
+  // auch 'sacrifice' einschliesst -- 'sacrifice' zaehlt hier bewusst NICHT
+  // separat aus, s. u.) gibt dem Hauptpanzer UND allen ueberlebenden
+  // Untertanen einen zeitlich befristeten Schadensbonus. Der Spieler-Anteil
+  // laeuft ueber einen eigenen Timed-Stack (necroDamagePct() liest ihn unten
+  // mit), der Untertanen-Anteil direkt als Feld auf jedem lebenden Geist
+  // (KEIN generischer Timed-Stack -- Geister haben keinen eigenen Speicher
+  // dafuer, Muster wie legionBulletBuffs).
+  if (cfg.necroHybridDeathPlayerDmgPct) {
+    L.push({
+      reasons: DEATH_REASONS, scope: 'room', key: 'necro086',
+      fn: (st) => {
+        addNecroTimedStack(st, '_timedHybridDeathDmg', cfg.necroHybridDeathPlayerDmgPct, cfg.necroHybridDeathBuffDurationS);
+        for (const g of st.ghosts) {
+          if (!g.alive) continue;
+          g.hybridBuffPct = cfg.necroHybridDeathGhostDmgPct;
+          g.hybridBuffUntil = st.time + cfg.necroHybridDeathBuffDurationS;
+        }
+      },
+    });
+  }
+
+  // ghost_087 "Erben der Front": ein sterbender Untertan ueberträgt einen
+  // Anteil seiner EIGENEN Basiswerte (nicht des Empfaengers!) an einen
+  // ZUFAELLIGEN Ueberlebenden -- bewusst als eigener, direkter Zuwachs auf
+  // cfg.maxHp/damage statt ueber ghost.js: applyFusionTransfer() (das
+  // rechnet den Zuwachs relativ zum EMPFAENGER-Basiswert, hier soll er aber
+  // vom STERBENDEN ausgehen -- zwei verschiedene Bezugsgroessen, deshalb
+  // eine eigene, kleine Rechnung statt einer geteilten Funktion mit
+  // widerspruechlicher Semantik).
+  if (cfg.necroHybridRandomTransferPct) {
+    L.push({
+      reasons: DEATH_REASONS, scope: 'room', key: 'necro087',
+      fn: (st, gh) => {
+        if (!gh) return;
+        const survivors = st.ghosts.filter((g) => g.alive);
+        if (survivors.length) {
+          const target = survivors[Math.floor(st.rng() * survivors.length)];
+          target.cfg.maxHp = Math.round(target.cfg.maxHp + gh.baseMaxHp * cfg.necroHybridRandomTransferPct);
+          target.cfg.damage = Math.round(target.cfg.damage + gh.baseDamage * cfg.necroHybridRandomTransferPct);
+        }
+        if (st.player?.alive && cfg.necroHybridRandomTransferShieldPct) {
+          const cap = st.player.cfg.maxHp;
+          st.player.shield = Math.min(cap, (st.player.shield || 0) + cap * cfg.necroHybridRandomTransferShieldPct);
+        }
+      },
+    });
+  }
+
+  // ghost_090 "Rueckkehr im Zorn": 25% Chance auf einen Ersatzuntertanen mit
+  // reduziertem Basiswert-Anteil -- der Ersatz selbst darf den Effekt nicht
+  // erneut ausloesen (isReplacement-Flag, in createGhost() nie gesetzt,
+  // ausschliesslich hier).
+  if (cfg.necroHybridReplacementChance) {
+    L.push({
+      reasons: DEATH_REASONS, scope: 'room', key: 'necro090',
+      fn: (st, gh) => {
+        if (!gh || gh.isReplacement) return;
+        if (st.rng() >= cfg.necroHybridReplacementChance) return;
+        const replacement = st.createReplacementGhost?.(gh, cfg);
+        if (replacement) replacement.isReplacement = true;
+      },
+    });
+  }
+
+  // ghost_091 "Lawine der Toten" (keystone): 3 Geistertode innerhalb von 5s
+  // -- dieselbe rollierende Fensterlogik wie ghost_034 "Requiem", aber ein
+  // EIGENES Zeitstempel-Array (necroAvalancheDeathTimes), damit sich beide
+  // Karten bei gleichzeitigem Besitz nicht gegenseitig den Zaehler leeren.
+  // WICHTIG: die Abklingzeit darf NICHT ueber das generische l.cooldownS
+  // laufen -- das wuerde schon die reine Zaehl-Buchfuehrung des ERSTEN Todes
+  // sperren (necroCooldownReady() setzt den Cooldown beim ERSTEN erlaubten
+  // Aufruf, bevor ueberhaupt 3 Tode gezaehlt werden konnten -- der 2./3. Tod
+  // im 5-s-Fenster kaeme nie mehr durch, weil die Abklingzeit 20s > 5s ist).
+  // Deshalb eine eigene, manuelle Abklingzeit (necroAvalancheCooldownUntil),
+  // erst gesetzt NACHDEM die Lawine wirklich ausgeloest hat -- Muster wie
+  // ghost_054s necroCoreCooldownUntil.
+  if (cfg.necroKeystoneAvalancheWindowS) {
+    L.push({
+      reasons: DEATH_REASONS, scope: 'room', key: 'necro091',
+      fn: (st) => {
+        if (st.time < (st.necroAvalancheCooldownUntil || 0)) return;
+        st.necroAvalancheDeathTimes = (st.necroAvalancheDeathTimes || []).filter(
+          (t) => st.time - t <= cfg.necroKeystoneAvalancheWindowS,
+        );
+        st.necroAvalancheDeathTimes.push(st.time);
+        if (st.necroAvalancheDeathTimes.length < cfg.necroKeystoneAvalancheCount) return;
+        st.necroAvalancheDeathTimes = [];
+        st.necroAvalancheCooldownUntil = st.time + (cfg.necroKeystoneAvalancheCooldownS || 0);
+        addNecroTimedStack(st, '_timedHybridAvalancheDmg', cfg.necroKeystoneAvalancheDmgPct, cfg.necroKeystoneAvalancheDurationS);
+        addNecroTimedStack(st, '_timedHybridAvalancheFR', cfg.necroKeystoneAvalancheFRPct, cfg.necroKeystoneAvalancheDurationS);
+        st.spawnFreeGhosts?.(cfg.necroKeystoneAvalancheSpawn, cfg.necroKeystoneAvalancheStatPct);
+      },
+    });
+  }
+
+  // ghost_097 "Thron aus Gebein" (keystone): JEDER Geistertod UND JEDE
+  // Verschmelzung (Auftrag: "Jeder Geistertod und jede Verschmelzung") --
+  // die EINZIGE Karte dieser Phase mit 'fusion' in ihren eigenen reasons,
+  // moeglich weil der generische Dispatcher jeden Listener unabhaengig
+  // filtert (die automatische _deaths-Buchfuehrung bleibt trotzdem fusion-
+  // frei, s. countsAsGhostDeath()). Gedeckelter, permanenter Raum-Stapel
+  // (Muster wie ghost_050s _legionAmmoExchange aus Phase 7 -- manueller
+  // Cap-Check vor dem Addieren, weil necroDamagePct() sonst unbegrenzt
+  // waechst).
+  if (cfg.necroKeystoneThroneDmgPct) {
+    L.push({
+      reasons: [...DEATH_REASONS, 'fusion'], scope: 'room', key: 'necro097',
+      fn: (st) => {
+        const cur = getNecroStack(st, 'room', '_hybridThroneDmg');
+        const cap = cfg.necroKeystoneThroneDmgCap || Infinity;
+        if (cur < cap) addNecroStack(st, 'room', '_hybridThroneDmg', Math.min(cfg.necroKeystoneThroneDmgPct, cap - cur));
+        if (st.player?.alive) {
+          const shieldCap = st.player.cfg.maxHp;
+          st.player.shield = Math.min(shieldCap, (st.player.shield || 0) + shieldCap * cfg.necroKeystoneThroneShieldPct);
+        }
+      },
+    });
+  }
+
+  // ghost_099 "Kroenungszug": stirbt ein ANDERER Untertan, wird die HAELFTE
+  // des aktuellen Champion-Bonus (5% je zu diesem Zeitpunkt noch lebendem
+  // ANDEREN Untertan) dauerhaft (bis Raumende) -- raumweit statt an eine
+  // Geist-Instanz gebunden, weil der Bonus die Kroenung ueberdauern soll,
+  // auch wenn ein anderer Untertan spaeter Champion wird.
+  if (cfg.necroCrownProcPerAllyPct && cfg.necroCrownProcHalfPermanent) {
+    L.push({
+      reasons: DEATH_REASONS, scope: 'room', key: 'necro099',
+      fn: (st) => {
+        const aliveOthers = st.ghosts.filter((g) => g.alive).length;
+        const currentBonus = cfg.necroCrownProcPerAllyPct * aliveOthers;
+        st.necroCoronationPermDmgPct = (st.necroCoronationPermDmgPct || 0) + currentBonus * 0.5;
+      },
+    });
+  }
+
+  // ghost_104 "Kreislauf der Verdammten" (keystone, Dreifach-Hybrid): JEDER
+  // Geistertod UND JEDE Verschmelzung zaehlen auf einen eigenen Schwellenwert
+  // -- eigener Stapel-Schluessel (necro104), damit er nicht mit dem
+  // allgemeinen '_deaths' (das ausdruecklich KEINE Verschmelzungen zaehlt)
+  // kollidiert.
+  if (cfg.necroKeystoneCircleThreshold) {
+    L.push({
+      reasons: [...DEATH_REASONS, 'fusion'], scope: 'room', key: 'necro104',
+      fn: (st) => {
+        const before = getNecroStack(st, 'room', '_circleCount');
+        addNecroStack(st, 'room', '_circleCount', 1);
+        const after = before + 1;
+        const n = countThresholdCrossings(before, after, cfg.necroKeystoneCircleThreshold);
+        if (n <= 0) return;
+        st.necroCircleGuaranteedRevive = true;
+        st.necroCircleReviveStatPct = cfg.necroKeystoneCircleReviveStatPct;
+        addNecroTimedStack(st, '_timedHybridCircleDmg', cfg.necroKeystoneCircleDmgPct, cfg.necroKeystoneCircleDurationS);
+      },
+    });
+  }
 }
 
 // Baseline-Schaden EINES Untertanen desselben Quelltyps OHNE jede
@@ -585,23 +762,45 @@ function resolveGhostBaselineDamage(state, sourceType) {
 // zeitlich befristeten Quellen (021/034). Bewusst eine feste, kleine
 // Aufzaehlung statt eines gemeinsamen Schluessels (s. Kopfkommentar Datei:
 // verschiedene Karten duerfen sich nicht gegenseitig ueberschreiben).
+// Nekromant-V2 Phase 9: fuenf weitere zeitlich befristete Quellen
+// (086/091/095/096/104/105 -- Gadget-Buffs UND Hybrid-/Keystone-Karten
+// teilen sich dieselbe kleine, feste Aufzaehlung, kein neuer Mechanismus).
 export function necroDamagePct(state) {
   return (
     getNecroStack(state, 'room', '_pctDamage') +
+    getNecroStack(state, 'room', '_hybridThroneDmg') +
     getNecroTimedStack(state, '_timedDmgErbschaft') +
-    getNecroTimedStack(state, '_timedRequiemDmg')
+    getNecroTimedStack(state, '_timedRequiemDmg') +
+    getNecroTimedStack(state, '_timedHybridDeathDmg') +
+    getNecroTimedStack(state, '_timedHybridAvalancheDmg') +
+    getNecroTimedStack(state, '_timedHybridCircleDmg') +
+    getNecroTimedStack(state, '_timedHybridSacrificeDmg') +
+    getNecroTimedStack(state, '_timedHybridChampSacrificeDmg') +
+    getNecroTimedStack(state, '_timedSoulbondBuff') +
+    getNecroTimedStack(state, '_timedAncestorDmg') +
+    // ghost_088 "Blutige Formation": +X% je AKTIVEM Untertan -- LIVE aus dem
+    // Legion-Cache (Phase 7, "nicht pro Frame") gelesen statt eines eigenen
+    // Timed-Stacks, weil der Wert sich automatisch mit der Anzahl aendert.
+    (state.player?.cfg?.necroHybridPerAllyDmgPct || 0) * (state.necroActiveGhostCount || 0)
+    // ghost_099s state.necroCoronationPermDmgPct wirkt NICHT hier, sondern
+    // ausschliesslich auf den CHAMPION (ghost.js: updateGhosts()) -- der
+    // Kartentext sagt "Der Champion erhaelt...", nicht der Hauptpanzer.
   );
 }
 export function necroFireRatePct(state) {
   return (
     getNecroStack(state, 'room', '_pctFireRate') +
     getNecroTimedStack(state, '_timedFireRateFuel') +
-    getNecroTimedStack(state, '_timedRequiemFireRate')
+    getNecroTimedStack(state, '_timedRequiemFireRate') +
+    getNecroTimedStack(state, '_timedHybridAvalancheFR') +
+    getNecroTimedStack(state, '_timedHybridSacrificeFR') +
+    getNecroTimedStack(state, '_timedHybridChampSacrificeFR') +
+    getNecroTimedStack(state, '_timedAncestorFR')
   );
 }
 export function necroSpeedPct(state) {
   return getNecroStack(state, 'room', '_pctSpeed') + getNecroTimedStack(state, '_timedRequiemSpeed');
 }
 export function necroResistBonus(state) {
-  return getNecroTimedStack(state, '_timedResistHaerte');
+  return getNecroTimedStack(state, '_timedResistHaerte') + getNecroTimedStack(state, '_timedHybridChampSacrificeResist');
 }

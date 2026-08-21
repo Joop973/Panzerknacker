@@ -2,8 +2,8 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v112';
-const PREV_CACHE = 'panzerknacker-v111'; // bleibt fuer eine evtl. offene Alt-Seite intakt
+const CACHE = 'panzerknacker-v113';
+const PREV_CACHE = 'panzerknacker-v112'; // bleibt fuer eine evtl. offene Alt-Seite intakt
 
 const ASSETS = [
   './',
@@ -27,6 +27,7 @@ const ASSETS = [
   'data/limits.json',
   'data/sounds.json',
   'data/status.json',
+  'data/upgrades_necro.json',
   'src/config.js',
   'src/main.js',
   'src/core/audio.js',
@@ -46,7 +47,9 @@ const ASSETS = [
   'src/game/collision.js',
   'src/game/generator.js',
   'src/game/mine.js',
+  'src/game/mortar.js',
   'src/game/ghost.js',
+  'src/game/necro.js',
   'src/game/run.js',
   'src/game/upgradepool.js',
   'src/game/state.js',

@@ -8,9 +8,9 @@
 import { resolveCircleWalls } from './collision.js';
 import { createBullet } from './bullet.js';
 import { createMine } from './mine.js';
-import { createGhost, occupiedGhostSlots, pushGhost } from './ghost.js';
+import { createGhost, occupiedGhostSlots, pushGhost, killGhost } from './ghost.js';
 import { statusSpeedMult } from './status.js';
-import { necroDamagePct, necroFireRatePct, necroSpeedPct } from './necro.js';
+import { necroDamagePct, necroFireRatePct, necroSpeedPct, addNecroTimedStack } from './necro.js';
 import { CELL } from '../config.js';
 
 let nextTankId = 1;
@@ -647,6 +647,47 @@ export function useGadget(tank, state, aimOverride) {
     used = true;
   } else if (g === 'trap_wall') {
     used = placeTrapWall(tank, state, scfg);
+  } else if (g === 'ghost_031') {
+    // "Maertyrerbefehl": opfert ALLE aktiven Untertanen. Je geopfertem
+    // Untertan haelt der Bonus 10s -- die Timed-Stack-API (addNecroTimedStack)
+    // erneuert nur die DAUER bei erneutem Aufruf, deshalb wird die gesamte
+    // Staerke (Anzahl x Prozentsatz) in EINEM Aufruf gesetzt statt N Aufrufen,
+    // die sich sonst gegenseitig ueberschreiben wuerden.
+    const victims = state.ghosts.filter((x) => x.alive);
+    // Nichts zu opfern -> die Karte tut nichts, verbraucht aber auch keine
+    // Abklingzeit (Muster: layMine() gibt ebenfalls false zurueck, wenn
+    // nichts ausgeloest werden konnte).
+    used = victims.length > 0;
+    if (used) {
+      for (const v of victims) killGhost(state, v, 'sacrifice');
+      addNecroTimedStack(state, '_timedHybridSacrificeDmg', victims.length * (tank.cfg.necroActiveDmgPct || 0), tank.cfg.necroActiveDurationS || 0);
+      addNecroTimedStack(state, '_timedHybridSacrificeFR', victims.length * (tank.cfg.necroActiveFireRatePct || 0), tank.cfg.necroActiveDurationS || 0);
+    }
+  } else if (g === 'ghost_089') {
+    // "Wechselopfer": opfert NUR den Untertan mit dem niedrigsten Leben.
+    const alive = state.ghosts.filter((x) => x.alive);
+    used = alive.length > 0;
+    if (used) {
+      let lowest = alive[0];
+      for (const x of alive) if (x.hp < lowest.hp) lowest = x;
+      killGhost(state, lowest, 'sacrifice');
+      for (const x of alive) {
+        if (x === lowest || !x.alive) continue;
+        x.hp = Math.min(x.cfg.maxHp, x.hp + x.cfg.maxHp * (tank.cfg.necroSacrificeHealPct || 0));
+      }
+      tank.shield = (tank.shield || 0) + tank.cfg.maxHp * (tank.cfg.necroSacrificeShieldPct || 0);
+      state.necroGuaranteedReviveUntil = state.time + (tank.cfg.necroSacrificeGuaranteeWindowS || 0);
+    }
+  } else if (g === 'ghost_096') {
+    // "Koenigliches Opfer": opfert AUSSCHLIESSLICH den Champion.
+    const champion = state.ghosts.find((x) => x.alive && x.isChampion);
+    used = !!champion;
+    if (used) {
+      killGhost(state, champion, 'sacrifice');
+      addNecroTimedStack(state, '_timedHybridChampSacrificeDmg', tank.cfg.necroSacrificeChampionDmgPct || 0, tank.cfg.necroSacrificeChampionDurationS || 0);
+      addNecroTimedStack(state, '_timedHybridChampSacrificeFR', tank.cfg.necroSacrificeChampionFRPct || 0, tank.cfg.necroSacrificeChampionDurationS || 0);
+      addNecroTimedStack(state, '_timedHybridChampSacrificeResist', tank.cfg.necroSacrificeChampionResist || 0, tank.cfg.necroSacrificeChampionDurationS || 0);
+    }
   }
   if (used) tank.gadgetCooldown = scfg.cooldownS ?? 4;
   return used;

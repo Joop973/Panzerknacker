@@ -84,8 +84,17 @@ export function createShopScreen() {
       const lvl = o.fallback || o.isUnique ? '' : ` (Stufe ${o.level})`;
       // Grundsteinumbau Phase 7: "+"-Suffix je Rastplatz-Stufe.
       const plus = '+'.repeat(o.stufe || 0);
+      // Nekromant-V2 Phase 9: dieselbe "Ersetzt dein Gadget"-Warnung wie im
+      // Upgrade-Screen -- ein im Shop GEKAUFTES Kartenregal-Angebot laeuft
+      // ueber denselben applyUpgradeChoice()-Hook (run.js) und ersetzt das
+      // Gadget ebenso still.
+      const equippedNow = ctx.getEquippedSecondary?.();
+      const swapWarn =
+        o.tag === 'gadget' && equippedNow && equippedNow !== o.id
+          ? `<span class="pv-warn">Ersetzt: ${ctx.secondariesData?.[equippedNow]?.label || equippedNow}</span>`
+          : '';
       card.innerHTML =
-        `<strong>${o.name}${plus}${lvl}</strong><span>${o.description}</span>` +
+        `<strong>${o.name}${plus}${lvl}</strong><span>${o.description}</span>${swapWarn}` +
         `<span class="price">${ctx.costs.shopCard}⚙</span>`;
       if (scrap < ctx.costs.shopCard) {
         card.classList.add('tooexpensive');

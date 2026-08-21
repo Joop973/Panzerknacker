@@ -726,7 +726,10 @@
       "description": "Ersetzt dein Gadget. Abklingzeit 24 Sekunden: Opfert alle aktiven Untertanenpanzer. Je geopfertem Untertanen erhält der Hauptpanzer 10 Sekunden lang +8 % Schaden und +5 % Feuerrate. Die Opferung zählt als Geistertod.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroActiveKind": "sacrifice_all",
+        "necroActiveDmgPct": 0.08,
+        "necroActiveFireRatePct": 0.05,
+        "necroActiveDurationS": 10
       },
       "_note": {
         "buildrolle": "Burst",
@@ -2037,7 +2040,9 @@
       "description": "Jeder Geistertod gewährt dem Hauptpanzer +4 % Schaden und allen überlebenden Untertanenpanzern +6 % Schaden für 8 Sekunden. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroHybridDeathPlayerDmgPct": 0.04,
+        "necroHybridDeathGhostDmgPct": 0.06,
+        "necroHybridDeathBuffDurationS": 8
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -2059,7 +2064,8 @@
       "description": "Ein sterbender Untertanenpanzer überträgt 15 % seines Basis-Lebens und Basis-Schadens auf einen zufälligen Überlebenden. Der Hauptpanzer erhält zusätzlich 3 % seines maximalen Lebens als Schild.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroHybridRandomTransferPct": 0.15,
+        "necroHybridRandomTransferShieldPct": 0.03
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -2081,7 +2087,10 @@
       "description": "Der Hauptpanzer verursacht +5 % Schaden je aktivem Untertanenpanzer, und seine Flanken- und Hecktreffer zusätzlich +10 %. Der nächste wiederbelebte Untertan erhält +8 % Schaden je Geistertod im aktuellen Raum, höchstens +80 %.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroHybridPerAllyDmgPct": 0.05,
+        "necroHybridFlankBonusPct": 0.1,
+        "necroHybridReviveDeathBonusPct": 0.08,
+        "necroHybridReviveDeathBonusCap": 0.8
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -2105,7 +2114,10 @@
       "description": "Ersetzt dein Gadget. Abklingzeit 18 Sekunden: Opfert den Untertanenpanzer mit dem niedrigsten Leben. Alle übrigen heilen 20 %, der Hauptpanzer erhält einen Schild über 10 % seines maximalen Lebens, und die nächste Wiederbelebungsprobe innerhalb von 8 Sekunden gelingt garantiert. Die Opferung zählt als Geistertod.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroActiveKind": "sacrifice_lowest",
+        "necroSacrificeHealPct": 0.2,
+        "necroSacrificeShieldPct": 0.1,
+        "necroSacrificeGuaranteeWindowS": 8
       },
       "_note": {
         "buildrolle": "Sustain",
@@ -2128,7 +2140,9 @@
       "description": "Bei einem Geistertod besteht 25 % Chance, einen Ersatzuntertanen mit 50 % Basiswert-Anteil und 6 Sekunden Lebenszeit erscheinen zu lassen. Dieser Ersatz kann den Effekt nicht erneut auslösen.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroHybridReplacementChance": 0.25,
+        "necroHybridReplacementStatPct": 0.5,
+        "necroHybridReplacementLifetimeS": 6
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -2150,7 +2164,14 @@
       "description": "Sterben 3 Untertanenpanzer innerhalb von 5 Sekunden, erscheinen 2 kostenlose Untertanen mit 60 % Basiswert-Anteil, und der Hauptpanzer erhält 8 Sekunden +20 % Schaden und +20 % Feuerrate. Abklingzeit 20 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroKeystoneAvalancheWindowS": 5,
+        "necroKeystoneAvalancheCount": 3,
+        "necroKeystoneAvalancheSpawn": 2,
+        "necroKeystoneAvalancheStatPct": 0.6,
+        "necroKeystoneAvalancheDmgPct": 0.2,
+        "necroKeystoneAvalancheFRPct": 0.2,
+        "necroKeystoneAvalancheDurationS": 8,
+        "necroKeystoneAvalancheCooldownS": 20
       },
       "_note": {
         "buildrolle": "Burst"
@@ -2173,7 +2194,7 @@
       "description": "Verschmelzungen zählen für raumweite Spielerstapel als halber Geistertod. Sie lösen keine Heilung, Explosionen, Druckwellen oder Abklingzeitreduktion aus.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroFusionHalfDeathForStacks": true
       },
       "_note": {
         "buildrolle": "Engine"
@@ -2195,7 +2216,9 @@
       "description": "Nach jeweils 5 Abschüssen des Champions erscheint ein zerbrechlicher Untertanenpanzer mit 25 % Basiswert-Anteil und 4 Sekunden Lebenszeit. Mit Einziger Thron verschmilzt er sofort.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroHybridChampionKillsPerSpawn": 5,
+        "necroHybridChampionSpawnStatPct": 0.25,
+        "necroHybridChampionSpawnLifetimeS": 4
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -2217,7 +2240,8 @@
       "description": "Stirbt der Champion, erhält der Hauptpanzer bis Raumende 25 % von dessen angesammeltem Schadensbonus als eigenen Schaden und einen Schild in Höhe von 25 % seines angesammelten Lebensbonus.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownDeathDmgTransferPct": 0.25,
+        "necroCrownDeathHpShieldPct": 0.25
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -2239,7 +2263,9 @@
       "description": "25 % des Schadens am Hauptpanzer werden auf den Champion umgeleitet. Jeder umgeleitete Treffer gewährt dem Hauptpanzer 5 Sekunden +3 % Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroSoulbondPct": 0.25,
+        "necroSoulbondBuffPct": 0.03,
+        "necroSoulbondBuffDurationS": 5
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -2262,7 +2288,11 @@
       "description": "Ersetzt dein Gadget. Abklingzeit 30 Sekunden: Opfert den Champion. Der Hauptpanzer erhält 10 Sekunden +40 % Schaden, +25 % Feuerrate und +20 Punkte Schadensresistenz. Die Opferung zählt als Geistertod.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroActiveKind": "sacrifice_champion",
+        "necroSacrificeChampionDmgPct": 0.4,
+        "necroSacrificeChampionFRPct": 0.25,
+        "necroSacrificeChampionResist": 20,
+        "necroSacrificeChampionDurationS": 10
       },
       "_note": {
         "buildrolle": "Burst",
@@ -2285,7 +2315,9 @@
       "description": "Jeder Geistertod und jede Verschmelzung gewähren dem Hauptpanzer bis Raumende +3 % Schaden und einen Schild in Höhe von 1,5 % seines maximalen Lebens, höchstens +60 % Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroKeystoneThroneDmgPct": 0.03,
+        "necroKeystoneThroneShieldPct": 0.015,
+        "necroKeystoneThroneDmgCap": 0.6
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -2307,7 +2339,9 @@
       "description": "Würde bei vollem Geisterlimit ein weiterer Untertanenpanzer erscheinen, verschmilzt der schwächste in den Champion und überträgt 20 % Basis-Leben sowie Basis-Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCapFusion": true,
+        "necroCapFusionHpPct": 0.2,
+        "necroCapFusionDamagePct": 0.2
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -2329,7 +2363,8 @@
       "description": "Der Champion erhält +5 % Schaden für jeden anderen aktiven Untertanenpanzer. Stirbt ein anderer Untertan, wird die Hälfte des aktuellen Bonus bis Raumende dauerhaft.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownProcPerAllyPct": 0.05,
+        "necroCrownProcHalfPermanent": true
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -2351,7 +2386,7 @@
       "description": "Stirbt der Champion, während ein weiterer Untertanenpanzer aktiv ist, übernimmt der gesündeste Überlebende 50 % der raumweiten Kronen- und Fusionsboni. Einmal pro Raum.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroSuccessionPct": 0.5
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -2374,7 +2409,7 @@
       "description": "Abschüsse durch Untertanenpanzer lösen eine eigene Wiederbelebungsprobe mit 20 % Chance aus. Der so entstehende Untertan behält eine Eigenschaft des Originals: Mörser bleiben Mörser, schnelle Typen bleiben schnell.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroHybridGhostKillReviveChance": 0.2
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -2397,7 +2432,9 @@
       "description": "Der Champion erhält +10 Punkte Schadensresistenz je anderem aktiven Untertanenpanzer. Ist er allein, erhält er stattdessen alle 5 Sekunden einen Schild über 10 % seines maximalen Lebens.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownGuardResistPerAlly": 10,
+        "necroCrownGuardSoloShieldPct": 0.1,
+        "necroCrownGuardSoloIntervalS": 5
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -2420,7 +2457,10 @@
       "description": "Je Geisterplatz über 3 erhält der Champion +8 % Schaden und +8 % maximales Leben. Ist außer ihm kein Platz belegt, zusätzlich +25 % Feuerrate.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroCrownMassDmgPerSlot": 0.08,
+        "necroCrownMassHpPerSlot": 0.08,
+        "necroCrownMassSlotThreshold": 3,
+        "necroCrownMassSoloFireRatePct": 0.25
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -2444,7 +2484,10 @@
       "description": "Nach insgesamt 5 Geistertoden oder Verschmelzungen gelingt die nächste Wiederbelebungsprobe garantiert, und der Untertanenpanzer erscheint mit +50 % Basiswert-Anteil. Gleichzeitig erhält der Hauptpanzer 8 Sekunden +15 % Schaden.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroKeystoneCircleThreshold": 5,
+        "necroKeystoneCircleReviveStatPct": 0.5,
+        "necroKeystoneCircleDmgPct": 0.15,
+        "necroKeystoneCircleDurationS": 8
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -2469,7 +2512,12 @@
       "description": "Zu Beginn jedes Raums erscheint kostenlos ein Urahnenuntertan mit 100 % Basiswert-Anteil eines Gegnertyps des aktuellen Akts und 20 Sekunden Lebenszeit. Stirbt oder verschmilzt er, erhält der Hauptpanzer 10 Sekunden +15 % Schaden und +15 % Feuerrate.",
       "signatureClass": "c_necro",
       "core": {
-        "_todo": "effect"
+        "necroStartGhostPct": 1.0,
+        "necroStartGhostLifetimeS": 20,
+        "necroAncestorBuffOnDeath": true,
+        "necroAncestorBuffDmgPct": 0.15,
+        "necroAncestorBuffFRPct": 0.15,
+        "necroAncestorBuffDurationS": 10
       },
       "_note": {
         "buildrolle": "Skalierung",
