@@ -869,10 +869,13 @@ export function createState(data, tiles, opts) {
         const necroKill = pc.necromancer && (killer === state.player || killer?.isGhost);
         const isBoss = isBossCfg(tank.cfg);
         const isElite = !!(tank.affixes && tank.affixes.length > 0);
-        // ghost_056 "Elite-Reaktivierung" (Nekromant-V2 Phase 7): erlaubt
-        // Wiederbelebungsproben ausdruecklich AUCH bei Eliten -- Bosse bleiben
-        // in JEDEM Fall ausgeschlossen (Auftrag: "Bosse bleiben ausgeschlossen").
-        const canRevive = necroKill && !isBoss && (!isElite || pc.necroEliteRevive);
+        // Champion-/Nekromant-Nachschliff Abschnitt 12 (UEBERARBEITET):
+        // Elitegegner sind GENERELL wiederbelebbar, nicht mehr nur mit
+        // ghost_056 "Elite-Reaktivierung" -- die Karte hebt seither nur noch
+        // den Basiswert-Anteil auf 90 % an (s. overrides weiter unten). Bosse
+        // bleiben in JEDEM Fall ausgeschlossen (Auftrag: "Bosse bleiben
+        // ausgeschlossen").
+        const canRevive = necroKill && !isBoss;
         if (canRevive) {
           // Seelenruf/Geisterlegion/Armee der Toten (Upgradepool-v2 Phase 8,
           // ghost_036/060 seit Phase 7): ghostMaxAdd erhoeht das Basislimit
@@ -940,17 +943,21 @@ export function createState(data, tiles, opts) {
           let spawnedAny = false;
           for (let i = 0; i < n; i++) {
             if (occupiedGhostSlots(state) >= ghostCap && !pc.necroCapFusion) break;
-            // ghost_056: ein wiederbelebter ELITE-Gegner erscheint mit einem
-            // eigenen (hoeheren) Basiswert-Anteil und belegt 2 Plaetze.
-            // ghost_104: die GARANTIERTE Probe (falls sie diese war) spawnt
-            // mit einem eigenen, hoeheren Basiswert-Anteil -- nur beim ersten
-            // Durchlauf (i===0), die Garantie deckt genau EINEN Untertan.
-            const overrides =
-              isElite && pc.necroEliteRevive
-                ? { baseStatPctOverride: pc.necroEliteReviveStatPct, slotCost: pc.necroEliteReviveSlots || 2 }
-                : i === 0 && guaranteed && state.necroCircleReviveStatPct
-                  ? { baseStatPctOverride: state.necroCircleReviveStatPct }
-                  : null;
+            // Jeder Elite-Untertan belegt strukturell 2 Geisterplaetze (er ist
+            // per Definition ein staerkerer Gegner) -- UNABHAENGIG von
+            // ghost_056. ghost_056 "Elite-Reaktivierung" hebt DARUEBER hinaus
+            // nur noch den Basiswert-Anteil von 50 % auf 90 % an (Auftrag
+            // Abschnitt 10: "65 % -> 90 %"); ohne die Karte erscheint ein
+            // wiederbelebter Elite-Gegner mit dem normalen Anteil wie jeder
+            // andere Untertan. ghost_104: die GARANTIERTE Probe (falls sie
+            // diese war) spawnt mit einem eigenen, hoeheren Basiswert-Anteil
+            // -- nur beim ersten Durchlauf (i===0), die Garantie deckt genau
+            // EINEN Untertan.
+            const overrides = isElite
+              ? { baseStatPctOverride: pc.necroEliteRevive ? pc.necroEliteReviveStatPct : undefined, slotCost: pc.necroEliteReviveSlots || 2 }
+              : i === 0 && guaranteed && state.necroCircleReviveStatPct
+                ? { baseStatPctOverride: state.necroCircleReviveStatPct }
+                : null;
             // Nekromant-V2 Phase 8: pushGhost() statt eines direkten
             // state.ghosts.push() -- EINZIGER Ort, der "Einziger Thron"
             // (necroUniqueThrone, ghost_071) auswertet. An allen sechs
@@ -1620,6 +1627,11 @@ export function stepState(state, cmd, dt) {
         // Anteil laeuft durch dieselbe Resistenz-/Schildpool-Kette wie jeder
         // andere Geistertreffer (applyResistToAmount/absorbWithShieldPool,
         // Phase 2), damit der Champion seine eigene Abwehr behaelt.
+        // ghost_095 "Seelenband" (Nachschliff Abschnitt 10, UEBERARBEITET):
+        // NUR noch die Umleitung selbst -- der zusaetzliche zeitlich
+        // befristete Schadensbonus fuer den Hauptpanzer ist ersatzlos
+        // entfernt. Ohne lebenden Champion passiert nichts (kein Fehl-
+        // umleiten ins Leere, s. Auftrag).
         if (t === state.player && !own && state.player.cfg.necroSoulbondPct) {
           const champion = state.ghosts.find((g) => g.alive && g.isChampion);
           if (champion) {
@@ -1629,12 +1641,6 @@ export function stepState(state, cmd, dt) {
             dmg = absorbWithShieldPool(state, champion, dmg);
             champion.hp -= dmg;
             if (champion.hp <= 0) killGhost(state, champion);
-            addNecroTimedStack(
-              state,
-              '_timedSoulbondBuff',
-              state.player.cfg.necroSoulbondBuffPct || 0,
-              state.player.cfg.necroSoulbondBuffDurationS || 0,
-            );
           }
         }
         state.applyDamage(t, schaden, cause, trefferMeta);

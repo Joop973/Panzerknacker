@@ -13,6 +13,7 @@ import {
   createRun,
   stepRun,
   chooseUpgrade,
+  chooseBossReward,
   enterRoom,
   totalRooms,
   continueEndless,
@@ -57,6 +58,7 @@ import { createRenderer, renderOpts } from './render/renderer.js';
 import { createTracks } from './render/tracks.js';
 import { createDebugOverlay } from './render/debug.js';
 import { createHud } from './ui/hud.js';
+import { initGlossary, installGlossaryTooltips } from './ui/glossary.js';
 import * as telemetry from './core/telemetry.js';
 
 async function loadData() {
@@ -83,6 +85,8 @@ async function loadData() {
     // gar nicht. Ohne diesen Eintrag koennte KEINE der 105 Karten (Phasen
     // 1-8 dieses Auftrags) jemals in einem echten Run erscheinen.
     'upgrades_necro',
+    // Champion-/Nekromant-Nachschliff Abschnitt 13: zentrales Glossar.
+    'glossary',
   ];
   const out = [];
   for (const n of names) {
@@ -124,7 +128,15 @@ async function init() {
     soundsData,
     statusData,
     necroUpgradesData,
+    glossaryData,
   ] = await loadData();
+  // Champion-/Nekromant-Nachschliff Abschnitt 13: Glossar-Begriffe EINMAL
+  // laden, dann JEDER Kartentext/UI-Text kann highlightTerms() darauf
+  // aufbauen (upgradescreen.js/roomscreens.js). installGlossaryTooltips()
+  // haengt einen einzigen, delegierten Klick-Listener ans Dokument -- deckt
+  // auch spaeter neu gerenderte Karten automatisch ab.
+  initGlossary(glossaryData);
+  installGlossaryTooltips();
   // Nekromant-V2 Phase 9: der 105-Karten-Signaturpool wird in den ALLGEMEINEN
   // Angebotspool gemischt (nicht als zweites Parallelsystem) -- jede Karte
   // traegt bereits signatureClass: "c_necro" (upgradepool.js filtert seit
@@ -221,6 +233,7 @@ async function init() {
   let run = null;
   let lastRoomState = null;
   let upgradeShown = false;
+  let bossRewardShown = false; // Abschnitt 17: garantierte 3-Legendaer-Belohnung nach jedem Boss
   let eventShown = false;
   let workshopShown = false;
   let mapShown = false;
@@ -459,6 +472,7 @@ async function init() {
   // Alle Raum-Overlays verstecken + Anzeige-Flags zuruecksetzen.
   function hideRoomScreens() {
     upgradeScreen.hide();
+    bossRewardShown = false;
     preview.hide();
     eventScreen.hide();
     workshopScreen.hide();
@@ -791,6 +805,46 @@ async function init() {
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shieldCharge', amount: costs.shieldCharge });
           return ok;
         },
+      });
+    }
+
+    // Boss-Belohnung (Abschnitt 17): derselbe Upgrade-Screen, aber immer
+    // GENAU die drei gezogenen legendaeren Karten ohne Schrott-Aktionen
+    // (Reroll/Verbannen/4. Karte/Schild waeren hier sinnwidrig -- die
+    // Auswahl ist bereits die garantierte Sonderbelohnung). Endet ueber
+    // chooseBossReward() statt chooseUpgrade() -- kein afterRoomDone(), der
+    // Bossraum ist schon geraeumt.
+    if (run.phase === 'bossReward' && !bossRewardShown) {
+      bossRewardShown = true;
+      upgradeScreen.show({
+        costs: run.data.balance.scrap.cost,
+        showActions: false,
+        title: 'Boss-Beute',
+        subtitle: 'Wähle eine von drei legendären Karten.',
+        getOffers: () => run.pendingOffers,
+        getScrap: () => run.scrap,
+        canFourth: () => false,
+        transformDefs: run.data.transformations?.transformations,
+        tagCounts: run.tagCounts,
+        unlocked: run.transformations,
+        threshold: run.data.transformations?.threshold,
+        hasDash: (run.upgrades.dash || 0) > 0,
+        equippedGadget: run.equippedGadget,
+        gadgetLabel: (id) => run.data.secondaries?.[id]?.label || id,
+        onPick: (idx) => {
+          const offers = run.pendingOffers;
+          telemetry.recordUpgrade({
+            chosen: { id: offers[idx].id, name: offers[idx].name, tag: offers[idx].tag, rarity: offers[idx].rarity },
+            rejected: [],
+          });
+          chooseBossReward(run, idx);
+          updateSecondaryLabel();
+          bossRewardShown = false;
+        },
+        onReroll: () => false,
+        onBan: () => false,
+        onFourth: () => false,
+        onShield: () => false,
       });
     }
 

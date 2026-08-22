@@ -31,10 +31,13 @@
 // aelterer) zum Champion. Basiswerte (Abschnitt 2.2): 70 % von Spieler-
 // maxHp/-Schaden zum Befoerderungszeitpunkt, NICHT vom geerbten Gegnertyp.
 // Der Champion belegt KEINEN normalen Geisterplatz (occupiedGhostSlots()
-// schliesst isChampion explizit aus) und hat standardmaessig KEINE
-// Lebensdauer (ueberlebt bis zum Tod oder Raumende, s. updateGhosts()).
-// NICHT zu verwechseln mit dem folgenden, aelteren, kartengebundenen
-// `isCommander`-Mechanismus (aktuell tot, s. u.).
+// schliesst isChampion explizit aus) und hat eine BEGRENZTE Lebensdauer wie
+// ein gewoehnlicher Geist (Champion-Nachschliff Abschnitt 3.2: dieselbe
+// Basiskonstante + eigene Champion-Lebensdauer-Karten, "Ewiger Thron" bleibt
+// die einzige Ausnahme, die sie wieder auf unendlich setzt), s.
+// promoteToChampion()/updateGhosts(). NICHT zu verwechseln mit dem
+// folgenden, aelteren, kartengebundenen `isCommander`-Mechanismus (aktuell
+// tot, s. u.).
 //
 // Upgradepool-v2 Phase 8 (Signaturtopf Nekromant): die 18 sig_necro_*-Karten
 // wirkten NICHT auf den Spieler selbst, sondern ueber ghost*-core-Schluessel
@@ -266,20 +269,13 @@ export function createGhost(state, x, y, heading = 0, sourceType, overrides) {
     championKills: 0, // ghost_093: Abschuesse NUR waehrend dieser Geist Champion war
     crownMassHpBonus: 0, // ghost_103: live nachgefuehrter, delta-basierter Bonus
   };
-  // ghost_080 "Kronenerbe" (Nekromant-V2 Phase 8): stirbt der Champion, merkt
-  // killGhost() 60% seiner Fusionsboni (state.necroCrownHeir) fuer ein
-  // 10-Sekunden-Fenster vor -- der NAECHSTE erscheinende Untertan (gleich
-  // welcher Erzeugungsstelle) erbt sie hier, EINMAL pro Raum ("Einmal pro
-  // Raum" -- necroCrownHeirUsed sperrt weitere Erbschaften). Kronenboni
-  // muessen NICHT uebertragen werden -- der Erbe liest sie automatisch aus
-  // demselben Spieler-cfg, sobald ER selbst isChampion wird.
-  const heir = state.necroCrownHeir;
-  if (heir && !state.necroCrownHeirUsed && state.time <= heir.deadline) {
-    state.necroCrownHeirUsed = true;
-    grantFusionBonus(g, heir.fusionHpBonus, heir.fusionDamageBonus, heir.fusionFireRateBonus);
-    g.fusionCount += heir.fusionCount;
-    g.hp = g.cfg.maxHp;
-  }
+  // ghost_080 "Kronenerbe" (UEBERARBEITET, Abschnitt 10): die Erbschaft wird
+  // seit dem Champion-Nachschliff nicht mehr hier beim Erscheinen eines
+  // BELIEBIGEN Geistes konsumiert, sondern erst in promoteToChampion(), wenn
+  // wirklich jemand zum (Nachfolge-)Champion wird -- das deckt jetzt auch den
+  // Fall ab, dass ein bereits VORHANDENER gewoehnlicher Geist unmittelbar
+  // befoerdert wird (der bisherige, rein spawn-gebundene Zeitfenster-
+  // Mechanismus haette diesen Fall nie erreicht, s. Kopfkommentar Funktion).
   return g;
 }
 
@@ -309,11 +305,26 @@ function promoteToChampion(state, g) {
   // gewoehnlicher Geist.
   g.baseMaxHp = maxHp;
   g.baseDamage = damage;
-  // Champion hat standardmaessig KEINE Lebensdauer (Abschnitt 2.4) -- ein
-  // frueheres Vorleben als gewoehnlicher Geist hatte ggf. schon eine
-  // laufende Lebenszeit, die hier ausdruecklich aufgehoben wird.
-  g.lifetime = Infinity;
-  g.lifetimeMax = Infinity;
+  // Champion-Lebenszeit (Nachschliff Abschnitt 3.2, ANGEPASST -- der Champion
+  // hat wieder eine BEGRENZTE Lebensdauer statt standardmaessig unendlich zu
+  // leben): Basiswert = dieselbe gemeinsame Konstante wie bei gewoehnlichen
+  // Untertanen (data/balance.json: ghost.lifetimeS), plus ghost_005s
+  // "Laengerer Eid" (ghostLifetimeAdd, wirkt jetzt auf BEIDE -- Auftrag
+  // Abschnitt 10) plus die vier neuen, Champion-EXKLUSIVEN Lebensdauer-Karten
+  // (necroCrownLifetimeAdd, Abschnitt 8). "Ewiger Thron" (ghost_083,
+  // necroCrownEternalLifetime) bleibt die EINZIGE, ausdrueckliche Ausnahme,
+  // die die Lebensdauer wieder auf unendlich setzt.
+  const eternal = !!playerCfg?.necroCrownEternalLifetime;
+  const championLifetimeMax = eternal
+    ? Infinity
+    : Math.max(
+        0.1,
+        (state.data.balance?.ghost?.lifetimeS ?? 12) +
+          (playerCfg?.ghostLifetimeAdd || 0) +
+          (playerCfg?.necroCrownLifetimeAdd || 0),
+      );
+  g.lifetime = championLifetimeMax;
+  g.lifetimeMax = championLifetimeMax;
   // Fusionsboni beginnen bei Null -- ein Vorleben als gewoehnlicher Geist
   // konnte selbst nie Gewinner einer Verschmelzung sein (nur Champions
   // verschmelzen andere in sich), es gibt also nichts zu uebernehmen.
@@ -321,6 +332,22 @@ function promoteToChampion(state, g) {
   g.fusionDamageBonus = 0;
   g.fusionFireRateBonus = 0;
   g.fusionCount = 0;
+  // Kronenerbe (ghost_080, UEBERARBEITET Abschnitt 10): "der naechste, sofort
+  // nachfolgende Champion" statt eines 10-Sekunden-Zeitfensters -- unter dem
+  // neuen, ausschliesslich SOFORTIGEN Nachfolgemodell (ensureChampion() wird
+  // synchron im selben killGhost()-Aufruf angestossen, s. dort) ist "der
+  // naechste erscheinende Untertan" exakt "der naechste befoerderte
+  // Champion", egal ob das ein schon existierender gewoehnlicher Geist oder
+  // ein brandneuer Spawn ist -- deshalb hier statt in createGhost()
+  // konsumiert. state.necroCrownHeir traegt keine deadline mehr.
+  const heir = state.necroCrownHeir;
+  if (heir && !state.necroCrownHeirUsed) {
+    state.necroCrownHeirUsed = true;
+    grantFusionBonus(g, heir.fusionHpBonus, heir.fusionDamageBonus, heir.fusionFireRateBonus);
+    g.fusionCount += heir.fusionCount;
+    g.hp = g.cfg.maxHp; // volle Auffuellung nach der Erbschaft
+    state.necroCrownHeir = null;
+  }
   // Permanente Kroenungsboni (ghost_061/063/068/083): genau EINMAL je
   // Champion-Instanz, direkt bei der Befoerderung -- unter dem neuen
   // stickyen Modell gibt es kein "erneutes Kroenen" derselben Instanz mehr,
@@ -432,23 +459,47 @@ function applyFusionTransfer(champion, loser, hpFrac, dmgFrac, frFrac) {
 // sich zwei unabhaengige Verschmelzungs-Karten nicht gegenseitig verzerren.
 export function fuseGhost(state, winner, loser, overrideFrac) {
   const pc = state.player?.cfg;
-  let hpFrac = overrideFrac?.hpFrac ?? pc?.necroFusionHpPct ?? 0.3;
-  let dmgFrac = overrideFrac?.dmgFrac ?? pc?.necroFusionDamagePct ?? 0.3;
-  let frFrac = overrideFrac?.frFrac ?? pc?.necroFusionFireRatePct ?? 0.12;
+  // Auftrag Abschnitt 4 (NEUE Baseline): JEDE Verschmelzung ueberträgt
+  // standardmaessig 100 % Basis-Leben/-Schaden/-Feuerrate des Verschmolzenen
+  // -- der Fallback ist deshalb `?? 1.0` statt der alten, viel niedrigeren
+  // Werte (0.3/0.3/0.12). Eine Karte kann diesen Wert weiterhin explizit
+  // UNTERSCHREIBEN (kein Kartenpool-Eintrag tut das aktuell), der Fallback
+  // greift nur, wenn KEINE Karte einen eigenen necroFusionHpPct/... Wert
+  // setzt.
+  let hpFrac = overrideFrac?.hpFrac ?? pc?.necroFusionHpPct ?? 1.0;
+  let dmgFrac = overrideFrac?.dmgFrac ?? pc?.necroFusionDamagePct ?? 1.0;
+  let frFrac = overrideFrac?.frFrac ?? pc?.necroFusionFireRatePct ?? 1.0;
   if (!overrideFrac) {
     // ghost_072 "Seelenauslese" (requires ghost_071): zusaetzlicher Anteil JE
-    // Verschmelzung, additiv zur Grundrate von 071.
+    // Verschmelzung, additiv zur Grundrate von 071. Einziges Schwert/Schild/
+    // Bogen (Abschnitt 6) nutzen DIESELBEN drei Felder -- alle vier Karten
+    // stapeln dadurch unbegrenzt miteinander, ohne eigenen Code.
     hpFrac += pc?.necroFusionHpPctBonus || 0;
     dmgFrac += pc?.necroFusionDamagePctBonus || 0;
     frFrac += pc?.necroFusionFireRatePctBonus || 0;
+    // ghost_071 "Einziger Thron" (Abschnitt 5, NEU): zusaetzlich +X % je
+    // BEREITS erfolgter Verschmelzung des Champions, OHNE Obergrenze -- die
+    // 1. Verschmelzung traegt noch keinen Bonus (winner.fusionCount ist zu
+    // diesem Zeitpunkt die Anzahl VORHERIGER Verschmelzungen, s.
+    // grantFusionBonus()-Aufruf unten, der fusionCount erst danach erhoeht),
+    // die 2. bereits +X %, die 3. +2X % usw.
+    if (pc?.necroUniqueThrone && pc?.necroUniqueThronePerFusionPct) {
+      const perFusionBonus = pc.necroUniqueThronePerFusionPct * (winner.fusionCount || 0);
+      hpFrac += perFusionBonus;
+      dmgFrac += perFusionBonus;
+      frFrac += perFusionBonus;
+    }
     // ghost_085 "Seelenkoloss" ERSETZT die Uebertragungswerte von 071/072,
     // statt zu addieren -- eigenes `replaces`-Datenfeld auf der Karte selbst
     // (core.necroFusionReplace), sonst wuerden sich beide Karten gleichzeitig
-    // stumm verdoppeln.
+    // stumm verdoppeln. Werte auf Legendaer-Niveau (150/150/60 %) angehoben,
+    // damit die Karte gegenueber der neuen 100-%-Baseline weiterhin ein
+    // echter Machtgewinn bleibt (Abschnitt 22: "darf die neue Baseline nicht
+    // unterbieten").
     if (pc?.necroFusionReplace) {
-      hpFrac = pc.necroFusionReplaceHpPct ?? 0.5;
-      dmgFrac = pc.necroFusionReplaceDamagePct ?? 0.5;
-      frFrac = pc.necroFusionReplaceFireRatePct ?? 0.2;
+      hpFrac = pc.necroFusionReplaceHpPct ?? 1.5;
+      dmgFrac = pc.necroFusionReplaceDamagePct ?? 1.5;
+      frFrac = pc.necroFusionReplaceFireRatePct ?? 0.6;
     }
   }
   const gainedHp = applyFusionTransfer(winner, loser, hpFrac, dmgFrac, frFrac);
@@ -575,7 +626,14 @@ export function pushGhost(state, g) {
         if (!weakest || x.hp < weakest.hp) weakest = x;
       }
       if (champion && weakest) {
-        fuseGhost(state, champion, weakest, { hpFrac: pc.necroCapFusionHpPct, dmgFrac: pc.necroCapFusionDamagePct, frFrac: 0 });
+        // Auftrag Abschnitt 22 ("Auslese der Legion ... nicht nur den alten
+        // Bonuswert statt 100 %"): auch dieser Verschmelzungspfad faellt ohne
+        // eigenen Kartenwert auf die neue 100-%-Baseline zurueck.
+        fuseGhost(state, champion, weakest, {
+          hpFrac: pc.necroCapFusionHpPct ?? 1.0,
+          dmgFrac: pc.necroCapFusionDamagePct ?? 1.0,
+          frFrac: pc.necroCapFusionFireRatePct ?? 1.0,
+        });
         recomputeLegionCache(state);
       }
       return;
@@ -679,14 +737,16 @@ export function killGhost(state, g, cause = 'damage') {
   // wenn ein ANDERER Untertan hier ueber Schaden/Ablauf stirbt (der dritte
   // Weg, Verschmelzung, hat seinen eigenen Aufruf in fuseGhost() oben).
   healChampionOnAllyDeath(state, g);
-  // ghost_080 "Kronenerbe" (Nekromant-V2 Phase 8): stirbt GENAU der Champion
-  // (nicht irgendein Untertan), merkt sich der Raum 60% seiner bisher
-  // angesammelten FUSIONSBONI fuer ein Zeitfenster -- der naechste
-  // erscheinende Untertan erbt sie in createGhost() oben. Kronenboni
+  // ghost_080 "Kronenerbe" (UEBERARBEITET, Abschnitt 10 -- "entferne das
+  // 10-Sekunden-Fenster ersatzlos, die Erbschaft muss mit der sofortigen
+  // Nachfolge funktionieren"): stirbt GENAU der Champion (nicht irgendein
+  // Untertan), merkt sich der Raum 60% seiner bisher angesammelten
+  // FUSIONSBONI OHNE jedes Zeitfenster -- ensureChampion() (am Ende dieser
+  // Funktion) befoerdert noch IM SELBEN Aufruf synchron einen Nachfolger,
+  // dessen promoteToChampion() die Erbschaft direkt konsumiert. Kronenboni
   // (necroCrown*) brauchen keine Uebertragung, s. dort. "Einmal pro Raum".
   if (g.isChampion && cfg?.necroCrownHeirPct && !state.necroCrownHeirUsed) {
     state.necroCrownHeir = {
-      deadline: state.time + (state.data.balance?.ghost?.crownHeirWindowS ?? 10),
       fusionHpBonus: (g.fusionHpBonus || 0) * cfg.necroCrownHeirPct,
       fusionDamageBonus: (g.fusionDamageBonus || 0) * cfg.necroCrownHeirPct,
       fusionFireRateBonus: (g.fusionFireRateBonus || 0) * cfg.necroCrownHeirPct,
@@ -987,17 +1047,17 @@ export function updateGhosts(state, dt) {
     // jedem neuen Raum ohnehin frisch mit [] angelegt (state.js:
     // createState()) -- die Lebensdauer ist also ein zusaetzliches, kein
     // ersetzendes Limit innerhalb desselben Raums.
-    // Champion (Auftrag Abschnitt 2.4, BASELINE seit der Champion-
-    // Ueberarbeitung, kein Kartengate mehr noetig): "besitzt standardmaessig
-    // KEINE normale Geister-Lebenszeit... bleibt bestehen, bis er im Kampf
-    // stirbt oder der Raum endet." Gewoehnliche Geister zerfallen weiterhin
-    // normal.
-    if (!g.isChampion) {
-      g.lifetime -= dt;
-      if (g.lifetime <= 0) {
-        killGhost(state, g, 'expire');
-        continue;
-      }
+    // Champion (Nachschliff Abschnitt 3.2, ANGEPASST): hat wieder eine
+    // BEGRENZTE Lebensdauer wie ein gewoehnlicher Geist -- dieselbe Zeile
+    // gilt jetzt fuer BEIDE. "Ewiger Thron" (necroCrownEternalLifetime) setzt
+    // g.lifetimeMax bereits in promoteToChampion() auf Infinity; `Infinity -
+    // dt` bleibt Infinity, `Infinity <= 0` ist false -- ein derart
+    // unsterblicher Champion verfaellt hier deshalb korrekt nie, ganz ohne
+    // eigenen Sonderfall.
+    g.lifetime -= dt;
+    if (g.lifetime <= 0) {
+      killGhost(state, g, 'expire');
+      continue;
     }
     // hp<=0-Pruefung: Kollisionstreffer rufen killGhost() direkt, diese Zeile
     // faengt den seltenen Fall ab, dass ein Statuseffekt-Tick o. ae. die hp
@@ -1030,12 +1090,16 @@ export function updateGhosts(state, dt) {
       g.cfg.maxHp = Math.round(g.cfg.maxHp * (playerCfg.necroVeteranHpMult || 1));
       g.hp = Math.min(g.cfg.maxHp, g.hp + (g.cfg.maxHp - oldMax));
     }
-    // ghost_081 "Seelenmonolith" (Nekromant-V2 Phase 8): bewegt sich der
-    // Champion necroCrownAnchorAfterS Sekunden lang nicht, verankert er sich
-    // -- gemessen an der VORHERIGEN Tick-Geschwindigkeit (g.vx/vy, unten am
-    // Ende jedes Durchlaufs neu gesetzt), nicht am aktuellen Bewegungswunsch.
+    // ghost_081 "Seelenmonolith" (Nachschliff Abschnitt 10, UEBERARBEITET):
+    // der Ausloeser ist jetzt die Bewegung des HAUPTPANZERS, nicht mehr die
+    // des Champions selbst -- bewegt sich der Spieler necroCrownAnchorAfterS
+    // Sekunden lang nicht, verankert sich der Champion (Bonus zerfaellt
+    // sofort wieder, sobald der Hauptpanzer sich erneut bewegt). Gemessen an
+    // der VORHERIGEN Tick-Geschwindigkeit des Spielers (state.player.vx/vy,
+    // von tank.js: moveTank() gepflegt), nicht am aktuellen Bewegungswunsch.
     if (g.isChampion && playerCfg?.necroCrownAnchorAfterS) {
-      const stillNow = Math.hypot(g.vx || 0, g.vy || 0) < 1;
+      const pv = state.player;
+      const stillNow = !!pv && Math.hypot(pv.vx || 0, pv.vy || 0) < 1;
       g.anchorTimer = stillNow ? (g.anchorTimer || 0) + dt : 0;
       g.anchored = g.anchorTimer >= playerCfg.necroCrownAnchorAfterS;
     } else {

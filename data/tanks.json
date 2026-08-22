@@ -274,13 +274,14 @@
       "magazine": 3,
       "mines": 0,
       "weapon": "bullet",
+      "bulletSpeed": 117,
       "role": "hunter",
       "aggression": 0.63,
       "accuracy": 0.72,
       "label": "Pinker",
       "maxHp": 40,
       "damage": 25,
-      "desc": "Jagt dich, zielt präzise und weicht dabei deinen Kugeln aus. Bis zu 3 Geschosse."
+      "desc": "Jagt dich, zielt präzise und weicht dabei deinen Kugeln aus. Bis zu 3 Geschosse, 10 % langsamer."
     },
     "t_green": {
       "speed": "fix",

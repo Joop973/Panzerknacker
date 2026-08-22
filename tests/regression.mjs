@@ -23,7 +23,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, repairAtRest, workbenchOptions, upgradeCardAtRest, advanceAct, runSnapshot, buyShopCard, buyShopLife, buyShopUpgradeLevel, buyShieldCharge } from '../src/game/run.js';
+import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, repairAtRest, workbenchOptions, upgradeCardAtRest, advanceAct, runSnapshot, buyShopCard, buyShopLife, buyShopUpgradeLevel, buyShieldCharge, chooseBossReward } from '../src/game/run.js';
 import { traceTrajectory } from '../src/game/bullet.js';
 import { validateArenas } from '../src/game/generator.js';
 import { createMine, updateMines } from '../src/game/mine.js';
@@ -64,6 +64,15 @@ function passRest(run) {
   if (repairAtRest(run)) return;
   const opts = workbenchOptions(run);
   if (opts.length) upgradeCardAtRest(run, opts[0].id);
+}
+
+// Champion-/Nekromant-Nachschliff Abschnitt 17: die garantierte Boss-
+// Belohnung braucht in JEDEM Playthrough-Durchlauf eine Wahl, sonst haengt
+// der Run in Phase "bossReward" fest (dieselbe Fehlerklasse wie ein
+// vergessener Kartenscreen-Schritt).
+function passBossReward(run) {
+  if (run.phase !== 'bossReward' || !run.pendingOffers) return;
+  chooseBossReward(run, 0);
 }
 
 // ---- 1. Ziellinie gegen alle Spezial-Wandtypen (Schatten-State) ----------
@@ -1904,7 +1913,7 @@ function passRest(run) {
     const st = run.state;
     for (const t of st.tanks) if (t !== st.player && t.alive) st.killTank(t, 'test');
     g = 0;
-    const nonCombat = new Set(['upgrade', 'map', 'rest', 'actComplete', 'workshop', 'event']);
+    const nonCombat = new Set(['upgrade', 'map', 'rest', 'bossReward', 'actComplete', 'workshop', 'event']);
     let advanceGuard = 10;
     while (run.phase !== 'preview' && advanceGuard-- > 0) {
       let steps = 0;
@@ -1914,6 +1923,7 @@ function passRest(run) {
         const c = run.map.byId.get(run.mapCurrentId);
         for (const id of c?.next || []) if (chooseMapNode(run, id)) break;
       } else if (run.phase === 'rest') passRest(run);
+      else if (run.phase === 'bossReward') passBossReward(run);
       else if (run.phase === 'actComplete') advanceAct(run);
       else if (run.phase === 'workshop') leaveWorkshop(run);
       else if (run.phase === 'event') chooseEventOption(run, 0);
@@ -2808,6 +2818,8 @@ for (const seed of SEEDS) {
     } else if (run.phase === 'rest') {
       // Grundsteinumbau Phase 6: Platzhalter-Durchgangsraum, ein "Weiter".
       passRest(run);
+    } else if (run.phase === 'bossReward') {
+      passBossReward(run);
     } else if (run.phase === 'actComplete') {
       // Grundsteinumbau Phase 6: Akt-Uebergangsbildschirm nach dem Bosskill.
       advanceAct(run);
@@ -2911,6 +2923,7 @@ for (const seed of SEEDS) {
         else if (run.phase === 'workshop') leaveWorkshop(run);
         else if (run.phase === 'event') chooseEventOption(run, 0);
         else if (run.phase === 'rest') passRest(run);
+        else if (run.phase === 'bossReward') passBossReward(run);
         else if (run.phase === 'actComplete') advanceAct(run);
         else break;
       }
@@ -3355,6 +3368,7 @@ for (const seed of SEEDS) {
       else if (run.phase === 'workshop') leaveWorkshop(run);
       else if (run.phase === 'event') chooseEventOption(run, 0);
       else if (run.phase === 'rest') passRest(run);
+      else if (run.phase === 'bossReward') passBossReward(run);
       else if (run.phase === 'actComplete') advanceAct(run);
       else return false;
     }
@@ -3473,6 +3487,7 @@ for (const seed of SEEDS) {
       else if (run.phase === 'workshop') lw(run);
       else if (run.phase === 'event') ceo(run, 0);
       else if (run.phase === 'rest') passRest(run);
+      else if (run.phase === 'bossReward') passBossReward(run);
       else if (run.phase === 'actComplete') aa(run);
       else break;
     }
@@ -4045,16 +4060,17 @@ for (const seed of SEEDS) {
     check(rollKill('c_necro', 'none', 0) === 0, 'Phase 3: ein Kill ohne bekannten Killer (z. B. Statuseffekt-Tick) erzeugt trotzdem einen Untertan');
   }
 
-  // (b2) Elite-/Boss-Ausnahme (Nekromant-V2 Phase 3, NEU): ein Gegner mit
-  // Elite-Affix ODER ein Boss wird trotz garantiertem Wurf (rng=>0) NIE
-  // wiederbelebt.
+  // (b2) Elite-/Boss-Ausnahme (Nekromant-V2 Phase 3, ANGEPASST durch den
+  // Champion-/Nekromant-Nachschliff Abschnitt 12: Eliten sind seither
+  // GENERELL wiederbelebbar, nicht mehr kategorisch ausgeschlossen -- nur
+  // Bosse bleiben in jedem Fall ausgenommen, s. Test direkt darunter).
   {
     const st = necroRoom();
     const e = st.tanks.find((t) => t !== st.player);
     e.affixes = ['twinshot']; // synthetischer Elite-Affix
-    st.rng = () => 0; // garantierter Wurf, waere ohne die Ausnahme immer ein Treffer
+    st.rng = () => 0; // garantierter Wurf
     st.killTank(e, 'test', { killer: st.player });
-    check(st.ghosts.length === 0, 'Phase 3: ein Elite-Gegner wird trotz Affix wiederbelebt');
+    check(st.ghosts.length === 1, 'Abschnitt 65 (Nachschliff 12): ein Elite-Gegner wird trotz garantiertem Wurf nicht wiederbelebt');
   }
   {
     const st = necroRoom();
@@ -4534,20 +4550,23 @@ for (const seed of SEEDS) {
   // (e) Lebensdauer (Nekromant-V2 Phase 3, ERSETZT "KEIN Lebensdauer-Timer"):
   // ein GEWOEHNLICHER Geist OHNE Ziel verfaellt nach lifetimeS trotzdem --
   // mit einem synthetisch VERKUERZTEN Wert geprueft (Mechanismus statt
-  // Datenlage). Nachschliff ("Champion hat KEINE Lebensdauer mehr"): ein
-  // solo gepushter Geist wuerde sofort selbst zum Champion befoerdert (nie
-  // verfallen) -- ein zuerst gepushter Anker-Geist haelt den Champion-Titel,
-  // damit `g` selbst gewoehnlich bleibt und der Ablauf-Mechanismus wirklich
-  // geprueft wird.
+  // Datenlage). Champion-/Nekromant-Nachschliff Abschnitt 3.2: der Champion
+  // hat SEIT DIESEM Auftrag wieder eine begrenzte Lebensdauer (nicht mehr
+  // unendlich) -- der Anker-Geist braucht deshalb "Ewiger Thron"
+  // (ghost_083, necroCrownEternalLifetime), um trotz des kuenstlich
+  // verkuerzten lifetimeS stabil zu bleiben, waehrend `g` (gewoehnlich)
+  // ganz normal verfaellt.
   {
     const orig = tanksData.balance.ghost.lifetimeS;
     tanksData.balance.ghost.lifetimeS = 1; // synthetisch kurz
     try {
       const st = necroRoom([]);
       st.tanks.length = 1; // nur der Spieler -- kein Ziel fuer den Geist
+      st.player.cfg.necroCrownEternalLifetime = true; // "Ewiger Thron", direkt gesetzt (dieser lokale necroRoom()-Helfer kennt keine playerUpgrades)
       const anchor = createGhost(st, 0, 0, 0, 't_pink');
-      pushGhost(st, anchor); // wird Champion, verfaellt nie -- haelt g gewoehnlich
+      pushGhost(st, anchor); // wird Champion, "Ewiger Thron" haelt es unendlich lebendig
       check(anchor.isChampion, 'Phase 3: Vorbedingung -- der Anker-Geist ist nicht Champion');
+      check(anchor.lifetimeMax === Infinity, 'Phase 3: Vorbedingung -- Ewiger Thron macht den Anker nicht unsterblich');
       const g = createGhost(st, 300, 300, 0, 't_pink');
       pushGhost(st, g);
       check(!g.isChampion, 'Phase 3: Vorbedingung -- g ist faelschlich selbst Champion');
@@ -4556,7 +4575,7 @@ for (const seed of SEEDS) {
       check(st.ghosts.includes(g) && g.alive, 'Phase 3: ein Geist verfaellt VOR Ablauf seiner Lebensdauer');
       for (let i = 0; i < 60; i++) updateGhosts(st, 1 / 60); // weitere 1 s -- deutlich nach Ablauf
       check(!st.ghosts.includes(g) || !g.alive, 'Phase 3: ein Geist ohne Ziel verfaellt nicht nach Ablauf seiner Lebensdauer');
-      check(anchor.alive, 'Phase 3: der Champion (Anker) verfaellt faelschlich mit');
+      check(anchor.alive, 'Phase 3: der Champion (Anker, mit Ewiger Thron) verfaellt faelschlich mit');
     } finally {
       tanksData.balance.ghost.lifetimeS = orig;
     }
@@ -4797,12 +4816,12 @@ for (const seed of SEEDS) {
     check(stronger.isChampion === false, 'Phase 3 (m3): ein neu ankommender, staerkerer Untertan wird faelschlich sofort Champion');
   }
 
-  // (n) Elite-/Boss-Ausnahme, End-to-End ueber updateTargeting/Rendering
-  // hinaus bereits in Abschnitt 42 (b2) mechanistisch geprueft (rng=>0
-  // garantiert, trotzdem kein Spawn) -- hier zusaetzlich die Kombination mit
-  // einer regulaeren (nicht-affix-tragenden) zweiten Leiche im selben Raum,
-  // damit sichergestellt ist, dass die Ausnahme wirklich NUR den
-  // Elite-/Boss-Kill betrifft, nicht den ganzen Raum.
+  // (n) Elite-Wiederbelebung, End-to-End (Champion-/Nekromant-Nachschliff
+  // Abschnitt 12, ANGEPASST -- Eliten sind seither GENERELL wiederbelebbar):
+  // ein Elite-Kill erzeugt einen Untertan, der strukturell 2 Geisterplaetze
+  // belegt (slotCost), UNABHAENGIG davon, ob er zufaellig als erster Spawn
+  // selbst zum (platzlosen) Champion wird. Ein zweiter, regulaerer Kill im
+  // selben Raum ist von alldem unbeeinflusst.
   {
     const st = necroRoom(['t_pink', 't_pink']);
     const [eElite, eNormal] = st.tanks.filter((t) => t !== st.player);
@@ -4810,9 +4829,11 @@ for (const seed of SEEDS) {
     eNormal.protect = 0;
     st.rng = () => 0;
     st.killTank(eElite, 'test', { killer: st.player });
-    check(st.ghosts.length === 0, 'Phase 3: der Elite-Kill erzeugt trotzdem einen Untertan');
+    check(st.ghosts.length === 1, 'Abschnitt 65 (Nachschliff 12): der Elite-Kill erzeugt keinen Untertan');
+    check(st.ghosts[0].slotCost === 2, `Abschnitt 65 (Nachschliff 12): der Elite-Untertan belegt ${st.ghosts[0].slotCost} statt 2 Geisterplaetze`);
     st.killTank(eNormal, 'test', { killer: st.player });
-    check(st.ghosts.length === 1, 'Phase 3: ein regulaerer Kill im selben Raum ist von der Elite-Ausnahme des vorigen Kills mitbetroffen');
+    check(st.ghosts.length === 2, 'Phase 3: ein regulaerer Kill im selben Raum erzeugt keinen weiteren Untertan');
+    check(st.ghosts[1].slotCost === 1, `Abschnitt 65 (Nachschliff 12): der regulaere Untertan belegt ${st.ghosts[1].slotCost} statt 1 Geisterplatz`);
   }
 
   // (o) Renderpfad: der neue Lebensdauer-Ring + der wiederverwendete
@@ -6256,6 +6277,7 @@ for (const seed of SEEDS) {
       else if (run.phase === 'workshop') leaveWorkshop(run);
       else if (run.phase === 'event') chooseEventOption(run, 0);
       else if (run.phase === 'rest') passRest(run);
+      else if (run.phase === 'bossReward') passBossReward(run);
       else if (run.phase === 'actComplete') {
         transitions++;
         const expected = diffData.acts[run.actIndex - 1].lifeReward;
@@ -6389,39 +6411,53 @@ for (const seed of SEEDS) {
     );
   }
 
-  // (g)+(h) Testschritt 5: workbenchOptions()/upgradeCardAtRest() am
-  //     Deckel -- die Karte verschwindet aus der Liste, ein Aufwerten wird
-  //     abgelehnt; sockel_ersatzpanzer erscheint dort NIE.
+  // (g)+(h) UEBERARBEITET (Champion-/Nekromant-Nachschliff Abschnitt 2): das
+  // alte Stufen-/Deckel-System ist vollstaendig entfernt -- workbenchOptions()
+  // listet jetzt jede besessene WIEDERHOLBARE Karte ohne Obergrenze,
+  // upgradeCardAtRest() behandelt eine erneute Wahl exakt wie ein frisches
+  // Angebot (derselbe Stapelzaehler run.upgrades[id]). isUnique-Karten
+  // erscheinen NIE, egal wie oft besessen (kann strukturell nur 1x sein).
   {
-    const maxLevel = tanksData.balance.upgradeLevel.maxLevel;
     const run = createRun(tanksData, tilesData, diffData, upgradesData, 9004);
     run.phase = 'rest';
-    run.upgrades = { sockel_motor: 1, sockel_ersatzpanzer: 1 };
-    run.upgradeLevels = { sockel_motor: maxLevel };
+    run.upgrades = { sockel_motor: 20, sockel_ersatzpanzer: 5 }; // hohe Stapelzahl, kein Deckel
     const opts = workbenchOptions(run);
     check(
-      !opts.some((o) => o.id === 'sockel_motor'),
-      'Phase 7: eine Karte am Stufen-Deckel erscheint noch in der Werkbank-Liste',
+      opts.some((o) => o.id === 'sockel_motor' && o.stufe === 20),
+      'Phase 7 (Nachschliff): eine oft besessene wiederholbare Karte fehlt/verliert ihre Stapelzahl in der Werkbank-Liste',
     );
+    // sockel_ersatzpanzer ist selbst isUnique:false (nicht das alte
+    // upgradable:false-Feld) -- erscheint also weiterhin ganz normal.
     check(
-      !opts.some((o) => o.id === 'sockel_ersatzpanzer'),
-      'Phase 7: sockel_ersatzpanzer erscheint in der Werkbank-Liste',
+      opts.some((o) => o.id === 'sockel_ersatzpanzer'),
+      'Phase 7 (Nachschliff): eine wiederholbare Karte fehlt in der Werkbank-Liste',
     );
-    const okAtCap = upgradeCardAtRest(run, 'sockel_motor');
-    check(okAtCap === false, 'Phase 7: upgradeCardAtRest() erlaubt eine Aufwertung ueber den Deckel hinaus');
-    check(run.upgradeLevels.sockel_motor === maxLevel, 'Phase 7: die Stufe steigt trotz Deckel weiter');
-    check(run.phase === 'rest', 'Phase 7: eine abgelehnte Aufwertung beendet den Raum trotzdem');
-    const okOther = upgradeCardAtRest(run, 'sockel_ersatzpanzer');
-    check(okOther === false, 'Phase 7: sockel_ersatzpanzer laesst sich trotz upgradable:false aufwerten');
-    const okUnowned = upgradeCardAtRest(run, 'sockel_magazin');
-    check(okUnowned === false, 'Phase 7: eine nie gezogene Karte laesst sich am Rastplatz aufwerten');
+    const okHigh = upgradeCardAtRest(run, 'sockel_motor');
+    check(okHigh === true, 'Phase 7 (Nachschliff): eine erneute Wahl bei hoher Stapelzahl wird abgelehnt (kein Deckel erlaubt)');
+    check(run.upgrades.sockel_motor === 21, `Phase 7 (Nachschliff): die Stapelzahl steigt nicht (${run.upgrades.sockel_motor} statt 21)`);
+    check(run.phase !== 'rest', 'Phase 7 (Nachschliff): eine gueltige Wahl beendet den Raum nicht');
 
-    // Erfolgsfall daneben: eine besessene, nicht gedeckelte Karte steigt.
-    run.upgrades.sockel_ladeautomat = 1;
-    const ok = upgradeCardAtRest(run, 'sockel_ladeautomat');
-    check(ok === true, 'Phase 7: eine gueltige Aufwertung wird abgelehnt');
-    check(run.upgradeLevels.sockel_ladeautomat === 1, 'Phase 7: die Stufe steigt nach einer gueltigen Aufwertung nicht');
-    check(run.phase !== 'rest', 'Phase 7: upgradeCardAtRest() beendet den Raum nicht');
+    // Einzigartige und nie besessene Karten lassen sich nicht waehlen.
+    // WICHTIG: upgradesData NICHT direkt mutieren -- das ist dasselbe
+    // geteilte Objekt, das alle anderen Tests (u.a. die Sockel-Pool-
+    // Strukturprüfung) ebenfalls lesen. Eine geklonte Kopie nur für run2.
+    const run2 = createRun(tanksData, tilesData, diffData, upgradesData, 9005);
+    run2.phase = 'rest';
+    run2.upgradesData = {
+      ...upgradesData,
+      upgrades: {
+        ...upgradesData.upgrades,
+        test_unique_65b: { id: 'test_unique_65b', name: 'Test', description: 'x', tag: 'x', rarity: 'common', isUnique: true, requires: [], core: {} },
+      },
+    };
+    run2.upgrades = { sockel_motor: 1, test_unique_65b: 1 };
+    check(!workbenchOptions(run2).some((o) => o.id === 'test_unique_65b'), 'Phase 7 (Nachschliff): eine einzigartige Karte erscheint in der Werkbank-Liste');
+    const okUnique = upgradeCardAtRest(run2, 'test_unique_65b');
+    check(okUnique === false, 'Phase 7 (Nachschliff): eine einzigartige Karte laesst sich am Rastplatz erneut waehlen');
+    check(run2.phase === 'rest', 'Phase 7 (Nachschliff): eine abgelehnte Wahl beendet den Raum trotzdem');
+    const okUnowned = upgradeCardAtRest(run2, 'sockel_magazin');
+    check(okUnowned === false, 'Phase 7 (Nachschliff): eine nie gezogene Karte laesst sich am Rastplatz waehlen');
+    check(run2.phase === 'rest', 'Phase 7 (Nachschliff): eine abgelehnte Wahl (unbesessene Karte) beendet den Raum trotzdem');
   }
 
   // (i) Sicherheitsnetz: volle Leben UND keine aufwertbare Karte darf den
@@ -6521,30 +6557,30 @@ for (const seed of SEEDS) {
     }
   }
 
-  // (c) Testschritt 2: Werkbank im Shop -- Stufe steigt, Schrott sinkt exakt
-  //     um cost.upgradeLevel, der Raum bleibt offen (anders als am
-  //     Rastplatz, wo dieselbe Aktion den Raum beendet).
+  // (c) Testschritt 2 (Champion-/Nekromant-Nachschliff Abschnitt 2,
+  //     UEBERARBEITET): Werkbank im Shop waehlt eine besessene Karte
+  //     ERNEUT -- die Stapelzahl steigt (kein separates Stufen-Feld mehr),
+  //     Schrott sinkt exakt um cost.upgradeLevel, der Raum bleibt offen.
   {
     const run = enterWorkshop();
     check(!!run, 'Phase 8: Testaufbau -- kein Shop-Knoten unter 60 Seeds gefunden');
     if (run) {
       run.upgrades.sockel_motor = 1;
-      run.upgradeLevels.sockel_motor = 0;
       const cost = tanksData.balance.scrap.cost.upgradeLevel;
       run.scrap = cost + 3;
       const ok = buyShopUpgradeLevel(run, 'sockel_motor');
-      check(ok === true, 'Phase 8: buyShopUpgradeLevel() lehnt eine gueltige Aufwertung ab');
-      check(run.upgradeLevels.sockel_motor === 1, `Phase 8: Stufe steigt nicht (${run.upgradeLevels.sockel_motor})`);
+      check(ok === true, 'Phase 8: buyShopUpgradeLevel() lehnt eine gueltige erneute Wahl ab');
+      check(run.upgrades.sockel_motor === 2, `Phase 8 (Nachschliff): Stapelzahl steigt nicht (${run.upgrades.sockel_motor} statt 2)`);
       check(run.scrap === 3, `Phase 8: Schrott sinkt nicht um genau ${cost} (Rest ${run.scrap} statt 3)`);
       check(run.phase === 'workshop', `Phase 8: die Werkbank-Aktion beendet den Shop-Raum (Phase "${run.phase}")`);
 
-      // Deckel/Besitz-Ablehnung (dieselbe raiseUpgradeLevel()-Pruefung wie
+      // Besitz-Ablehnung (dieselbe repickOwnedCard()-Pruefung wie
       // upgradeCardAtRest, Abschnitt 51) -- Schrott wird bei Ablehnung NICHT
       // abgezogen.
       const scrapBefore = run.scrap;
       const okUnowned = buyShopUpgradeLevel(run, 'sockel_magazin');
-      check(okUnowned === false, 'Phase 8: eine nie gezogene Karte laesst sich im Shop aufwerten');
-      check(run.scrap === scrapBefore, 'Phase 8: Schrott sinkt trotz abgelehnter Aufwertung (unbesessene Karte)');
+      check(okUnowned === false, 'Phase 8: eine nie gezogene Karte laesst sich im Shop erneut waehlen');
+      check(run.scrap === scrapBefore, 'Phase 8: Schrott sinkt trotz abgelehnter Wahl (unbesessene Karte)');
     }
   }
 
@@ -6865,14 +6901,22 @@ for (const seed of SEEDS) {
     return null;
   }
 
-  // (a) Punkt 16+17: der Sockel hat GENAU die fuenf bekannten Karten -- keine
+  // (a) Punkt 16+17: der Sockel hat GENAU die bekannten Karten -- keine
   //     mehr, keine weniger. Schliesst archivierte Karten strukturell aus
   //     (geschlossene Welt: rollFromPool()/drawOne() koennen nur ids liefern,
-  //     die in upgradesData.upgrades stehen).
+  //     die in upgradesData.upgrades stehen). Champion-/Nekromant-
+  //     Nachschliff Abschnitt 16/17: drei universelle legendaere Karten
+  //     (sockel_kriegsmeister/-titanpanzerung/-sturmantrieb) sind dazugekommen,
+  //     damit auch die Standard-Klasse genug Legendaere fuer Elite-/
+  //     Boss-Belohnungen hat -- fuenf auf acht Karten erweitert, sonst
+  //     unveraendert.
   {
-    const expected = ['sockel_ersatzpanzer', 'sockel_ladeautomat', 'sockel_magazin', 'sockel_motor', 'sockel_panzerung'];
+    const expected = [
+      'sockel_ersatzpanzer', 'sockel_kriegsmeister', 'sockel_ladeautomat', 'sockel_magazin',
+      'sockel_motor', 'sockel_panzerung', 'sockel_sturmantrieb', 'sockel_titanpanzerung',
+    ];
     const actual = Object.keys(upgradesData.upgrades).sort();
-    check(actual.length === 5, `Phase 10: Pool hat ${actual.length} Karten statt 5`);
+    check(actual.length === 8, `Phase 10: Pool hat ${actual.length} Karten statt 8`);
     check(actual.join(',') === expected.join(','), `Phase 10: Pool enthaelt unerwartete/fehlende ids: ${actual.join(',')}`);
   }
 
@@ -7187,9 +7231,11 @@ for (const seed of SEEDS) {
   const PATH_TAGS = new Set(['allgemein', 'opfer', 'legion', 'alpha']);
   const RARITIES = new Set(['common', 'uncommon', 'rare', 'epic', 'legendary']);
 
-  // (a) 105 eindeutige IDs, Objektschluessel === id.
+  // (a) Champion-/Nekromant-Nachschliff: 105 urspruengliche + 11 neue Karten
+  //     (Abschnitte 6/7/8/9) = 116, minus die entfernte ghost_068 "Langer
+  //     Anspruch" (Abschnitt 10) = 115 eindeutige IDs, Objektschluessel === id.
   const ids = Object.keys(U);
-  check(ids.length === 105, `Phase 0 (Nekromant-V2): ${ids.length} Karten statt 105`);
+  check(ids.length === 115, `Phase 0 (Nekromant-V2): ${ids.length} Karten statt 115`);
   check(new Set(ids).size === ids.length, 'Phase 0 (Nekromant-V2): doppelte ID im Pool');
   let badKey = 0;
   for (const k in U) if (U[k].id !== k) badKey++;
@@ -7199,13 +7245,19 @@ for (const seed of SEEDS) {
   //     alle legendaeren UND alle Aktivkarten (tag "gadget") sind isUnique;
   //     KEINE Karte traegt mehr ein maxStacks-Feld (v4 hat es ersatzlos
   //     abgeschafft -- nicht einzigartige Karten sind unbegrenzt stapelbar).
+  // Champion-/Nekromant-Nachschliff Abschnitt 7/8: ghost_111 (legendaer,
+  // Wiederbelebungschance) und ghost_115 (legendaer, Champion-Lebensdauer)
+  // sind ABSICHTLICH nicht isUnique -- der Auftrag verlangt ausdruecklich
+  // "alle fuenf [Karten je Kategorie] wiederholbar, unbegrenzt stapelbar",
+  // das steht ueber der aelteren v4-Pauschalregel "legendaer = isUnique".
+  const LEGENDARY_REPEATABLE_EXCEPTIONS = new Set(['ghost_111', 'ghost_115']);
   let badRarity = 0, badUniqueField = 0, badLegendaryUnique = 0, badGadgetUnique = 0;
   let hasMaxStacks = 0, badSigClass = 0, badSpread = 0;
   for (const k in U) {
     const d = U[k];
     if (!RARITIES.has(d.rarity)) badRarity++;
     if (typeof d.isUnique !== 'boolean') badUniqueField++;
-    if (d.rarity === 'legendary' && d.isUnique !== true) badLegendaryUnique++;
+    if (d.rarity === 'legendary' && d.isUnique !== true && !LEGENDARY_REPEATABLE_EXCEPTIONS.has(k)) badLegendaryUnique++;
     if (d.tag === 'gadget' && d.isUnique !== true) badGadgetUnique++;
     if (Object.prototype.hasOwnProperty.call(d, 'maxStacks')) hasMaxStacks++;
     if (d.signatureClass !== 'c_necro') badSigClass++;
@@ -7220,9 +7272,14 @@ for (const seed of SEEDS) {
   check(badSpread === 0, `Phase 0 (Nekromant-V2): ${badSpread} Karte(n) ohne mindestens ein Pfad-Tag (allgemein/opfer/legion/alpha)`);
 
   // (c) requires loest auf; keine Ketten (eine Voraussetzung hat selbst kein
-  //     eigenes requires); hoechstens 3 Karten haengen an derselben Karte;
-  //     hoechstens 4 Karten insgesamt tragen ueberhaupt ein requires (v4:
-  //     von 12 auf 4 gesenkt, damit kein Pfad an einer einzigen Karte haengt).
+  //     eigenes requires). Champion-/Nekromant-Nachschliff Abschnitt 6: drei
+  //     neue Fusions-Verstaerkerkarten (Einziges Schwert/Schild/Bogen)
+  //     haengen bewusst ebenfalls an ghost_071 ("ohne aktive Verschmelzungs-
+  //     karte wirkungslos", exakt derselbe Grund wie bei den drei
+  //     urspruenglichen v4-Abhaengigkeiten) -- die alten v4-Obergrenzen (3
+  //     Abhaengige je Karte, 4 Karten insgesamt mit requires) waren ein
+  //     reiner Schnappschuss des v4-Imports, keine Spielregel, und sind
+  //     entsprechend erweitert (6 bzw. 7).
   let unresolved = 0, chained = 0, withRequires = 0;
   const dependents = {};
   for (const k in U) {
@@ -7238,9 +7295,9 @@ for (const seed of SEEDS) {
   }
   check(unresolved === 0, `Phase 0 (Nekromant-V2): ${unresolved} requires-Eintraege loesen nicht auf eine echte ID auf`);
   check(chained === 0, `Phase 0 (Nekromant-V2): ${chained} requires-Kette(n) (eine Voraussetzung hat selbst ein requires)`);
-  const overCrowded = Object.values(dependents).filter((n) => n > 3).length;
-  check(overCrowded === 0, `Phase 0 (Nekromant-V2): ${overCrowded} Karte(n) mit mehr als 3 abhaengigen Karten`);
-  check(withRequires <= 4, `Phase 0 (Nekromant-V2): ${withRequires} Karte(n) mit requires statt hoechstens 4`);
+  const overCrowded = Object.values(dependents).filter((n) => n > 6).length;
+  check(overCrowded === 0, `Phase 0 (Nekromant-V2): ${overCrowded} Karte(n) mit mehr als 6 abhaengigen Karten`);
+  check(withRequires <= 7, `Phase 0 (Nekromant-V2): ${withRequires} Karte(n) mit requires statt hoechstens 7`);
 
   // (d) kein Kartentext enthaelt Reste der ueberholten Fassung-1-Spec
   //     ("Meter" -- alte Ring-/Radius-Einheit, "Abprall" -- Bandenschuss,
@@ -7689,6 +7746,7 @@ for (const seed of SEEDS) {
         else if (run.phase === 'workshop') leaveWorkshop(run);
         else if (run.phase === 'event') chooseEventOption(run, 0);
         else if (run.phase === 'rest') passRest(run);
+        else if (run.phase === 'bossReward') passBossReward(run);
         else if (run.phase === 'actComplete') advanceAct(run);
         else return false;
       }
@@ -7962,7 +8020,7 @@ for (const seed of SEEDS) {
       const g = createGhost(st, 0, 0, 0, 't_pink');
       killGhost(st, g, 'damage');
     }
-    check(Math.abs(necroDamagePct(st) - 0.06) < 1e-9, `Phase 6: ghost_011 gibt nach 3 Toden nicht +6 % (${necroDamagePct(st)})`);
+    check(Math.abs(necroDamagePct(st) - 0.15) < 1e-9, `Phase 6: ghost_011 gibt nach 3 Toden nicht +15 % (${necroDamagePct(st)})`);
     const st2 = necroRoom({ ghost_011: 1 });
     check(necroDamagePct(st2) === 0, 'Phase 6: ghost_011s Bonus ueberlebt faelschlich den Raumwechsel');
   }
@@ -8039,7 +8097,7 @@ for (const seed of SEEDS) {
   // ausgeloest (Spieler-hp unveraendert vom vollen Stand).
   {
     const st = necroRoom({ ghost_011: 1, ghost_014: 1, ghost_035: 1 });
-    check(Math.abs(necroDamagePct(st) - 4 * 0.02) < 1e-9, `Phase 6: ghost_035 stellt die Stapel nicht sofort (${necroDamagePct(st)})`);
+    check(Math.abs(necroDamagePct(st) - 4 * 0.05) < 1e-9, `Phase 6: ghost_035 stellt die Stapel nicht sofort (${necroDamagePct(st)})`);
     check(st.player.hp === st.player.cfg.maxHp, `Phase 6: ghost_035 loest faelschlich ghost_014s Heilung aus (hp=${st.player.hp})`);
   }
 
@@ -8053,7 +8111,7 @@ for (const seed of SEEDS) {
     st.rng = () => 0.01; // < 20 % -> Verdopplung greift
     const g1 = createGhost(st, 0, 0, 0, 't_pink');
     killGhost(st, g1, 'damage');
-    check(Math.abs(necroDamagePct(st) - 0.02 * 2) < 1e-9, `Phase 6: ghost_027 verdoppelt den pureStack-Beitrag nicht (${necroDamagePct(st)})`);
+    check(Math.abs(necroDamagePct(st) - 0.05 * 2) < 1e-9, `Phase 6: ghost_027 verdoppelt den pureStack-Beitrag nicht (${necroDamagePct(st)})`);
     check(Math.abs(st.player.hp - (10 + st.player.cfg.maxHp * 0.06)) < 1e-6, 'Phase 6: ghost_027 verdoppelt faelschlich die Heilung (kein pureStack)');
     // Gegenprobe im selben Test: eine Chance, die NIE trifft (rng immer 1),
     // darf niemals verdoppeln.
@@ -8061,16 +8119,17 @@ for (const seed of SEEDS) {
     st2.rng = () => 0.99;
     const g2 = createGhost(st2, 0, 0, 0, 't_pink');
     killGhost(st2, g2, 'damage');
-    check(Math.abs(necroDamagePct(st2) - 0.02) < 1e-9, `Phase 6: ghost_027 verdoppelt trotz verfehlter Chance (${necroDamagePct(st2)})`);
+    check(Math.abs(necroDamagePct(st2) - 0.05) < 1e-9, `Phase 6: ghost_027 verdoppelt trotz verfehlter Chance (${necroDamagePct(st2)})`);
 
+    // Treues Ende (Nachschliff Abschnitt 10: 60 % -> 50 % Bonus).
     const st3 = necroRoom({ ghost_011: 1, ghost_028: 1 });
     const g3 = createGhost(st3, 0, 0, 0, 't_pink');
     killGhost(st3, g3, 'expire');
-    check(Math.abs(necroDamagePct(st3) - 0.02 * 1.6) < 1e-9, `Phase 6: ghost_028 verstaerkt Ablauf-Stapel nicht um 60 % (${necroDamagePct(st3)})`);
+    check(Math.abs(necroDamagePct(st3) - 0.05 * 1.5) < 1e-9, `Phase 6: ghost_028 verstaerkt Ablauf-Stapel nicht um 50 % (${necroDamagePct(st3)})`);
     const st4 = necroRoom({ ghost_011: 1, ghost_028: 1 });
     const g4 = createGhost(st4, 0, 0, 0, 't_pink');
     killGhost(st4, g4, 'damage'); // normaler Tod -- 028 wirkt NUR bei Ablauf
-    check(Math.abs(necroDamagePct(st4) - 0.02) < 1e-9, `Phase 6: ghost_028 wirkt faelschlich auch bei normalem Tod (${necroDamagePct(st4)})`);
+    check(Math.abs(necroDamagePct(st4) - 0.05) < 1e-9, `Phase 6: ghost_028 wirkt faelschlich auch bei normalem Tod (${necroDamagePct(st4)})`);
   }
 
   // (h) ghost_010 "Jenseitsziel": eine echte Fahrlogik-Erweiterung (Auftrag:
@@ -8350,8 +8409,8 @@ for (const seed of SEEDS) {
     check(necroData.upgrades.ghost_044.isUnique === false, 'Phase 7: ghost_044 ist faelschlich einzigartig (waere nach 1x aus dem Pool)');
     const one = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_044: 1 }, necroData, 'mine', null);
     const ten = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_044: 10 }, necroData, 'mine', null);
-    check(Math.abs(one.necroReviveChanceAdd - 0.05) < 1e-9, `Phase 7: ghost_044 gibt bei Stufe 1 nicht +5pp (${one.necroReviveChanceAdd})`);
-    check(Math.abs(ten.necroReviveChanceAdd - 0.5) < 1e-9, `Phase 7: ghost_044 steigt nicht linear weiter (${ten.necroReviveChanceAdd} bei Stufe 10)`);
+    check(Math.abs(one.necroReviveChanceAdd - 0.07) < 1e-9, `Phase 7: ghost_044 gibt bei Stufe 1 nicht +7pp (${one.necroReviveChanceAdd})`);
+    check(Math.abs(ten.necroReviveChanceAdd - 0.7) < 1e-9, `Phase 7: ghost_044 steigt nicht linear weiter (${ten.necroReviveChanceAdd} bei Stufe 10)`);
   }
 
   // (f) Testschritt 5 (ghost_056 "Elite-Reaktivierung"): ein wiederbelebter
@@ -8371,14 +8430,18 @@ for (const seed of SEEDS) {
     const reactivated = st.ghosts.find((g) => !g.isChampion);
     check(reactivated?.slotCost === 2, `Phase 7: der wiederbelebte Elite-Untertan belegt nicht 2 Plaetze (${reactivated?.slotCost})`);
     check(occupiedGhostSlots(st) === 2, `Phase 7: occupiedGhostSlots zaehlt die 2 Plaetze nicht (${occupiedGhostSlots(st)})`);
-    // Gegenprobe im selben Test: OHNE die Karte wird eine Elite gar nicht
-    // erst wiederbelebt (canRevive-Gate).
+    // Champion-/Nekromant-Nachschliff Abschnitt 12 (ANGEPASST): OHNE die
+    // Karte wird die Elite trotzdem wiederbelebt (generelle Eignung), belegt
+    // weiterhin strukturell 2 Plaetze -- nur der 90-%-Basiswert-Bonus fehlt.
     const st2 = legionRoom({});
+    pushGhost(st2, createGhost(st2, 0, 0, 0, 't_pink')); // Anker -> wird Champion
     st2.rng = () => 0;
     const elite2 = mkEnemy();
     elite2.affixes = ['twinshot'];
     st2.killTank(elite2, 'test', { killer: st2.player });
-    check(st2.ghosts.length === 0, `Phase 7: eine Elite wird auch OHNE ghost_056 wiederbelebt (${st2.ghosts.length})`);
+    check(st2.ghosts.length === 2, `Abschnitt 65 (Nachschliff 12): eine Elite wird auch OHNE ghost_056 nicht wiederbelebt (${st2.ghosts.length})`);
+    const reactivated2 = st2.ghosts.find((g) => !g.isChampion);
+    check(reactivated2?.slotCost === 2, `Abschnitt 65 (Nachschliff 12): der Elite-Untertan belegt auch ohne die Karte nicht strukturell 2 Plaetze (${reactivated2?.slotCost})`);
   }
 
   // (g) recomputeLegionCache(): "nicht pro Frame" -- ein Geist, der OHNE den
@@ -8816,11 +8879,17 @@ for (const seed of SEEDS) {
   // dt-unabhaengig).
   const settleChampion = (st) => updateGhosts(st, 0.0001);
 
-  // (a) Struktur: 25 Karten, alle mit echtem core (kein "_todo: effect"), NaN-Check.
+  // (a) Struktur: 24 Karten (Champion-/Nekromant-Nachschliff Abschnitt 10:
+  //     ghost_068 "Langer Anspruch" ist vollstaendig entfernt, urspruenglich
+  //     25 in diesem Bereich), alle mit echtem core (kein "_todo: effect"), NaN-Check.
   {
     const ids = [];
-    for (let i = 61; i <= 85; i++) ids.push('ghost_' + String(i).padStart(3, '0'));
-    check(ids.every((id) => necroData.upgrades[id]), 'Phase 8: nicht alle 25 Karten ghost_061..ghost_085 existieren');
+    for (let i = 61; i <= 85; i++) {
+      const id = 'ghost_' + String(i).padStart(3, '0');
+      if (id !== 'ghost_068') ids.push(id);
+    }
+    check(ids.length === 24, `Phase 8: ${ids.length} Karten im Bereich statt 24 (ghost_068 muss fehlen)`);
+    check(ids.every((id) => necroData.upgrades[id]), 'Phase 8: nicht alle 24 Karten ghost_061..ghost_085 (ohne ghost_068) existieren');
     for (const id of ids) {
       const def = necroData.upgrades[id];
       check(def.core && def.core._todo !== 'effect', `Phase 8: ${id} hat noch keinen core-Wert`);
@@ -8893,16 +8962,27 @@ for (const seed of SEEDS) {
     check(g.cfg.damage > g0.cfg.damage, `Phase 8: ghost_083 erhoeht den Champion-Schaden nicht (${g0.cfg.damage} -> ${g.cfg.damage})`);
     check(g.cfg.maxHp > g0.cfg.maxHp, `Phase 8: ghost_083 erhoeht das Champion-Maximalleben nicht (${g0.cfg.maxHp} -> ${g.cfg.maxHp})`);
   }
-  // (d2) Der Champion hat GRUNDSAETZLICH (auch ohne jede Karte) keine
-  // Lebensdauer mehr -- deckt den urspruenglichen Testschritt-3-Kernpunkt
-  // ("Champion laeuft nicht nach 12s ab") jetzt strukturell statt kartengebunden ab.
+  // (d2) UEBERARBEITET (Champion-/Nekromant-Nachschliff Abschnitt 3.2): der
+  // Champion hat SEIT DIESEM Auftrag wieder eine BEGRENZTE Lebensdauer
+  // (Basiswert = dieselbe Konstante wie bei gewoehnlichen Untertanen) und
+  // verfaellt ohne "Ewiger Thron" ganz normal -- das genaue Gegenteil des
+  // urspruenglichen Testschritts. Nur MIT necroCrownEternalLifetime bleibt
+  // er unendlich lebendig.
   {
     const st = legionRoom({});
     const g = createGhost(st, 0, 0, 0, 't_pink');
     pushGhost(st, g);
     check(g.isChampion, 'Phase 8: Testaufbau (d2) -- einziger Untertan sollte Champion sein');
-    updateGhosts(st, g.lifetimeMax ? g.lifetimeMax + 10 : 100); // waere ohne Sonderregel laengst abgelaufen
-    check(st.ghosts.includes(g) && g.alive, `Phase 8: der Champion verfaellt trotz fehlender Lebensdauer (lifetime ${g.lifetime})`);
+    check(Number.isFinite(g.lifetimeMax), `Abschnitt 65 (Nachschliff 3.2): der Champion hat ohne Ewiger Thron eine unendliche Lebensdauer (${g.lifetimeMax})`);
+    updateGhosts(st, g.lifetimeMax + 1); // deutlich nach Ablauf
+    check(!st.ghosts.includes(g) || !g.alive, `Abschnitt 65 (Nachschliff 3.2): der Champion verfaellt trotz begrenzter Lebensdauer nicht (lifetime ${g.lifetime})`);
+
+    const stEternal = legionRoom({ ghost_083: 1 }); // "Ewiger Thron"
+    const gE = createGhost(stEternal, 0, 0, 0, 't_pink');
+    pushGhost(stEternal, gE);
+    check(gE.lifetimeMax === Infinity, 'Abschnitt 65 (Nachschliff 3.2): Ewiger Thron macht die Champion-Lebenszeit nicht unendlich');
+    updateGhosts(stEternal, 10000);
+    check(gE.alive, 'Abschnitt 65 (Nachschliff 3.2): ein Champion mit Ewiger Thron verfaellt trotzdem');
   }
 
   // (e) Testschritt 4: ghost_085 "Seelenkoloss" ERSETZT die Uebertragung von
@@ -8917,12 +8997,17 @@ for (const seed of SEEDS) {
     // Bugfix Abschnitt 5 ("falscher Panzer"): der Uebertragungswert muss aus
     // den BASISWERTEN DES VERSCHMOLZENEN (loser) kommen, NICHT aus denen des
     // Champions (winner) -- genau die vom Auftrag genannte Verwechslung.
-    const expectedHp = Math.round((loserBaseMaxHp || 0) * 0.5);
+    // Champion-Nachschliff (Abschnitt 22): ghost_085 traegt jetzt 150% statt
+    // der alten 50% (core.necroFusionReplaceHpPct 1.5).
+    const expectedHp = Math.round((loserBaseMaxHp || 0) * 1.5);
     check(
       champ.fusionHpBonus === expectedHp,
-      `Phase 8: ghost_085 ersetzt den Uebertragungswert nicht auf 50% des Verschmolzenen (${champ.fusionHpBonus} statt ${expectedHp})`,
+      `Phase 8: ghost_085 ersetzt den Uebertragungswert nicht auf 150% des Verschmolzenen (${champ.fusionHpBonus} statt ${expectedHp})`,
     );
-    const wouldBeIfAdditive = Math.round((loserBaseMaxHp || 0) * (0.3 + 0.08));
+    // Ohne Ersetzung wuerde die neue 100%-Basisuebertragung (Abschnitt 4) plus
+    // ghost_072s Zusatzrate (0.08) addiert -- das muss von den 150% Ersatzwert
+    // klar unterscheidbar bleiben.
+    const wouldBeIfAdditive = Math.round((loserBaseMaxHp || 0) * (1.0 + 0.08));
     check(
       champ.fusionHpBonus !== wouldBeIfAdditive,
       `Phase 8: ghost_085 addiert sich zu 071/072 statt zu ersetzen (${champ.fusionHpBonus})`,
@@ -8941,13 +9026,22 @@ for (const seed of SEEDS) {
     const hpBonusBefore = champ.fusionHpBonus;
     check(hpBonusBefore > 0, 'Phase 8: Testaufbau -- keine Fusionsboni vorhanden');
     killGhost(st, champ, 'damage');
+    // Mit ghost_071 aktiv verschmilzt JEDER weitere Geist in den Champion --
+    // nach dessen Tod lebt also KEIN gewoehnlicher Geist mehr, den
+    // ensureChampion() haette befoerdern koennen. Das Erbe-Fenster bleibt
+    // deshalb offen, bis der naechste (hier neu erzeugte) Nachfolger ueber
+    // pushGhost() erscheint -- NUR dieser Weg loest promoteToChampion() aus,
+    // das den Kronenerbe-Block enthaelt (nicht das rohe createGhost()).
     check(!!st.necroCrownHeir, 'Phase 8: ghost_080 hinterlaesst kein Erbe-Fenster beim Champion-Tod');
     const successor = createGhost(st, 10, 10, 0, 't_pink');
+    pushGhost(st, successor);
+    check(successor.isChampion, 'Phase 8: der Nachfolger wird nicht zum Champion befoerdert');
     const expected = hpBonusBefore * 0.6;
     check(
       Math.abs(successor.fusionHpBonus - expected) < 1e-6,
       `Phase 8: der Nachfolger erbt nicht 60% der Fusionsboni (${successor.fusionHpBonus} statt ${expected})`,
     );
+    check(!st.necroCrownHeir, 'Phase 8: das Erbe-Fenster wird nach der Befoerderung nicht geleert');
   }
   // Gegenprobe fuer (f): necroCrownHeirPct-Applier stillgelegt -> kein Erbe.
   {
@@ -9096,17 +9190,12 @@ for (const seed of SEEDS) {
     check(g.shield > 0, `Phase 8: ghost_067 gewaehrt keinen Kronenschild (${g.shield})`);
   }
 
-  // (n) ghost_068 "Langer Anspruch": Gesamtdauer UND Restlebenszeit steigen
-  // um 4 Sekunden bei der Kroenung.
-  {
-    const st = legionRoom({ ghost_068: 1 });
-    const g = push(st, createGhost(st, 0, 0, 0, 't_pink'));
-    const maxBefore = g.lifetimeMax;
-    const curBefore = g.lifetime;
-    settleChampion(st);
-    check(g.lifetimeMax > maxBefore, `Phase 8: ghost_068 erhoeht die Gesamtdauer nicht (${maxBefore} -> ${g.lifetimeMax})`);
-    check(g.lifetime > curBefore, `Phase 8: ghost_068 erhoeht die Restlebenszeit nicht (${curBefore} -> ${g.lifetime})`);
-  }
+  // (n) ENTFERNT (Champion-/Nekromant-Nachschliff Abschnitt 10): ghost_068
+  // "Langer Anspruch" ist komplett aus dem Pool entfernt (s. Abschnitt 65k
+  // weiter unten fuer den Struktur-Nachweis). Ersatz-Abdeckung fuer
+  // Champion-Lebensdauer-Karten liefern die neuen ghost_005/109-113
+  // ("Laengerer Eid"/die vier Champion-exklusiven Lebensdauer-Karten,
+  // s. eigener Testblock zu Abschnitt 8 des Auftrags weiter unten).
 
   // (o) ghost_069 "Kritische Krone": zusaetzliche Krit-Chance/-Schaden NUR
   // fuer den Champion -- gestellter RNG-Wurf faengt genau den Bereich, den
@@ -9680,7 +9769,10 @@ for (const seed of SEEDS) {
     check(st.necroGuaranteedReviveUntil > st.time, 'Phase 9: ghost_089 garantiert die naechste Wiederbelebungsprobe nicht');
   }
 
-  // (g) ghost_096 "Koenigliches Opfer": opfert AUSSCHLIESSLICH den Champion.
+  // (g) UEBERARBEITET (Champion-/Nekromant-Nachschliff Abschnitt 10):
+  // ghost_096 "Koenigliches Opfer" opfert AUSSCHLIESSLICH den Champion und
+  // gibt dem Hauptpanzer jetzt DAUERHAFT (kein Zeitfenster mehr) 40% von
+  // dessen BASISWERTEN direkt auf die cfg -- kein Timed-Stack mehr.
   {
     const st = legionRoom({ ghost_096: 1 });
     const g1 = push(st, createGhost(st, 100, 100, 0, 't_pink'));
@@ -9688,15 +9780,25 @@ for (const seed of SEEDS) {
     settleChampion(st);
     const champ = st.ghosts.find((g) => g.isChampion);
     const other = st.ghosts.find((g) => g !== champ);
+    const champBaseDamage = champ.baseDamage;
+    const champBaseMaxHp = champ.baseMaxHp;
+    const dmgBefore = st.player.cfg.damage;
+    const hpBefore = st.player.cfg.maxHp;
     st.player.cfg.gadget = 'ghost_096';
     st.player.gadgetCooldown = 0;
     const ok = useGadget(st.player, st);
     check(ok, 'Phase 9: ghost_096 loest nicht aus');
     check(!champ.alive, 'Phase 9: ghost_096 opfert nicht den Champion');
     check(other.alive, 'Phase 9: ghost_096 opfert einen Nicht-Champion mit');
+    const expectedDmg = dmgBefore + Math.round(champBaseDamage * 0.4);
+    const expectedHp = hpBefore + Math.round(champBaseMaxHp * 0.4);
     check(
-      getNecroTimedStackForTest(st, '_timedHybridChampSacrificeDmg') > 0,
-      'Phase 9: ghost_096 gibt keinen Schadensbonus',
+      st.player.cfg.damage === expectedDmg,
+      `Phase 9: ghost_096 gibt keinen dauerhaften Schadensbonus (${st.player.cfg.damage} statt ${expectedDmg})`,
+    );
+    check(
+      st.player.cfg.maxHp === expectedHp,
+      `Phase 9: ghost_096 gibt keinen dauerhaften LP-Bonus (${st.player.cfg.maxHp} statt ${expectedHp})`,
     );
   }
 
@@ -9918,24 +10020,27 @@ for (const seed of SEEDS) {
     check(st.ghosts.filter((g) => g.alive).length > before, 'Phase 9: ghost_091 spawnt keine kostenlosen Untertanen');
   }
 
-  // (q) ghost_092 "Blutiger Thron": eine Verschmelzung zaehlt fuer raumweite
-  // Spielerstapel als HALBER Geistertod, OHNE Heilung/Explosion/Abklingzeit
-  // auszuloesen -- nur pureStack-Listener (011/012/013) bekommen den halben
-  // Zuschlag, ein Listener mit Seiteneffekt (086) bleibt bei einer
-  // Verschmelzung stumm.
+  // (q) UEBERARBEITET (Champion-/Nekromant-Nachschliff Abschnitt 10): eine
+  // Verschmelzung zaehlt fuer raumweite Spielerstapel jetzt als VOLLER
+  // (nicht mehr halber) Geistertod, weiterhin OHNE Heilung/Explosion/
+  // Abklingzeit auszuloesen -- nur pureStack-Listener (011/012/013) bekommen
+  // den Zuschlag, ein Listener mit Seiteneffekt (097) bleibt bei einer
+  // Verschmelzung nur ueber seinen eigenen 'fusion'-Reason ausgeloest, nicht
+  // ein zweites Mal durch den ghost_092-Zweig.
   {
     const { onGhostRemoved } = await import('../src/game/necro.js');
     // Positiv: mit ghost_092 UND einer pureStack-Karte (011) gibt eine
-    // Verschmelzung genau die HAELFTE des normalen Zuwachses.
+    // Verschmelzung den VOLLEN normalen Zuwachs (Auftrag: "volle statt
+    // halbe Wirkung").
     const st = legionRoom({ ghost_092: 1, ghost_011: 1 });
     const before = getNecroStackForTest(st, '_pctDamage');
     const dummy = createGhost(st, 500, 500, 0, 't_pink');
     onGhostRemoved(st, dummy, 'fusion');
     const after = getNecroStackForTest(st, '_pctDamage');
-    const expectedGain = st.player.cfg.necroDmgPctPerDeath * 0.5;
+    const expectedGain = st.player.cfg.necroDmgPctPerDeath;
     check(
       Math.abs(after - before - expectedGain) < 1e-9,
-      `Phase 9: ghost_092 gibt bei einer Verschmelzung nicht exakt den halben Stapel-Zuwachs (erwartet +${expectedGain}, war +${after - before})`,
+      `Phase 9: ghost_092 gibt bei einer Verschmelzung nicht exakt den vollen Stapel-Zuwachs (erwartet +${expectedGain}, war +${after - before})`,
     );
     // Kontrolle: OHNE ghost_092 bleibt eine Verschmelzung fuer pureStack-
     // Listener wirkungslos (fusion steht nicht in DEATH_REASONS).
@@ -9998,9 +10103,10 @@ for (const seed of SEEDS) {
     check(st.player.shield > 0, 'Phase 9: ghost_094 gibt dem Hauptpanzer keinen Schild');
   }
 
-  // (t) ghost_095 "Seelenband": ein Anteil des Schadens am Hauptpanzer wird
-  // auf den Champion umgeleitet (durch dieselbe Resistenz-/Schildpool-Kette),
-  // der Spieler nimmt entsprechend weniger.
+  // (t) UEBERARBEITET (Champion-/Nekromant-Nachschliff Abschnitt 10):
+  // ghost_095 "Seelenband" leitet NUR NOCH einen Anteil des Schadens am
+  // Hauptpanzer auf den Champion um (durch dieselbe Resistenz-/Schildpool-
+  // Kette) -- der zeitlich befristete Zusatzbonus ist ersatzlos entfernt.
   {
     const st = legionRoom({ ghost_095: 1 });
     const champ = push(st, createGhost(st, 100, 100, 0, 't_pink'));
@@ -10016,7 +10122,6 @@ for (const seed of SEEDS) {
     check(champ.hp < champHpBefore, 'Phase 9: ghost_095 leitet keinen Schaden auf den Champion um');
     const playerLoss = playerHpBefore - st.player.hp;
     check(playerLoss < 100, `Phase 9: der Spieler nimmt trotz Umleitung den vollen Treffer (${playerLoss})`);
-    check(getNecroTimedStackForTest(st, '_timedSoulbondBuff') > 0, 'Phase 9: ghost_095 gibt bei einer Umleitung keinen Buff');
   }
 
   // (u) ghost_097 "Thron aus Gebein": JEDER Geistertod UND JEDE Verschmelzung
@@ -10719,8 +10824,10 @@ for (const seed of SEEDS) {
   const { hashSeed, rngFor, mulberry32 } = await import('../src/core/rng.js');
   const mergedUpgrades = { ...upgradesData, upgrades: { ...upgradesData.upgrades, ...necroData.upgrades } };
 
+  // Champion-/Nekromant-Nachschliff: 105 urspruengliche Karten + 11 neue
+  // (ghost_106..ghost_116) - 1 entfernte (ghost_068 "Langer Anspruch") = 115.
   const necroIds = Object.keys(necroData.upgrades);
-  check(necroIds.length === 105, `Phase 11: ${necroIds.length} Karten im Pool statt 105 (Testvoraussetzung)`);
+  check(necroIds.length === 115, `Phase 11: ${necroIds.length} Karten im Pool statt 115 (Testvoraussetzung)`);
 
   const necroRoom = (playerUpgrades = {}, types = ['t_pink']) => {
     const st = createState(tanksData, tilesData, {
@@ -11011,11 +11118,18 @@ for (const seed of SEEDS) {
     const control = createGhost(st, 999, 999, 0, 't_pink');
     const loserBaseDmg = control.baseDamage;
     const dmgFrac = necroData.upgrades.ghost_071.core.necroFusionDamagePct; // aus den Daten, nicht hartkodiert
-    const perFusionGain = Math.round(loserBaseDmg * dmgFrac);
+    // Champion-Nachschliff Abschnitt 5: ghost_071 selbst steigert die Rate um
+    // +necroUniqueThronePerFusionPct JE BEREITS ERFOLGTER Verschmelzung
+    // (winner.fusionCount VOR dem Zaehler-Erhoehen) -- die erste Verschmelzung
+    // nutzt also die reine dmgFrac (fusionCount 0), die zweite bereits
+    // dmgFrac + 1*perFusionBonus.
+    const perFusionBonus = necroData.upgrades.ghost_071.core.necroUniqueThronePerFusionPct || 0;
+    const gain1 = Math.round(loserBaseDmg * dmgFrac);
+    const gain2 = Math.round(loserBaseDmg * (dmgFrac + perFusionBonus));
     // Testvoraussetzung: linear und kompondierend muessen sich klar
     // unterscheidbar auseinanderentwickeln, sonst waere die Probe stumpf.
-    const linear2 = champBaseDmg + 2 * perFusionGain;
-    const compounding2 = Math.round((champBaseDmg + perFusionGain) * (1 + dmgFrac));
+    const linear2 = champBaseDmg + gain1 + gain2;
+    const compounding2 = Math.round((champBaseDmg + gain1) * (1 + dmgFrac + perFusionBonus));
     check(linear2 !== compounding2, 'Phase 11: Testvoraussetzung -- linear/kompondierend ergeben denselben Wert, Probe stumpf');
 
     pushGhost(st, createGhost(st, 100, 100, 0, 't_pink')); // baugleich -> Gleichstand, champ (existing) gewinnt
@@ -11231,6 +11345,7 @@ for (const seed of SEEDS) {
         leaveWorkshop(run);
       } else if (run.phase === 'event') chooseEventOption(run, 0);
       else if (run.phase === 'rest') passRest(run);
+      else if (run.phase === 'bossReward') passBossReward(run);
       else if (run.phase === 'actComplete') { sawActTransition = true; advanceAct(run); }
       else break;
 
@@ -11271,6 +11386,7 @@ for (const seed of SEEDS) {
       else if (run.phase === 'map') pickMapNode(run);
       else if (run.phase === 'event') chooseEventOption(run, 0);
       else if (run.phase === 'rest') passRest(run);
+      else if (run.phase === 'bossReward') passBossReward(run);
       else if (run.phase === 'actComplete') advanceAct(run);
       else break;
     }
@@ -11325,6 +11441,493 @@ for (const seed of SEEDS) {
       }).some((d) => d.id === syntheticId),
       'Abschnitt 64: eine ueber den Shop gekaufte einzigartige Karte bleibt in anderen Pools verfuegbar',
     );
+  }
+}
+
+// ---- 65. Champion-/Nekromant-Nachschliff (Auftrag mit 24 Abschnitten) ----
+// Deckt die Kernpunkte ab: Rastplatz-Neubau (2), Champion-Basiswerte/-
+// Lebensdauer/-Nachfolge (3), Verschmelzung 100 %-Baseline (4/5/6/22), die
+// fuenf Wiederbelebungs-/fuenf Lebensdauer-Karten (7/8), Losgeloeste Ketten
+// (9), zehn ueberarbeitete Karten (10), Gadget-Sperre vs. automatische
+// Wiederbelebung (11), Elite-Wiederbelebung (12), Glossar (13), Pinker/
+// Gruener (14/15), Elite-/Boss-Belohnung (16/17). Jeder Kernpunkt einzeln
+// per Gegenprobe am echten Quellcode bestaetigt (temporaer gebrochen,
+// erwartete Checks rot, danach zurueckgesetzt) -- Details in CLAUDE.md.
+{
+  const { createGhost, pushGhost, killGhost, ensureChampion, fuseGhost, occupiedGhostSlots } = await import('../src/game/ghost.js');
+  const { createState } = await import('../src/game/state.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+  const { resolveCfg: resolveCfg2, applyUpgrades: applyUpgrades2 } = await import('../src/game/cfg.js');
+  const { createRun, chooseUpgrade, rollBossReward, chooseBossReward, repairAtRest: repairAtRest2, workbenchOptions: workbenchOptions2, upgradeCardAtRest: upgradeCardAtRest2 } = await import('../src/game/run.js');
+  const { buildCandidates, rollOffers, drawOne, eliteRarityWeights } = await import('../src/game/upgradepool.js');
+  const { initGlossary, highlightTerms } = await import('../src/ui/glossary.js');
+  const glossaryData = load('glossary');
+  const mergedUpgrades = { ...upgradesData, upgrades: { ...upgradesData.upgrades, ...necroData.upgrades } };
+
+  const necroRoom = (playerUpgrades = {}, types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades,
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+      actEnemyPool: types,
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    return st;
+  };
+
+  // ---- (a) Rastplatz/Werkbank: neu gewaehlte Karte statt Stufe -----------
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 555, 'normal', { starterTank: 'player' });
+    run.upgrades.sockel_panzerung = 1;
+    run.phase = 'rest';
+    const before = run.upgrades.sockel_panzerung;
+    const opts = workbenchOptions2(run);
+    check(opts.some((o) => o.id === 'sockel_panzerung'), 'Abschnitt 65a: eine besessene wiederholbare Karte fehlt in der Werkbank-Liste');
+    check(upgradeCardAtRest2(run, 'sockel_panzerung'), 'Abschnitt 65a: erneutes Waehlen am Rastplatz schlaegt fehl');
+    check(run.upgrades.sockel_panzerung === before + 1, `Abschnitt 65a: Stapelzahl steigt nicht (${before} -> ${run.upgrades.sockel_panzerung})`);
+    check(run.phase !== 'rest', 'Abschnitt 65a: der Raum endet nicht nach der Werkbank-Wahl');
+    check(run.upgradeLevels.sockel_panzerung == null || run.upgradeLevels.sockel_panzerung === 0, 'Abschnitt 65a: das alte Stufen-Feld wird noch beschrieben');
+    // Einzigartige Karte darf nie in der Liste stehen, egal wie oft besessen.
+    const run2 = createRun(tanksData, tilesData, diffData, upgradesData, 555, 'normal', { starterTank: 'player' });
+    run2.upgrades.sockel_ersatzpanzer = 3; // upgradable:false, trotzdem nicht der Testfall hier
+    run2.upgradesData.upgrades.test_unique_65 = { id: 'test_unique_65', name: 'Test', description: 'x', tag: 'x', rarity: 'common', isUnique: true, requires: [], core: {} };
+    run2.upgrades.test_unique_65 = 1;
+    run2.phase = 'rest';
+    check(!workbenchOptions2(run2).some((o) => o.id === 'test_unique_65'), 'Abschnitt 65a: eine einzigartige Karte erscheint in der Werkbank-Liste');
+    check(!upgradeCardAtRest2(run2, 'test_unique_65'), 'Abschnitt 65a: eine einzigartige Karte laesst sich am Rastplatz erneut waehlen');
+  }
+  // Gegenprobe (a): repickOwnedCard() ohne isUnique-Sperre wuerde die zweite
+  // Pruefung rot machen -- am Quellcode verifiziert (temporaer `!def.isUnique`
+  // entfernt, Check schlug fehl, zurueckgesetzt).
+
+  // ---- (b) Champion: 70/70, kein Geisterlimit, sofortige Nachfolge -------
+  {
+    const st = necroRoom();
+    st.player.cfg.maxHp = 100;
+    st.player.cfg.damage = 20;
+    const g1 = createGhost(st, 100, 100, 0, 't_pink');
+    pushGhost(st, g1); // wird sofort Champion (erster Spawn)
+    check(g1.isChampion, 'Abschnitt 65b: erster Untertan wird nicht automatisch Champion');
+    check(g1.cfg.maxHp === 70, `Abschnitt 65b: Champion-LP ${g1.cfg.maxHp} statt 70 (70 % von 100)`);
+    check(g1.cfg.damage === 14, `Abschnitt 65b: Champion-Schaden ${g1.cfg.damage} statt 14 (70 % von 20)`);
+    const cap = st.data.balance.ghost.maxActive ?? 3;
+    for (let i = 0; i < cap; i++) pushGhost(st, createGhost(st, 100, 100, 0, 't_pink'));
+    check(occupiedGhostSlots(st) === cap, `Abschnitt 65b: Champion zaehlt gegen das Geisterlimit (belegt ${occupiedGhostSlots(st)} statt ${cap})`);
+    check(st.ghosts.filter((g) => g.alive).length === cap + 1, 'Abschnitt 65b: Champion + Deckel ergeben nicht cap+1 lebende Geister');
+  }
+  // Gegenprobe (b): slotCost am Champion faelschlich auf 1 statt 0 (durch
+  // Entfernen des isChampion-Ausschlusses in occupiedGhostSlots) -- am
+  // Quellcode verifiziert, Check schlug fehl, zurueckgesetzt.
+
+  // ---- (c) Champion-Lebensdauer: begrenzt, Ewiger Thron unendlich --------
+  {
+    const st = necroRoom({}, ['t_pink']);
+    const g = createGhost(st, 100, 100, 0, 't_pink');
+    pushGhost(st, g);
+    const base = st.data.balance.ghost.lifetimeS ?? 12;
+    check(g.isChampion && Number.isFinite(g.lifetimeMax) && g.lifetimeMax === base, `Abschnitt 65c: Champion-Basislebenszeit ${g.lifetimeMax} statt ${base}`);
+    // Ewiger Thron (necroCrownEternalLifetime) macht die Champion-Lebenszeit
+    // unendlich -- am nachfolgenden, NEU befoerderten Champion geprueft
+    // (promoteToChampion() wird jedesmal frisch aufgerufen).
+    const st2 = necroRoom({ ghost_083: 1 }, ['t_pink']);
+    const g2 = createGhost(st2, 100, 100, 0, 't_pink');
+    pushGhost(st2, g2);
+    check(g2.lifetimeMax === Infinity, `Abschnitt 65c: Ewiger Thron macht die Champion-Lebenszeit nicht unendlich (${g2.lifetimeMax})`);
+    // Ablauf toetet auch einen gewoehnlich befristeten Champion.
+    const st3 = necroRoom({}, ['t_pink']);
+    const g3 = createGhost(st3, 100, 100, 0, 't_pink');
+    pushGhost(st3, g3);
+    g3.lifetime = 0.001;
+    ensureChampion(st3); // No-op, Champion existiert schon
+    st3.ghosts.forEach((x) => {
+      if (x.alive && x.lifetime <= 0.01) killGhost(st3, x, 'expire');
+    });
+    check(!g3.alive, 'Abschnitt 65c: eine abgelaufene Champion-Lebenszeit toetet den Champion nicht');
+  }
+  // Gegenprobe (c): g.lifetime = Infinity fest in promoteToChampion() belassen
+  // (alte Fassung) -- Check auf lifetimeMax === base schlaegt fehl, am
+  // Quellcode verifiziert und zurueckgesetzt.
+
+  // ---- (d) Sofortige Nachfolge + Kronenerbe ohne Zeitfenster --------------
+  {
+    const st = necroRoom({ ghost_080: 1 }, ['t_pink']); // Kronenerbe
+    const champ = createGhost(st, 100, 100, 0, 't_pink');
+    pushGhost(st, champ);
+    const other = createGhost(st, 120, 100, 0, 't_pink');
+    pushGhost(st, other);
+    // Champion erhaelt kuenstlich einen Fusionsbonus, damit etwas zu erben ist.
+    champ.baseDamage = 20;
+    champ.fusionDamageBonus = 10;
+    champ.cfg.damage = champ.baseDamage + champ.fusionDamageBonus;
+    killGhost(st, champ); // toedlicher Treffer
+    check(!champ.alive, 'Abschnitt 65d: der alte Champion lebt nach killGhost() noch');
+    const successor = st.ghosts.find((g) => g.alive && g.isChampion);
+    check(!!successor, 'Abschnitt 65d: nach dem Champion-Tod wird SOFORT kein neuer Champion befoerdert');
+    check(successor === other, 'Abschnitt 65d: der einzige verbleibende gewoehnliche Geist wird nicht Nachfolger');
+    // Kronenerbe: 60 % von 10 = 6, ohne jedes Zeitfenster (keine Wartezeit
+    // zwischen Tod und Befoerderung noetig -- beides passiert synchron).
+    check(successor.fusionDamageBonus === 6, `Abschnitt 65d: Kronenerbe uebertraegt ${successor.fusionDamageBonus} statt 6`);
+    check(successor.cfg.damage === successor.baseDamage + 6, 'Abschnitt 65d: der geerbte Bonus wirkt nicht auf cfg.damage');
+  }
+  // Gegenprobe (d): Kronenerbe-Konsum in promoteToChampion() auskommentiert
+  // -- successor.fusionDamageBonus bleibt 0 statt 6, Check schlaegt fehl; am
+  // Quellcode verifiziert und zurueckgesetzt. Ohne Kronenerbe-Karte (kein
+  // necroCrownHeirPct) bleibt der Bonus ebenfalls 0 (separat verifiziert).
+
+  // ---- (e) Verschmelzung: 100 % Basis + Einziger Thron/Schwert/Schild/Bogen
+  {
+    // Reine 100%-Baseline ohne jede Karte, per Auslese der Legion (Karte)
+    // ausgeloest -- greift auch OHNE Einziger Thron.
+    const st = necroRoom({ ghost_098: 1 }, ['t_pink']); // Auslese der Legion
+    const champ = createGhost(st, 100, 100, 0, 't_pink');
+    pushGhost(st, champ);
+    const cap = (st.data.balance.ghost.maxActive ?? 3);
+    for (let i = 0; i < cap; i++) pushGhost(st, createGhost(st, 100, 100, 0, 't_pink'));
+    const weakest = st.ghosts.filter((g) => g.alive && !g.isChampion).reduce((a, b) => (a.hp < b.hp ? a : b));
+    const loserBaseDmg = weakest.baseDamage;
+    const championBaseDmg = champ.baseDamage;
+    pushGhost(st, createGhost(st, 100, 100, 0, 't_pink')); // loest die Verdraengungs-Fusion aus
+    check(champ.cfg.damage === championBaseDmg + Math.round(loserBaseDmg * 1.0), `Abschnitt 65e: Auslese der Legion ueberträgt nicht 100 % Basis-Schaden (${champ.cfg.damage} vs. erwartet ${championBaseDmg + loserBaseDmg})`);
+
+    // Einziger Thron: +5 %/Verschmelzung, ohne Obergrenze.
+    const st2 = necroRoom({ ghost_071: 1 }, ['t_pink']);
+    const champ2 = createGhost(st2, 100, 100, 0, 't_pink');
+    pushGhost(st2, champ2); // erster Spawn wird selbst Champion, noch keine Fusion
+    const loser1 = createGhost(st2, 100, 100, 0, 't_pink');
+    const loser1BaseDmg = loser1.baseDamage;
+    pushGhost(st2, loser1); // 1. Verschmelzung: 100 % (fusionCount war 0)
+    const afterFirst = champ2.fusionDamageBonus;
+    check(afterFirst === Math.round(loser1BaseDmg * 1.0), `Abschnitt 65e: 1. Verschmelzung mit Einziger Thron ueberträgt nicht 100 % (${afterFirst} vs. ${loser1BaseDmg})`);
+    const loser2 = createGhost(st2, 100, 100, 0, 't_pink');
+    const loser2BaseDmg = loser2.baseDamage;
+    pushGhost(st2, loser2); // 2. Verschmelzung: 105 % (1 vorherige Fusion)
+    const gained2 = champ2.fusionDamageBonus - afterFirst;
+    check(gained2 === Math.round(loser2BaseDmg * 1.05), `Abschnitt 65e: 2. Verschmelzung ueberträgt nicht 105 % (${gained2} vs. ${Math.round(loser2BaseDmg * 1.05)})`);
+
+    // Einziges Schwert (+15pp Schaden) stapelt additiv auf die 100 % Baseline.
+    const st3 = necroRoom({ ghost_071: 1, ghost_106: 1 }, ['t_pink']);
+    const champ3 = createGhost(st3, 100, 100, 0, 't_pink');
+    pushGhost(st3, champ3);
+    const loser3 = createGhost(st3, 100, 100, 0, 't_pink');
+    const loser3BaseDmg = loser3.baseDamage;
+    pushGhost(st3, loser3);
+    check(champ3.fusionDamageBonus === Math.round(loser3BaseDmg * 1.15), `Abschnitt 65e: Einziges Schwert ergibt nicht 115 % Schadensuebertragung (${champ3.fusionDamageBonus} vs. ${Math.round(loser3BaseDmg * 1.15)})`);
+  }
+  // Gegenprobe (e): fuseGhost()s Fallback ?? 1.0 auf ?? 0.3 zurueckgesetzt --
+  // Auslese-der-Legion-Check faellt sofort auf den alten, viel kleineren
+  // Wert; am Quellcode verifiziert und zurueckgesetzt. necroUniqueThronePerFusionPct
+  // aus dem cfg-Applier entfernt -> der 105-%-Check schlaegt fehl (verifiziert).
+
+  // ---- (f) Blutiger Thron: Verschmelzung zaehlt VOLL --------------------
+  {
+    const st = necroRoom({ ghost_071: 1, ghost_011: 1, ghost_092: 1 }, ['t_pink']); // Seelenzorn + Blutiger Thron
+    const champ = createGhost(st, 100, 100, 0, 't_pink');
+    pushGhost(st, champ);
+    const before = (st.necroStacks._pctDamage || 0);
+    pushGhost(st, createGhost(st, 100, 100, 0, 't_pink')); // Verschmelzung
+    const after = st.necroStacks._pctDamage || 0;
+    check(after - before === 0.05, `Abschnitt 65f: Blutiger Thron zaehlt eine Verschmelzung nicht mehr als vollen Geistertod (+${after - before} statt +0.05)`);
+  }
+  // Gegenprobe (f): der Multiplikator in necro.js von 1 zurueck auf 0.5
+  // gesetzt -- Delta faellt auf 0.025 statt 0.05, Check schlaegt fehl; am
+  // Quellcode verifiziert und zurueckgesetzt.
+
+  // ---- (g) Seelenheilung: genau einmal pro Verschmelzung ------------------
+  {
+    const st = necroRoom({ ghost_071: 1, ghost_065: 1 }, ['t_pink']);
+    const champ = createGhost(st, 100, 100, 0, 't_pink');
+    pushGhost(st, champ);
+    champ.hp = Math.max(1, champ.cfg.maxHp - 20);
+    const hpBefore = champ.hp;
+    pushGhost(st, createGhost(st, 100, 100, 0, 't_pink'));
+    check(champ.hp > hpBefore, 'Abschnitt 65g: Seelenheilung heilt den Champion bei einer Verschmelzung nicht');
+    check(champ.hp <= champ.cfg.maxHp, 'Abschnitt 65g: Seelenheilung heilt ueber das maximale Leben hinaus');
+  }
+
+  // ---- (h) Gadget-Sperre blockiert nur den aktiven Slot, nicht die
+  //      automatische Wiederbelebung -----------------------------------
+  {
+    const { useGadget, useSecondary } = await import('../src/game/tank.js');
+    const st = necroRoom({}, ['t_pink']);
+    st.player.cfg.secondaryDisabled = true;
+    check(useSecondary(st.player, st) === false, 'Abschnitt 65h: die Geisterbombe (aktive Erzeugung) ignoriert die Ausruestungssperre');
+    check(useGadget(st.player, st) === false, 'Abschnitt 65h: das Gadget ignoriert die Ausruestungssperre');
+    // Automatische Wiederbelebung laeuft ueber killTank(), kennt secondaryDisabled
+    // strukturell gar nicht -- Struktur-Nachweis statt Simulation.
+    const src = readFileSync(join(root, 'src', 'game', 'state.js'), 'utf8');
+    const reviveBlock = src.slice(src.indexOf('const necroKill ='), src.indexOf('const necroKill =') + 4000);
+    check(!reviveBlock.includes('secondaryDisabled'), 'Abschnitt 65h: der automatische Wiederbelebungswuerfel prueft faelschlich secondaryDisabled');
+  }
+
+  // ---- (i) Elite-Wiederbelebung generell moeglich, Karte hebt auf 90 % --
+  {
+    const src = readFileSync(join(root, 'src', 'game', 'state.js'), 'utf8');
+    const canReviveLine = src.match(/const canRevive = [^;]+;/)?.[0] || '';
+    check(!canReviveLine.includes('isElite'), `Abschnitt 65i: canRevive schliesst Eliten weiterhin ohne Karte aus (${canReviveLine})`);
+    check(necroData.upgrades.ghost_056.core.necroEliteReviveStatPct === 0.9, 'Abschnitt 65i: Elite-Reaktivierung liefert nicht 90 % Basiswert-Anteil');
+  }
+  // Gegenprobe (i): `(!isElite || pc.necroEliteRevive)` probeweise wieder
+  // eingefuegt -- der erste Check schlaegt fehl (Zeile enthaelt wieder
+  // "isElite"); am Quellcode verifiziert und zurueckgesetzt.
+
+  // ---- (j) Fuenf Wiederbelebungs- und fuenf Lebensdauer-Karten -----------
+  {
+    const revive = [
+      ['ghost_044', 'common', 0.07],
+      ['ghost_109', 'uncommon', 0.10],
+      ['ghost_055', 'rare', 0.12],
+      ['ghost_110', 'epic', 0.18],
+      ['ghost_111', 'legendary', 0.25],
+    ];
+    for (const [id, rarity, pct] of revive) {
+      const d = necroData.upgrades[id];
+      check(!!d, `Abschnitt 65j: ${id} fehlt im Pool`);
+      check(d.rarity === rarity, `Abschnitt 65j: ${id} hat Seltenheit ${d.rarity} statt ${rarity}`);
+      check(Math.abs(d.core.necroReviveChanceAdd - pct) < 1e-9, `Abschnitt 65j: ${id} liefert ${d.core.necroReviveChanceAdd} statt ${pct}`);
+      check(d.isUnique === false, `Abschnitt 65j: ${id} ist einzigartig statt wiederholbar`);
+    }
+    const lifetime = [
+      ['ghost_005', 'common', 'ghostLifetimeAdd', 0.5],
+      ['ghost_112', 'uncommon', 'necroCrownLifetimeAdd', 1.0],
+      ['ghost_113', 'rare', 'necroCrownLifetimeAdd', 1.5],
+      ['ghost_114', 'epic', 'necroCrownLifetimeAdd', 2.0],
+      ['ghost_115', 'legendary', 'necroCrownLifetimeAdd', 3.0],
+    ];
+    for (const [id, rarity, field, val] of lifetime) {
+      const d = necroData.upgrades[id];
+      check(!!d, `Abschnitt 65j: ${id} fehlt im Pool`);
+      check(d.rarity === rarity, `Abschnitt 65j: ${id} hat Seltenheit ${d.rarity} statt ${rarity}`);
+      check(Math.abs(d.core[field] - val) < 1e-9, `Abschnitt 65j: ${id}.core.${field} ist ${d.core[field]} statt ${val}`);
+      check(d.isUnique === false, `Abschnitt 65j: ${id} ist einzigartig statt wiederholbar`);
+    }
+    // Laengerer Eid wirkt auf BEIDE (Untertan und Champion) ueber
+    // ghostLifetimeAdd -- Champion-Test analog zu (c).
+    const st = necroRoom({ ghost_005: 1 }, ['t_pink']);
+    const g = createGhost(st, 100, 100, 0, 't_pink');
+    pushGhost(st, g);
+    const base = st.data.balance.ghost.lifetimeS ?? 12;
+    check(Math.abs(g.lifetimeMax - (base + 0.5)) < 1e-9, `Abschnitt 65j: Laengerer Eid wirkt nicht auf die Champion-Lebenszeit (${g.lifetimeMax} statt ${base + 0.5})`);
+  }
+
+  // ---- (k) Langer Anspruch ist vollstaendig entfernt ---------------------
+  check(!necroData.upgrades.ghost_068, 'Abschnitt 65k: ghost_068 "Langer Anspruch" ist noch im Pool');
+  check(!Object.values(necroData.upgrades).some((d) => d.name === 'Langer Anspruch'), 'Abschnitt 65k: eine Karte heisst noch "Langer Anspruch"');
+  check(
+    !Object.values(necroData.upgrades).some((d) => (d.requires || []).includes('ghost_068')),
+    'Abschnitt 65k: eine Karte verlangt noch ghost_068 als Voraussetzung',
+  );
+
+  // ---- (l) Seelenzorn/Totenrhythmus 5 %, Treues Ende 50 % ---------------
+  check(necroData.upgrades.ghost_011.core.necroDmgPctPerDeath === 0.05, 'Abschnitt 65l: Seelenzorn liefert nicht 5 % Schaden je Geistertod');
+  check(necroData.upgrades.ghost_012.core.necroFireRatePctPerDeath === 0.05, 'Abschnitt 65l: Totenrhythmus liefert nicht 5 % Feuerrate je Geistertod');
+  check(necroData.upgrades.ghost_028.core.necroExpireStackBonus === 0.5, 'Abschnitt 65l: Treues Ende liefert nicht 50 % Bonus');
+  check(necroData.upgrades.ghost_024.core.necroFireBurstWindowS === 2.0, 'Abschnitt 65l: Dunkler Treibstoff hat nicht das 2-Sekunden-Fenster');
+
+  // ---- (m) Erbschaft des Starken/Haerte aus Verlust: bis Raumende --------
+  {
+    const { necroDamagePct, necroResistBonus, buildNecroListeners } = await import('../src/game/necro.js');
+    const st = necroRoom({ ghost_021: 1, ghost_022: 1 }, ['t_pink']);
+    st.necroListeners = [];
+    buildNecroListeners(st, st.player.cfg);
+    const before = necroDamagePct(st);
+    const g = createGhost(st, 100, 100, 0, 't_pink');
+    g.baseDamage = 100; // >= 120% Schwelle greift hier ohnehin nicht, unterer Zweig reicht
+    pushGhost(st, g);
+    killGhost(st, g);
+    check(necroDamagePct(st) > before, 'Abschnitt 65m: Erbschaft des Starken traegt keinen dauerhaften Schadensbonus ein');
+    for (let i = 0; i < 3; i++) {
+      const gg = createGhost(st, 100, 100, 0, 't_pink');
+      pushGhost(st, gg);
+      killGhost(st, gg);
+    }
+    check(necroResistBonus(st) >= 8, `Abschnitt 65m: Haerte aus Verlust traegt nach 3 Toden keine dauerhafte Resistenz ein (${necroResistBonus(st)})`);
+    // Kein Zerfall ueber Zeit (bewusst NICHT tickNecroTimers aufgerufen zu
+    // pruefen, sondern strukturell: der Bonus liegt in state.necroStacks,
+    // nicht in state.necroTimedStacks).
+    check((st.necroStacks._roomDmgErbschaft || 0) > 0, 'Abschnitt 65m: Erbschaft des Starken liegt nicht im dauerhaften Raum-Stapel');
+    check((st.necroStacks._roomResistHaerte || 0) > 0, 'Abschnitt 65m: Haerte aus Verlust liegt nicht im dauerhaften Raum-Stapel');
+  }
+
+  // ---- (n) Koenigliches Opfer: 40 % Champion-Basis, kein Zeitfenster -----
+  {
+    const { useGadget } = await import('../src/game/tank.js');
+    const st = necroRoom({ ghost_096: 1 }, ['t_pink']);
+    st.player.equippedGadget = 'ghost_096';
+    st.player.cfg.gadget = 'ghost_096';
+    const champ = createGhost(st, 100, 100, 0, 't_pink');
+    pushGhost(st, champ);
+    champ.baseDamage = 50;
+    champ.baseMaxHp = 200;
+    const dmgBefore = st.player.cfg.damage;
+    const hpBefore = st.player.cfg.maxHp;
+    useGadget(st.player, st);
+    check(!champ.alive, 'Abschnitt 65n: Koenigliches Opfer toetet den Champion nicht');
+    check(st.player.cfg.damage === dmgBefore + 20, `Abschnitt 65n: Hauptpanzer erhaelt nicht +40 % Champion-Basisschaden (${st.player.cfg.damage - dmgBefore} statt 20)`);
+    check(st.player.cfg.maxHp === hpBefore + 80, `Abschnitt 65n: Hauptpanzer erhaelt nicht +40 % Champion-Basis-LP (${st.player.cfg.maxHp - hpBefore} statt 80)`);
+    check(!('necroSacrificeChampionDurationS' in necroData.upgrades.ghost_096.core), 'Abschnitt 65n: Koenigliches Opfer traegt noch das alte Zeitfenster-Feld');
+  }
+
+  // ---- (o) Seelenband: nur Umleitung, kein Zusatzbonus --------------------
+  check(!('necroSoulbondBuffPct' in necroData.upgrades.ghost_095.core), 'Abschnitt 65o: Seelenband traegt noch den alten Zeitbonus');
+
+  // ---- (p) Seelenmonolith: Ausloeser ist der Hauptpanzer -----------------
+  {
+    const src = readFileSync(join(root, 'src', 'game', 'ghost.js'), 'utf8');
+    // WICHTIG: src.indexOf() faengt sonst den ersten (Kommentar-)Fund von
+    // 'necroCrownAnchorAfterS' (dem Feldnamen im Standarddaten-Kommentar bei
+    // der Objekterzeugung) statt den eigentlichen Auswertungs-Block -- gezielt
+    // an der IF-Bedingung ansetzen, die den Mechanismus wirklich traegt.
+    const marker = 'playerCfg?.necroCrownAnchorAfterS)';
+    const anchorIdx = src.indexOf(marker);
+    check(anchorIdx >= 0, 'Abschnitt 65p: Testaufbau -- der Seelenmonolith-Auswertungsblock wurde nicht gefunden');
+    const anchorBlock = src.slice(anchorIdx, anchorIdx + 500);
+    check(anchorBlock.includes('state.player'), 'Abschnitt 65p: Seelenmonolith prueft nicht die Bewegung des Hauptpanzers');
+    check(necroData.upgrades.ghost_081.core.necroCrownAnchorAfterS === 5.0, 'Abschnitt 65p: Seelenmonolith verlangt nicht 5 Sekunden Stillstand');
+  }
+
+  // ---- (q) Losgeloeste Ketten: Geisterbombe liefert einen beweglichen Typ
+  {
+    const { useSecondary } = await import('../src/game/tank.js');
+    const st = necroRoom({ ghost_116: 1 }, ['t_pink']);
+    // Reiner Guardian-Pool (t_green ist "guardian", bewegt sich nie) --
+    // ohne den Filter waere JEDE gespawnte Geisterbombe stationaer.
+    st.actEnemyPool = ['t_green'];
+    let sawMobile = false;
+    for (let i = 0; i < 20; i++) {
+      st.player.ghostBombCooldown = 0;
+      st.ghosts.length = 0;
+      useSecondary(st.player, st);
+      const g = st.ghosts.find((x) => x.alive);
+      if (g && g.type !== 't_green') sawMobile = true;
+    }
+    // t_green ist der einzige Typ im Pool -> der Filter faellt auf den
+    // vollen (stationaeren) Pool zurueck, KEIN Absturz, kein leerer Spawn.
+    check(st.ghosts.some((g) => g.alive), 'Abschnitt 65q: Geisterbombe spawnt nichts bei einem reinen Guardian-Pool (Rueckfall fehlt)');
+    // Mit einem gemischten Pool wird garantiert ein beweglicher Typ gewaehlt.
+    st.actEnemyPool = ['t_green', 't_pink'];
+    let allMobile = true;
+    for (let i = 0; i < 20; i++) {
+      st.player.ghostBombCooldown = 0;
+      st.ghosts.length = 0;
+      useSecondary(st.player, st);
+      const g = st.ghosts.find((x) => x.alive);
+      if (g && g.type === 't_green') allMobile = false;
+    }
+    check(allMobile, 'Abschnitt 65q: Losgeloeste Ketten laesst trotzdem stationaere Typen ueber die Geisterbombe erscheinen');
+  }
+  // Gegenprobe (q): necroForceMobileBomb-Filter in tank.js: spawnGhostBomb()
+  // ausgebaut -- der letzte Check (allMobile) schlaegt fehl (t_green
+  // erscheint wieder); am Quellcode verifiziert und zurueckgesetzt.
+
+  // ---- (r) Pinker Panzer: 117 px/s, weiterhin 3 Geschosse ----------------
+  {
+    const cfg = resolveCfg2(tanksData, 't_pink');
+    check(cfg.bulletSpeed === 117, `Abschnitt 65r: t_pink.bulletSpeed ist ${cfg.bulletSpeed} statt 117`);
+    check(cfg.magazine === 3, `Abschnitt 65r: t_pink.magazine ist ${cfg.magazine} statt 3`);
+    const otherCfg = resolveCfg2(tanksData, 't_yellow');
+    check(otherCfg.bulletSpeed === (tanksData.bulletSpeeds.bullet ?? 130), 'Abschnitt 65r: ein anderer Gegnertyp wird durch die t_pink-Aenderung mitgebremst');
+  }
+  // Gegenprobe (r): tanks.json: t_pink.bulletSpeed entfernt -- cfg.bulletSpeed
+  // faellt auf den geteilten Wert (130) zurueck, Check schlaegt fehl; am
+  // Quellcode verifiziert und zurueckgesetzt.
+
+  // ---- (s) Gruener Panzer: 1,7 s Moerser-Flugzeit -------------------------
+  check(tanksData.balance.mortar.flightTimeS === 1.7, `Abschnitt 65s: mortar.flightTimeS ist ${tanksData.balance.mortar.flightTimeS} statt 1.7`);
+  check(tanksData.balance.mortar.radiusPx === 44, 'Abschnitt 65s: mortar.radiusPx hat sich unerwuenscht geaendert');
+
+  // ---- (t) Elite-Belohnung: mindestens eine episch-oder-legendaere Karte -
+  // rollReward() selbst ist modul-lokal (nicht exportiert) -- der Test nutzt
+  // deshalb dieselben oeffentlichen Bausteine (rollOffers/drawOne/
+  // eliteRarityWeights), mit denen run.js: rollReward()s Elite-Zweig
+  // 1:1 aufgebaut ist.
+  {
+    let sawEpicOrLegendary = 0;
+    const trials = 60;
+    for (let i = 0; i < trials; i++) {
+      const opts = {
+        chosen: {}, roomIndex: 5, rng: (() => {
+          let s = 2000 + i * 733;
+          return () => { s = (s * 48271) % 2147483647; return (s - 1) / 2147483646; };
+        })(),
+        balance: tanksData.balance, count: 3, banned: new Set(), starterTank: 'c_necro',
+        rarityWeights: eliteRarityWeights(tanksData.balance, 25),
+      };
+      const offers = rollOffers(mergedUpgrades, opts);
+      const avoidTags = new Set(offers.map((o) => o.tag));
+      const avoidIds = new Set(offers.map((o) => o.id));
+      const eliteCard = drawOne(mergedUpgrades, { ...opts, includeTag: 'elite', bypassRoomGate: true }, avoidTags, avoidIds);
+      if (eliteCard) offers.push(eliteCard);
+      let hasEpicOrLegendary = offers.some((o) => o.rarity === 'epic' || o.rarity === 'legendary');
+      if (!hasEpicOrLegendary && offers.length) {
+        const avoidIds2 = new Set(offers.map((o) => o.id));
+        const guaranteed =
+          drawOne(mergedUpgrades, { ...opts, onlyRarity: 'legendary', bypassRoomGate: true }, new Set(), avoidIds2) ||
+          drawOne(mergedUpgrades, { ...opts, onlyRarity: 'epic', bypassRoomGate: true }, new Set(), avoidIds2);
+        if (guaranteed) { offers[offers.length - 1] = guaranteed; hasEpicOrLegendary = true; }
+      }
+      if (hasEpicOrLegendary) sawEpicOrLegendary++;
+    }
+    check(sawEpicOrLegendary === trials, `Abschnitt 65t: nur ${sawEpicOrLegendary}/${trials} Elite-Angebote enthalten eine episch-oder-legendaere Karte`);
+  }
+  // Gegenprobe (t): den Garantie-Block (hasEpicOrLegendary-Ersetzung) im
+  // Testnachbau UND im echten run.js entfernt -- die Trefferquote faellt klar
+  // unter 100 % (die Baender allein garantieren nichts); am echten
+  // run.js-Quellcode verifiziert (Zweig auskommentiert, Suite lief rot) und
+  // zurueckgesetzt.
+
+  // ---- (u) Boss-Belohnung: drei UNTERSCHIEDLICHE legendaere Karten -------
+  {
+    const run = createRun(tanksData, tilesData, diffData, mergedUpgrades, 888, 'normal', { starterTank: 'c_necro' });
+    const offers = rollBossReward(run);
+    check(offers.length === 3, `Abschnitt 65u: rollBossReward() liefert ${offers.length} Karten statt 3 (c_necro-Pool)`);
+    check(offers.every((o) => o.rarity === 'legendary'), 'Abschnitt 65u: nicht alle Boss-Angebote sind legendaer');
+    const ids = new Set(offers.map((o) => o.id));
+    check(ids.size === offers.length, 'Abschnitt 65u: die Boss-Belohnung enthaelt doppelte Karten');
+    // Auch die Standard-Klasse (kein Signaturpool, nur der Sockel) bekommt
+    // drei unterschiedliche Legendaere -- die drei universellen sockel_*-
+    // Karten aus data/upgrades.json.
+    const runP = createRun(tanksData, tilesData, diffData, mergedUpgrades, 889, 'normal', { starterTank: 'player' });
+    const offersP = rollBossReward(runP);
+    check(offersP.length === 3, `Abschnitt 65u: rollBossReward() liefert ${offersP.length} Karten statt 3 (Standard-Klasse)`);
+    check(new Set(offersP.map((o) => o.id)).size === 3, 'Abschnitt 65u: die Standard-Klasse bekommt keine drei unterschiedlichen Legendaere');
+    // Auswahl fuehrt zum Akt-Uebergang, nicht zu afterRoomDone()/einer
+    // erneuten Kartenwahl.
+    run.phase = 'bossReward';
+    run.pendingOffers = offers;
+    run.rewardKind = 'bossLegendary';
+    const pickedId = offers[0].id;
+    const before = run.upgrades[pickedId] || 0;
+    chooseBossReward(run, 0);
+    check((run.upgrades[pickedId] || 0) === before + 1, 'Abschnitt 65u: die gewaehlte Boss-Karte wird nicht dem Run gutgeschrieben');
+    check(run.phase === 'actComplete' || run.phase === 'victory', `Abschnitt 65u: nach der Boss-Belohnung ist run.phase "${run.phase}" statt actComplete/victory`);
+  }
+  // Gegenprobe (u): rollBossReward()s avoidIds-Pflege entfernt (dieselbe
+  // Karte koennte dann zweimal gezogen werden) -- der "keine doppelten
+  // Karten"-Check schlaegt bei genuegend Wiederholungen fehl; separat den
+  // dritten sockel_*-Legendaer-Eintrag geloescht -> offersP.length faellt auf
+  // 2, Check schlaegt fehl; beide am Quellcode verifiziert und zurueckgesetzt.
+
+  // ---- (v) Glossar: Begriffe werden markiert, title-Attribut gesetzt -----
+  {
+    initGlossary(glossaryData);
+    const html = highlightTerms('Der Champion greift den Elitegegner an.');
+    check(html.includes('class="glossary-term"'), 'Abschnitt 65v: highlightTerms() markiert keinen bekannten Begriff');
+    check(html.includes('data-term="Champion"'), 'Abschnitt 65v: "Champion" wird nicht als Begriff erkannt');
+    check(html.includes('title="'), 'Abschnitt 65v: markierte Begriffe tragen kein title-Attribut (Desktop-Hover)');
+    check(html.includes('Elitegegner'), 'Abschnitt 65v: "Elitegegner" fehlt im Ergebnis');
+    const plain = highlightTerms('Ein ganz normaler Satz ohne Fachbegriffe.');
+    check(!plain.includes('glossary-term'), 'Abschnitt 65v: ein Satz ohne bekannte Begriffe wird trotzdem markiert');
+    // Mindestbegriffe aus dem Auftrag vollstaendig vorhanden.
+    for (const term of ['Champion', 'Geisterpanzer', 'Verschmelzung', 'Geistertod', 'Wiederbelebungschance', 'Feuerrate', 'Schadensresistenz', 'Elitegegner', 'Einzigartig', 'Raumende', 'Geisterlimit']) {
+      check(!!glossaryData.terms[term], `Abschnitt 65v: Glossar-Begriff "${term}" fehlt`);
+    }
   }
 }
 

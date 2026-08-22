@@ -44,9 +44,14 @@ export function resolveCfg(data, type) {
     magazineCap: isPlayerClass ? (t.magazineCap ?? bbullet?.maxActiveCap ?? Infinity) : Infinity,
     mines: t.mines,
     weapon: t.weapon,
+    // Champion-/Nekromant-Nachschliff Abschnitt 14 (t_pink): ein Gegnertyp
+    // kann seinen eigenen `bulletSpeed` gegen den geteilten
+    // data/tanks.json:bulletSpeeds-Wert ueberschreiben, ohne andere Typen
+    // desselben Waffenwerts zu beeinflussen (vorher galt fuer Gegner
+    // ausschliesslich der geteilte Wert).
     bulletSpeed: isPlayerClass
       ? (t.bulletSpeed ?? bbullet?.speed ?? data.bulletSpeeds[t.weapon])
-      : data.bulletSpeeds[t.weapon],
+      : (t.bulletSpeed ?? data.bulletSpeeds[t.weapon]),
     // Gegner-Rolle statt Gegner-Typ (Phase 8): vier Rollen (guardian/
     // sapper/hunter/sieger), parametrisiert statt pro Typ eigener
     // Turm-/Fahrfunktion. Rolle und Panzerung bleiben frei kombinierbar.
@@ -731,6 +736,9 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroCoreDamageBonus = Math.max(cfg.necroCoreDamageBonus || 0, c.necroCoreDamageBonus || 0);
       cfg.necroCoreCooldownS = Math.max(cfg.necroCoreCooldownS || 0, c.necroCoreCooldownS || 0);
     }
+    // ghost_116 "Losgeloeste Ketten" (Abschnitt 9): reines Freischalt-Flag,
+    // isUnique -- kein Level-Faktor noetig.
+    if (c.necroForceMobileBomb) cfg.necroForceMobileBomb = true;
     if (c.necroEliteRevive) {
       cfg.necroEliteRevive = true;
       cfg.necroEliteReviveStatPct = Math.max(cfg.necroEliteReviveStatPct || 0, c.necroEliteReviveStatPct || 0);
@@ -762,6 +770,15 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     // isChampion wird.
     if (c.necroCrownDamagePct) cfg.necroCrownDamagePct = (cfg.necroCrownDamagePct || 0) + c.necroCrownDamagePct * lvl;
     if (c.necroCrownHpPct) cfg.necroCrownHpPct = (cfg.necroCrownHpPct || 0) + c.necroCrownHpPct * lvl;
+    // Nachschliff Abschnitt 8 (fuenf Champion-Lebensdauer-Karten): additiv,
+    // unbegrenzt stapelbar -- wirkt NUR auf den Champion (ghost.js:
+    // promoteToChampion()), nicht auf gewoehnliche Untertanen (dafuer bleibt
+    // ghostLifetimeAdd/ghost_005 zustaendig, das seit Abschnitt 10
+    // ZUSAETZLICH auch den Champion mit einschliesst).
+    if (c.necroCrownLifetimeAdd) cfg.necroCrownLifetimeAdd = (cfg.necroCrownLifetimeAdd || 0) + c.necroCrownLifetimeAdd * lvl;
+    // "Ewiger Thron" (ghost_083, Nachschliff Abschnitt 3.2): einzige Karte,
+    // die die Champion-Lebensdauer auf unendlich zurueckstellt.
+    if (c.necroCrownEternalLifetime) cfg.necroCrownEternalLifetime = true;
     if (c.necroSoloDamagePct) cfg.necroSoloDamagePct = (cfg.necroSoloDamagePct || 0) + c.necroSoloDamagePct * lvl;
     if (c.necroSoloFireRatePct) cfg.necroSoloFireRatePct = (cfg.necroSoloFireRatePct || 0) + c.necroSoloFireRatePct * lvl;
     if (c.necroCrownResist) cfg.necroCrownResist = (cfg.necroCrownResist || 0) + c.necroCrownResist * lvl;
@@ -787,8 +804,15 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroFusionHpPct = Math.max(cfg.necroFusionHpPct || 0, c.necroFusionHpPct || 0);
       cfg.necroFusionDamagePct = Math.max(cfg.necroFusionDamagePct || 0, c.necroFusionDamagePct || 0);
       cfg.necroFusionFireRatePct = Math.max(cfg.necroFusionFireRatePct || 0, c.necroFusionFireRatePct || 0);
+      // ghost_071 "Einziger Thron" (Nachschliff Abschnitt 5): +X % je bereits
+      // erfolgter Verschmelzung des Champions, OHNE Obergrenze.
+      cfg.necroUniqueThronePerFusionPct = Math.max(
+        cfg.necroUniqueThronePerFusionPct || 0,
+        c.necroUniqueThronePerFusionPct || 0,
+      );
       // necroFusionMinLifetimeS (ghost_071 alt) ist ersatzlos entfernt --
-      // Champion hat standardmaessig keine Lebensdauer mehr.
+      // die Champion-Lebensdauer laeuft seit dem Nachschliff wieder ueber
+      // die gemeinsame ghostLifetimeAdd/necroCrownLifetimeAdd-Rechnung.
     }
     if (c.necroFusionHpPctBonus) cfg.necroFusionHpPctBonus = (cfg.necroFusionHpPctBonus || 0) + c.necroFusionHpPctBonus * lvl;
     if (c.necroFusionDamagePctBonus) cfg.necroFusionDamagePctBonus = (cfg.necroFusionDamagePctBonus || 0) + c.necroFusionDamagePctBonus * lvl;
@@ -902,11 +926,11 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroSoulbondBuffPct = Math.max(cfg.necroSoulbondBuffPct || 0, c.necroSoulbondBuffPct || 0);
       cfg.necroSoulbondBuffDurationS = Math.max(cfg.necroSoulbondBuffDurationS || 0, c.necroSoulbondBuffDurationS || 0);
     }
-    if (c.necroSacrificeChampionDmgPct) {
-      cfg.necroSacrificeChampionDmgPct = Math.max(cfg.necroSacrificeChampionDmgPct || 0, c.necroSacrificeChampionDmgPct);
-      cfg.necroSacrificeChampionFRPct = Math.max(cfg.necroSacrificeChampionFRPct || 0, c.necroSacrificeChampionFRPct || 0);
-      cfg.necroSacrificeChampionResist = Math.max(cfg.necroSacrificeChampionResist || 0, c.necroSacrificeChampionResist || 0);
-      cfg.necroSacrificeChampionDurationS = Math.max(cfg.necroSacrificeChampionDurationS || 0, c.necroSacrificeChampionDurationS || 0);
+    // ghost_096 "Koenigliches Opfer" (Nachschliff Abschnitt 10,
+    // UEBERARBEITET): ein einzelner Prozentsatz ("40 % der Champion-
+    // Basiswerte") statt vier getrennter, zeitlich befristeter Felder.
+    if (c.necroSacrificeChampionStatPct) {
+      cfg.necroSacrificeChampionStatPct = Math.max(cfg.necroSacrificeChampionStatPct || 0, c.necroSacrificeChampionStatPct);
     }
     if (c.necroKeystoneThroneDmgPct) {
       cfg.necroKeystoneThroneDmgPct = Math.max(cfg.necroKeystoneThroneDmgPct || 0, c.necroKeystoneThroneDmgPct);
@@ -919,6 +943,7 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroCapFusion = true;
       cfg.necroCapFusionHpPct = Math.max(cfg.necroCapFusionHpPct || 0, c.necroCapFusionHpPct || 0);
       cfg.necroCapFusionDamagePct = Math.max(cfg.necroCapFusionDamagePct || 0, c.necroCapFusionDamagePct || 0);
+      cfg.necroCapFusionFireRatePct = Math.max(cfg.necroCapFusionFireRatePct || 0, c.necroCapFusionFireRatePct || 0);
     }
     if (c.necroCrownProcPerAllyPct) {
       cfg.necroCrownProcPerAllyPct = Math.max(cfg.necroCrownProcPerAllyPct || 0, c.necroCrownProcPerAllyPct);

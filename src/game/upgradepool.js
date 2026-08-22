@@ -156,6 +156,17 @@ export function shopRarityWeights(balance, shopsVisited) {
   return pickBand(bands, shopsVisited ?? 1, 'maxVisit');
 }
 
+// Champion-/Nekromant-Nachschliff Abschnitt 16: eigene Seltenheitstabelle
+// fuer Elite-Belohnungen, dieselbe pickBand()-Mechanik wie rewardRarityWeights
+// aber mit deutlich hoeherem episch/legendaer-Anteil (data/balance.json:
+// eliteRarityBands). Fehlt das Datenfeld (aeltere/synthetische balance.json),
+// faellt der Aufrufer auf die normale rewardRarityWeights()-Tabelle zurueck.
+export function eliteRarityWeights(balance, totalRoomIndex) {
+  const bands = balance.eliteRarityBands;
+  if (!bands || !bands.length) return rewardRarityWeights(balance, totalRoomIndex);
+  return pickBand(bands, totalRoomIndex ?? 1, 'maxRoom');
+}
+
 function makeOffer(def, chosen) {
   return {
     id: def.id,

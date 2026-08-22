@@ -587,7 +587,17 @@ function spawnGhostBomb(tank, state) {
   // (state.rng), nie Math.random. Ein leerer Pool (Testfixtures ohne
   // actEnemyPool) faellt auf 't_brown' zurueck, den fruehesten/einfachsten
   // Gegnertyp, statt den Wurf zu verweigern.
-  const pool = state.actEnemyPool && state.actEnemyPool.length ? state.actEnemyPool : ['t_brown'];
+  const rawPool = state.actEnemyPool && state.actEnemyPool.length ? state.actEnemyPool : ['t_brown'];
+  // ghost_116 "Losgeloeste Ketten" (Abschnitt 9): garantiert einen
+  // BEWEGLICHEN (nicht-stationaeren) Typ -- stationaere Typen (role:
+  // 'guardian', Phase 8) werden aus dem Pool gefiltert. Bleibt dabei kein
+  // Typ uebrig, faellt der Filter auf den vollen Pool zurueck, statt die
+  // Geisterbombe wirkungslos zu machen.
+  let pool = rawPool;
+  if (tank.cfg.necroForceMobileBomb) {
+    const mobile = rawPool.filter((t) => state.data.types?.[t]?.role !== 'guardian');
+    if (mobile.length) pool = mobile;
+  }
   const sourceType = pool[Math.floor(state.rng() * pool.length) % pool.length];
   const bombGhost = createGhost(state, tank.x, tank.y, tank.turret, sourceType);
   // Nekromant-V2 Phase 8: pushGhost() (Muster s. state.js: killTank()) --
@@ -684,14 +694,28 @@ export function useGadget(tank, state, aimOverride) {
       state.necroGuaranteedReviveUntil = state.time + (tank.cfg.necroSacrificeGuaranteeWindowS || 0);
     }
   } else if (g === 'ghost_096') {
-    // "Koenigliches Opfer": opfert AUSSCHLIESSLICH den Champion.
+    // "Koenigliches Opfer" (Nachschliff Abschnitt 10, UEBERARBEITET): opfert
+    // AUSSCHLIESSLICH den Champion, der Hauptpanzer erhaelt 40 % von dessen
+    // BASISWERTEN (HP/Schaden/Feuerrate -- nicht mehr ein fixer Prozentsatz
+    // fuer 10 Sekunden) bis Raumende -- direkte, dauerhafte cfg-Anpassung
+    // (Muster wie ghost_094 "Erbe des Herrschers"), kein Zeitfenster mehr.
     const champion = state.ghosts.find((x) => x.alive && x.isChampion);
     used = !!champion;
     if (used) {
+      const pct = tank.cfg.necroSacrificeChampionStatPct ?? 0.4;
+      if (state.player?.alive) {
+        const p = state.player;
+        const dmgGain = Math.round((champion.baseDamage || 0) * pct);
+        const hpGain = Math.round((champion.baseMaxHp || 0) * pct);
+        const champRate = champion.baseFireCooldown > 0 ? 1 / champion.baseFireCooldown : 0;
+        p.cfg.damage += dmgGain;
+        p.cfg.maxHp += hpGain;
+        p.hp += hpGain;
+        const curRate = p.cfg.fireCooldown > 0 ? 1 / p.cfg.fireCooldown : 0;
+        const newRate = curRate + champRate * pct;
+        p.cfg.fireCooldown = newRate > 0 ? 1 / newRate : p.cfg.fireCooldown;
+      }
       killGhost(state, champion, 'sacrifice');
-      addNecroTimedStack(state, '_timedHybridChampSacrificeDmg', tank.cfg.necroSacrificeChampionDmgPct || 0, tank.cfg.necroSacrificeChampionDurationS || 0);
-      addNecroTimedStack(state, '_timedHybridChampSacrificeFR', tank.cfg.necroSacrificeChampionFRPct || 0, tank.cfg.necroSacrificeChampionDurationS || 0);
-      addNecroTimedStack(state, '_timedHybridChampSacrificeResist', tank.cfg.necroSacrificeChampionResist || 0, tank.cfg.necroSacrificeChampionDurationS || 0);
     }
   }
   if (used) tank.gadgetCooldown = scfg.cooldownS ?? 4;
