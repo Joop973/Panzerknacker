@@ -297,7 +297,11 @@ Ueberarbeitung** — zwei eigenstaendige, raum- bzw. shopbesuchsabhaengige
 Seltenheitstabellen (`run.totalRoomIndex` runweit, `run.shopsVisited`
 zaehlt echte Shop-Eintritte) ersetzen `balance.rarity`+`rarityGates`,
 Shop-Karten haben jetzt individuelle, nach Seltenheit gewuerfelte Preise
-statt eines Einheitspreises.
+statt eines Einheitspreises. **Zuletzt gemergt: Champion-Sprite**
+(Nutzergrafik) — der Champion hat jetzt ein eigenes goldenes
+`body_champion.png`/`turret_champion.png` statt des geteilten
+Geister-Sprites, plus eine 12-Frame-Aura-Loop-Animation
+(`champion_aura_00..11.png`, dauerhaft im Loop bei 12 fps).
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -6383,13 +6387,87 @@ fruehereren einheitlichen `scrap.cost.shopCard`.
   Asset — die Strategie ist network-first fuer Code+Daten, ein Online-Reload
   liefert `data/balance.json`/den neuen Code ohnehin sofort frisch).
 
+### Champion-Sprite (Nutzergrafik, Nachtrag zum Champion-Nachschliff) — gemergt
+Loest den letzten offenen To-do-Punkt aus dem Champion-Nachschliff ein: der
+Champion teilt sich nicht mehr `body_ghost.png`/`turret_ghost.png` mit den
+gewöhnlichen Untertanen, sondern hat ein eigenes goldenes Sprite-Paar PLUS
+eine 12-Frame-Aura-Loop-Animation, die dauerhaft im Loop läuft.
+- **Zwei gelieferte Nutzergrafiken**: ein Kombibild (Wanne links/Turm rechts,
+  schwarzer Hintergrund — dieselbe Konvention wie alle bisherigen
+  `body_X.png`/`turret_X.png`-Lieferungen) und ein 12-Frame-Animationssheet
+  (6×2-Raster, hellgrauer Schachbrett-Hintergrund statt Alpha, da als JPEG
+  geliefert) einer bereits fertig zusammengesetzten Wanne mit umherziehenden
+  Flammenschädeln — die Wannen-Pose ist über alle 12 Frames FEST, nur die
+  Schädel/der Glanz animieren (per Bildvergleich verifiziert).
+- **Verarbeitung** (einmaliges Skript, nicht eingecheckt, PIL+scipy wie bei
+  allen bisherigen Sprite-Lieferungen): Kombibild randverbunden vom
+  schwarzen Hintergrund befreit (dieselbe Flood-Fill-Technik wie immer —
+  Tracks/Loch bleiben erhalten, weil nicht randverbunden), Turm-Drehpunkt
+  ("breitesten-Zeile"-Heuristik, liefert zuverlässig das Kuppelzentrum) VOR
+  der 90°-Rotation ermittelt und die exakte PIL-Rotationsformel (empirisch
+  gegen einen einzelnen Marker-Pixel verifiziert, nicht nur angenommen) auf
+  den Punkt angewendet, damit Rohr-zeigt-nach-rechts UND der Drehpunkt in
+  der Bildmitte beide stimmen. Wannen-Loch über eine randverbundene
+  Flood-Fill-Suche nach dunklen, NICHT randverbundenen Flächen im
+  Zentrumsbereich lokalisiert (dieselbe „Loch = Turmdrehpunkt"-Erkenntnis
+  aus den früheren Klassen-Sprite-Lieferungen), Canvas darauf zentriert.
+  Das Animationssheet nutzt eine ANDERE Freistellung (Erkennung über
+  neutralgraue Pixel im Schachbrett-Helligkeitsbereich statt schwarzer
+  Flood-Fill, weil JPEG-Checker statt echtem Alpha geliefert wurde) —
+  Ergebnis in `assets/sprites/body_champion.png`/`turret_champion.png`
+  (92×110/410×200) und `champion_aura_00.png`…`_11.png` (je 160×160).
+- **`src/render/sprites.js`**: `'champion'` in `TANK_TYPES` (lädt
+  body/turret automatisch über den bestehenden Mechanismus), neue Kategorie
+  `SPRITES.championAura` (kein Rumpf/Turm-Paar, sondern 12 fertige,
+  NICHT-rotierende Einzelbilder) + `CHAMPION_AURA_FRAME_COUNT` (12) +
+  `championAuraFrame(index)` (Wraparound für Indizes außerhalb 0..11).
+- **`src/render/renderer.js: drawGhosts()`**: für `g.isChampion` wird jetzt
+  (a) EIN Aura-Loop-Frame ZUERST gezeichnet — screen-aligned, NICHT mit
+  heading/turret rotiert (die Quellframes sind bereits fertig zusammengesetzt
+  und lassen sich nicht in Rumpf/Turm trennen), größer skaliert + reduzierte
+  Deckkraft, damit er wie ein weicher Nimbus HINTER dem korrekt rotierenden
+  Vordergrund-Tank wirkt; (b) `body_champion`/`turret_champion` statt
+  `body_ghost`/`turret_ghost`, mit voller Deckkraft (0,92 statt der
+  Geister-Transparenz 0,55 — die Nutzergrafik ist deckendes Gold, keine
+  durchscheinende Geister-Optik). **Der bestehende goldene Ring bleibt
+  BEWUSST erhalten**, auch für den Champion (nicht durch das neue Sprite
+  ersetzt): "fällt immer auf funktionierende prozedurale Formen zurück" ist
+  eine durchgehende Regel dieses Renderers — lädt das Champion-Sprite (noch)
+  nicht (langsames Netz, Ladefehler), wäre der Champion ohne den Ring optisch
+  nicht mehr von einem gewöhnlichen Untertan zu unterscheiden.
+- **12 Frames bei 12 fps = exakt 1 s pro Umlauf** (`CHAMPION_AURA_FPS`),
+  über `state.time` (nicht `performance.now()`) — bleibt dadurch synchron
+  mit Zeitlupe/Pause wie jede andere zeitgesteuerte Animation im Spiel.
+- **Neuer Test `tests/championsprite.mjs`** (dependency-frei, NEUES eigenes
+  Testfile statt eines Abschnitts in `regression.mjs`): `src/render/
+  sprites.js` legt `initSprites()` als Modul-SEITENEFFEKT beim ersten Import
+  von `renderer.js` an (danach stumm wegen eines internen Deckels) — die
+  bestehende Suite importiert `renderer.js` längst mit `domstub.mjs`s
+  ABSICHTLICH FEHLSCHLAGENDEM Image-Stub (kein Netz im Test), sodass echtes
+  Sprite-Laden dort nie geprüft werden kann. Das neue Testfile installiert
+  stattdessen einen EIGENEN, ERFOLGREICHEN Image-Stub VOR dem allerersten
+  Import von `renderer.js`. Prüft: Struktur (genau 12 Aura-Frames + das
+  Champion-Sprite-Paar geladen, erwartete Dateinamen angefordert),
+  `championAuraFrame()`-Wraparound, der ECHTE Renderpfad zeichnet für
+  `g.isChampion=true` tatsächlich `body_champion`/`turret_champion` + einen
+  Aura-Frame und NICHT `body_ghost`/`turret_ghost` (und umgekehrt für
+  `false`), und der Loop läuft wirklich (vier über eine Sekunde verteilte
+  Zeitpunkte zeigen vier verschiedene Frames, nach einer vollen Sekunde
+  exakt derselbe Frame wie zu Sekundenbeginn — Zeitpunkte bewusst auf
+  Frame-MITTE statt Frame-Grenze gelegt, sonst hätte Gleitkomma-Rundung bei
+  `11/12*12` den falschen Frame-Index treffen können). Gegenprobe für jeden
+  Kernpunkt einzeln bestanden (`CHAMPION_AURA_FRAME_COUNT` verfälscht,
+  `useChampionSprite` auf `false` erzwungen, Aura-Frame-Index eingefroren).
+- **Playwright-Smoke**: alle 14 neuen PNG-Dateien laden im echten Browser
+  fehlerfrei mit den erwarteten Abmessungen; ein echter, über die
+  Spielmodule gebauter Champion-Untertan wird über den echten Renderpfad in
+  einen echten Canvas gezeichnet und als Screenshot geprüft — Sprite, Ring
+  und Aura erscheinen sichtbar und korrekt ausgerichtet, keine
+  Konsolenfehler.
+- `sw.js` auf `v116` gebumpt (14 neue PNG-Dateien in `ASSETS`, cache-first
+  wie alle Bild-Assets) + `telemetry.js: GAME_VERSION` mitgezogen.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Dediziertes Champion-Sprite** (optional, kein Blocker): der Champion
-      teilt sich weiterhin `body_ghost.png`/`turret_ghost.png` mit allen
-      gewöhnlichen Untertanen, nur der goldene Ring unterscheidet ihn. Ein
-      eigenes, golden eingefärbtes Sprite („goldener transparenter
-      Geisterpanzer") war die im Champion-Nachschliff-Auftrag genannte
-      *Wunschrichtung*, kein Muss — bei Bedarf/gelieferter Grafik ergänzen.
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
       ersetzt (s. o.), bis ein neues Bosskonzept entsteht. Beim Neubau die
@@ -6824,6 +6902,15 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   gemeinsames, durchscheinend gezeichnetes Sprite für **alle** Panzer, die
   zum Geist werden (`renderer.js: drawGhosts`, `globalAlpha 0.55`), mit
   Fallback auf die alte prozedurale Form. Nicht an einen Panzertyp gebunden.
+- **Champion-Sprite** (Nutzergrafik): `body_champion.png`/
+  `turret_champion.png` (dieselbe Rotationskonvention wie oben, aber
+  volldeckend `globalAlpha 0.92` statt der Geister-Transparenz) NUR für
+  `g.isChampion`, plus eine 12-Frame-Loop-Animation
+  `champion_aura_00.png`…`_11.png` (`SPRITES.championAura`,
+  `championAuraFrame(index)`), screen-aligned OHNE Rotation hinter dem Tank
+  gezeichnet, dauerhaft im Loop bei 12 fps über `state.time`. Der
+  bestehende goldene Ring bleibt zusätzlich bestehen (Fallback, falls das
+  Sprite nicht lädt).
 - Spieler-Glow, Schild-Ring, Ziellinie, Betäubungs-Ring und die
   Unsichtbarkeit des Weißen sind Renderer-Overlays (nicht im Sprite).
 
@@ -6841,6 +6928,7 @@ node --check src/<datei>.js         # Syntax
 node tests/regression.mjs           # Regressionssuite (eingecheckt!)
 node tests/gamepad.mjs              # Controller-Eingabe (dependency-frei, gestubbtes Gamepad)
 node tests/music.mjs                # Hintergrundmusik-Loop + Fallback (dependency-frei, gestubbtes AudioContext/fetch)
+node tests/championsprite.mjs       # Champion-Sprite/-Aura (dependency-frei, EIGENER erfolgreicher Image-Stub)
 node tests/gamepadcursor.mjs        # Gamepad-Cursor end-to-end (Playwright, eigener Server)
 node tests/uilayout.mjs             # Overlay-Layout (braucht Playwright)
 node tests/viewport.mjs             # DPR/Viewport + Zielkoordinaten (Playwright, braucht eigenen Server auf :8099)

@@ -24,13 +24,25 @@ const TANK_TYPES = [
   // Geisterpanzer: EINE gemeinsame Grafik fuer alle Panzer, die zum Geist
   // werden (Renderer: drawGhosts).
   'ghost',
+  // Champion (Nutzergrafik, Nachtrag zum Champion-Nachschliff): eigenes
+  // goldenes body_champion.png/turret_champion.png, NUR fuer g.isChampion
+  // in drawGhosts() -- ersetzt dort body_ghost/turret_ghost, alle anderen
+  // Untertanen bleiben beim gemeinsamen 'ghost'-Sprite.
+  'champion',
 ];
+
+// Champion-Aura (Nutzergrafik): 12-Frame-Loop-Animation (champion_aura_00..11.png),
+// dauerhaft im Loop hinter dem Champion gezeichnet (renderer.js: drawGhosts()).
+// Eigene Kategorie statt body/turret, weil es KEIN Rumpf/Turm-Paar ist, das
+// separat rotiert -- ein bereits fertig zusammengesetztes, nicht rotierendes
+// Aura-Bild pro Frame.
+export const CHAMPION_AURA_FRAME_COUNT = 12;
 
 // Geschoss-Sprite je Sorte (siehe renderer.js für die Zuordnung).
 const BULLET_KEYS = ['normal', 'rocket', 'bounce', 'tungsten', 'explosive'];
 const TILE_KEYS = ['floor', 'wall', 'breakable', 'hole'];
 
-export const SPRITES = { body: {}, turret: {}, bullet: {}, tile: {} };
+export const SPRITES = { body: {}, turret: {}, bullet: {}, tile: {}, championAura: {} };
 
 let total = 0;
 let loaded = 0;
@@ -62,6 +74,10 @@ export function initSprites() {
   }
   for (const k of BULLET_KEYS) load('bullet', k, `bullet_${k}.png`);
   for (const k of TILE_KEYS) load('tile', k, `tile_${k}.png`);
+  for (let i = 0; i < CHAMPION_AURA_FRAME_COUNT; i++) {
+    const key = String(i).padStart(2, '0');
+    load('championAura', key, `champion_aura_${key}.png`);
+  }
 }
 
 // true, sobald alle Sprites bereit sind (dann Sprite- statt Vektor-Look).
@@ -96,5 +112,13 @@ const SPRITE_ALIAS = {
 // Einzelnes Sprite, oder null wenn (noch) nicht ladbar.
 export function sprite(cat, key) {
   const img = SPRITES[cat][SPRITE_ALIAS[key] || key];
+  return img && img.complete && img.naturalWidth > 0 ? img : null;
+}
+
+// Champion-Aura-Frame nach Index (wraparound, falls je ein Index ausserhalb
+// 0..11 hereinkommt) -- oder null, solange (noch) nicht geladen.
+export function championAuraFrame(index) {
+  const key = String(((index % CHAMPION_AURA_FRAME_COUNT) + CHAMPION_AURA_FRAME_COUNT) % CHAMPION_AURA_FRAME_COUNT).padStart(2, '0');
+  const img = SPRITES.championAura[key];
   return img && img.complete && img.naturalWidth > 0 ? img : null;
 }
