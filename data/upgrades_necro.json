@@ -103,10 +103,10 @@
       "isUnique": false,
       "weight": 100,
       "requires": [],
-      "description": "Die Lebenszeit aller Untertanenpanzer steigt um 2,0 Sekunden.",
+      "description": "Die Lebenszeit aller Untertanenpanzer UND des Champions steigt um 0,5 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "ghostLifetimeAdd": 2.0
+        "ghostLifetimeAdd": 0.5
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -242,10 +242,10 @@
       "isUnique": false,
       "weight": 100,
       "requires": [],
-      "description": "Jeder Geistertod gewährt dem Hauptpanzer +2 % Schaden bis Raumende. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
+      "description": "Jeder Geistertod gewährt dem Hauptpanzer +5 % Schaden bis Raumende. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
       "signatureClass": "c_necro",
       "core": {
-        "necroDmgPctPerDeath": 0.02
+        "necroDmgPctPerDeath": 0.05
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -264,10 +264,10 @@
       "isUnique": false,
       "weight": 100,
       "requires": [],
-      "description": "Jeder Geistertod gewährt dem Hauptpanzer +2 % Feuerrate bis Raumende. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
+      "description": "Jeder Geistertod gewährt dem Hauptpanzer +5 % Feuerrate bis Raumende. Ablauf der Lebenszeit löst aus, Verschmelzung nicht.",
       "signatureClass": "c_necro",
       "core": {
-        "necroFireRatePctPerDeath": 0.02
+        "necroFireRatePctPerDeath": 0.05
       },
       "_note": {
         "buildrolle": "Tempo"
@@ -474,7 +474,7 @@
       "isUnique": false,
       "weight": 55,
       "requires": [],
-      "description": "Stirbt ein Untertanenpanzer mit mindestens 120 % des Basisschadens eines Untertanen, erhält der Hauptpanzer +8 % Schaden für 10 Sekunden, sonst +4 %.",
+      "description": "Stirbt ein Untertanenpanzer mit mindestens 120 % des Basisschadens eines Untertanen, erhält der Hauptpanzer +8 % Schaden bis Raumende, sonst +4 %. Stapelt mit jedem weiteren Tod.",
       "signatureClass": "c_necro",
       "core": {
         "necroInheritHighPct": 0.08,
@@ -499,7 +499,7 @@
       "isUnique": false,
       "weight": 55,
       "requires": [],
-      "description": "Nach jeweils 3 Geistertoden erhält der Hauptpanzer +8 Punkte Schadensresistenz für 10 Sekunden.",
+      "description": "Nach jeweils 3 Geistertoden erhält der Hauptpanzer +8 Punkte Schadensresistenz, dauerhaft bis Raumende.",
       "signatureClass": "c_necro",
       "core": {
         "necroResistEveryN": 3,
@@ -550,10 +550,10 @@
       "isUnique": false,
       "weight": 55,
       "requires": [],
-      "description": "Der erste Geistertod innerhalb jedes 3-Sekunden-Fensters gewährt dem Hauptpanzer +15 % Feuerrate für 5 Sekunden.",
+      "description": "Der erste Geistertod innerhalb jedes 2-Sekunden-Fensters gewährt dem Hauptpanzer +15 % Feuerrate für 5 Sekunden.",
       "signatureClass": "c_necro",
       "core": {
-        "necroFireBurstWindowS": 3.0,
+        "necroFireBurstWindowS": 2.0,
         "necroFireBurstPct": 0.15,
         "necroFireBurstDurationS": 5.0
       },
@@ -648,10 +648,10 @@
       "isUnique": false,
       "weight": 55,
       "requires": [],
-      "description": "Läuft die Lebenszeit eines Untertanen ab, statt dass er durch Schaden stirbt, sind die ausgelösten Spielerstapel um 60 % stärker.",
+      "description": "Läuft die Lebenszeit eines Untertanen ab, statt dass er durch Schaden stirbt, sind die ausgelösten Spielerstapel um 50 % stärker.",
       "signatureClass": "c_necro",
       "core": {
-        "necroExpireStackBonus": 0.6
+        "necroExpireStackBonus": 0.5
       },
       "_note": {
         "buildrolle": "Engine"
@@ -1025,10 +1025,10 @@
       "isUnique": false,
       "weight": 100,
       "requires": [],
-      "description": "Die Wiederbelebungschance nach einem Abschuss des Hauptpanzers steigt um 5 Prozentpunkte.",
+      "description": "Die Wiederbelebungschance nach einem Abschuss durch den Hauptpanzer, den Champion oder einen anderen Untertanen steigt um 7 Prozentpunkte.",
       "signatureClass": "c_necro",
       "core": {
-        "necroReviveChanceAdd": 0.05
+        "necroReviveChanceAdd": 0.07
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1285,7 +1285,7 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Die Wiederbelebungschance nach einem Abschuss des Hauptpanzers steigt um 12 Prozentpunkte.",
+      "description": "Die Wiederbelebungschance nach einem Abschuss durch den Hauptpanzer, den Champion oder einen anderen Untertanen steigt um 12 Prozentpunkte.",
       "signatureClass": "c_necro",
       "core": {
         "necroReviveChanceAdd": 0.12
@@ -1308,11 +1308,11 @@
       "isUnique": true,
       "weight": 22,
       "requires": [],
-      "description": "Elitegegner sind für Wiederbelebungsproben zulässig. Wiederbelebte Eliten erscheinen mit 65 % Basiswert-Anteil und belegen 2 Geisterplätze. Bosse bleiben ausgeschlossen.",
+      "description": "Elitegegner sind bereits generell für Wiederbelebungsproben zulässig (belegen dabei immer 2 Geisterplätze). Mit dieser Karte erscheinen wiederbelebte Eliten mit 90 % Basiswert-Anteil statt der üblichen 50 %. Bosse bleiben ausgeschlossen.",
       "signatureClass": "c_necro",
       "core": {
         "necroEliteRevive": true,
-        "necroEliteReviveStatPct": 0.65,
+        "necroEliteReviveStatPct": 0.9,
         "necroEliteReviveSlots": 2
       },
       "_note": {
@@ -1578,28 +1578,6 @@
         "buildrolle": "Sicherheit"
       }
     },
-    "ghost_068": {
-      "id": "ghost_068",
-      "name": "Langer Anspruch",
-      "tag": "duration",
-      "tags": [
-        "alpha",
-        "champion",
-        "dauer"
-      ],
-      "rarity": "common",
-      "isUnique": false,
-      "weight": 100,
-      "requires": [],
-      "description": "Der Champion erhält dauerhaft +18 % maximales Leben.",
-      "signatureClass": "c_necro",
-      "core": {
-        "necroCrownHpPct": 0.18
-      },
-      "_note": {
-        "buildrolle": "Sicherheit"
-      }
-    },
     "ghost_069": {
       "id": "ghost_069",
       "name": "Kritische Krone",
@@ -1661,13 +1639,14 @@
       "isUnique": true,
       "weight": 12,
       "requires": [],
-      "description": "Sobald ein zweiter Untertanenpanzer erscheinen würde, verschmilzt der schwächere sofort mit dem Champion. Der Champion erhält bis Raumende 30 % des Basis-Lebens und Basis-Schadens sowie 12 % der Basis-Feuerrate des Verschmolzenen. Verschmelzung ist kein Geistertod.",
+      "description": "Sobald ein zweiter Untertanenpanzer erscheinen würde, verschmilzt er sofort mit dem Champion. Jede Verschmelzung überträgt 100 % des Basis-Lebens, Basis-Schadens und der Basis-Feuerrate des Verschmolzenen, zusätzlich +5 Prozentpunkte auf alle drei je bereits erfolgter Verschmelzung, ohne Obergrenze. Verschmelzung ist kein Geistertod.",
       "signatureClass": "c_necro",
       "core": {
         "necroUniqueThrone": true,
-        "necroFusionHpPct": 0.3,
-        "necroFusionDamagePct": 0.3,
-        "necroFusionFireRatePct": 0.12
+        "necroFusionHpPct": 1.0,
+        "necroFusionDamagePct": 1.0,
+        "necroFusionFireRatePct": 1.0,
+        "necroUniqueThronePerFusionPct": 0.05
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -1688,7 +1667,7 @@
       "requires": [
         "ghost_071"
       ],
-      "description": "Jede Verschmelzung überträgt zusätzlich 8 Prozentpunkte Basis-Leben und Basis-Schaden sowie 3 Prozentpunkte Basis-Feuerrate.",
+      "description": "Jede Verschmelzung überträgt zusätzlich 8 Prozentpunkte Basis-Leben und Basis-Schaden sowie 3 Prozentpunkte Basis-Feuerrate, oben auf die 100 % Grundübertragung.",
       "signatureClass": "c_necro",
       "core": {
         "necroFusionHpPctBonus": 0.08,
@@ -1879,7 +1858,7 @@
       "isUnique": true,
       "weight": 22,
       "requires": [],
-      "description": "Stirbt der Champion, übernimmt der nächste innerhalb von 10 Sekunden erscheinende Untertanenpanzer 60 % seiner raumweiten Kronen- und Fusionsboni. Einmal pro Raum.",
+      "description": "Stirbt der Champion, übernimmt der sofort nachfolgende Champion 60 % seiner raumweiten Kronen- und Fusionsboni. Einmal pro Raum.",
       "signatureClass": "c_necro",
       "core": {
         "necroCrownHeirPct": 0.6
@@ -1901,10 +1880,10 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Bewegt sich der Champion 2 Sekunden nicht, verankert er sich: +45 % Schaden, +25 % Reichweite und +20 Punkte Schadensresistenz, bis er sich wieder bewegt.",
+      "description": "Bewegt sich der Hauptpanzer 5 Sekunden nicht, verankert sich der Champion: +45 % Schaden, +25 % Reichweite und +20 Punkte Schadensresistenz, bis der Hauptpanzer sich wieder bewegt.",
       "signatureClass": "c_necro",
       "core": {
-        "necroCrownAnchorAfterS": 2.0,
+        "necroCrownAnchorAfterS": 5.0,
         "necroCrownAnchorDamagePct": 0.45,
         "necroCrownAnchorRangePct": 0.25,
         "necroCrownAnchorResist": 20
@@ -1951,11 +1930,12 @@
       "isUnique": true,
       "weight": 12,
       "requires": [],
-      "description": "Der Champion erhält dauerhaft +25 % Schaden und +25 % maximales Leben.",
+      "description": "Der Champion erhält dauerhaft +25 % Schaden und +25 % maximales Leben. Seine Lebenszeit läuft nie mehr ab -- er besteht bis zum Tod oder Raumende.",
       "signatureClass": "c_necro",
       "core": {
         "necroCrownDamagePct": 0.25,
-        "necroCrownHpPct": 0.25
+        "necroCrownHpPct": 0.25,
+        "necroCrownEternalLifetime": true
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -2001,13 +1981,13 @@
       "requires": [
         "ghost_071"
       ],
-      "description": "Ersetzt die Übertragung von Einziger Thron: Jede Verschmelzung überträgt 50 % Basis-Leben, 50 % Basis-Schaden und 20 % Basis-Feuerrate. Solange diese Karte aktiv ist, kann nur der Champion als Untertanenpanzer bestehen.",
+      "description": "Ersetzt die Übertragung von Einziger Thron: Jede Verschmelzung überträgt 150 % Basis-Leben, 150 % Basis-Schaden und 60 % Basis-Feuerrate (statt der einfachen Grundübertragung + Boni). Solange diese Karte aktiv ist, kann nur der Champion als Untertanenpanzer bestehen.",
       "signatureClass": "c_necro",
       "core": {
         "necroFusionReplace": true,
-        "necroFusionReplaceHpPct": 0.5,
-        "necroFusionReplaceDamagePct": 0.5,
-        "necroFusionReplaceFireRatePct": 0.2
+        "necroFusionReplaceHpPct": 1.5,
+        "necroFusionReplaceDamagePct": 1.5,
+        "necroFusionReplaceFireRatePct": 0.6
       },
       "_note": {
         "buildrolle": "Skalierung",
@@ -2180,7 +2160,7 @@
       "isUnique": true,
       "weight": 55,
       "requires": [],
-      "description": "Verschmelzungen zählen für raumweite Spielerstapel als halber Geistertod. Sie lösen keine Heilung, Explosionen, Druckwellen oder Abklingzeitreduktion aus.",
+      "description": "Verschmelzungen zählen für raumweite Spielerstapel als voller Geistertod. Sie lösen keine Heilung, Explosionen, Druckwellen oder Abklingzeitreduktion aus.",
       "signatureClass": "c_necro",
       "core": {
         "necroFusionHalfDeathForStacks": true
@@ -2260,12 +2240,10 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "25 % des Schadens am Hauptpanzer werden auf den Champion umgeleitet. Jeder umgeleitete Treffer gewährt dem Hauptpanzer 5 Sekunden +3 % Schaden.",
+      "description": "25 % des Schadens am Hauptpanzer werden auf den Champion umgeleitet. Ohne lebenden Champion passiert nichts.",
       "signatureClass": "c_necro",
       "core": {
-        "necroSoulbondPct": 0.25,
-        "necroSoulbondBuffPct": 0.03,
-        "necroSoulbondBuffDurationS": 5
+        "necroSoulbondPct": 0.25
       },
       "_note": {
         "buildrolle": "Sicherheit"
@@ -2285,14 +2263,11 @@
       "isUnique": true,
       "weight": 12,
       "requires": [],
-      "description": "Ersetzt dein Gadget. Abklingzeit 30 Sekunden: Opfert den Champion. Der Hauptpanzer erhält 10 Sekunden +40 % Schaden, +25 % Feuerrate und +20 Punkte Schadensresistenz. Die Opferung zählt als Geistertod.",
+      "description": "Ersetzt dein Gadget. Abklingzeit 30 Sekunden: Opfert den Champion. Der Hauptpanzer erhält dauerhaft (bis Raumende) 40 % von dessen Basis-Leben, Basis-Schaden und Basis-Feuerrate. Die Opferung zählt als Geistertod.",
       "signatureClass": "c_necro",
       "core": {
         "necroActiveKind": "sacrifice_champion",
-        "necroSacrificeChampionDmgPct": 0.4,
-        "necroSacrificeChampionFRPct": 0.25,
-        "necroSacrificeChampionResist": 20,
-        "necroSacrificeChampionDurationS": 10
+        "necroSacrificeChampionStatPct": 0.4
       },
       "_note": {
         "buildrolle": "Burst",
@@ -2335,12 +2310,13 @@
       "isUnique": true,
       "weight": 55,
       "requires": [],
-      "description": "Würde bei vollem Geisterlimit ein weiterer Untertanenpanzer erscheinen, verschmilzt der schwächste in den Champion und überträgt 20 % Basis-Leben sowie Basis-Schaden.",
+      "description": "Würde bei vollem Geisterlimit ein weiterer Untertanenpanzer erscheinen, verschmilzt der schwächste stattdessen in den Champion und überträgt 100 % Basis-Leben, Basis-Schaden und Basis-Feuerrate.",
       "signatureClass": "c_necro",
       "core": {
         "necroCapFusion": true,
-        "necroCapFusionHpPct": 0.2,
-        "necroCapFusionDamagePct": 0.2
+        "necroCapFusionHpPct": 1.0,
+        "necroCapFusionDamagePct": 1.0,
+        "necroCapFusionFireRatePct": 1.0
       },
       "_note": {
         "buildrolle": "Skalierung"
@@ -2521,6 +2497,258 @@
       "_note": {
         "buildrolle": "Skalierung",
         "balanceHinweis": "Skaliert automatisch mit dem Akt, weil späte Akte stärkere Gegnertypen haben."
+      }
+    },
+    "ghost_106": {
+      "id": "ghost_106",
+      "name": "Einziges Schwert",
+      "tag": "fusion",
+      "tags": [
+        "alpha",
+        "fusion",
+        "schaden"
+      ],
+      "rarity": "rare",
+      "isUnique": false,
+      "weight": 22,
+      "requires": [
+        "ghost_071"
+      ],
+      "description": "Jede Verschmelzung überträgt zusätzlich 15 Prozentpunkte Basis-Schaden, oben auf die 100 % Grundübertragung von Einziger Thron.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroFusionDamagePctBonus": 0.15
+      },
+      "_note": {
+        "buildrolle": "Skalierung",
+        "balanceHinweis": "Ohne eine aktive Verschmelzungskarte (Einziger Thron/Auslese der Legion) wirkungslos -- deshalb an ghost_071 gebunden."
+      }
+    },
+    "ghost_107": {
+      "id": "ghost_107",
+      "name": "Einziges Schild",
+      "tag": "fusion",
+      "tags": [
+        "alpha",
+        "fusion",
+        "leben"
+      ],
+      "rarity": "rare",
+      "isUnique": false,
+      "weight": 22,
+      "requires": [
+        "ghost_071"
+      ],
+      "description": "Jede Verschmelzung überträgt zusätzlich 15 Prozentpunkte Basis-Leben, oben auf die 100 % Grundübertragung von Einziger Thron.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroFusionHpPctBonus": 0.15
+      },
+      "_note": {
+        "buildrolle": "Sicherheit",
+        "balanceHinweis": "Ohne eine aktive Verschmelzungskarte (Einziger Thron/Auslese der Legion) wirkungslos -- deshalb an ghost_071 gebunden."
+      }
+    },
+    "ghost_108": {
+      "id": "ghost_108",
+      "name": "Einziger Bogen",
+      "tag": "fusion",
+      "tags": [
+        "alpha",
+        "fusion",
+        "feuerrate"
+      ],
+      "rarity": "rare",
+      "isUnique": false,
+      "weight": 22,
+      "requires": [
+        "ghost_071"
+      ],
+      "description": "Jede Verschmelzung überträgt zusätzlich 15 Prozentpunkte Basis-Feuerrate, oben auf die 100 % Grundübertragung von Einziger Thron.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroFusionFireRatePctBonus": 0.15
+      },
+      "_note": {
+        "buildrolle": "Tempo",
+        "balanceHinweis": "Ohne eine aktive Verschmelzungskarte (Einziger Thron/Auslese der Legion) wirkungslos -- deshalb an ghost_071 gebunden."
+      }
+    },
+    "ghost_109": {
+      "id": "ghost_109",
+      "name": "Flüstern der Gefallenen",
+      "tag": "revival",
+      "tags": [
+        "legion",
+        "wiederbelebung"
+      ],
+      "rarity": "uncommon",
+      "isUnique": false,
+      "weight": 55,
+      "requires": [],
+      "description": "Die Wiederbelebungschance nach einem Abschuss durch den Hauptpanzer, den Champion oder einen anderen Untertanen steigt um 10 Prozentpunkte.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroReviveChanceAdd": 0.1
+      },
+      "_note": {
+        "buildrolle": "Skalierung",
+        "balanceHinweis": "Über 100 % gelingt die Probe sicher; der Überschuss ist die Chance auf einen zweiten Untertanen."
+      }
+    },
+    "ghost_110": {
+      "id": "ghost_110",
+      "name": "Ruf der Legion",
+      "tag": "revival",
+      "tags": [
+        "legion",
+        "wiederbelebung"
+      ],
+      "rarity": "epic",
+      "isUnique": false,
+      "weight": 12,
+      "requires": [],
+      "description": "Die Wiederbelebungschance nach einem Abschuss durch den Hauptpanzer, den Champion oder einen anderen Untertanen steigt um 18 Prozentpunkte.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroReviveChanceAdd": 0.18
+      },
+      "_note": {
+        "buildrolle": "Skalierung",
+        "balanceHinweis": "Über 100 % gelingt die Probe sicher; der Überschuss ist die Chance auf einen zweiten Untertanen."
+      }
+    },
+    "ghost_111": {
+      "id": "ghost_111",
+      "name": "Unaufhaltsamer Totenruf",
+      "tag": "revival",
+      "tags": [
+        "legion",
+        "wiederbelebung"
+      ],
+      "rarity": "legendary",
+      "isUnique": false,
+      "weight": 7,
+      "requires": [],
+      "description": "Die Wiederbelebungschance nach einem Abschuss durch den Hauptpanzer, den Champion oder einen anderen Untertanen steigt um 25 Prozentpunkte.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroReviveChanceAdd": 0.25
+      },
+      "_note": {
+        "buildrolle": "Skalierung",
+        "balanceHinweis": "Über 100 % gelingt die Probe sicher; der Überschuss ist die Chance auf einen zweiten Untertanen."
+      }
+    },
+    "ghost_112": {
+      "id": "ghost_112",
+      "name": "Beständiger Regent",
+      "tag": "duration",
+      "tags": [
+        "alpha",
+        "champion",
+        "dauer"
+      ],
+      "rarity": "uncommon",
+      "isUnique": false,
+      "weight": 55,
+      "requires": [],
+      "description": "Die Lebenszeit des Champions steigt um 1,0 Sekunden.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroCrownLifetimeAdd": 1.0
+      },
+      "_note": {
+        "buildrolle": "Sicherheit"
+      }
+    },
+    "ghost_113": {
+      "id": "ghost_113",
+      "name": "Verlängerte Herrschaft",
+      "tag": "duration",
+      "tags": [
+        "alpha",
+        "champion",
+        "dauer"
+      ],
+      "rarity": "rare",
+      "isUnique": false,
+      "weight": 22,
+      "requires": [],
+      "description": "Die Lebenszeit des Champions steigt um 1,5 Sekunden.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroCrownLifetimeAdd": 1.5
+      },
+      "_note": {
+        "buildrolle": "Sicherheit"
+      }
+    },
+    "ghost_114": {
+      "id": "ghost_114",
+      "name": "Ungebrochener Schwur",
+      "tag": "duration",
+      "tags": [
+        "alpha",
+        "champion",
+        "dauer"
+      ],
+      "rarity": "epic",
+      "isUnique": false,
+      "weight": 12,
+      "requires": [],
+      "description": "Die Lebenszeit des Champions steigt um 2,0 Sekunden.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroCrownLifetimeAdd": 2.0
+      },
+      "_note": {
+        "buildrolle": "Sicherheit"
+      }
+    },
+    "ghost_115": {
+      "id": "ghost_115",
+      "name": "Vermächtnis der Krone",
+      "tag": "duration",
+      "tags": [
+        "alpha",
+        "champion",
+        "dauer"
+      ],
+      "rarity": "legendary",
+      "isUnique": false,
+      "weight": 7,
+      "requires": [],
+      "description": "Die Lebenszeit des Champions steigt um 3,0 Sekunden.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroCrownLifetimeAdd": 3.0
+      },
+      "_note": {
+        "buildrolle": "Sicherheit"
+      }
+    },
+    "ghost_116": {
+      "id": "ghost_116",
+      "name": "Losgelöste Ketten",
+      "tag": "hybrid",
+      "tags": [
+        "alpha",
+        "geisterbombe",
+        "typ"
+      ],
+      "rarity": "epic",
+      "isUnique": true,
+      "weight": 12,
+      "requires": [],
+      "description": "Der über die Geisterbombe aktiv erzeugte Untertanenpanzer ist immer ein beweglicher Gegnertyp -- niemals ein stationärer.",
+      "signatureClass": "c_necro",
+      "core": {
+        "necroForceMobileBomb": true
+      },
+      "_note": {
+        "buildrolle": "Engine",
+        "balanceHinweis": "Reiner Filter, keine neue Ressource/Mechanik."
       }
     }
   }

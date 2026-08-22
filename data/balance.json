@@ -33,8 +33,8 @@
   },
   "_comment_mortar": "Grundsteinumbau Phase 3 (t_green wird Moerserschuetze). Alle Werte laut Auftrag '_todo: balance' -- noch nicht am Spielgefuehl geprueft. flightTimeS: Flugzeit bis zum Einschlag (auch die Dauer, ueber die die Einschlagmarkierung waechst). radiusPx/damage: wie mine.js: explodeAt(). leadPct: Anteil der Spielerbewegung, den das Zielsystem vorhersagt (0 = zielt auf die Position beim Abschuss, 1 = volle Vorhersage Position+Geschwindigkeit*flightTimeS). minRangePx: unter dieser Distanz feuert der Gruene nicht (Distanzgegner, sonst bombt er sich selbst weg).",
   "mortar": {
-    "_todo": "balance",
-    "flightTimeS": 1.1,
+    "_comment": "Champion-/Nekromant-Nachschliff Abschnitt 15: flightTimeS 1.1 -> 1.7, damit ein Panzer mit Grundtempo den Explosionsradius (samt eigener Trefferflaeche) vor der Detonation vollstaendig verlassen kann. radiusPx unveraendert.",
+    "flightTimeS": 1.7,
     "radiusPx": 44,
     "damage": 25,
     "leadPct": 0.4,
@@ -87,6 +87,14 @@
     { "maxRoom": null, "rarity": { "common": 38, "uncommon": 30, "rare": 17, "epic": 10, "legendary": 5 } }
   ],
   "_comment_shopRarityBands": "Kartenbelohnung/Shop-Ueberarbeitung: EIGENSTAENDIGE Seltenheitsverteilung fuer das Shop-Regal, gestaffelt nach der Anzahl BEREITS BESUCHTER Shops (`run.shopsVisited`, 1-indexiert -- der 1. betretene Shop nutzt Band 1, unabhaengig davon, in welchem Raum/Akt er liegt). Getrennt von rewardRarityBands (eigener Auftragspunkt: 'eigenstaendige Seltenheitschancen fuer Shop-Karten', nicht von der Kampf-Raumtiefe abgeleitet). `maxVisit` wie `maxRoom` oben; `null` = letztes Band gilt ab dort dauerhaft (7. Shop+).",
+  "_comment_eliteRarityBands": "Champion-/Nekromant-Nachschliff Abschnitt 16: eigenstaendige Baender fuer Elite-Belohnungen, dieselbe pickBand()-Mechanik wie rewardRarityBands, aber mit deutlich hoeherem episch+legendaer-Anteil je Stufe (mindestens das ~5-10-Fache der jeweils gleich gestaffelten rewardRarityBands-Stufe) -- zusaetzlich zur harten 'mindestens episch-oder-legendaer'-Garantie in run.js: rollReward().",
+  "eliteRarityBands": [
+    { "maxRoom": 4, "rarity": { "common": 60, "uncommon": 24, "rare": 10, "epic": 4.5, "legendary": 1.5 } },
+    { "maxRoom": 9, "rarity": { "common": 50, "uncommon": 25, "rare": 14, "epic": 8, "legendary": 3 } },
+    { "maxRoom": 14, "rarity": { "common": 35, "uncommon": 27, "rare": 18, "epic": 13, "legendary": 7 } },
+    { "maxRoom": 20, "rarity": { "common": 22, "uncommon": 27, "rare": 21, "epic": 19, "legendary": 11 } },
+    { "maxRoom": null, "rarity": { "common": 18, "uncommon": 25, "rare": 22, "epic": 22, "legendary": 13 } }
+  ],
   "shopRarityBands": [
     { "maxVisit": 2, "rarity": { "common": 71.3, "uncommon": 8.5, "rare": 9, "epic": 6, "legendary": 5.2 } },
     { "maxVisit": 4, "rarity": { "common": 63, "uncommon": 12.5, "rare": 12, "epic": 7, "legendary": 5.5 } },

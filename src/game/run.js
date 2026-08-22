@@ -17,7 +17,7 @@
 import { rngFor, rngForRun, hashSeed } from '../core/rng.js';
 import { recordRun, loadStats, saveCurrentRun, clearCurrentRun } from '../core/storage.js';
 import { createState, stepState } from './state.js';
-import { rollOffers as rollFromPool, drawOne, rewardRarityWeights, shopRarityWeights } from './upgradepool.js';
+import { rollOffers as rollFromPool, drawOne, rewardRarityWeights, shopRarityWeights, eliteRarityWeights } from './upgradepool.js';
 import { arenaEnemySpawnCount } from './generator.js';
 
 const TRANSITION_S = 1.5;
@@ -777,55 +777,59 @@ export function repairAtRest(run) {
   return true;
 }
 
-function upgradeLevelBalance(run) {
-  return run.data.balance.upgradeLevel || { bonusPct: 0, maxLevel: 0 };
-}
-
-// Werkbank-Vorschau fuer die UI: eigene Karten, die sich noch aufwerten
-// lassen -- besessen (Stapel > 0), nicht per upgradable:false gesperrt
-// (sockel_ersatzpanzer), noch unter maxLevel. Grundsteinumbau Phase 8:
-// dieselbe Funktion fuer Rastplatz UND Shop, "dieselbe Mechanik, hier
-// gekauft statt gerastet" (Auftrag) -- ein Ort fuer die Filterregeln.
+// Champion-/Nekromant-Nachschliff Abschnitt 2: das alte "eine Karte bekommt
+// eine separate Stufe/+-Symbol"-System (run.upgradeLevels, maxLevel-Deckel)
+// ist VOLLSTAENDIG entfernt. Eine besessene, WIEDERHOLBARE (nicht
+// einzigartige) Karte am Rastplatz/in der Shop-Werkbank zu waehlen wird
+// jetzt EXAKT wie eine frische Kartenwahl behandelt -- derselbe Stapelzaehler
+// run.upgrades[id], derselbe applyUpgradeChoice()-Hook wie beim normalen
+// Angebot. Kein Stufen-Deckel mehr: eine Karte laesst sich beliebig oft
+// erneut waehlen. cfg.js/state.js behalten die (jetzt dauerhaft leere)
+// upgradeLevels-Infrastruktur unangetastet als reines totes Feld -- ein
+// Loeschen dort waere ein reiner Aufraeum-Nebenschauplatz ohne Verhaltens-
+// aenderung und riskiert unnoetig weitere Aufrufstellen.
+//
+// Werkbank-Vorschau fuer die UI: eigene, WIEDERHOLBARE Karten (isUnique muss
+// false sein -- eine einzigartige Karte darf am Rastplatz/im Shop nie
+// erneut auftauchen, Auftrag Abschnitt 1/2). "stufe" zeigt jetzt die
+// tatsaechliche Stapelzahl (run.upgrades[id]), keine separate Werkbank-Stufe
+// mehr.
 export function workbenchOptions(run) {
-  const maxLevel = upgradeLevelBalance(run).maxLevel ?? 0;
   const defs = run.upgradesData.upgrades;
   return Object.keys(run.upgrades)
     .filter((id) => (run.upgrades[id] || 0) > 0)
     .map((id) => defs[id])
-    .filter((def) => def && def.upgradable !== false)
-    .filter((def) => (run.upgradeLevels[def.id] || 0) < maxLevel)
+    .filter((def) => def && !def.isUnique)
     .map((def) => ({
       id: def.id,
       name: def.name,
       description: def.description,
       symbol: def.symbol,
-      stufe: run.upgradeLevels[def.id] || 0,
-      maxLevel,
+      stufe: run.upgrades[def.id] || 0,
     }));
 }
 
-// Gemeinsamer Kern: eine besessene, noch nicht am Deckel stehende Karte eine
-// Stufe aufwerten (Besitz-/Deckel-/upgradable-Pruefung). Weder Kosten noch
-// Raumfluss -- das entscheiden die beiden Aufrufer (Rastplatz: kostenlos +
-// Raum-Ende; Shop: gegen Schrott, Raum bleibt offen), Muster wie
-// applyUpgradeChoice()/buyShopCard() teilen sich denselben Kern.
-function raiseUpgradeLevel(run, id) {
+// Gemeinsamer Kern: eine bereits besessene, wiederholbare Karte "erneut
+// waehlen" -- ruft denselben applyUpgradeChoice()-Hook wie eine frische
+// Kartenwahl (Stapelzaehler, Tag-/Synergie-Buchfuehrung, Sonderfaelle wie
+// Glaskanone/Notschild/Trophaee/Ersatzpanzer laufen automatisch mit). Weder
+// Kosten noch Raumfluss -- das entscheiden die beiden Aufrufer (Rastplatz:
+// kostenlos + Raum-Ende; Shop: gegen Schrott, Raum bleibt offen).
+function repickOwnedCard(run, id) {
   if ((run.upgrades[id] || 0) <= 0) return false;
   const def = run.upgradesData.upgrades[id];
-  if (!def || def.upgradable === false) return false;
-  const maxLevel = upgradeLevelBalance(run).maxLevel ?? 0;
-  const cur = run.upgradeLevels[id] || 0;
-  if (cur >= maxLevel) return false;
-  run.upgradeLevels[id] = cur + 1;
+  if (!def || def.isUnique) return false;
+  applyUpgradeChoice(run, def);
   return true;
 }
 
-// Rastplatz, Option 2: Werkbank. cfg.js: applyUpgrades() liest
-// run.upgradeLevels danach bei jedem Raumaufbau/Respawn neu. Beendet den
-// Raum sofort (dieselbe "eine Wahl, Raum zu Ende"-Regel wie Reparatur).
+// Rastplatz, Option 2 (ueberarbeitet, Champion-/Nekromant-Nachschliff
+// Abschnitt 2): "Werkbank" waehlt eine besessene, wiederholbare Karte
+// erneut, statt sie eine separate Stufe aufzuwerten. Beendet den Raum sofort
+// (dieselbe "eine Wahl, Raum zu Ende"-Regel wie Reparatur).
 export function upgradeCardAtRest(run, id) {
   if (run.phase !== 'rest') return false;
-  if (!raiseUpgradeLevel(run, id)) return false;
+  if (!repickOwnedCard(run, id)) return false;
   afterRoomDone(run);
   return true;
 }
@@ -1309,15 +1313,23 @@ export function stepRun(run, cmd, dt) {
       const reward = actCfg.lifeReward || 0;
       run.lastActLifeReward = reward;
       if (reward) run.lives = Math.min(run.maxLives, run.lives + reward);
-      if (run.actIndex >= run.difficulty.acts.length) {
-        // Letzter Akt (Phalanx) geschafft -> Run gewonnen, kein Uebergang mehr.
-        finishRun(run, true);
+      // Champion-/Nekromant-Nachschliff Abschnitt 17: nach JEDEM besiegten
+      // Boss eine garantierte Belohnung mit drei UNTERSCHIEDLICHEN
+      // legendaeren Karten, VOR dem Akt-Uebergang bzw. dem Sieg-Bildschirm
+      // -- auch nach dem letzten Boss (finishBossReward() gewinnt den Run
+      // erst, NACHDEM die Karte gewaehlt wurde).
+      run.rewardKind = 'bossLegendary';
+      const offers = rollBossReward(run);
+      if (offers.length) {
+        run.pendingOffers = offers;
+        run.phase = 'bossReward';
         return;
       }
-      // Akt 1/2 geschafft: Zwischenbildschirm statt der normalen
-      // Belohnungsauswahl (der alte Finalraum bot ohnehin keine Karte an --
-      // dieselbe Stelle prüfte früher direkt gegen totalRooms()).
-      run.phase = 'actComplete';
+      // Sicherheitsnetz (Muster: der allgemeine Belohnungs-Sicherheitsnetz-
+      // Zweig unten) -- ein Pool ohne genug distinkte Legendaere blockiert
+      // den Run nicht, sondern zieht direkt weiter.
+      run.rewardKind = null;
+      finishBossReward(run);
       return;
     }
     // Belohnung: Eliteraeume ziehen aus dem Elite-Pool. Grundsteinumbau
@@ -1412,7 +1424,11 @@ function rollReward(run) {
     });
   }
   if (run.rewardKind === 'elite') {
-    const offers = rollFromPool(run.upgradesData, base);
+    // Champion-/Nekromant-Nachschliff Abschnitt 16: eigene, deutlich
+    // episch/legendaer-lastigere Seltenheitstabelle statt der normalen
+    // Belohnungsbaender fuer die Dreierauswahl.
+    const eliteBase = { ...base, rarityWeights: eliteRarityWeights(run.data.balance, run.totalRoomIndex) };
+    const offers = rollFromPool(run.upgradesData, eliteBase);
     const avoidTags = new Set(offers.map((o) => o.tag));
     const avoidIds = new Set(offers.map((o) => o.id));
     const eliteCard = drawOne(
@@ -1425,9 +1441,74 @@ function rollReward(run) {
     // oder -- wie im Sockel aktuell -- gar keine Karte mit Tag 'elite'
     // vorhanden) -> keine 4. Karte statt eines Platzhaltereintrags.
     if (eliteCard) offers.push(eliteCard);
+    // Harte Garantie: mindestens eine episch-oder-legendaere Karte, auch
+    // wenn die boostete Tabelle rein zufaellig keine getroffen hat -- eine
+    // legendaere Karte erfuellt die Anforderung ebenfalls. Ersetzt im
+    // Zweifel die zuletzt gezogene Karte, statt das Angebot zu verlaengern
+    // (Angebotsgroesse bleibt unveraendert).
+    const hasEpicOrLegendary = offers.some((o) => o.rarity === 'epic' || o.rarity === 'legendary');
+    if (!hasEpicOrLegendary && offers.length) {
+      const avoidIds2 = new Set(offers.map((o) => o.id));
+      const guaranteed =
+        drawOne(run.upgradesData, { ...base, onlyRarity: 'legendary', bypassRoomGate: true }, new Set(), avoidIds2) ||
+        drawOne(run.upgradesData, { ...base, onlyRarity: 'epic', bypassRoomGate: true }, new Set(), avoidIds2);
+      if (guaranteed) offers[offers.length - 1] = guaranteed;
+    }
     return offers;
   }
   return rollFromPool(run.upgradesData, base);
+}
+
+// Champion-/Nekromant-Nachschliff Abschnitt 17 (Boss-Belohnung): NACH jedem
+// besiegten Akt-Boss werden bis zu drei UNTERSCHIEDLICHE legendaere Karten
+// gezogen -- ueber drawOne() statt rollOffers(), weil rollOffers() die "kein
+// doppelter Tag pro Angebot"-Regel durchsetzt (mehrere Legendaere teilen
+// sich oft denselben Tag, das wuerde die Auswahl unnoetig verkleinern).
+// avoidTags bleibt bewusst LEER (nur avoidIds waechst) -- Klassen-/
+// Element-/isUnique-Filter aus buildCandidates() gelten trotzdem
+// unveraendert. Liefert 0-3 Karten (kein Fallback/Platzhalter, Muster wie
+// jede andere Kartenziehung seit Grundsteinumbau Phase 4).
+export function rollBossReward(run) {
+  const opts = { ...poolOpts(run), onlyRarity: 'legendary', bypassRoomGate: true };
+  const offers = [];
+  const avoidIds = new Set();
+  for (let i = 0; i < 3; i++) {
+    const card = drawOne(run.upgradesData, opts, new Set(), avoidIds);
+    if (!card) break;
+    offers.push(card);
+    avoidIds.add(card.id);
+  }
+  return offers;
+}
+
+// Nach der Boss-Belohnung (gewaehlt ODER uebersprungen, falls der Pool leer
+// war): derselbe Akt-Uebergang/Sieg-Pfad wie vor Abschnitt 17, nur aus dem
+// Hauptfluss herausgezogen, damit ihn beide Aufrufer (chooseBossReward()
+// UND das Sicherheitsnetz in stepRun()) teilen koennen.
+function finishBossReward(run) {
+  if (run.actIndex >= run.difficulty.acts.length) {
+    // Letzter Akt (Phalanx) geschafft -> Run gewonnen, kein Uebergang mehr.
+    finishRun(run, true);
+    return;
+  }
+  // Akt 1/2 geschafft: Zwischenbildschirm statt der normalen
+  // Belohnungsauswahl (der alte Finalraum bot ohnehin keine Karte an --
+  // dieselbe Stelle prüfte früher direkt gegen totalRooms()).
+  run.phase = 'actComplete';
+}
+
+// Boss-Belohnung waehlen: applyUpgradeChoice() wie jede andere Kartenwahl
+// (Stapelzaehler, isUnique-Sperre, Tag-/Synergie-Buchfuehrung), aber
+// endet NICHT in afterRoomDone() -- der Bossraum ist bereits geraeumt, der
+// naechste Schritt ist der Akt-Uebergang bzw. der Sieg.
+export function chooseBossReward(run, index) {
+  if (run.phase !== 'bossReward' || !run.pendingOffers) return;
+  const offer = run.pendingOffers[index];
+  if (!offer) return;
+  applyUpgradeChoice(run, offer);
+  run.pendingOffers = null;
+  run.rewardKind = null;
+  finishBossReward(run);
 }
 
 // --- Phase-3-Schrott-Aktionen im Upgrade-Screen ---
@@ -1557,14 +1638,15 @@ export function buyShopLife(run) {
   return true;
 }
 
-// Werkbank im Shop (Grundsteinumbau Phase 8): dieselbe Aufwertung wie am
-// Rastplatz (raiseUpgradeLevel()), hier gegen Schrott statt kostenlos --
+// Werkbank im Shop (Grundsteinumbau Phase 8, ueberarbeitet Champion-/
+// Nekromant-Nachschliff Abschnitt 2): dieselbe "erneut waehlen"-Mechanik wie
+// am Rastplatz (repickOwnedCard()), hier gegen Schrott statt kostenlos --
 // und ohne Raumfluss, man bleibt im Shop wie bei jeder anderen Aktion hier.
 export function buyShopUpgradeLevel(run, id) {
   if (run.phase !== 'workshop') return false;
   const cost = run.data.balance.scrap.cost.upgradeLevel ?? 0;
   if (run.scrap < cost) return false;
-  if (!raiseUpgradeLevel(run, id)) return false;
+  if (!repickOwnedCard(run, id)) return false;
   run.scrap -= cost;
   return true;
 }

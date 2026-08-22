@@ -1275,3 +1275,29 @@ body.touch-on .throwstick.slot-empty {
   color: #9aa0a8;
   text-align: center;
 }
+
+/* Champion-/Nekromant-Nachschliff Abschnitt 13: Glossar-Begriffe in
+   Kartentexten. Blaue, gepunktet unterstrichene Markierung -- title-Attribut
+   zeigt die Erklaerung beim Desktop-Hover nativ, der delegierte Klick-
+   Listener aus src/ui/glossary.js zeigt dieselbe Erklaerung als Sprechblase
+   bei Klick/Tap (Touch-Geraete kennen kein Hover). */
+.glossary-term {
+  color: #6fb8ff;
+  text-decoration: underline dotted;
+  text-decoration-color: rgba(111, 184, 255, 0.7);
+  cursor: help;
+}
+
+.glossary-bubble {
+  position: fixed;
+  z-index: 500;
+  max-width: 260px;
+  padding: 8px 10px;
+  background: #1c2430;
+  color: #e6ecf2;
+  border: 1px solid #6fb8ff;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.35;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}

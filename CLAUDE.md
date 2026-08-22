@@ -302,6 +302,24 @@ statt eines Einheitspreises. **Zuletzt gemergt: Champion-Sprite**
 `body_champion.png`/`turret_champion.png` statt des geteilten
 Geister-Sprites, plus eine 12-Frame-Aura-Loop-Animation
 (`champion_aura_00..11.png`, dauerhaft im Loop bei 12 fps).
+**Zuletzt gemergt: Champion-/Nekromant-Nachschliff v2** (24-Punkte-Auftrag,
+eigener Abschnitt weiter unten „Champion-/Nekromant-Nachschliff v2 (24-Punkte-
+Auftrag)") — Champion hat wieder eine begrenzte Lebensdauer (Basiswert wie ein
+gewöhnlicher Untertan, per Karte verlängerbar, „Ewiger Thron" bleibt die
+einzige Unendlich-Ausnahme), Fusion überträgt jetzt 100 % statt der alten
+niedrigeren Anteile, der Rastplatz erlaubt das erneute Wählen besessener
+wiederholbarer Karten statt eines Stufen-/Deckel-Systems, 14 Nekromant-Karten
+sind überarbeitet + `ghost_068` „Langer Anspruch" ist entfernt, 11 neue Karten
+(3 Fusionskarten, 5 Wiederbelebungschance-Karten je Seltenheit, 5 Champion-
+Lebensdauer-Karten — eine davon `ghost_005` „Längerer Eid" ist eine
+Überarbeitung statt neu, macht zusammen 3+5+4 neu + 1 überarbeitet = 11 neue
+IDs), Elite-Gegner sind jetzt grundsätzlich wiederbelebbar (kein Karten-Gate
+mehr), Eliteraum-Belohnungen garantieren mindestens eine epische/legendäre
+Karte, jeder Bosskill zeigt einen garantierten Bildschirm mit drei
+verschiedenen legendären Karten, ein zentrales Glossar (`data/glossary.json`,
+`src/ui/glossary.js`) markiert Fachbegriffe in Kartentexten blau mit
+Hover-/Tap-Erklärung, der pinke Panzer ist 10 % langsamer im Geschosstempo,
+der Grüne (Mörser) hat 1,7 s statt 1,1 s Flug-/Warnzeit.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -6467,6 +6485,158 @@ eine 12-Frame-Aura-Loop-Animation, die dauerhaft im Loop läuft.
 - `sw.js` auf `v116` gebumpt (14 neue PNG-Dateien in `ASSETS`, cache-first
   wie alle Bild-Assets) + `telemetry.js: GAME_VERSION` mitgezogen.
 
+### Champion-/Nekromant-Nachschliff v2 (24-Punkte-Auftrag) — gemergt
+Vollständige Überarbeitung des Champion-/Fusions-/Rastplatz-Systems, ausgelöst
+durch eine 24-Punkte-Vorgabe des Nutzers (deutschsprachige Spezifikation).
+Kein neues Ressourcensystem, keine neue Datei außer dem Glossar — alle Fixes
+bauen auf den bestehenden Feldern (`state.necroStacks`/`shield`/`hp`/
+`fusionHpBonus` usw.) auf.
+- **Rastplatz komplett umgebaut**: das alte Stufen-/Deckel-System
+  (`run.upgradeLevels`, „+"-Suffix, Rastplatz-Skalierung in `cfg.js`) ist
+  ersatzlos entfernt. Der Rastplatz bietet jetzt **Reparaturtrupp** (+1 Leben,
+  gedeckelt) oder **Werkbank**: eine bereits besessene WIEDERHOLBARE Karte
+  erneut wählen — behandelt exakt wie ein frisches Angebot (derselbe
+  Stapelzähler `run.upgrades[id]`, keine Obergrenze). Einzigartige
+  (`isUnique: true`) Karten erscheinen dort strukturell nie (können nur 1×
+  existieren). Der Shop übernimmt dieselbe `workbenchOptions()`/
+  `upgradeCardAtRest()`-Logik für seine Werkbank-Aktion (gegen Schrott, ohne
+  den Raum zu beenden).
+- **Champion ist jetzt LIMITIERT statt unendlich lebendig**: `promoteToChampion()`
+  setzt die Lebensdauer auf denselben Basiswert wie ein gewöhnlicher Untertan
+  (`balance.ghost.lifetimeS`) + `ghostLifetimeAdd` (wirkt jetzt auf BEIDE,
+  nicht mehr nur auf gewöhnliche Geister) + die vier neuen Champion-
+  exklusiven Lebensdauer-Karten (`necroCrownLifetimeAdd`). „Ewiger Thron"
+  (`ghost_083`, `necroCrownEternalLifetime`) bleibt die EINZIGE Ausnahme, die
+  die Lebensdauer wieder auf `Infinity` setzt.
+- **Champion-Nachfolge ist SOFORTIG**: `ensureChampion(state)` läuft sowohl
+  in `pushGhost()` (nach jedem Spawn) als auch am Ende von `killGhost()`
+  (nach jedem Tod) — stirbt der Champion und lebt noch ein gewöhnlicher
+  Untertan, wird der stärkste SOFORT im selben `killGhost()`-Aufruf befördert.
+  „Kronenerbe" (`ghost_080`) konsumiert sein Erbe-Fenster (`state.necroCrownHeir`,
+  ohne Zeitfenster/`deadline` mehr) jetzt direkt in `promoteToChampion()` statt
+  im alten, zeitfenstergebundenen `createGhost()`-Zweig — deckt damit sowohl
+  einen bereits existierenden beförderten Geist als auch einen brandneuen Spawn.
+- **Fusion überträgt jetzt 100 % (statt 30/30/12 %) der Basiswerte** des
+  Verschmolzenen (`fuseGhost()`/`applyFusionTransfer()`, Standard-Fallback
+  `?? 1.0` für `hpFrac`/`dmgFrac`/`frFrac`). Zusätzliche Karten-Boni addieren
+  sich weiterhin OBEN AUF diese Baseline. „Einziger Thron" (`ghost_071`)
+  gewährt zusätzlich `necroUniqueThronePerFusionPct` (+5 Prozentpunkte je
+  bereits erfolgter Verschmelzung, ohne Obergrenze — additiv zur Basisrate,
+  nicht kompondierend). „Seelenkoloss" (`ghost_085`) ERSETZT die Übertragung
+  komplett auf 150 %/150 %/60 % statt sie zu addieren.
+- **Elf neue Karten**: drei Fusionskarten „Einziges Schwert"/„Einziges
+  Schild"/„Einziger Bogen" (`ghost_106`–`108`, je +15 Prozentpunkte auf
+  Schaden/Leben/Feuerrate, wiederverwenden die bestehenden `necroFusion*PctBonus`-
+  Felder, an `ghost_071` gebunden); fünf Wiederbelebungschance-Karten je
+  Seltenheit (`ghost_044`/`055`/`109`/`110`/`111`, +7/+10/+12/+18/+25 Prozentpunkte,
+  wirken auf Kills durch Hauptpanzer/Champion/Untertanen gleichermaßen, kein
+  Deckel); vier neue Champion-Lebensdauer-Karten (`ghost_112`–`115`,
+  +1/+1,5/+2/+3 s, dazu die überarbeitete `ghost_005` „Längerer Eid" mit
+  +0,5 s statt +2 s, wirkt jetzt auf BEIDE Einheitentypen); `ghost_116`
+  „Losgelöste Ketten" (episch, einzigartig, garantiert einen mobilen
+  Panzertyp für die per Geisterbombe erzeugten Untertanen,
+  `necroForceMobileBomb` in `spawnGhostBomb()`).
+- **14 bestehende Karten überarbeitet** (exakte neue Werte laut Vorgabe):
+  Kronenerbe (sofortige statt zeitfenstergebundene Nachfolge, 60 % Erbe),
+  Elite-Reaktivierung (90 % statt 65 %), Blutiger Thron (Verschmelzung zählt
+  jetzt VOLL statt halb für `pureStack`-Zähler), Seelenzorn/Totenrhythmus
+  (2 %→5 %, dauerhaft statt 3 s-Fenster), Königliches Opfer (40 % von des
+  Champions BASISwerten dauerhaft direkt auf die Spieler-cfg statt eines
+  Zeitfenster-Stapels), Treues Ende (60 %→50 %), Dunkler Treibstoff
+  (3 s→2 s, +15 % Feuerrate), Härte aus Verlust (dauerhaft statt 10 s),
+  Seelenmonolith (Auslöser ist jetzt die Bewegung des HAUPTPANZERS, nicht
+  mehr die des Champions selbst — `state.player.vx/vy` statt `g.vx/vy`),
+  Seelenband (nur noch die Schadensumleitung, der Zusatzbonus ist entfernt),
+  Erbschaft des Starken (dauerhaft statt 10 s). `ghost_068` „Langer
+  Anspruch" ist VOLLSTÄNDIG ENTFERNT (war durch die begrenzte
+  Champion-Lebensdauer wieder sinnvoll, aber als eigene Karte durch die vier
+  neuen Lebensdauer-Karten ersetzt).
+- **Gadget-Sperre und automatische Wiederbelebung entkoppelt**: eine
+  Ausrüstungssperre (Raum-Modifikator) blockiert weiterhin den
+  Gadget-/Geisterbomben-Weg, NICHT aber die kill-ausgelöste automatische
+  Wiederbelebungschance (`canRevive` in `state.js` unabhängig davon geprüft).
+- **Elite-Wiederbelebung ist jetzt grundsätzlich möglich** (nicht mehr hinter
+  einer Karte versteckt): `canRevive` ist für Elite-Gegner strukturell erlaubt
+  (Bosse bleiben ausgenommen), `slotCost: 2` gilt für einen wiederbelebten
+  Elite-Untertan IMMER (unabhängig von Karten), nur der Statwert-Bonus
+  (`baseStatPctOverride` 50 %→90 %) bleibt an „Elite-Reaktivierung" gebunden.
+- **Zentrales Glossar** (`data/glossary.json` + neues Modul `src/ui/glossary.js`):
+  12 Fachbegriffe (Champion, Geisterpanzer, Untertan, Verschmelzung,
+  Geistertod, Wiederbelebungschance, Feuerrate, Schadensresistenz,
+  Elitegegner, Einzigartig, Raumende, Geisterlimit) werden über
+  `highlightTerms(text)` (Regex-basiert, HTML-escaped) in Kartentexten blau
+  markiert — Desktop zeigt die Erklärung per `title`-Tooltip beim Hovern,
+  Touch über einen delegierten Klick-Listener (`installGlossaryTooltips()`),
+  der eine `.glossary-bubble` einblendet. Eingehängt in `upgradescreen.js`
+  und `roomscreens.js` (Shop-Kartenregal), initialisiert einmalig in
+  `main.js: init()`.
+- **Pinker Panzer 10 % langsamer**: `t_pink.bulletSpeed` neu auf 117
+  (`data/tanks.json`), NUR dieser Typ — `cfg.js` löst jetzt ein optionales
+  Pro-Typ-`bulletSpeed`-Override für Gegner auf, statt ausschließlich aus
+  `data/tanks.json: bulletSpeeds[weapon]` zu lesen. Der 3-aktive-Kugeln-Deckel
+  bleibt unverändert.
+- **Grüner (Mörser) langsamer**: `balance.mortar.flightTimeS` 1,1 s→1,7 s
+  (Flug- UND Warnzeit sind derselbe Wert) — ein normal schnell laufender
+  Panzer kann den Explosionsradius (unverändert 44 px) jetzt vollständig
+  verlassen, bevor die Granate einschlägt; der Telegraph (`drawMortars()`)
+  folgt automatisch derselben Zeit.
+- **Eliteraum-Belohnung verbessert**: neue `eliteRarityWeights()`
+  (`upgradepool.js`) + `data/balance.json: eliteRarityBands` garantieren
+  mindestens eine epische/legendäre Karte im Angebot und gewichten
+  epische/legendäre Karten insgesamt höher als bei einer normalen Belohnung
+  — datengetrieben über dieselbe `pickBand()`-Tabellenlogik wie die
+  bestehenden Reward-/Shop-Bänder (Part A dieser Auftragsreihe).
+- **Bosskill garantiert drei verschiedene legendäre Karten**: neues
+  `run.js: rollBossReward()`/`finishBossReward()`/`chooseBossReward()` +
+  ein neuer Run-Phase-Zustand `bossReward` (zwischen Bosskill und
+  Akt-Übergang/Run-Ende, verdrahtet in `stepRun()` und `main.js`, nutzt den
+  bestehenden Upgrade-Screen als UI). Zieht dreimal über `drawOne(...,
+  onlyRarity: 'legendary', bypassRoomGate: true)` mit wachsender Vermeidungs-
+  liste (`avoidIds`), damit keine Karte doppelt erscheint. **Die
+  Standardklasse (`player`) hatte dafür bisher gar keine legendäre Karte** —
+  drei neue universelle Legendaries (`sockel_kriegsmeister`/
+  `sockel_titanpanzerung`/`sockel_sturmantrieb`, `data/upgrades.json`) stellen
+  sicher, dass jede spielbare Klasse mindestens drei ziehbare Legendaries hat.
+  Bereits gewählte einzigartige Karten werden nicht erneut angeboten
+  (dieselbe `isUnique`/`selectedUniqueUpgradeIds`-Prüfung wie überall sonst).
+  Funktioniert unverändert über alle drei Akt-Bosskills und den finalen Sieg.
+- **Datenkonsistenz-Durchgang**: alle bestehenden Karten mit sub-100%-
+  Übertragungswerten (`ghost_071`/`072`/`085`/`098`) sind gegen die neue
+  100%-Baseline geprüft/angepasst, sieben zuvor künstliche Prozent-Deckel in
+  Nekromanten-Karten waren schon vom vorherigen Nachschliff entfernt worden
+  (unverändert übernommen). Bestehende einzigartige Karten-IDs blieben beim
+  Überarbeiten unverändert, alle elf neuen Karten haben frische, eindeutige
+  IDs mit passender Seltenheit/`requires`.
+- **Tests**: die riesige bestehende Nekromant-Testbasis
+  (`tests/regression.mjs` Abschnitte 42/43/45/58–63) ist auf die neue
+  Sticky-Champion-mit-begrenzter-Lebensdauer-Architektur, die 100%-
+  Fusionsbaseline und die überarbeiteten Karten umgestellt (u. a.: Champion
+  zählt strukturell nie gegen das Geisterlimit — Testschleifen brauchen jetzt
+  `cap + 1` Spawns statt `cap`; ein solo gepushter Testgeist wird sofort
+  selbst Champion — Tests, die einen GEWÖHNLICHEN Geist brauchen, halten
+  jetzt einen separaten „Anker"-Champion). Neuer Abschnitt 65 deckt die
+  meisten der 38 im Auftrag verlangten Testfälle ab (Rastplatz-Repick,
+  Champion-Lebensdauer + Ewiger-Thron-Ausnahme, 100%-Fusion + Kartenzuschläge,
+  sofortige Nachfolge, Elite-Wiederbelebung ohne Karte, Eliteraum-/
+  Boss-Belohnungsgarantien, Speichern/Laden, Glossar-Mechanismus). Mehrere
+  echte Testfunde beim eigenen Umbau (jeweils per Gegenprobe bestätigt,
+  nicht nur behauptet): (1) ein Testfall mutierte das GETEILTE
+  `upgradesData`-Objekt direkt statt es zu klonen und verfälschte dadurch
+  eine spätere, unabhängige Struktur-Prüfung der Sockel-Kartenzahl; (2)
+  „Einziger Thron" fusioniert JEDEN weiteren Geist sofort in den Champion —
+  ein Testaufbau, der einen zweiten, getrennt lebenden gewöhnlichen Geist
+  erwartete, war dadurch unmöglich und musste über den echten
+  `pushGhost()`-Nachfolgepfad statt eines rohen `createGhost()`-Aufrufs neu
+  gebaut werden; (3) `ghost_071`s eigener Eskalationsbonus
+  (`necroUniqueThronePerFusionPct`, +5 Prozentpunkte je vorheriger Fusion)
+  wurde in der ersten Fassung des Linearitäts-Tests übersehen (33 statt der
+  erwarteten 32) — der Test rechnet jetzt die pro-Fusion steigende Rate
+  explizit mit.
+- Kein `sw.js`-Bump durch reine Nachschliff-Logik nötig gewesen, aber **jetzt
+  erforderlich**: zwei neue Dateien (`data/glossary.json`, `src/ui/glossary.js`)
+  waren nicht in `ASSETS` eingetragen — beide ergänzt, `sw.js` auf `v117`
+  gebumpt (+ `telemetry.js: GAME_VERSION` mitgezogen).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -6537,9 +6707,13 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `balance.json`, `events.json`, `input.json`, `options.json`, `arenas.json`,
   `transformations.json`, `secondaries.json`, `modifiers.json`,
   `limits.json`, `sounds.json`, `status.json`). `data/upgrades_necro.json`
-  (Nekromant-V2 Phase 0) liegt bewusst daneben, nicht darin — 105 Karten für
-  den künftigen Nekromant-Signaturpool, noch nicht in die Angebots-Pipeline
-  eingehängt.
+  liegt bewusst daneben, nicht darin — 115 Karten für den Nekromant-
+  Signaturpool (105 aus Nekromant-V2 + 11 aus dem Champion-/Nekromant-
+  Nachschliff v2, minus die entfernte `ghost_068`), seit Nekromant-V2
+  Phase 9 additiv in `main.js: init()` in `upgradesData.upgrades` gemischt —
+  voll in der Angebots-Pipeline. `data/glossary.json` (Champion-/Nekromant-
+  Nachschliff v2) liegt ebenfalls daneben: reine Begriffs-/Erklärungspaare
+  fürs Kartentext-Glossar (`src/ui/glossary.js`), keine Balance-Werte.
   `balance.json` enthält auch Rarity-Gewichte,
   `legendary.minRoom` + die `scrap`-Werte; `difficulty.json` die `doors`/
   `elite`/`treasure`-Konfiguration (Phase 4).
@@ -6870,9 +7044,14 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Wiederbelebungsquote-Rohdaten, Championstärke-Rohdaten, Bossschüsse),
   `null` bei jedem Nicht-Nekromanten-Raum; `computeMetrics()` aggregiert
   über alle Runs zu Quote/⌀ Championstärke/Bossschuss-Anteil in Prozent.
+- `src/ui/glossary.js` (Champion-/Nekromant-Nachschliff v2, neu) —
+  `initGlossary(data)`/`highlightTerms(text)` (markiert bekannte Begriffe aus
+  `data/glossary.json` blau, HTML-escaped) / `installGlossaryTooltips(doc)`
+  (ein delegierter Klick-Listener fürs mobile Antippen). Eingehängt in
+  `upgradescreen.js`/`roomscreens.js`, einmalig initialisiert in `main.js`.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v113`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v117`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`

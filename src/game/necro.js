@@ -203,20 +203,24 @@ export function onGhostRemoved(state, ghost, reason) {
     l.fn(state, ghost, reason, l.pureStack ? stackMult : 1);
   }
 
-  // ghost_092 "Blutiger Thron" (Nekromant-V2 Phase 9): "Verschmelzungen
-  // zaehlen fuer raumweite Spielerstapel als HALBER Geistertod. Sie loesen
-  // KEINE Heilung, Explosionen, Druckwellen oder Abklingzeitreduktion aus."
-  // -- deshalb bewusst NICHT ueber die normale reasons-Filterung oben (die
-  // wuerde JEDEN death_damage/death_expire-Listener treffen, auch jene mit
-  // einem Seiteneffekt), sondern ein zweiter, auf pureStack:true
-  // eingeschraenkter Durchlauf, unabhaengig von l.reasons (011/012/013
-  // deklarieren 'fusion' dort ohnehin nicht). Dasselbe Prinzip wie
-  // applyVirtualNecroDeaths(), nur mit halbem statt vollem Gewicht.
+  // ghost_092 "Blutiger Thron" (Nachschliff Abschnitt 10, UEBERARBEITET):
+  // "Verschmelzungen zaehlen fuer raumweite Spielerstapel als VOLLER
+  // Geistertod." (vorher: halber) -- Heilung/Explosionen/Druckwellen/
+  // Abklingzeitreduktion bleiben weiterhin ausgeschlossen, deshalb bewusst
+  // NICHT ueber die normale reasons-Filterung oben (die wuerde JEDEN
+  // death_damage/death_expire-Listener treffen, auch jene mit einem
+  // Seiteneffekt), sondern ein zweiter, auf pureStack:true eingeschraenkter
+  // Durchlauf, unabhaengig von l.reasons (011/012/013 deklarieren 'fusion'
+  // dort ohnehin nicht). Dasselbe Prinzip wie applyVirtualNecroDeaths(), mit
+  // vollem statt (wie zuvor) halbem Gewicht -- explizit auf ausdruecklich auf
+  // 'fusion' lauschende Karten wie ghost_065 "Seelenheilung" hat das keinen
+  // Einfluss, die feuern ueber ihren eigenen, direkten Aufruf in
+  // ghost.js: fuseGhost().
   if (reason === 'fusion' && pc?.necroFusionHalfDeathForStacks) {
     for (const l of state.necroListeners) {
       if (!l.pureStack) continue;
       if (!necroCooldownReady(state, l.key + '_fusion', l.cooldownS)) continue;
-      l.fn(state, ghost, reason, 0.5);
+      l.fn(state, ghost, reason, 1);
     }
   }
 }
@@ -403,8 +407,12 @@ export function buildNecroListeners(state, cfg) {
     });
   }
 
-  // ghost_021 "Erbschaft des Starken": staerker gewesene Untertanen (>=120%
-  // des unverstaerkten Basisschadens) geben einen groesseren Bonus.
+  // ghost_021 "Erbschaft des Starken" (Nachschliff Abschnitt 10,
+  // UEBERARBEITET: kein 10-Sekunden-Fenster mehr -- der Bonus bleibt bis
+  // Raumende bestehen, jeder qualifizierende Tod haeuft weiter oben drauf,
+  // dasselbe additive "bis Raumende"-Muster wie Seelenzorn/Totenrhythmus):
+  // staerker gewesene Untertanen (>=120% des unverstaerkten Basisschadens)
+  // geben einen groesseren Bonus.
   if (cfg.necroInheritHighPct) {
     L.push({
       reasons: DEATH_REASONS, scope: 'room', key: 'necro021',
@@ -413,19 +421,22 @@ export function buildNecroListeners(state, cfg) {
         const base = resolveGhostBaselineDamage(st, gh.type);
         const strong = base > 0 && gh.baseDamage >= base * (cfg.necroInheritThresholdMult || 1.2);
         const pct = strong ? cfg.necroInheritHighPct : cfg.necroInheritLowPct;
-        addNecroTimedStack(st, '_timedDmgErbschaft', pct, cfg.necroInheritDurationS);
+        addNecroStack(st, 'room', '_roomDmgErbschaft', pct);
       },
     });
   }
 
-  // ghost_022 "Haerte aus Verlust": nach jeweils 3 Toden Resistenz auf Zeit.
+  // ghost_022 "Haerte aus Verlust" (Nachschliff Abschnitt 10, UEBERARBEITET:
+  // kein 10-Sekunden-Fenster mehr -- die Resistenz bleibt bis Raumende
+  // bestehen, der Ausloeser "alle 3 Tode" ist unveraendert): nach jeweils 3
+  // Toden dauerhaft +Resistenzpunkte.
   if (cfg.necroResistEveryN) {
     L.push({
       reasons: DEATH_REASONS, scope: 'room', key: 'necro022',
       fn: (st) => {
         const after = getNecroStack(st, 'room', DEATH_STACK_KEY);
         const n = countThresholdCrossings(after - 1, after, cfg.necroResistEveryN);
-        if (n > 0) addNecroTimedStack(st, '_timedResistHaerte', cfg.necroResistAmount, cfg.necroResistDurationS);
+        if (n > 0) addNecroStack(st, 'room', '_roomResistHaerte', cfg.necroResistAmount * n);
       },
     });
   }
@@ -768,7 +779,9 @@ export function necroDamagePct(state) {
   return (
     getNecroStack(state, 'room', '_pctDamage') +
     getNecroStack(state, 'room', '_hybridThroneDmg') +
-    getNecroTimedStack(state, '_timedDmgErbschaft') +
+    // ghost_021 "Erbschaft des Starken" (Nachschliff Abschnitt 10): jetzt ein
+    // dauerhafter, raumweiter Stapel statt eines 10-Sekunden-Zeitfensters.
+    getNecroStack(state, 'room', '_roomDmgErbschaft') +
     getNecroTimedStack(state, '_timedRequiemDmg') +
     getNecroTimedStack(state, '_timedHybridDeathDmg') +
     getNecroTimedStack(state, '_timedHybridAvalancheDmg') +
@@ -801,7 +814,13 @@ export function necroSpeedPct(state) {
   return getNecroStack(state, 'room', '_pctSpeed') + getNecroTimedStack(state, '_timedRequiemSpeed');
 }
 export function necroResistBonus(state) {
-  return getNecroTimedStack(state, '_timedResistHaerte') + getNecroTimedStack(state, '_timedHybridChampSacrificeResist');
+  // ghost_022 "Haerte aus Verlust" (Nachschliff Abschnitt 10): jetzt ein
+  // dauerhafter, raumweiter Stapel statt eines 10-Sekunden-Zeitfensters.
+  return (
+    getNecroStack(state, 'room', '_roomResistHaerte') +
+    getNecroTimedStack(state, '_timedResistHaerte') +
+    getNecroTimedStack(state, '_timedHybridChampSacrificeResist')
+  );
 }
 
 // Wandelt eine (potenziell unbegrenzt grosse) Feuerraten-Prozentbonus-Summe

@@ -1,0 +1,17 @@
+{
+  "_comment": "Champion-/Nekromant-Nachschliff Abschnitt 13: zentrales Glossar fuer Spielbegriffe. src/ui/glossary.js liest diese Datei EINMAL und markiert jedes Vorkommen eines Begriffs in Kartentexten/UI-Texten blau (title-Attribut fuer Desktop-Hover, Klick/Tap fuer Mobilgeraete zeigt dieselbe Erklaerung als Sprechblase). Nur genuine, im Spiel tatsaechlich vorkommende Begriffe -- keine erfundenen Mechaniken.",
+  "terms": {
+    "Champion": "Der staerkste Geisterpanzer eines Raums: 70 % der Lebenspunkte und des Schadens des Hauptpanzers, blockiert nie den Geisterlimit, hat eine eigene, begrenzte Lebenszeit.",
+    "Geisterpanzer": "Ein wiederbelebter, verbuendeter Untertan des Nekromanten. Erbt Waffe/Rolle des besiegten Gegners, kaempft an der Seite des Hauptpanzers, bis er stirbt oder der Raum endet.",
+    "Untertan": "Ein Geisterpanzer -- ein wiederbelebter, verbuendeter Panzer, der an der Seite des Hauptpanzers kaempft.",
+    "Verschmelzung": "Zwei Geisterpanzer werden zu einem: der schwaechere verschwindet, der Champion uebernimmt einen Anteil seiner Basiswerte (Leben, Schaden, Feuerrate). Zaehlt fuer sich genommen NICHT als Geistertod.",
+    "Geistertod": "Ein Geisterpanzer stirbt durch Schaden, durch Ablauf seiner Lebenszeit oder durch eine Opferung. Loest viele Nekromanten-Karten aus. Eine Verschmelzung zaehlt nicht dazu.",
+    "Wiederbelebungschance": "Die Chance, dass ein vom Hauptpanzer, dem Champion oder einem Geisterpanzer besiegter Gegner selbst als neuer Geisterpanzer erscheint.",
+    "Feuerrate": "Wie oft ein Panzer pro Sekunde nachladen kann -- eine hoehere Feuerrate verkuerzt die Nachladezeit.",
+    "Schadensresistenz": "Punkte, die erlittenen Schaden verringern: genommener Schaden wird durch (1 + Resistenzsumme/100) geteilt.",
+    "Elitegegner": "Ein Gegner mit zusaetzlichem Affix und mehr Lebenspunkten als ein gewoehnlicher Gegner. Kann wiederbelebt werden, Bosse dagegen nie.",
+    "Einzigartig": "Eine Karte mit diesem Merkmal laesst sich in einem Run nur EIN einziges Mal waehlen und verschwindet danach aus jedem Angebot -- Rastplatz und Werkbank inbegriffen.",
+    "Raumende": "Der Zeitpunkt, an dem der aktuelle Raum geraeumt wird -- viele zeitlich befristete Boni gelten genau bis dahin.",
+    "Geisterlimit": "Wie viele gewoehnliche Geisterpanzer gleichzeitig aktiv sein koennen. Der Champion zaehlt NIE dagegen; ein wiederbelebter Elitegegner belegt zwei Plaetze."
+  }
+}

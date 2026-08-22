@@ -78,6 +78,54 @@
       },
       "upgradable": false,
       "_todo": "balance"
+    },
+    "sockel_kriegsmeister": {
+      "id": "sockel_kriegsmeister",
+      "name": "Kriegsmeister",
+      "description": "+8 Schaden",
+      "tag": "stat",
+      "rarity": "legendary",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚔️",
+      "core": {
+        "damageAdd": 8
+      },
+      "_todo": "balance",
+      "_comment": "Champion-/Nekromant-Nachschliff Abschnitt 16/17: klassenunabhaengige (kein signatureClass) legendaere Karte, damit auch die Standard-Klasse genug Legendaere fuer Elite-/Boss-Belohnungen hat."
+    },
+    "sockel_titanpanzerung": {
+      "id": "sockel_titanpanzerung",
+      "name": "Titanpanzerung",
+      "description": "+40 maximale Lebenspunkte",
+      "tag": "health",
+      "rarity": "legendary",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🛡",
+      "core": {
+        "hpAdd": 40
+      },
+      "_todo": "balance",
+      "_comment": "Champion-/Nekromant-Nachschliff Abschnitt 16/17: klassenunabhaengige legendaere Karte."
+    },
+    "sockel_sturmantrieb": {
+      "id": "sockel_sturmantrieb",
+      "name": "Sturmantrieb",
+      "description": "Fahrtempo +20 %",
+      "tag": "speed",
+      "rarity": "legendary",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "⚙",
+      "core": {
+        "speedMult": 1.2
+      },
+      "_todo": "balance",
+      "_comment": "Champion-/Nekromant-Nachschliff Abschnitt 16/17: klassenunabhaengige legendaere Karte."
     }
   }
 }

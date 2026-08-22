@@ -2,6 +2,8 @@
 // HTML-Overlays wie der Upgrade-Screen. Die Spiellogik (run.js) liefert
 // Daten und Callbacks; diese Module rendern nur.
 
+import { highlightTerms } from './glossary.js';
+
 function makeOverlay(id) {
   const el = document.createElement('div');
   el.className = 'overlay hidden';
@@ -97,7 +99,7 @@ export function createShopScreen() {
           ? `<span class="pv-warn">Ersetzt: ${ctx.secondariesData?.[equippedNow]?.label || equippedNow}</span>`
           : '';
       card.innerHTML =
-        `<strong>${o.name}${plus}${lvl}</strong><span>${o.description}</span>${swapWarn}` +
+        `<strong>${o.name}${plus}${lvl}</strong><span>${highlightTerms(o.description)}</span>${swapWarn}` +
         `<span class="price">${o.price}⚙</span>`;
       if (scrap < o.price) {
         card.classList.add('tooexpensive');
@@ -147,16 +149,17 @@ export function createShopScreen() {
     el.appendChild(actions);
   }
 
-  // Werkbank (Grundsteinumbau Phase 8): dieselbe Aufwertung wie am
-  // Rastplatz (run.js: workbenchOptions()/buyShopUpgradeLevel()), hier
-  // gegen Schrott -- der Shop bleibt dabei offen, anders als der Rastplatz.
+  // Werkbank (Grundsteinumbau Phase 8, ueberarbeitet Champion-/Nekromant-
+  // Nachschliff Abschnitt 2): eine besessene, wiederholbare Karte gegen
+  // Schrott ERNEUT waehlen (kein separates Stufen-System mehr) -- der Shop
+  // bleibt dabei offen, anders als der Rastplatz.
   function renderWorkbench(scrap) {
     const options = ctx.getWorkbenchOptions();
     el.appendChild(
       sectionTitle(
         options.length
-          ? `Werkbank — Upgrade aufwerten (${ctx.costs.upgradeLevel}⚙):`
-          : 'Werkbank — keine aufwertbare Karte vorhanden.',
+          ? `Werkbank — Karte erneut wählen (${ctx.costs.upgradeLevel}⚙):`
+          : 'Werkbank — keine wiederholbare Karte vorhanden.',
       ),
     );
     if (!options.length) return;
@@ -165,10 +168,9 @@ export function createShopScreen() {
     for (const o of options) {
       const b = document.createElement('button');
       b.className = 'dropbtn';
-      const plus = '+'.repeat(o.stufe);
       b.innerHTML =
-        `${o.symbol || '•'} ${o.name}${plus} <span class="price">${ctx.costs.upgradeLevel}⚙</span>`;
-      b.title = `Stufe ${o.stufe} → ${o.stufe + 1} (Deckel ${o.maxLevel})`;
+        `${o.symbol || '•'} ${o.name} (Stufe ${o.stufe}) <span class="price">${ctx.costs.upgradeLevel}⚙</span>`;
+      b.title = `Nochmal wählen: Stufe ${o.stufe} → ${o.stufe + 1}`;
       b.disabled = scrap < ctx.costs.upgradeLevel;
       b.addEventListener('click', () => {
         if (ctx.onUpgradeLevel(o.id)) render();
@@ -316,17 +318,20 @@ export function createRestScreen() {
       repairSection.appendChild(repairBtn);
       el.appendChild(repairSection);
 
-      // Option 2: Werkbank -- eine besessene, aufwertbare Karte waehlen.
+      // Option 2: Werkbank -- eine besessene, wiederholbare Karte ERNEUT
+      // waehlen (Champion-/Nekromant-Nachschliff Abschnitt 2: kein separates
+      // Stufen-System mehr -- exakt wie eine frische Kartenwahl, unbegrenzt
+      // oft wiederholbar).
       const workSection = document.createElement('div');
       workSection.className = 'restoption';
       const workHeader = document.createElement('p');
       workHeader.className = 'workshophint';
-      workHeader.textContent = 'Werkbank — ein Upgrade eine Stufe aufwerten:';
+      workHeader.textContent = 'Werkbank — ein Upgrade erneut wählen:';
       workSection.appendChild(workHeader);
       if (!options.length) {
         const empty = document.createElement('p');
         empty.className = 'eventtext';
-        empty.textContent = 'Keine aufwertbare Karte vorhanden.';
+        empty.textContent = 'Keine wiederholbare Karte vorhanden.';
         workSection.appendChild(empty);
       } else {
         const list = document.createElement('div');
@@ -334,10 +339,9 @@ export function createRestScreen() {
         for (const o of options) {
           const b = document.createElement('button');
           b.className = 'dropbtn';
-          const plus = '+'.repeat(o.stufe);
           b.innerHTML =
-            `${o.symbol || '•'} ${o.name}${plus} <span class="reststate">${o.description}</span>`;
-          b.title = `Stufe ${o.stufe} → ${o.stufe + 1} (Deckel ${o.maxLevel})`;
+            `${o.symbol || '•'} ${o.name} (Stufe ${o.stufe}) <span class="reststate">${highlightTerms(o.description)}</span>`;
+          b.title = `Nochmal wählen: Stufe ${o.stufe} → ${o.stufe + 1}`;
           b.addEventListener('click', () => {
             if (onUpgrade(o.id) !== false) el.classList.add('hidden');
           });

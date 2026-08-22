@@ -11,6 +11,8 @@
 // Namenstausch, s. data/balance.json: _comment_rarity) -- "Einzigartig" ist
 // seither die separate isUnique-Eigenschaft einer Karte, keine Seltenheit
 // mehr, s. u. (Stufenanzeige).
+import { highlightTerms } from './glossary.js';
+
 const RARITY = {
   common: 'Gewöhnlich',
   uncommon: 'Ungewöhnlich',
@@ -122,7 +124,7 @@ export function createUpgradeScreen() {
         o.tag === 'gadget' && ctx.equippedGadget && ctx.equippedGadget !== o.id
           ? `<span class="pv-warn">Ersetzt: ${ctx.gadgetLabel?.(ctx.equippedGadget) ?? ctx.equippedGadget}</span>`
           : '';
-      card.innerHTML = `<strong>${o.name}${plus}${lvl}</strong><span>${o.description}</span>${swapWarn}${meta}`;
+      card.innerHTML = `<strong>${o.name}${plus}${lvl}</strong><span>${highlightTerms(o.description)}</span>${swapWarn}${meta}`;
       card.addEventListener('click', () => {
         el.classList.add('hidden');
         ctx.onPick(i);
