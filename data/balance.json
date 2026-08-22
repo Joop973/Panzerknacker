@@ -70,7 +70,7 @@
     "chainDelay": 0.15,
     "warningTime": 0.5
   },
-  "_comment_rarity": "UMBAUPLAN-Upgradepool-v2 Phase 1: fuenf statt drei Seltenheiten. Nekromant-V2 Phase 1: die fuenfte Stufe heisst jetzt 'uncommon' statt 'unique' -- reiner Namenstausch (dieselben Gewichte 45/25/15/10/5 in derselben Reihenfolge common>...>legendary, nur umbenannt common/rare/epic/unique/legendary -> common/uncommon/rare/epic/legendary), weil 'unique' als Wort jetzt dem GETRENNTEN isUnique-Feld einer Karte gehoert (Stapelregel, STARTHIER.md) und nicht mehr als Seltenheitsname taugt -- passend zu data/upgrades_necro.json (Geisterpanzer_105_Upgrades_v4.xlsx nennt die Stufen exakt so). Gewichte gelten NUR unter den Stufen, die im aktuellen Angebotspool ueberhaupt vertreten sind (weightedPick normiert pro Stufe, s. upgradepool.js) -- ein frueher Raum ohne freigeschaltete legendary-Karten verteilt die 5 automatisch auf common/uncommon/rare/epic um, keine Sonderbehandlung noetig. rarityGates loest das alte legendary.minRoom ab: common/uncommon haben keinen globalen Deckel (nur das per-Karte minRoom zaehlt), rare/epic/legendary zusaetzlich einen globalen Mindestraum.",
+  "_comment_rarity": "UMBAUPLAN-Upgradepool-v2 Phase 1: fuenf statt drei Seltenheiten. Nekromant-V2 Phase 1: die fuenfte Stufe heisst jetzt 'uncommon' statt 'unique' -- reiner Namenstausch, weil 'unique' als Wort jetzt dem GETRENNTEN isUnique-Feld einer Karte gehoert (Stapelregel, STARTHIER.md). Kartenbelohnung/Shop-Ueberarbeitung: `rarity` ist jetzt nur noch der FALLBACK-Wert (fuer synthetische Balance-Objekte ohne die Baender unten, v. a. Tests) -- die tatsaechlich verwendeten Gewichte kommen kontextabhaengig aus `rewardRarityBands` (normale Belohnungen) bzw. `shopRarityBands` (Shop-Regal), s. dort. `rarityGates` (das fruehere globale legendary.minRoom-Aequivalent) ist ERSATZLOS ENTFERNT: die neuen Baender regeln Seltenheit ausschliesslich ueber Wahrscheinlichkeit, nicht mehr ueber Erreichbarkeit -- alle fuenf Stufen sind dadurch ab Raum 1 grundsaetzlich moeglich. Gewichte gelten weiterhin NUR unter den Stufen, die im aktuellen Angebotspool ueberhaupt vertreten sind (weightedPick normiert pro Stufe UND verteilt eine an einer Stufe komplett fehlende Karte automatisch proportional auf die verbleibenden Stufen um, s. upgradepool.js).",
   "rarity": {
     "common": 45,
     "uncommon": 25,
@@ -78,18 +78,23 @@
     "epic": 10,
     "legendary": 5
   },
-  "rarityGates": {
-    "rare": {
-      "minRoom": 3
-    },
-    "epic": {
-      "minRoom": 6
-    },
-    "legendary": {
-      "minRoom": 9
-    }
-  },
-  "_comment_scrap": "treasure (Grundsteinumbau Phase 4, _todo: balance): Schrottpaket fuer Schatzkammer/Verflucht-Raeume -- ersetzt das fruehere garantierte Legendaer, das der Sockel (5 Karten, keine legendary) nicht mehr liefern kann. run.js: grantTreasureScrap(). Grundsteinumbau Phase 8: cost.upgradeLevel ist der Werkbank-Preis im Shop (dieselbe Aufwertung wie am Rastplatz, hier gekauft statt gerastet) -- cost.rerollElement (Zweitelement-Preis) ist mit dem Zweitelement-System entfallen (archive/systeme-v1.md, Abschnitt 2).",
+  "_comment_rewardRarityBands": "Kartenbelohnung/Shop-Ueberarbeitung: Seltenheitsverteilung fuer NORMALE Kartenbelohnungen (Kampf/Elite/Verflucht/Ereignis-Kartenoption), gestaffelt nach dem NEUEN runWEITEN Raumzaehler `run.totalRoomIndex` -- bewusst NICHT dem akt-lokalen `run.roomIndex` (der faengt pro Akt bei 1 neu an und wuerde die 21+-Stufe nie erreichen, s. run.js: actRoomKey()-Kommentar). Jede Zeile summiert exakt auf 100. `maxRoom` ist die obere Grenze (inklusive) des Bands; `null` beim letzten Band heisst 'gilt unbegrenzt weiter' (Raum 21+). upgradepool.js: rewardRarityWeights() waehlt die passende Zeile, weightedPick() bleibt unveraendert (Tier-Normierung + automatische Umverteilung bei fehlender Stufe gelten unabhaengig von der Bandwahl).",
+  "rewardRarityBands": [
+    { "maxRoom": 4, "rarity": { "common": 80.4, "uncommon": 16, "rare": 3, "epic": 0.5, "legendary": 0.1 } },
+    { "maxRoom": 9, "rarity": { "common": 73.75, "uncommon": 20, "rare": 5, "epic": 1, "legendary": 0.25 } },
+    { "maxRoom": 14, "rarity": { "common": 60, "uncommon": 25, "rare": 9, "epic": 4, "legendary": 2 } },
+    { "maxRoom": 20, "rarity": { "common": 43.5, "uncommon": 30, "rare": 15, "epic": 8, "legendary": 3.5 } },
+    { "maxRoom": null, "rarity": { "common": 38, "uncommon": 30, "rare": 17, "epic": 10, "legendary": 5 } }
+  ],
+  "_comment_shopRarityBands": "Kartenbelohnung/Shop-Ueberarbeitung: EIGENSTAENDIGE Seltenheitsverteilung fuer das Shop-Regal, gestaffelt nach der Anzahl BEREITS BESUCHTER Shops (`run.shopsVisited`, 1-indexiert -- der 1. betretene Shop nutzt Band 1, unabhaengig davon, in welchem Raum/Akt er liegt). Getrennt von rewardRarityBands (eigener Auftragspunkt: 'eigenstaendige Seltenheitschancen fuer Shop-Karten', nicht von der Kampf-Raumtiefe abgeleitet). `maxVisit` wie `maxRoom` oben; `null` = letztes Band gilt ab dort dauerhaft (7. Shop+).",
+  "shopRarityBands": [
+    { "maxVisit": 2, "rarity": { "common": 71.3, "uncommon": 8.5, "rare": 9, "epic": 6, "legendary": 5.2 } },
+    { "maxVisit": 4, "rarity": { "common": 63, "uncommon": 12.5, "rare": 12, "epic": 7, "legendary": 5.5 } },
+    { "maxVisit": 5, "rarity": { "common": 49, "uncommon": 17.5, "rare": 16, "epic": 10, "legendary": 7.5 } },
+    { "maxVisit": 6, "rarity": { "common": 32.5, "uncommon": 22.5, "rare": 22, "epic": 14, "legendary": 9 } },
+    { "maxVisit": null, "rarity": { "common": 26.5, "uncommon": 22.5, "rare": 24, "epic": 16, "legendary": 11 } }
+  ],
+  "_comment_scrap": "treasure (Grundsteinumbau Phase 4, _todo: balance): Schrottpaket fuer Schatzkammer/Verflucht-Raeume -- ersetzt das fruehere garantierte Legendaer, das der Sockel (5 Karten, keine legendary) nicht mehr liefern kann. run.js: grantTreasureScrap(). Grundsteinumbau Phase 8: cost.upgradeLevel ist der Werkbank-Preis im Shop (dieselbe Aufwertung wie am Rastplatz, hier gekauft statt gerastet) -- cost.rerollElement (Zweitelement-Preis) ist mit dem Zweitelement-System entfallen (archive/systeme-v1.md, Abschnitt 2). Kartenbelohnung/Shop-Ueberarbeitung: cost.shopCard (der bisherige EINHEITLICHE Kartenpreis) ist ERSATZLOS ENTFERNT -- jede Shop-Karte hat jetzt einen individuell gewuerfelten Preis nach ihrer eigenen Seltenheit, s. shop.cardPriceRanges.",
   "scrap": {
     "perRoom": [
       1,
@@ -103,7 +108,6 @@
       "ban": 1,
       "fourthCard": 3,
       "shieldCharge": 4,
-      "shopCard": 5,
       "shopSecondary": 6,
       "shopLife": 12,
       "upgradeLevel": 6
@@ -119,9 +123,16 @@
     "bonusPct": 0.5,
     "maxLevel": 2
   },
-  "_comment_shop": "Grundsteinumbau Phase 8: cardChoices 5 -> 4 (Auftrag) -- der Sockel hat nur 5 Karten insgesamt, ein Regal mit 5 Slots zeigte praktisch immer alle auf einmal.",
+  "_comment_shop": "Grundsteinumbau Phase 8: cardChoices 5 -> 4 (Auftrag) -- der Sockel hat nur 5 Karten insgesamt, ein Regal mit 5 Slots zeigte praktisch immer alle auf einmal. Kartenbelohnung/Shop-Ueberarbeitung: cardPriceRanges loest den fruehere einheitlichen Kartenpreis (cost.shopCard) ab -- pro Seltenheit ein GANZZAHLIGES, EINSCHLIESSLICHES Intervall [min, max], bei Angebotserzeugung EINMAL je Karte gewuerfelt (run.js: startNonCombatRoom(), aus demselben deterministischen run.rng.upgrades-Strom wie die Kartenauswahl selbst -- Seed + Raumnummer reproduzieren dadurch automatisch dieselben Preise, ohne eigene Persistenz). Die fuenf Baender ueberschneiden sich nicht und steigen streng von Stufe zu Stufe (jede common-Karte guenstiger als jede uncommon usw.).",
   "shop": {
-    "cardChoices": 4
+    "cardChoices": 4,
+    "cardPriceRanges": {
+      "common": [2, 4],
+      "uncommon": [5, 6],
+      "rare": [7, 10],
+      "epic": [11, 14],
+      "legendary": [15, 19]
+    }
   },
   "_comment_ghost": "Nekromant-V2 Phase 3 (Geisterpanzer-Basis): reviveChance ersetzt das alte, zweistufige spawnChance.necro/spawnChance.ghost (0,5/0,33, archiviert in ARCHIV.md) -- EIN einheitlicher Wert fuer JEDEN Kill auf der Nekromanten-Seite (Spieler ODER ein vorhandener Geist), additiv ohne Obergrenze (Auftrag Abschnitt 4a: ueber 100% erzeugt der ganzzahlige Anteil sichere Zusatz-Untertanen, der Rest bleibt Chance) -- keine Karte treibt ihn vor Phase 6+ ueber 0,35. baseStatPct: Anteil der TYP-Basiswerte (maxHp/damage), die ein Untertan vom geerbten Typ erbt (Rest der Werte -- Rolle/Waffe/Panzerung/Tempo -- bleibt unveraendert, 'Typ wird geerbt'). lifetimeS: Grundlebenszeit, sichtbar als schrumpfender Ring, Ablauf ist ein ANDERER Todes-Ausloeser als Schaden (Phase 5 baut die Unterscheidung aus). rangePct: Feuer-SCHWELLE (nicht Bewegungsgrenze) relativ zu balance.bullet.maxDistance -- war bis Phase 2 (Upgradepool-v2) ein Feld des jetzt archivierten ghost_tank-Typs, jetzt ein einzelner geteilter Wert (gilt fuer jeden geerbten Typ gleich). meterPx: reine Dokumentations-Umrechnung fuer Kartentexte (1 Zelle = 32px), von keiner Formel gelesen. strengthWeights: Staerke-Formel fuer ensureChampion() (aktuelleLP*hp + Schaden*damage), bei Gleichstand gewinnt der AELTERE Untertan (Iterationsreihenfolge, kein Zufall) -- WIRD NUR bei der EINMALIGEN Befoerderung ausgewertet, nicht laufend (Nachschliff 'Champion muss ein eigenstaendiger Geisterpanzer sein'): sobald ein Geist isChampion traegt, bleibt er es bis zum Tod, ein spaeter staerkerer gewoehnlicher Geist loest ihn NICHT ab. championStatPct: Champion-Basiswerte werden NICHT vom getoeteten Gegner geerbt, sondern EINMALIG bei der Befoerderung aus den AKTUELLEN Werten des Hauptpanzers berechnet (maxHp*pct/damage*pct, gerundet, nie 0) -- unabhaengig von baseStatPct, das nur fuer GEWOEHNLICHE Untertanen gilt. Geistlimit bleibt 3 OHNE Verdraengung (Upgradepool-v2 Phase 6), der Champion zaehlt NIE dagegen (occupiedGhostSlots() ueberspringt ihn explizit). commanderHpMult/commanderDamageMult/commanderShieldHealFraction sind Reste des ALTEN, kartengebundenen Kommandanten-Mechanismus (Upgradepool-v2 Phase 8) -- aktuell unerreichbar (kein lebendiges Upgrade setzt cfg.ghostCommander mehr), bleiben als Wiederanschlusspunkt stehen, NICHT zu verwechseln mit dem STICKY isChampion-Flag. bombCooldownS (Nutzerwunsch): eigene Abklingzeit der Geisterbombe, unabhaengig vom Geistlimit UND vom kill-ausgeloesten Spawnwuerfel.",
   "ghost": {

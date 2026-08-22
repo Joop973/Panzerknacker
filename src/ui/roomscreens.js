@@ -64,7 +64,10 @@ export function createShopScreen() {
   function renderCards(scrap) {
     const offers = ctx.getOffers() || [];
     if (!offers.length) return;
-    el.appendChild(sectionTitle(`Karte kaufen (${ctx.costs.shopCard}⚙ je Karte):`));
+    // Kartenbelohnung/Shop-Ueberarbeitung: kein einheitlicher Preis mehr --
+    // jede Karte zeigt ihren eigenen, nach Seltenheit gewuerfelten Preis
+    // (o.price, s. run.js: rollShopPrice()).
+    el.appendChild(sectionTitle('Karte kaufen:'));
     const shelf = document.createElement('div');
     shelf.className = 'shopcards';
     offers.forEach((o, i) => {
@@ -95,8 +98,8 @@ export function createShopScreen() {
           : '';
       card.innerHTML =
         `<strong>${o.name}${plus}${lvl}</strong><span>${o.description}</span>${swapWarn}` +
-        `<span class="price">${ctx.costs.shopCard}⚙</span>`;
-      if (scrap < ctx.costs.shopCard) {
+        `<span class="price">${o.price}⚙</span>`;
+      if (scrap < o.price) {
         card.classList.add('tooexpensive');
       } else {
         // Nur kaufbare Karten in die Controller-Fokusliste aufnehmen (main.js:

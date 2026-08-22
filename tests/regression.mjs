@@ -2954,34 +2954,11 @@ for (const seed of SEEDS) {
     check(hasMaxStacks === 0, `Phase 1 (Nekromant-V2): ${hasMaxStacks} Karte(n) tragen noch ein maxStacks-Feld (abgeschafft)`);
   }
 
-  // (b) MECHANISMUS der Raum-Gates (rarityGates): mit einem SYNTHETISCHEN
-  //     Gate-Wert (5), nicht dem echten balance.json-Wert -- sonst waere der
-  //     Test bei der naechsten Balance-Anpassung grundlos rot oder faelschlich
-  //     gruen. Ein einzelner Kandidat + count:1 macht das Ergebnis
-  //     deterministisch: vor dem Gate ist der Pool leer (Grundsteinumbau
-  //     Phase 4: kein Fallback-Auffuellen mehr, s. upgradepool.js), ab dem
-  //     Gate erscheint die echte Karte.
-  {
-    const { mulberry32 } = await import('../src/core/rng.js');
-    const fakeData = {
-      offersPerScreen: 1,
-      upgrades: {
-        gated_card: {
-          id: 'gated_card', name: 'Testkarte', description: 'x', tag: 'testtag',
-          rarity: 'epic', isUnique: false, requires: [], minRoom: 1,
-        },
-      },
-    };
-    const balance = { rarity: { epic: 100 }, rarityGates: { epic: { minRoom: 5 } } };
-    const before = rollOffers(fakeData, {
-      chosen: {}, roomIndex: 4, rng: mulberry32(1), balance, count: 1, banned: new Set(),
-    });
-    check(before.length === 0, 'Phase 1 (Upgradepool-v2): rarityGate laesst die Karte VOR ihrem Mindestraum durch');
-    const after = rollOffers(fakeData, {
-      chosen: {}, roomIndex: 5, rng: mulberry32(1), balance, count: 1, banned: new Set(),
-    });
-    check(after[0]?.id === 'gated_card', 'Phase 1 (Upgradepool-v2): rarityGate haelt die Karte auch AB ihrem Mindestraum noch zurueck');
-  }
+  // (b) archiviert -- Kartenbelohnung/Shop-Ueberarbeitung entfernt
+  //     balance.rarityGates ERSATZLOS (Seltenheit wird seither nur noch
+  //     ueber Wahrscheinlichkeit gestaffelt, nie mehr ueber Erreichbarkeit --
+  //     s. CLAUDE.md). Der Nachfolge-Mechanismus (rewardRarityWeights()/
+  //     shopRarityWeights()) ist in Abschnitt 64 geprueft.
 
   // (c) MECHANISMUS der Stapelregel (Nekromant-V2 Phase 1): eine NICHT
   //     einzigartige Karte bleibt nach 1/10/100/1000 Wahlen weiter im Pool
@@ -11052,6 +11029,301 @@ for (const seed of SEEDS) {
     check(
       champ.cfg.damage !== compounding2,
       `Phase 11: der Schadenszuwachs rechnet vom bereits geboosteten AKTUELLEN Wert statt vom Basiswert (${champ.cfg.damage} entspricht dem kompondierenden Ergebnis)`,
+    );
+  }
+}
+
+// ---- 64. Kartenbelohnung/Shop-Ueberarbeitung ------------------------------
+// Zwei EIGENSTAENDIGE, kontextabhaengige Seltenheitstabellen ersetzen die
+// bisherige globale balance.rarity + balance.rarityGates-Kombination: normale
+// Kartenbelohnungen (Kampf/Elite/Verflucht/Ereignis-Kartenoption) staffeln
+// sich nach dem NEUEN runweiten Raumzaehler run.totalRoomIndex (faengt NIE
+// pro Akt neu an, anders als das akt-lokale run.roomIndex), das Shop-Regal
+// eigenstaendig nach der Anzahl bereits besuchter Shops run.shopsVisited.
+// Dazu individuelle, nach Seltenheit gewuerfelte Shop-Kartenpreise statt des
+// fruehereren einheitlichen scrap.cost.shopCard. weightedPick() selbst ist
+// UNVERAENDERT (Tier-Normierung + automatische Umverteilung bei fehlender
+// Stufe gelten unveraendert, s. Abschnitt (e)).
+{
+  const { rewardRarityWeights, shopRarityWeights, buildCandidates, rollOffers, weightedPick } =
+    await import('../src/game/upgradepool.js');
+  const balance = tanksData.balance;
+
+  // (a) Struktur: beide Baender-Tabellen vollstaendig (5 Zeilen), jede Zeile
+  //     summiert exakt auf 100, rarityGates/scrap.cost.shopCard sind
+  //     ERSATZLOS weg, die fuenf Preisbaender ueberschneiden sich nicht und
+  //     steigen streng von Stufe zu Stufe.
+  {
+    check(!('rarityGates' in balance), 'Abschnitt 64: balance.rarityGates existiert noch (haette entfernt werden sollen)');
+    check(!('shopCard' in balance.scrap.cost), 'Abschnitt 64: balance.scrap.cost.shopCard existiert noch (haette entfernt werden sollen)');
+    check(Array.isArray(balance.rewardRarityBands) && balance.rewardRarityBands.length === 5, 'Abschnitt 64: rewardRarityBands fehlt oder hat nicht 5 Zeilen');
+    check(Array.isArray(balance.shopRarityBands) && balance.shopRarityBands.length === 5, 'Abschnitt 64: shopRarityBands fehlt oder hat nicht 5 Zeilen');
+    for (const [label, bands] of [['reward', balance.rewardRarityBands], ['shop', balance.shopRarityBands]]) {
+      for (const band of bands) {
+        const sum = Object.values(band.rarity).reduce((a, b) => a + b, 0);
+        check(Math.abs(sum - 100) < 1e-9, `Abschnitt 64: ${label}-Band (${band.maxRoom ?? band.maxVisit ?? 'letztes'}) summiert nicht auf 100 (${sum})`);
+      }
+    }
+    const ranges = balance.shop.cardPriceRanges;
+    const order = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+    for (const r of order) {
+      check(Array.isArray(ranges[r]) && ranges[r].length === 2 && ranges[r][0] <= ranges[r][1], `Abschnitt 64: Preisband ${r} ungueltig (${JSON.stringify(ranges[r])})`);
+    }
+    for (let i = 1; i < order.length; i++) {
+      const [prevMin, prevMax] = ranges[order[i - 1]];
+      const [min] = ranges[order[i]];
+      check(min > prevMax, `Abschnitt 64: Preisband ${order[i]} beginnt nicht strikt ueber ${order[i - 1]} (${min} <= ${prevMax})`);
+    }
+  }
+
+  // (b) rewardRarityWeights(): exakte Bandwahl an den vier vorgegebenen
+  //     Grenzen (Test gegen die ECHTEN balance.json-Werte -- die Grenzen
+  //     SIND die Spezifikation aus dem Auftrag, kein synthetischer Wert
+  //     noetig) + Fallback ohne Baender auf die flache balance.rarity.
+  {
+    const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const bands = balance.rewardRarityBands;
+    check(eq(rewardRarityWeights(balance, 1), bands[0].rarity), 'Abschnitt 64: Raum 1 nutzt nicht Band 1 (1-4)');
+    check(eq(rewardRarityWeights(balance, 4), bands[0].rarity), 'Abschnitt 64: Raum 4 nutzt nicht Band 1 (1-4)');
+    check(eq(rewardRarityWeights(balance, 5), bands[1].rarity), 'Abschnitt 64: Raum 5 wechselt nicht auf Band 2 (5-9)');
+    check(eq(rewardRarityWeights(balance, 9), bands[1].rarity), 'Abschnitt 64: Raum 9 nutzt nicht Band 2 (5-9)');
+    check(eq(rewardRarityWeights(balance, 10), bands[2].rarity), 'Abschnitt 64: Raum 10 wechselt nicht auf Band 3 (10-14)');
+    check(eq(rewardRarityWeights(balance, 14), bands[2].rarity), 'Abschnitt 64: Raum 14 nutzt nicht Band 3 (10-14)');
+    check(eq(rewardRarityWeights(balance, 15), bands[3].rarity), 'Abschnitt 64: Raum 15 wechselt nicht auf Band 4 (15-20)');
+    check(eq(rewardRarityWeights(balance, 20), bands[3].rarity), 'Abschnitt 64: Raum 20 nutzt nicht Band 4 (15-20)');
+    check(eq(rewardRarityWeights(balance, 21), bands[4].rarity), 'Abschnitt 64: Raum 21 wechselt nicht auf Band 5 (21+)');
+    check(eq(rewardRarityWeights(balance, 500), bands[4].rarity), 'Abschnitt 64: Raum 500 verlaesst Band 5 wieder (sollte unbegrenzt gelten)');
+    const flatBalance = { rarity: { common: 1 } };
+    check(rewardRarityWeights(flatBalance, 1) === flatBalance.rarity, 'Abschnitt 64: rewardRarityWeights() faellt ohne Baender nicht auf balance.rarity zurueck');
+    check(shopRarityWeights(flatBalance, 1) === flatBalance.rarity, 'Abschnitt 64: shopRarityWeights() faellt ohne Baender nicht auf balance.rarity zurueck');
+  }
+
+  // (c) shopRarityWeights(): exakte Bandwahl an den Shop-Besuchsgrenzen
+  //     2/3, 4/5, 5/6, 6/7 -- der 7. Besuch und jeder weitere bleiben auf
+  //     Band 5.
+  {
+    const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const bands = balance.shopRarityBands;
+    check(eq(shopRarityWeights(balance, 1), bands[0].rarity), 'Abschnitt 64: 1. Shop nutzt nicht Band 1 (1-2)');
+    check(eq(shopRarityWeights(balance, 2), bands[0].rarity), 'Abschnitt 64: 2. Shop nutzt nicht Band 1 (1-2)');
+    check(eq(shopRarityWeights(balance, 3), bands[1].rarity), 'Abschnitt 64: 3. Shop wechselt nicht auf Band 2 (3-4)');
+    check(eq(shopRarityWeights(balance, 4), bands[1].rarity), 'Abschnitt 64: 4. Shop nutzt nicht Band 2 (3-4)');
+    check(eq(shopRarityWeights(balance, 5), bands[2].rarity), 'Abschnitt 64: 5. Shop wechselt nicht auf Band 3');
+    check(eq(shopRarityWeights(balance, 6), bands[3].rarity), 'Abschnitt 64: 6. Shop wechselt nicht auf Band 4');
+    check(eq(shopRarityWeights(balance, 7), bands[4].rarity), 'Abschnitt 64: 7. Shop wechselt nicht auf Band 5 (7+)');
+    check(eq(shopRarityWeights(balance, 50), bands[4].rarity), 'Abschnitt 64: 50. Shop verlaesst Band 5 wieder (sollte unbegrenzt gelten)');
+  }
+
+  // (d) Legendary ist ab Raum 1 grundsaetzlich ZIEHBAR (nicht nur "wird
+  //     irgendwann mal gewuerfelt"): ein deterministisch GESTELLTER rng()-
+  //     Wert (statt einer statistischen Stichprobe, die bei 0,1 % Chance
+  //     unzuverlaessig waere) waehlt gezielt in die legendaere Restscheibe
+  //     der Verteilung.
+  {
+    const fakeData = {
+      offersPerScreen: 1,
+      upgrades: {
+        common_card: { id: 'common_card', name: 'x', description: 'x', tag: 't1', rarity: 'common', isUnique: false, requires: [], minRoom: 1 },
+        legendary_card: { id: 'legendary_card', name: 'x', description: 'x', tag: 't2', rarity: 'legendary', isUnique: false, requires: [], minRoom: 1 },
+      },
+    };
+    const weights = rewardRarityWeights(balance, 1); // Raum 1: legendary = 0,1 %
+    const offers = rollOffers(fakeData, { chosen: {}, roomIndex: 1, rng: () => 0.9999, balance, count: 1, banned: new Set(), rarityWeights: weights });
+    check(offers[0]?.id === 'legendary_card', `Abschnitt 64: legendary ist in Raum 1 nicht erreichbar (rollOffers lieferte ${offers[0]?.id})`);
+    const commonOffers = rollOffers(fakeData, { chosen: {}, roomIndex: 1, rng: () => 0.0001, balance, count: 1, banned: new Set(), rarityWeights: weights });
+    check(commonOffers[0]?.id === 'common_card', 'Abschnitt 64: Testvoraussetzung -- rng() nahe 0 liefert nicht die common-Karte');
+  }
+
+  // (e) Umverteilung bei fehlender Stufe bleibt erhalten (weightedPick()
+  //     selbst ist UNVERAENDERT) -- ein Pool OHNE legendary-Karte verteilt
+  //     deren Anteil automatisch proportional auf die vorhandenen Stufen um.
+  //     Deterministisch ueber eine gleichmaessig verteilte rng()-Sequenz
+  //     statt Math.random(), damit das Ergebnis exakt statt statistisch ist.
+  {
+    const list = [{ id: 'a', rarity: 'common' }, { id: 'b', rarity: 'uncommon' }];
+    const weights = rewardRarityWeights(balance, 1); // common 80.4, uncommon 16, rare 3, epic 0.5, legendary 0.1
+    let commonPicks = 0;
+    const N = 4000;
+    for (let i = 0; i < N; i++) {
+      const r = (i + 0.5) / N;
+      if (weightedPick(list, () => r, weights).id === 'a') commonPicks++;
+    }
+    const expected = weights.common / (weights.common + weights.uncommon);
+    const rate = commonPicks / N;
+    check(Math.abs(rate - expected) < 0.01, `Abschnitt 64: Umverteilung bei fehlender Stufe stimmt nicht (${rate.toFixed(4)} statt ${expected.toFixed(4)})`);
+  }
+
+  // (f) run.totalRoomIndex/run.shopsVisited END-TO-END ueber einen echten
+  //     Playthrough (eigener Seed, unabhaengig von den 5 Seeds oben): der
+  //     runweite Raumzaehler startet bei 1, waechst bei JEDEM echten
+  //     Raumwechsel um genau 1 und NIE zurueck -- auch nicht beim
+  //     Akt-Uebergang (das akt-lokale run.roomIndex faengt dort neu bei 1
+  //     an). Der Shop-Besuchszaehler waechst NUR beim echten Betreten eines
+  //     NEUEN Shop-Raums; Kaufaktionen/erneutes Lesen innerhalb DESSELBEN
+  //     Besuchs duerfen weder ihn noch die schon gewuerfelten Preise
+  //     veraendern.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 555, 'normal', { starterTank: 'player' });
+    check(run.totalRoomIndex === 1, `Abschnitt 64: totalRoomIndex startet nicht bei 1 (${run.totalRoomIndex})`);
+    check(run.shopsVisited === 0, `Abschnitt 64: shopsVisited startet nicht bei 0 (${run.shopsVisited})`);
+
+    let guard = 200000;
+    // Roomkey statt nur actIndex: ein WITHIN-Akt-Wechsel (Kampf -> naechster
+    // Kampf, Kampf -> Shop, ...) muss GENAUSO +1 zaehlen wie ein
+    // Akt-Uebergang -- eine erste Fassung dieses Tests pruefte nur "totalRoomIndex
+    // springt beim Akt-Uebergang um genau 1", was ein FEHLENDER Zaehler an der
+    // eigentlichen Stelle (advanceToMapNode()) NICHT gefangen haette (advanceAct()
+    // erhoeht selbst schon um 1, das allein haette die alte Pruefung erfuellt) --
+    // per Gegenprobe am eigenen Testaufbau gefunden, jetzt behoben: JEDE
+    // Iteration, die den Raum wirklich wechselt (Akt- ODER Kartennavigation),
+    // muss totalRoomIndex um EXAKT 1 erhoehen; jede andere Iteration darf es
+    // GAR NICHT veraendern.
+    let prevTotal = run.totalRoomIndex;
+    let prevRoomKey = `${run.actIndex}:${run.roomIndex}`;
+    let brokenMonotonic = false;
+    let brokenPerRoomIncrement = false;
+    let sawActTransition = false;
+    let shopVisitCount = 0;
+    let firstShopChecked = false;
+
+    while (run.phase !== 'victory' && run.phase !== 'gameover' && guard-- > 0) {
+      if (run.phase === 'preview') enterRoom(run);
+      else if (run.phase === 'transition') stepRun(run, CMD, STEP);
+      else if (run.phase === 'playing') { cheatKillAll(run.state); stepRun(run, CMD, STEP); }
+      else if (run.phase === 'upgrade') chooseUpgrade(run, 0);
+      else if (run.phase === 'map') pickMapNode(run);
+      else if (run.phase === 'workshop') {
+        // run.phase === 'workshop' gilt genau EINE Iteration lang (dieser
+        // Zweig ruft leaveWorkshop() selbst, direkt am Ende) -- jeder
+        // Eintritt hier IST ein echter neuer Besuch.
+        shopVisitCount++;
+        check(run.shopsVisited === shopVisitCount, `Abschnitt 64: shopsVisited (${run.shopsVisited}) stimmt nicht mit der Anzahl echter Shop-Eintritte (${shopVisitCount}) ueberein`);
+        if (!firstShopChecked && run.shopOffers?.length) {
+          firstShopChecked = true;
+          const ranges = balance.shop.cardPriceRanges;
+          const pricesBefore = run.shopOffers.map((o) => o.price);
+          for (const o of run.shopOffers) {
+            const [min, max] = ranges[o.rarity] || [];
+            check(min !== undefined && o.price >= min && o.price <= max, `Abschnitt 64: Preis ${o.price} der ${o.rarity}-Karte ${o.id} liegt ausserhalb ${min}-${max}`);
+          }
+          // Eine ANDERE Shop-Aktion (Schildladung) darf die Kartenpreise
+          // nicht veraendern.
+          const scrapBefore = run.scrap;
+          run.scrap = 9999;
+          buyShieldCharge(run);
+          check(run.shopOffers.map((o) => o.price).every((p, i) => p === pricesBefore[i]), 'Abschnitt 64: Preise aendern sich nach einer ANDEREN Shop-Aktion');
+          // Affordability + exakter Abzug + Verkauft-Sperre.
+          const target = run.shopOffers.find((o) => !o.sold);
+          if (target) {
+            const idx = run.shopOffers.indexOf(target);
+            run.scrap = target.price - 1;
+            check(!buyShopCard(run, idx), 'Abschnitt 64: Karte wird trotz zu wenig Schrott gekauft');
+            check(run.scrap === target.price - 1, 'Abschnitt 64: Schrott wird bei einem abgelehnten Kauf trotzdem abgezogen');
+            run.scrap = target.price;
+            check(buyShopCard(run, idx), 'Abschnitt 64: Karte wird bei exakt ausreichend Schrott nicht gekauft');
+            check(run.scrap === 0, `Abschnitt 64: Kauf zieht nicht exakt den angezeigten Preis ab (Rest ${run.scrap})`);
+            check(target.sold === true, 'Abschnitt 64: gekaufte Karte ist nicht als verkauft markiert');
+            run.scrap = 9999;
+            check(!buyShopCard(run, idx), 'Abschnitt 64: eine bereits verkaufte Karte laesst sich erneut kaufen');
+          }
+          run.scrap = scrapBefore;
+        }
+        leaveWorkshop(run);
+      } else if (run.phase === 'event') chooseEventOption(run, 0);
+      else if (run.phase === 'rest') passRest(run);
+      else if (run.phase === 'actComplete') { sawActTransition = true; advanceAct(run); }
+      else break;
+
+      if (run.totalRoomIndex < prevTotal) brokenMonotonic = true;
+      const roomKey = `${run.actIndex}:${run.roomIndex}`;
+      if (roomKey !== prevRoomKey) {
+        if (run.totalRoomIndex !== prevTotal + 1) brokenPerRoomIncrement = true;
+      } else if (run.totalRoomIndex !== prevTotal) {
+        brokenPerRoomIncrement = true;
+      }
+      prevRoomKey = roomKey;
+      prevTotal = run.totalRoomIndex;
+    }
+    check(guard > 0, 'Abschnitt 64: Playthrough-Haenger (Iterationslimit erreicht)');
+    check(run.phase === 'victory', `Abschnitt 64: kein Sieg im Playthrough (${run.phase})`);
+    check(sawActTransition, 'Abschnitt 64: Testvoraussetzung -- kein Akt-Uebergang im Playthrough beobachtet');
+    check(!brokenMonotonic, 'Abschnitt 64: totalRoomIndex ist nicht monoton gewachsen');
+    check(!brokenPerRoomIncrement, 'Abschnitt 64: totalRoomIndex waechst nicht bei JEDEM echten Raumwechsel um genau 1 (bzw. veraendert sich bei einem Nicht-Wechsel)');
+    check(shopVisitCount > 0, 'Abschnitt 64: Testvoraussetzung -- kein Shop im Playthrough besucht');
+    check(run.shopsVisited === shopVisitCount, `Abschnitt 64: shopsVisited am Run-Ende (${run.shopsVisited}) stimmt nicht mit den gezaehlten echten Besuchen (${shopVisitCount}) ueberein`);
+  }
+
+  // (g) Speichern/Laden (Resume): totalRoomIndex, shopsVisited UND die
+  //     bereits gewuerfelten Kartenpreise ueberleben unveraendert -- ein
+  //     Resume baut den Raum ueber denselben (Seed, Akt, Raumnummer)-
+  //     abgeleiteten RNG-Strom neu auf (das Regal steht seit Phase 13
+  //     bewusst NICHT im Snapshot), reproduziert dadurch automatisch
+  //     dieselben Angebote UND Preise -- derselbe Beweis wie "gleicher Seed +
+  //     gleiche Spielfolge liefert identische Shop-Angebote/-Preise".
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 777, 'normal', { starterTank: 'player' });
+    let guard = 200000;
+    while (run.phase !== 'workshop' && run.phase !== 'victory' && run.phase !== 'gameover' && guard-- > 0) {
+      if (run.phase === 'preview') enterRoom(run);
+      else if (run.phase === 'transition') stepRun(run, CMD, STEP);
+      else if (run.phase === 'playing') { cheatKillAll(run.state); stepRun(run, CMD, STEP); }
+      else if (run.phase === 'upgrade') chooseUpgrade(run, 0);
+      else if (run.phase === 'map') pickMapNode(run);
+      else if (run.phase === 'event') chooseEventOption(run, 0);
+      else if (run.phase === 'rest') passRest(run);
+      else if (run.phase === 'actComplete') advanceAct(run);
+      else break;
+    }
+    check(run.phase === 'workshop', 'Abschnitt 64: Testvoraussetzung -- kein Shop im Resume-Testlauf erreicht');
+    if (run.phase === 'workshop') {
+      const before = {
+        totalRoomIndex: run.totalRoomIndex,
+        shopsVisited: run.shopsVisited,
+        offers: run.shopOffers.map((o) => ({ id: o.id, price: o.price, rarity: o.rarity })),
+      };
+      const snap = runSnapshot(run);
+      const resumed = createRun(tanksData, tilesData, diffData, upgradesData, run.seed, 'normal', { resume: snap });
+      check(resumed.totalRoomIndex === before.totalRoomIndex, `Abschnitt 64: totalRoomIndex ueberlebt Resume nicht (${before.totalRoomIndex} -> ${resumed.totalRoomIndex})`);
+      check(resumed.shopsVisited === before.shopsVisited, `Abschnitt 64: shopsVisited ueberlebt Resume nicht (${before.shopsVisited} -> ${resumed.shopsVisited})`);
+      check(resumed.phase === 'workshop', 'Abschnitt 64: Resume baut den Shop-Raum nicht wieder auf');
+      const after = (resumed.shopOffers || []).map((o) => ({ id: o.id, price: o.price, rarity: o.rarity }));
+      check(JSON.stringify(after) === JSON.stringify(before.offers), 'Abschnitt 64: Resume reproduziert nicht dieselben Kartenangebote/Preise');
+    }
+  }
+
+  // (h) Eine ueber den SHOP gekaufte einzigartige Karte verschwindet genauso
+  //     aus allen Kartenquellen wie eine im normalen Angebot gewaehlte
+  //     (Nekromant-V2 Phase 1, "gilt fuer beide Auftraege") -- buyShopCard()
+  //     haengt seit dieser Ueberarbeitung an einer neuen Preislogik,
+  //     applyUpgradeChoice() selbst ist unveraendert, aber der Weg dorthin
+  //     ist neu genug, um es direkt zu pruefen statt es nur anzunehmen.
+  {
+    const syntheticId = 'test_shop_unique_card';
+    const syntheticUpgrades = {
+      ...upgradesData,
+      upgrades: {
+        ...upgradesData.upgrades,
+        [syntheticId]: {
+          id: syntheticId, name: 'Testkarte', description: 'x', tag: 'test_shop_unique',
+          rarity: 'common', isUnique: true, requires: [], minRoom: 1, core: {},
+        },
+      },
+    };
+    const run = createRun(tanksData, tilesData, diffData, syntheticUpgrades, 4242, 'normal', { starterTank: 'player' });
+    run.phase = 'workshop';
+    run.shopOffers = [{
+      id: syntheticId, name: 'Testkarte', description: 'x', tag: 'test_shop_unique', tags: [],
+      rarity: 'common', level: 1, isUnique: true, price: 3,
+    }];
+    run.scrap = 3;
+    check(buyShopCard(run, 0), 'Abschnitt 64: Kauf einer einzigartigen Shop-Karte schlaegt fehl');
+    check(run.selectedUniqueUpgradeIds.has(syntheticId), 'Abschnitt 64: eine ueber den Shop gekaufte einzigartige Karte landet nicht in selectedUniqueUpgradeIds');
+    check(
+      !buildCandidates(syntheticUpgrades, {
+        chosen: run.upgrades, roomIndex: run.roomIndex, balance: tanksData.balance,
+        banned: run.bannedUpgrades, starterTank: run.starterTank, selectedUniqueUpgradeIds: run.selectedUniqueUpgradeIds,
+      }).some((d) => d.id === syntheticId),
+      'Abschnitt 64: eine ueber den Shop gekaufte einzigartige Karte bleibt in anderen Pools verfuegbar',
     );
   }
 }
