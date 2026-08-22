@@ -836,7 +836,9 @@ async function init() {
           const offer = run.shopOffers[idx];
           const ok = buyShopCard(run, idx);
           if (ok) {
-            telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shopCard', amount: costs.shopCard });
+            // Kartenbelohnung/Shop-Ueberarbeitung: individueller Kartenpreis
+            // (offer.price) statt des entfernten einheitlichen costs.shopCard.
+            telemetry.recordScrapSpend({ room: run.roomIndex, type: 'shopCard', amount: offer.price });
             // Gekaufte Karte wie eine gewaehlte protokollieren (ohne
             // abgelehnte Alternativen -- im Shop lehnt man nichts ab).
             telemetry.recordUpgrade({

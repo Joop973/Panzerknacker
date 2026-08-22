@@ -7,14 +7,14 @@
 // Regeln:
 //  - N Karten (Standard 3), NIE zwei mit demselben Tag -- AUSSER Signatur-
 //    karten (signatureClass gesetzt) untereinander, s. dedupeKey() unten.
-//  - Seltenheitsgewichte aus balance.json (rarity.common/uncommon/rare/epic/
-//    legendary, Nekromant-V2 Phase 1: umbenannt von common/rare/epic/
-//    unique/legendary -- reiner Namenstausch, dieselben fuenf Gewichte in
-//    derselben Reihenfolge, "unique" als Seltenheitsstufe entfaellt, weil das
-//    Wort jetzt dem GETRENNTEN isUnique-Feld gehoert, s. u.).
-//  - rare/epic/legendary zusaetzlich erst ab balance.rarityGates[stufe]
-//    .minRoom (global, ersetzt das fruehere legendary.minRoom; common/
-//    uncommon haben keinen globalen Deckel).
+//  - Seltenheitsgewichte kommen kontextabhaengig aus opts.rarityWeights
+//    (Kartenbelohnung/Shop-Ueberarbeitung: rewardRarityWeights()/
+//    shopRarityWeights(), je nach runweitem Raumzaehler bzw. Shop-Besuchs-
+//    zaehler gestaffelt, s. dort) -- Fallback auf die flache balance.rarity,
+//    falls opts.rarityWeights fehlt. Das fruehere balance.rarityGates
+//    (Seltenheit erst ab Raum X UEBERHAUPT ziehbar) ist ERSATZLOS ENTFERNT:
+//    alle fuenf Stufen sind ab Raum 1 grundsaetzlich moeglich, nur die
+//    WAHRSCHEINLICHKEIT staffelt sich.
 //  - Nekromant-V2 Phase 1 ("Stapelregel gilt fuer beide Auftraege", STARTHIER.md):
 //    `maxStacks` ist ERSATZLOS abgeschafft. Eine nicht-einzigartige Karte
 //    (isUnique: false/fehlt) verlaesst den Pool NIE, egal wie oft sie schon
@@ -122,6 +122,40 @@ function makeCombinedWeight(opts) {
   return makeSynergyWeight(opts);
 }
 
+// Kartenbelohnung/Shop-Ueberarbeitung: zwei GETRENNTE, kontextabhaengige
+// Seltenheitstabellen ersetzen die bisherige einzelne balance.rarity fuer
+// Angebote -- normale Kartenbelohnungen (Kampf/Elite/Verflucht/Ereignis-
+// Kartenoption) staffeln sich nach dem runWEITEN Raumzaehler
+// (run.totalRoomIndex, s. run.js), das Shop-Regal eigenstaendig nach der
+// Anzahl bereits besuchter Shops (run.shopsVisited). Beide Tabellen sind
+// sortierte Baender in data/balance.json (rewardRarityBands/shopRarityBands),
+// `key` ist 'maxRoom' bzw. 'maxVisit' -- ein Band mit `key: null` ist das
+// letzte und gilt ab dort unbegrenzt weiter. weightedPick() selbst bleibt
+// UNVERAENDERT: die Tier-Normierung + automatische Umverteilung bei einer an
+// einer Stufe komplett fehlenden Karte gelten unabhaengig davon, WELCHE
+// Gewichtstabelle hier zurueckkommt.
+function pickBand(bands, n, key) {
+  for (const band of bands) {
+    if (band[key] == null || n <= band[key]) return band.rarity;
+  }
+  return bands[bands.length - 1].rarity;
+}
+
+// Fehlt data/balance.json: rewardRarityBands (z. B. ein synthetisches
+// Balance-Objekt in einem Test) -> Fallback auf die flache balance.rarity,
+// damit bestehende Aufrufer ohne die neuen Baender unveraendert funktionieren.
+export function rewardRarityWeights(balance, totalRoomIndex) {
+  const bands = balance.rewardRarityBands;
+  if (!bands || !bands.length) return balance.rarity;
+  return pickBand(bands, totalRoomIndex ?? 1, 'maxRoom');
+}
+
+export function shopRarityWeights(balance, shopsVisited) {
+  const bands = balance.shopRarityBands;
+  if (!bands || !bands.length) return balance.rarity;
+  return pickBand(bands, shopsVisited ?? 1, 'maxVisit');
+}
+
 function makeOffer(def, chosen) {
   return {
     id: def.id,
@@ -156,7 +190,8 @@ function dedupeKey(d) {
 // Zusatz-Optionen (Phase 4, Elite-/Treasure-Belohnung):
 //   includeTag     -- nur dieser Tag (umgeht die EXCLUDED_TAGS, z. B. 'elite')
 //   onlyRarity     -- nur diese Seltenheit (z. B. 'legendary' fuer Treasure)
-//   bypassRoomGate -- minRoom + rarityGates ignorieren
+//   bypassRoomGate -- per-Karte minRoom ignorieren (rarityGates gibt es seit
+//                     der Kartenbelohnung/Shop-Ueberarbeitung nicht mehr)
 // Nekromant-V2 Phase 11: exportiert (vorher modulintern) fuer einen
 // erschoepfenden Abnahme-Test (Punkt 4/5: alle 105 Karten direkt gegen den
 // Filter statt gegen eine seeds-basierte Stichprobe pruefen) -- reine
@@ -173,10 +208,6 @@ export function buildCandidates(upgradesData, opts) {
     starterTank,
     selectedUniqueUpgradeIds,
   } = opts;
-  // Upgradepool-v2 Phase 1: generischer Ersatz fuer das fruehere einzelne
-  // legendary.minRoom -- jede Stufe in rarityGates bekommt ihr eigenes
-  // globales Mindestraum-Gate (common/uncommon haben keinen Eintrag -> kein Gate).
-  const rarityGates = balance.rarityGates || {};
   const bannedSet = banned || new Set();
   const defs = upgradesData.upgrades;
   const candidates = [];
@@ -225,11 +256,14 @@ export function buildCandidates(upgradesData, opts) {
     // die zweite Pruefung faengt auch bereits vorbereitete Auswahlen ab,
     // deren `chosen`-Zaehler (noch) nicht aktualisiert wurde.
     if (def.isUnique && ((chosen[id] || 0) >= 1 || selectedUniqueUpgradeIds?.has(id))) continue;
-    if (!bypassRoomGate) {
-      if (roomIndex < (def.minRoom || 1)) continue;
-      const gate = rarityGates[def.rarity]?.minRoom;
-      if (gate && roomIndex < gate) continue;
-    }
+    // Kartenbelohnung/Shop-Ueberarbeitung: das fruehere globale rarityGates
+    // (Seltenheit selbst erst ab Raum X ZIEHBAR) ist ERSATZLOS ENTFERNT --
+    // Seltenheit wird jetzt ausschliesslich ueber Wahrscheinlichkeit
+    // gesteuert (rewardRarityWeights()/shopRarityWeights() weiter unten),
+    // nie mehr ueber Eligibility. Der per-Karte minRoom-Gate bleibt (echte
+    // Kartenvoraussetzung, aktuell bei jeder Karte minRoom:1 -- also ein
+    // No-op, kein zusaetzlicher Deckel).
+    if (!bypassRoomGate && roomIndex < (def.minRoom || 1)) continue;
     if (def.requires && def.requires.some((req) => (chosen[req] || 0) <= 0)) continue;
     // Nachschliff Abschnitt 7 ("Blutiger Thron kann ohne Nutzen angeboten
     // werden"): generisches UND-von-ODER-Gate, unabhaengig vom einfachen
@@ -252,7 +286,12 @@ export function buildCandidates(upgradesData, opts) {
 //         includeTag?, onlyRarity?, bypassRoomGate?, ignoreTagRule? }
 export function rollOffers(upgradesData, opts) {
   const { chosen = {}, rng, balance, count, ignoreTagRule } = opts;
-  const weights = balance.rarity;
+  // Kartenbelohnung/Shop-Ueberarbeitung: opts.rarityWeights traegt die
+  // kontextabhaengige Gewichtstabelle (rewardRarityWeights()/
+  // shopRarityWeights(), aus run.js: poolOpts()/startNonCombatRoom()
+  // durchgereicht) -- Fallback auf die flache balance.rarity fuer Aufrufer,
+  // die (noch) kein rarityWeights setzen (z. B. aeltere Tests).
+  const weights = opts.rarityWeights || balance.rarity;
   const n = count || upgradesData.offersPerScreen || 3;
 
   const combinedWeight = makeCombinedWeight(opts);
@@ -284,7 +323,7 @@ export function rollOffers(upgradesData, opts) {
 // Phase 4: kein Fallback mehr, s. rollOffers()).
 export function drawOne(upgradesData, opts, avoidTags, avoidIds) {
   const { chosen = {}, rng, balance } = opts;
-  const weights = balance.rarity;
+  const weights = opts.rarityWeights || balance.rarity;
   const at = avoidTags || new Set();
   const ai = avoidIds || new Set();
   const eligible = buildCandidates(upgradesData, opts).filter(

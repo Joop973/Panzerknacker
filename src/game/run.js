@@ -17,7 +17,7 @@
 import { rngFor, rngForRun, hashSeed } from '../core/rng.js';
 import { recordRun, loadStats, saveCurrentRun, clearCurrentRun } from '../core/storage.js';
 import { createState, stepState } from './state.js';
-import { rollOffers as rollFromPool, drawOne } from './upgradepool.js';
+import { rollOffers as rollFromPool, drawOne, rewardRarityWeights, shopRarityWeights } from './upgradepool.js';
 import { arenaEnemySpawnCount } from './generator.js';
 
 const TRANSITION_S = 1.5;
@@ -328,6 +328,19 @@ function actRoomKey(run) {
   return (run.actIndex - 1) * 100 + run.roomIndex;
 }
 
+// Kartenbelohnung/Shop-Ueberarbeitung: Bestwertes Fallback fuer
+// run.totalRoomIndex bei einem ALTEN Zwischenstand (vor dieser Aenderung),
+// der das Feld noch nicht kennt -- summiert die Raumzahl (inkl. Bossraum)
+// jedes bereits ABGESCHLOSSENEN Akts vor r.actIndex plus die akt-lokale
+// Raumnummer selbst. Reine Migrationshilfe fuer einen einmaligen Ladevorgang,
+// beeinflusst keinen neuen Run (der startet immer bei 1, s. createRun()).
+function estimateTotalRoomIndex(run, r) {
+  const acts = run.difficulty.acts || [];
+  let total = 0;
+  for (let i = 0; i < (r.actIndex || 1) - 1; i++) total += (acts[i]?.rooms ?? 16) + 1;
+  return total + (r.roomIndex || 1);
+}
+
 // Benannte RNG-Stroeme fuer den aktuellen Raum neu ableiten. Getrennte
 // Labels sorgen dafuer, dass z. B. eine geaenderte Upgrade-Logik die
 // Raumlayouts nicht verschiebt.
@@ -368,6 +381,13 @@ export function runSnapshot(run) {
     starterTank: run.starterTank, // Phase 9: die Klasse gehoert in die Seed-Wiedergabe
     actIndex: run.actIndex, // Grundsteinumbau Phase 6: welcher Akt (1-3)
     roomIndex: run.roomIndex, // akt-lokal (1..17), faengt pro Akt neu bei 1 an
+    // Kartenbelohnung/Shop-Ueberarbeitung: totalRoomIndex ist RUNWEIT (faengt
+    // NIE pro Akt neu an, s. estimateTotalRoomIndex()-Kommentar oben) --
+    // treibt die Seltenheitsbaender fuer normale Kartenbelohnungen.
+    // shopsVisited zaehlt echte Shop-EINTRITTE (nicht Neu-Rendern/Aktionen
+    // im Shop) -- treibt die eigenstaendigen Shop-Seltenheitsbaender.
+    totalRoomIndex: run.totalRoomIndex,
+    shopsVisited: run.shopsVisited,
     roomType: run.roomType,
     mapCurrentId: run.mapCurrentId, // Phase 12: Position auf der Karte (Wahl, nicht ableitbar)
     lives: run.lives,
@@ -678,6 +698,18 @@ function grantTreasureScrap(run) {
   }
 }
 
+// Kartenbelohnung/Shop-Ueberarbeitung: ganzzahliger, einschliesslicher Preis
+// innerhalb des zur Seltenheit gehoerenden Bands (data/balance.json:
+// shop.cardPriceRanges). Fehlt ein Band (aeltere/synthetische balance.json),
+// faellt der Preis auf 5 Schrott zurueck (der frueher einheitliche Wert).
+function rollShopPrice(run, rarity) {
+  const ranges = run.data.balance.shop?.cardPriceRanges;
+  const range = ranges?.[rarity];
+  if (!range) return 5;
+  const [min, max] = range;
+  return min + Math.floor(run.rng.upgrades() * (max - min + 1));
+}
+
 // Nicht-Kampf-Raum: kein neuer Arena-Zustand -- der Vorraum bleibt Kulisse.
 function startNonCombatRoom(run, type) {
   if (type === 'treasure') {
@@ -693,8 +725,19 @@ function startNonCombatRoom(run, type) {
     // NICHT im runSnapshot -- selbes Prinzip wie roomModifier in Phase 10.
     run.shopOffers = rollFromPool(run.upgradesData, {
       ...poolOpts(run),
+      // Kartenbelohnung/Shop-Ueberarbeitung: eigenstaendige Seltenheits-
+      // tabelle nach Shop-Besuchszahl statt der reward-Baender aus poolOpts().
+      rarityWeights: shopRarityWeights(run.data.balance, run.shopsVisited),
       count: run.data.balance.shop?.cardChoices ?? 5,
     });
+    // Jede angebotene Karte bekommt EINMAL, hier beim Betreten, einen nach
+    // ihrer Seltenheit gewuerfelten Preis (data/balance.json:
+    // shop.cardPriceRanges) -- aus demselben deterministischen
+    // run.rng.upgrades-Strom wie die Kartenauswahl selbst, direkt danach
+    // verbraucht. Dadurch reproduziert Seed+Raumnummer beim Fortsetzen
+    // automatisch dieselben Preise (kein eigener Snapshot-Eintrag noetig,
+    // gleiches Prinzip wie das Regal selbst).
+    for (const offer of run.shopOffers) offer.price = rollShopPrice(run, offer.rarity);
     run.shopLifeBought = false; // "Leben: einmal pro Shop"
     run.phase = 'workshop';
   } else if (type === 'event') {
@@ -792,6 +835,15 @@ export function upgradeCardAtRest(run, id) {
 function advanceToMapNode(run, node) {
   run.roomIndex = node.layer;
   run.mapCurrentId = node.id;
+  // Kartenbelohnung/Shop-Ueberarbeitung: dies ist die EINZIGE Stelle, an der
+  // der Spieler innerhalb eines Akts wirklich in einen NEUEN Raum wechselt
+  // (sowohl beim automatischen Weiterzug als auch bei einer echten
+  // Kartenwahl, s. chooseMapNode()/afterRoomDone()) -- der richtige Ort fuer
+  // den runweiten Raumzaehler UND den Shop-Besuchszaehler. Ein Resume
+  // (createRun()) laeuft NIE hier durch (direkter startRoom()-Aufruf), zaehlt
+  // also nie doppelt.
+  run.totalRoomIndex = (run.totalRoomIndex || 0) + 1;
+  if (node.type === 'workshop') run.shopsVisited = (run.shopsVisited || 0) + 1;
   startRoom(run, node.type);
 }
 
@@ -802,6 +854,7 @@ function advanceToMapNode(run, node) {
 function afterRoomDone(run) {
   if (run.endless) {
     run.roomIndex++;
+    run.totalRoomIndex = (run.totalRoomIndex || 0) + 1;
     startRoom(run, 'combat');
     return;
   }
@@ -918,6 +971,10 @@ function enterAct(run, actIndex) {
 // beim Bosskill ein, s. dort) -- hier nur noch der Kartenwechsel selbst.
 export function advanceAct(run) {
   if (run.phase !== 'actComplete') return;
+  // Kartenbelohnung/Shop-Ueberarbeitung: Eintritt in Raum 1 des naechsten
+  // Akts ist ebenfalls ein neuer Raum -- enterAct() selbst setzt roomIndex
+  // zurueck auf 1, totalRoomIndex zaehlt hier unbeeinflusst weiter.
+  run.totalRoomIndex = (run.totalRoomIndex || 0) + 1;
   enterAct(run, run.actIndex + 1);
 }
 
@@ -998,6 +1055,12 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     bestCombo: 0, // hoechste Combo im Run
     seed: seed >>> 0,
     roomIndex: 1,
+    // Kartenbelohnung/Shop-Ueberarbeitung: totalRoomIndex ist der RUNweite
+    // Gegenstueck zu roomIndex (nie pro Akt zurueckgesetzt, s.
+    // advanceToMapNode()/advanceAct()/afterRoomDone()); shopsVisited zaehlt
+    // echte Shop-Eintritte. Beide treiben die neuen Seltenheitsbaender.
+    totalRoomIndex: 1,
+    shopsVisited: 0,
     lives: mode.lives,
     maxLives: mode.lives, // Bezug fuer Berserker (fehlende Leben)
     kills: 0, // ueber den ganzen Run
@@ -1027,6 +1090,13 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     // sie waren immer "Akt 1" (es gab nur einen), bestmoegliches Fallback.
     buildActMap(run, r.actIndex || 1);
     run.roomIndex = r.roomIndex;
+    // Kartenbelohnung/Shop-Ueberarbeitung: aeltere Zwischenstaende (vor
+    // dieser Aenderung) kennen totalRoomIndex/shopsVisited noch nicht --
+    // Fallback rekonstruiert totalRoomIndex bestmoeglich aus den bekannten
+    // Akt-/Raumdaten, shopsVisited faellt neutral auf 0 zurueck (kein
+    // Hinweis auf tatsaechlich schon besuchte Shops im alten Snapshot).
+    run.totalRoomIndex = r.totalRoomIndex ?? estimateTotalRoomIndex(run, r);
+    run.shopsVisited = r.shopsVisited ?? 0;
     run.lives = r.lives;
     run.shieldCharges = (r.shieldCharges || []).slice();
     run.scrap = r.scrap || 0;
@@ -1302,6 +1372,10 @@ function poolOpts(run) {
     // Nekromant-V2 Phase 1: zusaetzliche Filterquelle fuer isUnique-Karten
     // (s. upgradepool.js: buildCandidates()).
     selectedUniqueUpgradeIds: run.selectedUniqueUpgradeIds,
+    // Kartenbelohnung/Shop-Ueberarbeitung: Seltenheitsgewichte fuer NORMALE
+    // Belohnungen, gestaffelt nach dem runweiten Raumzaehler. Der Shop
+    // ueberschreibt dies in startNonCombatRoom() mit shopRarityWeights().
+    rarityWeights: rewardRarityWeights(run.data.balance, run.totalRoomIndex),
   };
 }
 
@@ -1431,7 +1505,10 @@ export function buyShopCard(run, index) {
   if (run.phase !== 'workshop' || !run.shopOffers) return false;
   const offer = run.shopOffers[index];
   if (!offer || offer.sold) return false;
-  const cost = run.data.balance.scrap.cost.shopCard;
+  // Kartenbelohnung/Shop-Ueberarbeitung: individueller, beim Betreten des
+  // Shops einmalig gewuerfelter Preis (offer.price) statt eines
+  // einheitlichen Werts -- s. startNonCombatRoom()/rollShopPrice().
+  const cost = offer.price;
   if (run.scrap < cost) return false;
   run.scrap -= cost;
   offer.sold = true;

@@ -292,7 +292,12 @@ Rechnung ist korrigiert, `ghost_098` funktioniert jetzt an allen sechs
 Erzeugungsstellen einschließlich der echten `killTank()`/Geisterbomben-Wege,
 „Blutiger Thron" ist ueber ein neues generisches `requiresAnyOf`-Gate an
 funktionierende Voraussetzungen gebunden, sieben zuvor kuenstliche Deckel in
-Nekromanten-Karten sind entfernt.
+Nekromanten-Karten sind entfernt. **Zuletzt gemergt: Kartenbelohnung/Shop-
+Ueberarbeitung** — zwei eigenstaendige, raum- bzw. shopbesuchsabhaengige
+Seltenheitstabellen (`run.totalRoomIndex` runweit, `run.shopsVisited`
+zaehlt echte Shop-Eintritte) ersetzen `balance.rarity`+`rarityGates`,
+Shop-Karten haben jetzt individuelle, nach Seltenheit gewuerfelte Preise
+statt eines Einheitspreises.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -6293,6 +6298,91 @@ gefordert: „keine Seelenenergie") — alle Fixes bauen auf den bestehenden
   jetzt zusaetzlich korrekt, weil `isChampion` nicht mehr pro Frame flackert.
   Kein dediziertes Champion-Sprite vorhanden — bleibt offen (s. To-do).
 
+### Kartenbelohnung/Shop-Ueberarbeitung (Nutzerauftrag) — gemergt
+Zwei EIGENSTAENDIGE, kontextabhaengige Seltenheitstabellen ersetzen die
+bisherige globale `balance.rarity` + `balance.rarityGates`-Kombination;
+dazu individuelle, nach Seltenheit gewuerfelte Shop-Kartenpreise statt des
+fruehereren einheitlichen `scrap.cost.shopCard`.
+- **Zwei neue Run-Zaehler** (`src/game/run.js`): `run.totalRoomIndex` ist
+  RUNWEIT (faengt NIE pro Akt neu bei 1 an, anders als das akt-lokale
+  `run.roomIndex` — s. `actRoomKey()`), inkrementiert an genau drei Stellen:
+  `advanceToMapNode()` (jeder echte Raumwechsel innerhalb eines Akts),
+  `advanceAct()` (Eintritt in Raum 1 des naechsten Akts) und dem
+  Endlosmodus-Zweig in `afterRoomDone()`. `run.shopsVisited` zaehlt echte
+  Shop-EINTRITTE (in `advanceToMapNode()`, wenn `node.type === 'workshop'`)
+  — NICHT Neu-Rendern/Kaufaktionen innerhalb desselben Besuchs, die laufen
+  nie durch diese Funktion. Ein Resume (`createRun({resume})`) laeuft NIE
+  durch `advanceToMapNode()`, zaehlt also nie doppelt. Beide Felder stehen im
+  `runSnapshot()`; ein aelterer Zwischenstand ohne die Felder rekonstruiert
+  `totalRoomIndex` bestmoeglich aus den bekannten Akt-Raumzahlen
+  (`estimateTotalRoomIndex()`), `shopsVisited` faellt neutral auf 0 zurueck.
+- **`data/balance.json: rewardRarityBands`/`shopRarityBands`** (je 5 Zeilen,
+  jede summiert exakt auf 100): normale Kartenbelohnungen (Kampf/Elite/
+  Verflucht/Ereignis-Kartenoption) staffeln sich nach `run.totalRoomIndex`
+  (Raum 1–4/5–9/10–14/15–20/21+), das Shop-Regal eigenstaendig nach
+  `run.shopsVisited` (Besuch 1–2/3–4/5/6/7+). `balance.rarityGates` (das
+  fruehere globale legendary-Mindestraum-Gate) ist ERSATZLOS ENTFERNT — alle
+  fuenf Stufen sind ab Raum 1 grundsaetzlich ZIEHBAR, nur die
+  WAHRSCHEINLICHKEIT staffelt sich noch. Der per-Karte `minRoom`-Gate bleibt
+  (echte Kartenvoraussetzung, aktuell bei jeder Karte `minRoom:1` — ein No-op).
+- **`src/game/upgradepool.js: rewardRarityWeights(balance, totalRoomIndex)`/
+  `shopRarityWeights(balance, shopsVisited)`** (neu, exportiert) waehlen das
+  passende Band; Fallback auf die flache `balance.rarity`, falls die Baender
+  fehlen (aeltere/synthetische Balance-Objekte, v. a. Tests).
+  `rollOffers()`/`drawOne()` lesen `opts.rarityWeights || balance.rarity`
+  statt fest `balance.rarity` — `run.js: poolOpts()` setzt die Reward-Baender
+  fuer ALLE normalen Kartenquellen (Angebot/Verbannen/Vierte Karte/Ereignis-
+  Kartenoption), `startNonCombatRoom()`s Shop-Zweig ueberschreibt sie mit den
+  Shop-Baendern. **`weightedPick()` selbst ist komplett UNVERAENDERT** — die
+  bestehende Tier-Normierung verteilt eine an einer Stufe fehlende Karte
+  bereits automatisch proportional auf die vorhandenen Stufen um (mathematisch
+  bewiesen: die Summe der Gewichte je Stufe ist immer exakt `weights[stufe]`,
+  unabhaengig von Kartenzahl UND Synergiegewichtung — deckt "Umverteilung bei
+  fehlender Stufe" UND "Synergie verzerrt nie die Stufenwahrscheinlichkeit"
+  ohne Codeaenderung ab).
+- **Shop-Preise** (`data/balance.json: shop.cardPriceRanges`, fuenf sich
+  NICHT ueberschneidende, streng steigende Intervalle: common 2–4, uncommon
+  5–6, rare 7–10, epic 11–14, legendary 15–19): `run.js: rollShopPrice()`
+  wuerfelt EINMAL je angebotener Karte beim Betreten des Shops
+  (`startNonCombatRoom()`), aus demselben deterministischen
+  `run.rng.upgrades`-Strom wie die Kartenauswahl selbst — Seed + Raumnummer
+  reproduzieren dadurch automatisch dieselben Preise, KEIN eigener
+  Snapshot-Eintrag noetig (dasselbe Prinzip wie das Regal selbst seit
+  Phase 13). `buyShopCard()` liest `offer.price` statt des entfernten
+  `scrap.cost.shopCard`. `src/ui/roomscreens.js: renderCards()` zeigt den
+  individuellen Preis je Karte statt eines Abschnittstitels mit Einheitspreis.
+- **Alle anderen Shop-Aktionen unveraendert** (Schildladung, Sekundaerwaffe/
+  Gadget tauschen, Leben, Werkbank, Ablegen) — sie haengen nie am Kartenpreis.
+- **Neuer Testabschnitt 64** (`tests/regression.mjs`, Gegenprobe fuer jeden
+  Kernpunkt einzeln bestanden — je absichtlich rot gemacht: Bandgrenze in
+  `pickBand()` um eins verschoben, `totalRoomIndex`-Inkrement in
+  `advanceToMapNode()` entfernt, `shopsVisited`-Inkrement entfernt,
+  Preiswuerfeln deaktiviert, `buyShopCard()` auf einen festen Preis
+  zurueckgebaut, ein rarity-basiertes Eligibility-Gate probeweise wieder in
+  `buildCandidates()` eingebaut, die Resume-Wiederherstellung von
+  `totalRoomIndex`/`shopsVisited` ausgebaut): Struktur (beide Baender-
+  Tabellen, Summe 100 je Zeile, `rarityGates`/`scrap.cost.shopCard` wirklich
+  weg, Preisbaender ueberschneidungsfrei + streng steigend), exakte
+  Bandwahl an allen acht Grenzen (Raum 4/5, 9/10, 14/15, 20/21; Shop 2/3,
+  4/5, 5/6, 6/7) + Fallback ohne Baender, legendary deterministisch
+  erreichbar in Raum 1 (gestellter `rng()`-Wert statt Statistik), Umverteilung
+  bei fehlender Stufe (deterministisch ueber eine gleichmaessig verteilte
+  `rng()`-Sequenz), ein kompletter Playthrough (eigener Seed) mit
+  RAUMGENAUEM `totalRoomIndex`-Inkrement (**wichtiger Testfund**: eine erste
+  Fassung pruefte nur "totalRoomIndex springt beim Akt-Uebergang um genau 1"
+  — das haette einen komplett fehlenden Zaehler an der eigentlichen Stelle
+  NICHT gefangen, weil `advanceAct()` selbst schon inkrementiert; jetzt wird
+  JEDE Iteration gegen einen Akt+Raum-Schluessel geprueft, nicht nur die
+  Akt-Grenze) + korrektem `shopsVisited`, Preise im richtigen Band, Preise
+  stabil nach einer ANDEREN Shop-Aktion, Affordability/exakter Abzug/
+  Verkauft-Sperre, Resume reproduziert Angebote UND Preise identisch, eine
+  ueber den Shop gekaufte einzigartige Karte verschwindet aus allen Pools.
+  Playwright-Smoke (echter Playthrough im Browser bis zum ersten Shop,
+  Preise im richtigen Band, keine Konsolenfehler) bestanden.
+- Kein `sw.js`-Bump (reine Code-/Datenaenderung, kein neues/geaendertes
+  Asset — die Strategie ist network-first fuer Code+Daten, ein Online-Reload
+  liefert `data/balance.json`/den neuen Code ohnehin sofort frisch).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Dediziertes Champion-Sprite** (optional, kein Blocker): der Champion
       teilt sich weiterhin `body_ghost.png`/`turret_ghost.png` mit allen
@@ -6624,20 +6714,27 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   20 Hybrid-/Keystone-Karten hinzu — keine neue Applier-Architektur, nur
   mehr Zeilen derselben Schleife.
 - `src/game/upgradepool.js` — Auswahl-Pool. Filter in `buildCandidates()`:
-  `rarity` (fünf Stufen + `rarityGates`, Upgradepool-v2 Phase 1),
-  `isUnique` (Nekromant-V2 Phase 1: ersetzt `maxStacks` ersatzlos — eine
-  nicht-einzigartige Karte hat KEINE Obergrenze mehr, eine einzigartige
-  fällt raus, sobald `chosen[id]>=1` ODER sie in
+  `rarity` (fünf Stufen), `isUnique` (Nekromant-V2 Phase 1: ersetzt
+  `maxStacks` ersatzlos — eine nicht-einzigartige Karte hat KEINE Obergrenze
+  mehr, eine einzigartige fällt raus, sobald `chosen[id]>=1` ODER sie in
   `opts.selectedUniqueUpgradeIds` steht), `requires`, `minRoom`, Bannliste,
   `damageType` (Element der Klasse, LP-Phase 11), `signatureClass`
   (Klassenzugehörigkeit, LP-Phase 18), `exclusions` (Negativliste,
-  Upgradepool-v2 Phase 6). Gewichtung: tier-normiertes `weightedPick` ×
-  Zweitelement × Synergie (`tags[]` gegen `run.synergyTags`, Phase 3).
-  `dedupeKey()` dedupt Signaturkarten auf die eigene `id` statt auf den
-  gemeinsamen Tag `signature` (Phase 2) — deshalb dürfen mehrere
-  Signaturkarten derselben Klasse gleichzeitig im Angebot stehen. Elite-/
-  Treasure-Belohnungen umgehen Teile davon über
-  `includeTag`/`onlyRarity`/`bypassRoomGate`/`ignoreTagRule`.
+  Upgradepool-v2 Phase 6). Kartenbelohnung/Shop-Ueberarbeitung: das frühere
+  globale `rarityGates` (Seltenheit erst ab Raum X ÜBERHAUPT ziehbar) ist
+  ERSATZLOS ENTFERNT — Seltenheit läuft seither ausschließlich über
+  Gewichtung, nie mehr über Eligibility. Gewichtung: tier-normiertes
+  `weightedPick` (unverändert seit LP Phase 10) × Synergie (`tags[]` gegen
+  `run.synergyTags`, Phase 3), mit `weights` aus `opts.rarityWeights` —
+  `rewardRarityWeights(balance, totalRoomIndex)`/`shopRarityWeights(balance,
+  shopsVisited)` (neu, exportiert) wählen je nach Kontext das passende Band
+  aus `data/balance.json: rewardRarityBands`/`shopRarityBands`, Fallback auf
+  die flache `balance.rarity` ohne Baender. `dedupeKey()` dedupt
+  Signaturkarten auf die eigene `id` statt auf den gemeinsamen Tag
+  `signature` (Phase 2) — deshalb dürfen mehrere Signaturkarten derselben
+  Klasse gleichzeitig im Angebot stehen. Elite-/Treasure-Belohnungen umgehen
+  Teile davon über `includeTag`/`onlyRarity`/`bypassRoomGate`/
+  `ignoreTagRule`.
 - **Upgrade-Felder in `data/upgrades.json`** (Stand nach Nekromant-V2
   Phase 1): `id`, `name`, `description`, `tag` (Hauptkategorie, treibt die
   Transformationen über `run.tagCounts`), `tags[]` (Synergie-Tags, treiben die
@@ -6663,6 +6760,9 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Grundsteinumbau Phase 8 zusätzlich die Werkbank gegen Schrott). Seit
   Grundsteinumbau Phase 6 auch `createRestScreen()` (Rastplatz: seit Phase 7
   Reparaturtrupp/Werkbank) und `createActCompleteScreen()` (Akt-Übergang).
+  Kartenbelohnung/Shop-Ueberarbeitung: `renderCards()` zeigt den
+  individuellen, pro Karte gewürfelten Preis (`o.price`) statt eines
+  Abschnittstitels mit Einheitspreis.
 - `src/ui/mapscreen.js` — Kartenscreen (Phase 12): zeigt den ganzen
   Kartengraphen **des aktuellen Akts** (Grundsteinumbau Phase 6: eine Karte
   pro Akt statt einer für den ganzen Run), klickbar nur die von der
@@ -6802,4 +6902,10 @@ Vorhaltemarkierung gegen die analytische Abfanglösung, `magBlockedTime` real
 bei 450er-Kugeln, Mörser-Radius auf beiden Seiten, `bossHpMult` an zwei
 echten Bossräumen, Fortsetzen über eine Aktgrenze, Akt-2/3-Kartendeterminismus,
 Schatzkammer-Preis/-Ertrag exakt) — damit ist der gesamte
-`AUFTRAG-GRUNDSTEINUMBAU.md` (Phasen 0–10) abgenommen.
+`AUFTRAG-GRUNDSTEINUMBAU.md` (Phasen 0–10) abgenommen. **Abschnitt 64**
+bewacht die Kartenbelohnung/Shop-Ueberarbeitung: exakte Bandwahl an allen
+acht Grenzen (Raum/Shop-Besuch), legendary deterministisch erreichbar in
+Raum 1, ein kompletter Playthrough mit raumgenauem `totalRoomIndex`-
+Inkrement + korrektem `shopsVisited`, individuelle Shop-Preise im richtigen
+Band/stabil/exakt abgezogen, Resume reproduziert Angebote und Preise
+identisch.
