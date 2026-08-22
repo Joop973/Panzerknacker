@@ -5,7 +5,7 @@
 // Physikschritten interpoliert (alpha).
 
 import { WIDTH, HEIGHT, CELL } from '../config.js';
-import { initSprites, sprite } from './sprites.js';
+import { initSprites, sprite, championAuraFrame } from './sprites.js';
 import {
   drawMines,
   drawTraps,
@@ -958,18 +958,56 @@ export function createRenderer(ctx) {
   // gleich (Wiedererkennbarkeit "das ist ein Untertan", nicht "das ist ein
   // wiederbelebter Brauner"); g.type faerbt nur den prozeduralen Fallback
   // ein (kein Sprite geladen).
+  // Champion-Aura (Nutzergrafik, Nachtrag zum Champion-Nachschliff): 12
+  // Frames, dauerhaft im Loop (Auftrag: "die Animation soll dauerhaft im
+  // Loop laufen") -- 12 Frames bei AURA_FPS ergeben einen glatten,
+  // rundenzahligen 1-s-Umlauf. Ueber state.time statt performance.now(),
+  // damit die Animation wie alles andere im Spiel mit Zeitlupe/Pause
+  // synchron bleibt (state.time ist die interpolierte Spielzeit).
+  const CHAMPION_AURA_FPS = 12;
+
   function drawGhosts(ctx, state, alpha) {
     const ghostBody = sprite('body', 'ghost');
     const ghostTur = sprite('turret', 'ghost');
+    // Champion-Sprite (Nutzergrafik): eigenes goldenes body/turret-Paar,
+    // NUR fuer g.isChampion -- alle anderen Untertanen bleiben beim
+    // gemeinsamen Geister-Sprite oben (unveraendert).
+    const champBody = sprite('body', 'champion');
+    const champTur = sprite('turret', 'champion');
+    const auraFrameIdx = Math.floor(state.time * CHAMPION_AURA_FPS);
     for (const g of state.ghosts) {
       const x = lerp(g.prevX, g.x, alpha);
       const y = lerp(g.prevY, g.y, alpha);
       const r = g.cfg.radius;
-      ctx.globalAlpha = 0.55;
-      if (ghostBody && ghostTur) {
+      const useChampionSprite = g.isChampion && champBody && champTur;
+
+      // Aura-Loop-Frame ZUERST (hinter dem Tank) -- screen-aligned, NICHT
+      // mit heading/turret rotiert: die 12 Quellframes zeigen eine bereits
+      // fertig zusammengesetzte Wanne in fester Pose mit umherziehenden
+      // Flammenschaedeln, keine trennbaren Rumpf/Turm-Teile. Groesser als
+      // die eigentliche Wanne skaliert + reduzierte Deckkraft, damit sie wie
+      // ein weicher, lebendiger Nimbus HINTER dem korrekt rotierenden
+      // Vordergrund-Tank wirkt, statt wie ein zweiter, falsch ausgerichteter
+      // Panzer.
+      if (g.isChampion) {
+        const auraImg = championAuraFrame(auraFrameIdx);
+        if (auraImg) {
+          ctx.globalAlpha = 0.6;
+          drawSpriteRot(auraImg, x, y, 0, 4.4 * r, false);
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      // Champion wird SOLIDE gezeichnet (die Nutzergrafik ist deckendes
+      // Gold, keine durchscheinende Geister-Optik) -- alle anderen
+      // Untertanen bleiben bei der bisherigen Transparenz.
+      ctx.globalAlpha = useChampionSprite ? 0.92 : 0.55;
+      const bodyImg = useChampionSprite ? champBody : ghostBody;
+      const turImg = useChampionSprite ? champTur : ghostTur;
+      if (bodyImg && turImg) {
         // Front zeigt im Sprite nach oben -> heading + PI/2 (wie drawTank).
-        drawSpriteRot(ghostBody, x, y, g.heading + Math.PI / 2, 2.9 * r, false);
-        drawSpriteRot(ghostTur, x, y, g.turret, 2.1 * r, true);
+        drawSpriteRot(bodyImg, x, y, g.heading + Math.PI / 2, 2.9 * r, false);
+        drawSpriteRot(turImg, x, y, g.turret, 2.1 * r, true);
       } else {
         ctx.save();
         ctx.translate(x, y);
@@ -990,11 +1028,16 @@ export function createRenderer(ctx) {
       ctx.globalAlpha = 1;
 
       // Geisterkommandant (Upgradepool-v2 Phase 8, aktuell kartenlos also
-      // unerreichbar, s. ghost.js Kopfkommentar) UND der NEUE, dynamische
-      // Champion (Nekromant-V2 Phase 3) teilen sich denselben goldenen Ring
-      // (Auftrag: "Eliteeinheit, muss erkennbar sein") -- dieselbe Farbe wie
-      // die legendaeren Karten (style.css), damit "das ist etwas
-      // Besonderes" sofort assoziiert wird, ohne ein neues Sprite.
+      // unerreichbar, s. ghost.js Kopfkommentar) UND der dynamische Champion
+      // (Nekromant-V2 Phase 3) teilen sich weiterhin denselben goldenen Ring
+      // (Auftrag: "Eliteeinheit, muss erkennbar sein") -- BEWUSST auch beim
+      // Champion nicht entfernt, obwohl die Nutzergrafik oben schon ein
+      // eindeutig goldenes Sprite + Aura-Loop liefert: "faellt immer auf
+      // funktionierende prozedurale Formen zurueck" ist eine durchgehende
+      // Regel dieses Renderers (sprites.js: initSprites()) -- laedt das
+      // Champion-Sprite (noch) nicht/nie (langsames Netz, Ladefehler), waere
+      // der Champion ohne den Ring optisch von einem gewoehnlichen Untertan
+      // nicht mehr zu unterscheiden.
       if (g.isCommander || g.isChampion) {
         ctx.strokeStyle = '#e8b44a';
         ctx.lineWidth = 2;
