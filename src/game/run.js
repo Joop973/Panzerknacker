@@ -39,10 +39,17 @@ const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
 // bossai.js, die boss_*-Arenen (data/arenas.json) und die Panzerungslogik
 // dahinter bleiben unangetastet im Code/in den Daten stehen (nichts geloescht,
 // nur nicht mehr erreicht) -- siehe CLAUDE.md, Abschnitt "Bosse (Platzhalter)".
+// Spinnenboss-Auftrag: Akt 3 (data/difficulty.json: acts[2].boss) zeigt
+// jetzt auf 'boss_spider' statt 'boss_phalanx' -- t_spider ist kein
+// Platzhalter mehr, sondern der echte, ausgearbeitete Bosstyp. Die Arena
+// hat bewusst nur EINEN Gegner-Spawn (arenaEnemySpawnCount()===1), es
+// spawnt also ausschliesslich der Spinnenboss, keine eingekaufte
+// Unterstuetzung (Abschnitt 6/26).
 const BOSS_ENEMY_TYPES = {
   boss_reactor: ['t_black'],
   boss_mirror: ['t_black'],
   boss_phalanx: ['t_black'],
+  boss_spider: ['t_spider'],
 };
 
 // Raumtyp -> Anzeige (Raumvorschau + Kartenscreen, Phase 12). Symbole sind

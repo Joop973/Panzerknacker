@@ -16,7 +16,8 @@
     "slow": 40,
     "normal": 70,
     "fast": 100,
-    "veryfast": 140
+    "veryfast": 140,
+    "spider": 48
   },
   "_comment_bulletSpeeds": "Grundsteinumbau Phase 2: rocket 300 -> 210 -- schneller als eine Gegnerkugel (130), aber langsamer als die neue Spielerkugel (450): ausweichbar, aber draengend (Entscheidung, s. AUFTRAG-GRUNDSTEINUMBAU.md Phase 2).",
   "bulletSpeeds": {
@@ -426,6 +427,20 @@
       "maxHp": 100,
       "damage": 34,
       "desc": "Fünf Panzer rotieren gemeinsam um die Raummitte. Nur der kurze Lücken-Moment beim Rotieren lässt einen Treffer durch."
+    },
+    "t_spider": {
+      "_comment": "Spinnenboss, Akt 3 (ersetzt boss_phalanx/t_black). speed='spider' (48px/s, s. speeds oben) ist nur der RESOLVIERTE Ausgangswert -- src/game/spider.js ueberschreibt tank.cfg.speed jeden Tick neu nach der Formel 48*lebendeBeine/8 (Abschnitt 8), die Zahl hier gilt also nur, solange alle 8 Beine stehen. spiderBoss:true macht isBossCfg() wahr (cfg.js) -- verhindert die doppelte Akt-3-HP-Skalierung, Exekution (Grundsteinumbau Phase 2) und Wiederbelebung als Geist (state.js: canRevive), genau wie bossInvincible/mirrorBoss/phalanx bei den anderen drei Bossen. role='guardian' ist nur ein Platzhalter fuer resolveCfg()/die generische KI-Struktur -- die tatsaechliche Fahrbewegung laeuft komplett ausserhalb von DRIVES/roleTurret ueber bossai.js: stepSpiderBoss() (Muster wie stepMirrorBoss/stepPhalanxBoss), nur das Feuern nutzt roleTurret() normal weiter. maxHp/damage sind Phase-1-Basiswerte; Phase 2 hebt Schaden/Feuerrate direkt in spider.js an (data/balance.json: boss.spider.phases).",
+      "speed": "spider",
+      "magazine": 3,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "guardian",
+      "accuracy": 0.85,
+      "spiderBoss": true,
+      "label": "Spinnenboss",
+      "maxHp": 1800,
+      "damage": 26,
+      "desc": "Acht angreifbare Beine schützen den Körper. Klettert über innere Wände, erzeugt Spinnenminen und verschießt Netze."
     }
   }
 }

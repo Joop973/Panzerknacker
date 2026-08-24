@@ -2,8 +2,8 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v117';
-const PREV_CACHE = 'panzerknacker-v116'; // bleibt fuer eine evtl. offene Alt-Seite intakt
+const CACHE = 'panzerknacker-v118';
+const PREV_CACHE = 'panzerknacker-v117'; // bleibt fuer eine evtl. offene Alt-Seite intakt
 
 const ASSETS = [
   './',
@@ -58,9 +58,12 @@ const ASSETS = [
   'src/game/damagetypes.js',
   'src/game/tank.js',
   'src/game/trap.js',
+  'src/game/spider.js',
+  'src/game/spidermine.js',
   'src/render/debug.js',
   'src/render/effects.js',
   'src/render/renderer.js',
+  'src/render/spiderrender.js',
   'src/render/sprites.js',
   'src/render/tracks.js',
   // Sprite-Grafiken (Rümpfe + Türme je Panzertyp, Kacheln, Geschosse)

@@ -22,12 +22,13 @@
       "_todo": "balance"
     },
     {
-      "boss": "boss_phalanx",
+      "boss": "boss_spider",
       "rooms": 16,
       "bossHpMult": 1.8,
       "lifeReward": 0,
       "budget": { "base": 10, "perRoom": 3.0 },
-      "_todo": "balance"
+      "_todo": "balance",
+      "_comment_spider": "Spinnenboss-Auftrag: ersetzt boss_phalanx. bossHpMult bleibt stehen, greift aber NICHT auf t_spider (isBossCfg()/spiderBoss ueberspringt applyHpScaling() komplett, s. cfg.js) -- t_spider.maxHp (1800, tanks.json) ist bereits der finale Wert, keine Doppelskalierung auf 3240."
     }
   ],
   "_comment_danger": "Grundsteinumbau Phase 6: unlockRoom (galt ueber den ganzen 16-Raum-Run) ist durch unlockAct + unlockRoomInAct ersetzt -- 'eingefuehrt in Akt X, bleibt danach verfuegbar', Feinstaffelung innerhalb des Akts ueber unlockRoomInAct. Gruppierung laut Auftrag (_todo: balance): Akt 1 braun/grau/tuerkis/gelb, Akt 2 +rosa/gepanzert/gruen (Moerser), Akt 3 +lila/weiss/schwarz.",

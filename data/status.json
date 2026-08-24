@@ -69,6 +69,17 @@
       "freezeS": 1,
       "color": "#7fd8ff",
       "symbol": "❄"
+    },
+    "web": {
+      "_comment": "Spinnennetz (Akt-3-Boss). Reines Tempo-Malus wie Frost, aber ohne Erstarrung -- die kanonischen Werte (50%/1,5s) stehen NUR hier, damit sie nirgends doppelt gepflegt werden muessen (src/game/spider.js ruft state.applyStatus(tank,'web',1,{}) ohne Overrides). Gilt ueber die auf state.ghosts erweiterte updateStatus()-Schleife automatisch auch fuer Geisterpanzer und den Champion (Abschnitt 19/25), nicht nur fuer state.tanks.",
+      "name": "Netz",
+      "stacksPerHit": 1,
+      "damagePerTick": 0,
+      "durationS": 1.5,
+      "maxStacks": 1,
+      "speedMult": 0.5,
+      "color": "#e8e4d8",
+      "symbol": "🕸"
     }
   }
 }

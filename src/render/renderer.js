@@ -22,6 +22,7 @@ import {
   drawLeadMarkers,
   drawMortars,
 } from './effects.js';
+import { drawSpiderBossLegs, drawSpiderBossBody, drawSpiderMines, drawSpiderWebs } from './spiderrender.js';
 import { traceTrajectory } from '../game/bullet.js';
 import { visibleStatus } from '../game/status.js';
 import { typeColor } from '../game/damagetypes.js';
@@ -77,6 +78,7 @@ export const TANK_COLORS = {
   t_reactor: '#e0a83c', // Reaktorkern -- warnendes Orange
   t_mirror: '#7fe6ff', // Der Spiegel -- kaltes Cyan
   t_phalanx: '#c9d0da', // Phalanx-Wache -- helles Stahlgrau
+  t_spider: '#8a6ad8', // Spinnenboss -- dieselbe violette Leitfarbe wie seine Lebensbalken
 
   ghost_tank: '#cfe0f5', // Geisterpanzer (Anhang B) -- blasses Kaltweiss
 };
@@ -427,6 +429,11 @@ export function createRenderer(ctx) {
 
   function drawTank(state, t, alpha) {
     if (!t.alive) return;
+    // Spinnenboss (Spinnenboss-Auftrag): eigene, vollstaendig prozedurale
+    // Darstellung (drawSpiderBossLegs/-Body in spiderrender.js) ersetzt die
+    // normale Wanne+Turm-Form komplett -- kein doppeltes Rendering, keine
+    // zweite (viel kleinere) Lebensleiste unter der eigenen Boss-Leiste.
+    if (t.cfg.spiderBoss) return;
 
     // t_white: unsichtbar bis auf den Schimmer (Muendungsblitz und
     // dicke Reifenspuren sind die anderen Tracking-Kanaele).
@@ -1276,6 +1283,8 @@ export function createRenderer(ctx) {
       drawFloor();
       tracks.draw(ctx);
       drawMines(ctx, state);
+      drawSpiderMines(ctx, state);
+      drawSpiderWebs(ctx, state);
       drawTraps(ctx, state);
       if (renderOpts.threatLines) drawThreatLines(ctx, state);
       if (renderOpts.aimLine) drawAimLine(ctx, state, traceTrajectory);
@@ -1289,7 +1298,9 @@ export function createRenderer(ctx) {
       drawWaveWarning(ctx, state);
       drawMortars(ctx, state); // Phase 3: immer sichtbar, kein Schalter
       drawGhosts(ctx, state, alpha);
+      drawSpiderBossLegs(ctx, state); // unter dem Koerper -- Gelenke sitzen am Panzerrand
       for (const t of state.tanks) drawTank(state, t, alpha);
+      drawSpiderBossBody(ctx, state, alpha); // ersetzt drawTank()s Standardform komplett (s. dort)
       drawRadar(ctx, state);
       drawThreatRings(ctx, state); // Gefahrensinn (Phase 18, Welle 3)
       if (renderOpts.leadMarker) drawLeadMarkers(ctx, state); // Phase 2

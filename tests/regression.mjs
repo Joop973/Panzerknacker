@@ -1621,7 +1621,10 @@ function passBossReward(run) {
   const { applyHpScaling, isBossCfg } = await import('../src/game/cfg.js');
   const T = tanksData.types;
   const dmg = T.player.damage;
-  const BOSSE = ['t_reactor', 't_mirror', 't_phalanx'];
+  // Spinnenboss-Auftrag: t_spider (1800 LP, spiderBoss:true) ist ein
+  // weiterer Boss ausserhalb der 2-5/10-Treffer-Baender fuer normale
+  // Gegner/Elite -- dieselbe Ausnahme wie die drei bestehenden Bosse.
+  const BOSSE = ['t_reactor', 't_mirror', 't_phalanx', 't_spider'];
 
   // (a) Trefferzahl je Gegnertyp gegen den Standardpanzer. Genau der Test,
   // den Plan-Phase 28 verlangt ("Weicht sie von der Tabelle in Phase 2 ab
@@ -6135,14 +6138,15 @@ for (const seed of SEEDS) {
   const { generateMap, buyEnemies, totalRooms, createRun: cr2, stepRun: sr2, advanceAct: aa2 } = await import('../src/game/run.js');
   const { mulberry32 } = await import('../src/core/rng.js');
 
-  // (a) Struktur: drei Akte, feste Boss-Reihenfolge Reaktor->Spiegel->Phalanx,
+  // (a) Struktur: drei Akte, feste Boss-Reihenfolge Reaktor->Spiegel->Spinne
+  //     (Spinnenboss-Auftrag: ersetzt boss_phalanx als Akt-3-Boss),
   //     Lebensbonus nur bei Akt 1/2 (Akt 3 beendet den Run, kein Bonus mehr).
   {
     const acts = diffData.acts;
     check(acts.length === 3, `Phase 6: ${acts.length} Akte statt 3`);
     check(
-      acts.map((a) => a.boss).join(',') === 'boss_reactor,boss_mirror,boss_phalanx',
-      `Phase 6: Boss-Reihenfolge ${acts.map((a) => a.boss).join(',')} statt Reaktor/Spiegel/Phalanx`,
+      acts.map((a) => a.boss).join(',') === 'boss_reactor,boss_mirror,boss_spider',
+      `Phase 6: Boss-Reihenfolge ${acts.map((a) => a.boss).join(',')} statt Reaktor/Spiegel/Spinne`,
     );
     for (const [i, a] of acts.entries()) {
       check(
@@ -11928,6 +11932,547 @@ for (const seed of SEEDS) {
     for (const term of ['Champion', 'Geisterpanzer', 'Verschmelzung', 'Geistertod', 'Wiederbelebungschance', 'Feuerrate', 'Schadensresistenz', 'Elitegegner', 'Einzigartig', 'Raumende', 'Geisterlimit']) {
       check(!!glossaryData.terms[term], `Abschnitt 65v: Glossar-Begriff "${term}" fehlt`);
     }
+  }
+}
+
+// ---- 66. Spinnenboss (Akt 3) ----------------------------------------------
+// Deckt die sicherheitskritischen Kernpunkte des Spinnenboss-Auftrags ab:
+// acht Beine mit eigener HP/Geschwindigkeitsformel, den Bein-vs-Koerper-
+// Trefferordnungs-Bug (ein Schuss, der einen Bein-Treffer haette sein
+// sollen, wurde vom generischen Panzer-Kollisionskreis des Bosses VOR der
+// Bein-Pruefung verschluckt -- b) unten testet genau diesen Mechanismus,
+// nicht nur "irgendein Bein stirbt irgendwann"), das 3,5s-Betaeubungs-
+// fenster mit Koerper-Verwundbarkeit, die 30%-Bodenklammer, den Phase-2-
+// Schwellenwert, den kompletten Phase-3-Uebergang (Wandabriss, feste
+// Position, zwei zeitversetzte Saeulen, Dauerverwundbarkeit), den Gegner-
+// Geschoss-Deckel-Fix (Geisterkugeln zaehlen nicht mehr als "gegnerisch")
+// samt des erhoehten Bullet-Hell-Budgets, Spinnenminen (Spawn-/aktive
+// Phase, kein Selbstbeschuss des Bosses, kein Ausloesen durch einen
+// eigenen Bossschuss, kein 3s-Minenzuender-Fuse), Spinnennetze (HP-basierte
+// Zerstoerung -- NICHT ein beliebiger Treffer, s. c) --, Lebensdauer/
+// Zerfall, die 50%/1,5s-Verlangsamung fuer Spieler UND Geister/Champion)
+// und den Respawn-Fix (der Spielball darf den Spinnenboss nicht auf seinen
+// Ursprungs-Spawnpunkt zuruecksetzen). Jeder mit eigenen Zahlen geprueft,
+// nicht nur gegen die aktuelle balance.json-Datenlage.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { createGhost, pushGhost } = await import('../src/game/ghost.js');
+  const { isBossCfg } = await import('../src/game/cfg.js');
+  const bcfg = tanksData.balance.boss.spider;
+  const CMD = { move: { x: 0, y: 0 }, aim: 0, firing: false, secondary: false, secondaryThrow: false, dash: false };
+
+  function spiderRoom() {
+    return createState(tanksData, tilesData, {
+      genRng: () => 0.5,
+      enemyTypes: ['t_spider'],
+      aiSeed: 1,
+      roomSpec: { fixedLayout: 'boss_spider' },
+      arenas: tanksData.arenas,
+      hpScale: 1,
+      hpSkipBosses: true,
+    });
+  }
+
+  // Realistischer Spielerschuss (Radius wie eine echte Kugel) statt der
+  // Testfalle "riesiger Radius" -- ein zu grosser Testradius ueberlappt
+  // aus reiner Groesse zusaetzlich den Aussenwand-Kollisionskreis und
+  // erzeugt so einen Test-Artefakt, kein echtes Spielverhalten.
+  function shotAt(owner, x, y, dmg = 999) {
+    return createBullet(x, y, 0, { speed: 0, radius: 5, owner, damage: dmg });
+  }
+  function legMid(leg) {
+    return { x: (leg.jointX + leg.footX) / 2, y: (leg.jointY + leg.footY) / 2 };
+  }
+
+  // ---- (a) Struktur: t_spider, Akt-3-Zuordnung, kanonische Balance-Werte -
+  {
+    const t = tanksData.types.t_spider;
+    check(!!t && t.spiderBoss === true, 'Abschnitt 66a: t_spider fehlt oder traegt kein spiderBoss-Flag');
+    check(t.maxHp === 1800, `Abschnitt 66a: t_spider.maxHp ${t.maxHp} statt 1800`);
+    check(!t.player, 'Abschnitt 66a: t_spider ist faelschlich als Spielerklasse markiert');
+    check(diffData.acts[2].boss === 'boss_spider', `Abschnitt 66a: Akt-3-Boss ist "${diffData.acts[2].boss}" statt "boss_spider"`);
+    check(!!tanksData.arenas.boss_spider, 'Abschnitt 66a: Arena boss_spider fehlt in arenas.json');
+    check(bcfg.legCount === 8, `Abschnitt 66a: legCount ${bcfg.legCount} statt 8`);
+    check(bcfg.legHp === 150, `Abschnitt 66a: legHp ${bcfg.legHp} statt 150`);
+    check(bcfg.legCount * bcfg.legHp === 1200, 'Abschnitt 66a: acht Beine ergeben nicht 1200 LP');
+    check(bcfg.legCount * bcfg.legHp + 1800 === 3000, 'Abschnitt 66a: Gesamt-LP (Beine+Koerper) ergeben nicht 3000');
+    check(bcfg.legStunS === 3.5, `Abschnitt 66a: legStunS ${bcfg.legStunS} statt 3.5`);
+    check(bcfg.phase2AtHpPct === 0.5, `Abschnitt 66a: phase2AtHpPct ${bcfg.phase2AtHpPct} statt 0.5`);
+    check(bcfg.phase3ProtectHpPct === 0.3, `Abschnitt 66a: phase3ProtectHpPct ${bcfg.phase3ProtectHpPct} statt 0.3`);
+    check(bcfg.baseSpeedPxS === 48, `Abschnitt 66a: baseSpeedPxS ${bcfg.baseSpeedPxS} statt 48`);
+    check(bcfg.pillars.length === 2, `Abschnitt 66a: ${bcfg.pillars.length} Saeulen statt genau 2`);
+    check(bcfg.mine.spawnS === 1.5, `Abschnitt 66a: mine.spawnS ${bcfg.mine.spawnS} statt 1.5`);
+    check(bcfg.web.maxHp === 20, `Abschnitt 66a: web.maxHp ${bcfg.web.maxHp} statt 20`);
+    check(bcfg.web.maxLifeS === 10, `Abschnitt 66a: web.maxLifeS ${bcfg.web.maxLifeS} statt 10`);
+    const webStatus = tanksData.status.effects.web;
+    check(!!webStatus, 'Abschnitt 66a: data/status.json hat keinen "web"-Effekt');
+    check(webStatus.speedMult === 0.5, `Abschnitt 66a: web.speedMult ${webStatus.speedMult} statt 0.5`);
+    check(webStatus.durationS === 1.5, `Abschnitt 66a: web.durationS ${webStatus.durationS} statt 1.5`);
+  }
+
+  // ---- (b) Bein-Trefferordnung: der eigentliche Bug ------------------------
+  // Ein Schuss auf ein Bein darf NICHT vom generischen Koerper-Kollisions-
+  // kreis des Bosses verschluckt werden (0 Schaden, Bein bleibt am Leben).
+  // Genau dieser Bug lag vor, solange updateSpiderLegHits() NACH der
+  // grossen Panzer-Trefferschleife lief -- ERREICHBAR aber erst mit einem
+  // Geschossradius, der gross genug ist, um vom Bein-Mittelpunkt aus (~30 px
+  // vom Bosszentrum, legJointPx 15 + legReachPx 46 gemittelt) ZUGLEICH den
+  // kleinen Koerper-Kollisionskreis (tankRadius 12) zu erreichen -- ein
+  // gewoehnlicher Spielerschuss (physics.bulletRadius 4) ist dafuer zu klein
+  // (Gegenprobe mit Radius 5 bestaetigt: kein Ueberlapp, der Test waere
+  // dabei NIE rot geworden, egal ob der Bug drin ist oder nicht -- also
+  // wirkungslos gewesen). Radius 20 ist die kleinste Groessenordnung, die
+  // das Ueberlapp-Fenster nachweislich schliesst und damit den Mechanismus
+  // tatsaechlich prueft, auch wenn aktuell kein Kartenupgrade den Spieler-
+  // Geschossradius so weit anheben kann.
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    const leg = boss.spiderLegs[0];
+    const { x, y } = legMid(leg);
+    st.bullets.push(createBullet(x, y, 0, { speed: 0, radius: 20, owner: st.player, damage: 999 }));
+    const hpBefore = boss.hp;
+    stepState(st, CMD, 1 / 60);
+    check(!leg.alive, 'Abschnitt 66b: ein Schuss auf ein Bein toetet es nicht');
+    check(boss.hp === hpBefore, 'Abschnitt 66b: derselbe Schuss hat zusaetzlich (faelschlich) den geschuetzten Koerper getroffen');
+  }
+
+  // ---- (c) Geschwindigkeitstabelle 8/4/1/0 Beine + Betaeubungsfenster -----
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    check(Math.abs(boss.cfg.speed - 48) < 0.01, `Abschnitt 66c: Speed mit 8 Beinen ${boss.cfg.speed} statt 48`);
+    for (let i = 0; i < 4; i++) {
+      const { x, y } = legMid(boss.spiderLegs[i]);
+      st.bullets.push(shotAt(st.player, x, y));
+    }
+    stepState(st, CMD, 1 / 60);
+    check(boss.spiderLegsAlive === 4, `Abschnitt 66c: ${boss.spiderLegsAlive} Beine uebrig statt 4`);
+    check(Math.abs(boss.cfg.speed - 24) < 0.01, `Abschnitt 66c: Speed mit 4 Beinen ${boss.cfg.speed} statt 24`);
+    check(Math.abs(boss.spiderVulnerableTimer - bcfg.legStunS) < 1e-6, 'Abschnitt 66c: das Betaeubungsfenster steht nicht exakt auf legStunS');
+    const hpDuringStun = boss.hp;
+    st.applyDamage(boss, 100, 'test');
+    check(boss.hp === hpDuringStun - 100, 'Abschnitt 66c: der Koerper ist waehrend der Betaeubung nicht verwundbar');
+    // Fenster laufen lassen (ohne weiteren Beinverlust): Koerper wieder
+    // geschuetzt, solange noch Beine leben.
+    for (let i = 0; i < Math.ceil(bcfg.legStunS * 60) + 5; i++) stepState(st, CMD, 1 / 60);
+    check(!(boss.spiderVulnerableTimer > 0), 'Abschnitt 66c: das Betaeubungsfenster laeuft nie ab');
+    const hpAfterStun = boss.hp;
+    st.applyDamage(boss, 100, 'test');
+    check(boss.hp === hpAfterStun, 'Abschnitt 66c: der Koerper ist nach Ablauf der Betaeubung (Beine noch da) nicht wieder geschuetzt');
+  }
+
+  // ---- (c2) Weiterer Beinverlust ERNEUERT das Fenster, addiert nicht -----
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    const { x: x0, y: y0 } = legMid(boss.spiderLegs[0]);
+    st.bullets.push(shotAt(st.player, x0, y0));
+    stepState(st, CMD, 1 / 60);
+    check(Math.abs(boss.spiderVulnerableTimer - bcfg.legStunS) < 0.02, 'Abschnitt 66c2: erster Beinverlust setzt das Fenster nicht auf legStunS');
+    for (let i = 0; i < 30; i++) stepState(st, CMD, 1 / 60); // ~0.5s ins Fenster hinein
+    const midway = boss.spiderVulnerableTimer;
+    check(midway < bcfg.legStunS - 0.3, 'Abschnitt 66c2: Testvoraussetzung -- das Fenster sollte schon abgelaufen sein');
+    const { x: x1, y: y1 } = legMid(boss.spiderLegs[1]);
+    st.bullets.push(shotAt(st.player, x1, y1));
+    stepState(st, CMD, 1 / 60);
+    check(
+      boss.spiderVulnerableTimer > midway && boss.spiderVulnerableTimer <= bcfg.legStunS + 0.02,
+      `Abschnitt 66c2: der zweite Beinverlust erneuert das Fenster nicht auf volle legStunS (ist ${boss.spiderVulnerableTimer}, war ${midway})`,
+    );
+  }
+
+  // ---- (d) 30%-Bodenklammer mit EIGENEM Prozentsatz -----------------------
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    boss.spiderVulnerableTimer = 1; // Koerper kuenstlich verwundbar
+    boss.hp = 1000;
+    st.applyDamage(boss, 900, 'test'); // waere 100, die Klammer hebt auf den Boden
+    const floor = boss.cfg.maxHp * bcfg.phase3ProtectHpPct;
+    check(boss.hp === floor, `Abschnitt 66d: hp ${boss.hp} statt auf den Boden ${floor} geklemmt`);
+    // Normale Kugel bei lebenden Beinen ohne Betaeubung: Klammer greift
+    // erst gar nicht (Koerper ist ohnehin geschuetzt), hp bleibt exakt.
+    boss.spiderVulnerableTimer = 0;
+    boss.hp = 1000;
+    st.applyDamage(boss, 900, 'test');
+    check(boss.hp === 1000, 'Abschnitt 66d: eine normale Kugel erreicht trotz Beinen den Koerper');
+  }
+
+  // ---- (e) Phase-2-Schwelle bei GENAU 50 % ---------------------------------
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    boss.hp = boss.cfg.maxHp * bcfg.phase2AtHpPct + 1;
+    stepState(st, CMD, 1 / 60);
+    check(boss.spiderPhase === 1, 'Abschnitt 66e: Phase 2 beginnt schon VOR der 50%-Schwelle');
+    boss.hp = boss.cfg.maxHp * bcfg.phase2AtHpPct;
+    stepState(st, CMD, 1 / 60);
+    check(boss.spiderPhase === 2, 'Abschnitt 66e: Phase 2 beginnt nicht bei genau 50% Boss-LP');
+    // Kein Rueckfall auf Phase 1, auch wenn hp danach wieder steigt.
+    boss.hp = boss.cfg.maxHp;
+    stepState(st, CMD, 1 / 60);
+    check(boss.spiderPhase === 2, 'Abschnitt 66e: Phase 2 faellt auf Phase 1 zurueck, wenn hp wieder steigt');
+  }
+
+  // ---- (f) Alle acht Beine weg -> Betaeubung + Uebergang -> Phase 3 -------
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    for (const leg of boss.spiderLegs) leg.hp = 1; // ein Treffer reicht je Bein
+    for (let i = 0; i < 8; i++) {
+      const { x, y } = legMid(boss.spiderLegs[i]);
+      st.bullets.push(shotAt(st.player, x, y));
+    }
+    stepState(st, CMD, 1 / 60);
+    check(boss.spiderLegsAlive === 0, `Abschnitt 66f: ${boss.spiderLegsAlive} Beine uebrig statt 0`);
+    check(Math.abs(boss.cfg.speed) < 0.01, `Abschnitt 66f: Speed ohne Beine ${boss.cfg.speed} statt 0`);
+    check(boss.spiderPhase !== 3, 'Abschnitt 66f: Phase 3 beginnt ohne das 3,5s-Betaeubungsfenster');
+    // Stun (legStunS) + Uebergang (transitionS) vollstaendig ablaufen lassen.
+    const ticks = Math.ceil((bcfg.legStunS + bcfg.transitionS + 0.5) * 60);
+    for (let i = 0; i < ticks; i++) stepState(st, CMD, 1 / 60);
+    check(boss.spiderPhase === 3, `Abschnitt 66f: Phase war "${boss.spiderPhase}" statt 3 nach Stun+Uebergang`);
+    check(
+      Math.abs(boss.x - bcfg.stationaryPos.x) < 1 && Math.abs(boss.y - bcfg.stationaryPos.y) < 1,
+      `Abschnitt 66f: Boss steht bei (${boss.x},${boss.y}) statt (${bcfg.stationaryPos.x},${bcfg.stationaryPos.y})`,
+    );
+    check(Array.isArray(st.spiderPillars) && st.spiderPillars.length === 2, `Abschnitt 66f: ${st.spiderPillars?.length} Saeulen statt 2`);
+    // Innenwaende weg, Aussenrand bleibt (0/0 und COLS-1/ROWS-1 pruefen zwei
+    // Ecken der Aussenwand stellvertretend).
+    check(!st.isSolid(5 * 32 + 16, 3 * 32 + 16), 'Abschnitt 66f: eine ehemalige Innenwand-Zelle ist nach dem Umbau weiterhin fest');
+    check(st.isSolid(16, 16), 'Abschnitt 66f: der Aussenrand ist nach dem Umbau nicht mehr fest');
+    // Koerper ist in Phase 3 DAUERHAFT verwundbar, auch ohne aktives
+    // Betaeubungsfenster.
+    boss.spiderVulnerableTimer = 0;
+    const hpBefore = boss.hp;
+    st.applyDamage(boss, 50, 'test');
+    check(boss.hp === hpBefore - 50, 'Abschnitt 66f: der Koerper ist in Phase 3 nicht dauerhaft verwundbar');
+    // Minen/Netze wurden beim Umbau kontrolliert geraeumt (Abschnitt 21:
+    // keine unvermeidbaren Treffer waehrend der Umbau-Kurzsequenz).
+    check(st.spiderMines.length === 0, 'Abschnitt 66f: Spinnenminen ueberleben den Phase-3-Umbau');
+    check(st.spiderWebs.length === 0, 'Abschnitt 66f: Spinnennetze ueberleben den Phase-3-Umbau');
+  }
+
+  // ---- (g) Saeulen: unabhaengig, zeitversetzt, mit Vorwarnung -------------
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    for (const leg of boss.spiderLegs) leg.hp = 1;
+    for (let i = 0; i < 8; i++) {
+      const { x, y } = legMid(boss.spiderLegs[i]);
+      st.bullets.push(shotAt(st.player, x, y));
+    }
+    stepState(st, CMD, 1 / 60);
+    // Genau bis zum ERSTEN Tick in Phase 3 stoppen (nicht mit einem Puffer
+    // ueberschiessen) -- sonst hat updatePillars() den Timer der Saeule mit
+    // Timer 0 schon selbst weitergedreht, bevor der "startet offen"-Check
+    // ueberhaupt laeuft.
+    const maxTicks = Math.ceil((bcfg.legStunS + bcfg.transitionS + 1) * 60);
+    let reachedPhase3 = false;
+    for (let i = 0; i < maxTicks; i++) {
+      stepState(st, CMD, 1 / 60);
+      if (boss.spiderPhase === 3) {
+        reachedPhase3 = true;
+        break;
+      }
+    }
+    check(reachedPhase3, 'Abschnitt 66g: Testvoraussetzung -- Phase 3 nicht erreicht');
+    const [p0, p1] = st.spiderPillars;
+    check(p0.col !== p1.col || p0.row !== p1.row, 'Abschnitt 66g: beide Saeulen stehen auf derselben Zelle');
+    check(!p0.solid && !p1.solid, 'Abschnitt 66g: beide Saeulen starten nicht offen');
+    // Saeule 0 hat Timer 0 -> faehrt sofort im ersten Tick hoch, Saeule 1
+    // (Timer = pillarOffsetS) bleibt noch offen -- "immer mindestens eine
+    // verfuegbar" direkt nach dem Uebergang.
+    stepState(st, CMD, 1 / 60);
+    check(p0.solid, 'Abschnitt 66g: Saeule 0 (Timer 0) faehrt nicht sofort hoch');
+    check(!p1.solid, 'Abschnitt 66g: Saeule 1 (zeitversetzt) faehrt zu frueh hoch, verletzt die Staffelung');
+    check(st.isSolid(p0.col * 32 + 16, p0.row * 32 + 16), 'Abschnitt 66g: setWallSolid() traegt eine hochgefahrene Saeule nicht ins Grid ein');
+    // Saeule 1 faehrt nach pillarOffsetS ebenfalls hoch.
+    for (let i = 0; i < Math.ceil(bcfg.pillarOffsetS * 60); i++) stepState(st, CMD, 1 / 60);
+    check(p1.solid, 'Abschnitt 66g: Saeule 1 faehrt nach pillarOffsetS nicht hoch');
+  }
+
+  // ---- (h) Gegner-Geschoss-Deckel: Geisterkugeln zaehlen nicht mit --------
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const cap = tanksData.balance.enemyBullet.maxActive;
+    const enemy = st.spiderBoss;
+    const ghostOwner = { isGhost: true, cfg: {} };
+    // Getrennte Positionen (weit auseinander): sonst wuerden Geister- und
+    // Bosskugel bei identischer Position ueber die GENERISCHE Geschoss-
+    // gegen-Geschoss-Kollision gegenseitig sterben (unterschiedlicher
+    // Besitzer -> keine Salven-Ausnahme) -- ein Testartefakt, das mit dem
+    // hier eigentlich geprueften Deckel-Fix nichts zu tun hat.
+    for (let i = 0; i < cap + 10; i++) st.bullets.push(createBullet(400, 400, 0, { speed: 0, radius: 3, owner: ghostOwner, damage: 1 }));
+    for (let i = 0; i < 3; i++) st.bullets.push(createBullet(100, 100, 0, { speed: 0, radius: 3, owner: enemy, damage: 1 }));
+    stepState(st, CMD, 1 / 60);
+    const ghostBulletsLeft = st.bullets.filter((b) => b.owner === ghostOwner).length;
+    check(ghostBulletsLeft === cap + 10, `Abschnitt 66h: ${ghostBulletsLeft} von ${cap + 10} Geisterkugeln uebrig -- der Gegner-Deckel verdraengt sie faelschlich mit`);
+  }
+
+  // ---- (i) Bullet-Hell-Budget nur in Phase 3, hoeher als das normale -----
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    const baseCap = tanksData.balance.enemyBullet.maxActive;
+    check(bcfg.bulletHellMaxActive > baseCap, 'Abschnitt 66i: bulletHellMaxActive ist nicht groesser als das normale Budget');
+    boss.spiderPhase = 3;
+    for (let i = 0; i < baseCap + 15; i++) st.bullets.push(createBullet(400, 400, 0, { speed: 0, radius: 3, owner: boss, damage: 1 }));
+    stepState(st, CMD, 1 / 60);
+    const left = st.bullets.filter((b) => b.owner === boss).length;
+    check(left === Math.min(baseCap + 15, bcfg.bulletHellMaxActive), `Abschnitt 66i: ${left} Bossgeschosse uebrig, erwartet min(${baseCap + 15}, ${bcfg.bulletHellMaxActive})`);
+  }
+
+  // ---- (j) Spinnenmine: Spawnphase (sofort beschiessbar, reduzierter ------
+  //          Schaden, kein Selbstbeschuss, kein Ausloesen durch eigenen Schuss)
+  {
+    const { spawnSpiderMine, updateSpiderMines } = await import('../src/game/spidermine.js');
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    const m = spawnSpiderMine(st, boss);
+    check(m.spiderState === 'spawn', 'Abschnitt 66j: eine frische Spinnenmine startet nicht in der Spawnphase');
+    check(m.radius === bcfg.mine.spawnRadiusPx, `Abschnitt 66j: Spawnradius ${m.radius} statt ${bcfg.mine.spawnRadiusPx}`);
+    // Ein eigener Bossschuss loest sie NICHT aus.
+    st.bullets.push(createBullet(m.x, m.y, 0, { speed: 0, radius: 3, owner: boss, damage: 999 }));
+    updateSpiderMines(st, 1 / 60);
+    check(!m.dead, 'Abschnitt 66j: ein eigener Bossschuss loest die Spinnenmine faelschlich aus');
+    // Beruehrt sie den eigenen Besitzer (den Boss selbst)? Darf nicht ausloesen.
+    for (let i = 0; i < 30; i++) updateSpiderMines(st, 1 / 60);
+    check(!m.dead, 'Abschnitt 66j: die Spinnenmine detoniert durch reine Beruehrung ihres eigenen Besitzers');
+    // Ab Frame 1 beschiessbar (Spieler-Kugel loest sie SOFORT aus, keine
+    // normale Zuend-Verzoegerung), mit reduziertem Spawn-Schaden statt des
+    // vollen aktiven Schadens, und trifft dabei den (sonst geschuetzten)
+    // Koerper -- Abschnitt 15. FRISCHER Raum statt eines zweiten Minen-
+    // Objekts im selben: zwei Spawnphasen-Minen haengen beide exakt am
+    // Bosskoerper (dieselbe Position) -- friendlyBulletHitsMine() ist
+    // NICHT an eine bestimmte Mine gebunden, ein zweites Objekt an
+    // derselben Stelle wuerde denselben Schuss stellvertretend abfangen
+    // und die eigentlich gepruefte Mine unberuehrt lassen.
+    const st2 = spiderRoom();
+    stepState(st2, CMD, 1 / 60);
+    const boss2 = st2.spiderBoss;
+    const m2 = spawnSpiderMine(st2, boss2);
+    const hpBefore = boss2.hp;
+    st2.bullets.push(createBullet(m2.x, m2.y, 0, { speed: 0, radius: 3, owner: st2.player, damage: 5 }));
+    updateSpiderMines(st2, 1 / 60);
+    check(m2.dead, 'Abschnitt 66j: eine frisch erzeugte Spinnenmine ist noch nicht beschiessbar');
+    check(boss2.hp === hpBefore - bcfg.mine.spawnDamage, `Abschnitt 66j: Spawn-Explosion traf den Koerper nicht mit spawnDamage (${bcfg.mine.spawnDamage}), hp ${hpBefore}->${boss2.hp}`);
+  }
+
+  // ---- (k) Spinnenmine: Uebergang in die aktive Phase, kein 3s-Fuse -------
+  {
+    const { spawnSpiderMine, updateSpiderMines } = await import('../src/game/spidermine.js');
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    const m = spawnSpiderMine(st, boss);
+    for (let i = 0; i < Math.ceil(bcfg.mine.spawnS * 60) + 2; i++) updateSpiderMines(st, 1 / 60);
+    check(m.spiderState === 'active', 'Abschnitt 66k: die Spinnenmine wechselt nach spawnS nicht in die aktive Phase');
+    check(!m.dead, 'Abschnitt 66k: die Spinnenmine ist beim Phasenwechsel bereits tot');
+    // Deutlich laenger als der normale 3s-Minenzuender simulieren -- eine
+    // Spinnenmine in der aktiven Verfolgung darf NICHT ueber den generischen
+    // Minen-Fuse detonieren (sie ist nicht in state.mines, hat also gar
+    // keinen Zugriff auf ihn, aber die Lebensdauer selbst muss laenger als
+    // 3s tragen). Der Spieler wird fuer diese Messung kurzzeitig als "nicht
+    // lebend" markiert, damit eine reale KONTAKT-Detonation (touchesLiving
+    // Target) das Ergebnis nicht verfaelscht -- geprueft wird ausschliesslich
+    // die Lebensdauer/den fehlenden 3s-Fuse, nicht das (bereits in (l)
+    // separat getestete) Kontaktverhalten.
+    st.player.alive = false;
+    for (let i = 0; i < 5 * 60; i++) updateSpiderMines(st, 1 / 60);
+    st.player.alive = true;
+    check(!m.dead, 'Abschnitt 66k: die aktive Spinnenmine detoniert vor Ablauf der chaseDurationS (5s simuliert, Fuse waere bei 3s)');
+  }
+
+  // ---- (l) Spinnenmine: aktive Phase trifft Spieler UND Geist -------------
+  {
+    const { spawnSpiderMine, updateSpiderMines } = await import('../src/game/spidermine.js');
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    const m = spawnSpiderMine(st, boss);
+    m.spiderState = 'active';
+    m.chaseAge = 0;
+    m.x = st.player.x;
+    m.y = st.player.y;
+    const hpBefore = st.player.hp;
+    updateSpiderMines(st, 1 / 60);
+    check(m.dead, 'Abschnitt 66l: die aktive Spinnenmine detoniert nicht bei Kontakt mit dem Spieler');
+    check(hpBefore - st.player.hp === bcfg.mine.activeDamage, `Abschnitt 66l: Spielerschaden ${hpBefore - st.player.hp} statt activeDamage ${bcfg.mine.activeDamage}`);
+
+    const st2 = spiderRoom();
+    stepState(st2, CMD, 1 / 60);
+    const g = createGhost(st2, 400, 300, 0, 't_brown');
+    pushGhost(st2, g);
+    const m2 = spawnSpiderMine(st2, st2.spiderBoss);
+    m2.spiderState = 'active';
+    m2.chaseAge = 0;
+    m2.x = g.x;
+    m2.y = g.y;
+    const ghostHpBefore = g.hp;
+    updateSpiderMines(st2, 1 / 60);
+    check(m2.dead, 'Abschnitt 66l: die aktive Spinnenmine detoniert nicht bei Kontakt mit einem Geisterpanzer');
+    check(g.hp < ghostHpBefore, 'Abschnitt 66l: ein Geisterpanzer nimmt keinen Schaden von einer Spinnenmine');
+  }
+
+  // ---- (m) Spinnennetz: HP-basierte Zerstoerung (Abschnitt 18, EXAKTE ----
+  //          Beispielrechnung), Zerfall, maximale Lebensdauer
+  {
+    const { updateSpiderWebs } = await import('../src/game/spider.js');
+    const wcfg = bcfg.web;
+    // 5s unberuehrt zerfallen lassen: 20 - 2*5 = 10 HP.
+    {
+      const st = spiderRoom();
+      st.spiderWebs = [{ x: 400, y: 300, hp: wcfg.maxHp, maxHp: wcfg.maxHp, age: 0 }];
+      for (let i = 0; i < 5 * 60; i++) updateSpiderWebs(st, 1 / 60);
+      const w = st.spiderWebs[0];
+      check(!!w && Math.abs(w.hp - 10) < 0.2, `Abschnitt 66m: Netz-HP nach 5s Zerfall ${w?.hp} statt ~10`);
+    }
+    // Frisches Netz: genau 2 Treffer mit Spielerschaden 10 zerstoeren es
+    // (10 -> 0), 1 Treffer allein NICHT.
+    {
+      const st = spiderRoom();
+      st.spiderWebs = [{ x: 400, y: 300, hp: 20, maxHp: 20, age: 0 }];
+      st.bullets.push(createBullet(400, 300, 0, { speed: 0, radius: 26, owner: st.player, damage: 10 }));
+      updateSpiderWebs(st, 1 / 60);
+      // Toleranz deckt den normalen Zerfall INNERHALB desselben Tick-Aufrufs
+      // ab (updateSpiderWebs zieht immer erst decayPerS*dt ab, bevor sie
+      // Geschosstreffer prueft) -- der Test prueft die groessenordnungs-
+      // maessige HP-Bilanz, nicht eine hundertstel-Pixel-genaue Zahl.
+      check(st.spiderWebs.length === 1 && Math.abs(st.spiderWebs[0].hp - 10) < 0.1, `Abschnitt 66m: ein 10-Schaden-Treffer soll das Netz auf ~10 HP bringen, nicht zerstoeren (hp=${st.spiderWebs[0]?.hp})`);
+      st.bullets.push(createBullet(400, 300, 0, { speed: 0, radius: 26, owner: st.player, damage: 10 }));
+      updateSpiderWebs(st, 1 / 60);
+      check(st.spiderWebs.length === 0, 'Abschnitt 66m: ein zweiter 10-Schaden-Treffer zerstoert das frische Netz nicht');
+    }
+    // Nekromant-Schaden (8): 3 Treffer noetig (8*2=16<20, 8*3=24>=20).
+    {
+      const st = spiderRoom();
+      st.spiderWebs = [{ x: 400, y: 300, hp: 20, maxHp: 20, age: 0 }];
+      for (let i = 0; i < 2; i++) {
+        st.bullets.push(createBullet(400, 300, 0, { speed: 0, radius: 26, owner: st.player, damage: 8 }));
+        updateSpiderWebs(st, 1 / 60);
+      }
+      check(st.spiderWebs.length === 1, 'Abschnitt 66m: das Netz haelt zwei 8-Schaden-Treffer nicht aus (sollte noch stehen)');
+      st.bullets.push(createBullet(400, 300, 0, { speed: 0, radius: 26, owner: st.player, damage: 8 }));
+      updateSpiderWebs(st, 1 / 60);
+      check(st.spiderWebs.length === 0, 'Abschnitt 66m: ein dritter 8-Schaden-Treffer zerstoert das Netz nicht');
+    }
+    // Maximale Lebensdauer: nach maxLifeS verschwindet es auch ohne jeden
+    // Treffer/Zerfall bis 0.
+    {
+      const st = spiderRoom();
+      st.spiderWebs = [{ x: 400, y: 300, hp: 1000, maxHp: 1000, age: 0 }]; // HP absichtlich hoch, damit nur die Lebensdauer greift
+      for (let i = 0; i < Math.ceil(wcfg.maxLifeS * 60) + 5; i++) updateSpiderWebs(st, 1 / 60);
+      check(st.spiderWebs.length === 0, 'Abschnitt 66m: das Netz ueberlebt seine maximale Lebensdauer');
+    }
+  }
+
+  // ---- (n) Netz-Verlangsamung: 50%/1,5s fuer Spieler UND Geist/Champion --
+  {
+    const { updateSpiderWebs } = await import('../src/game/spider.js');
+    const { statusSpeedMult, updateStatus } = await import('../src/game/status.js');
+    // Spieler.
+    {
+      const st = spiderRoom();
+      stepState(st, CMD, 1 / 60);
+      st.spiderWebs = [{ x: st.player.x, y: st.player.y, hp: 20, maxHp: 20, age: 0 }];
+      updateSpiderWebs(st, 1 / 60);
+      check(st.spiderWebs.length === 0, 'Abschnitt 66n: das Netz verschwindet nicht sofort bei Beruehrung durch den Spieler');
+      check(Math.abs(statusSpeedMult(st, st.player) - 0.5) < 1e-9, `Abschnitt 66n: Spieler-Tempomultiplikator ${statusSpeedMult(st, st.player)} statt 0.5`);
+      // Nach 1.5s wieder normal, kurz davor noch verlangsamt.
+      for (let i = 0; i < Math.ceil(1.4 * 60); i++) updateStatus(st, 1 / 60);
+      check(Math.abs(statusSpeedMult(st, st.player) - 0.5) < 1e-9, 'Abschnitt 66n: die Verlangsamung endet zu frueh (vor 1.5s)');
+      for (let i = 0; i < Math.ceil(0.2 * 60); i++) updateStatus(st, 1 / 60);
+      check(statusSpeedMult(st, st.player) === 1, 'Abschnitt 66n: die Verlangsamung endet nicht nach 1.5s');
+    }
+    // Geisterpanzer/Champion -- Abschnitt 19 verlangt ausdruecklich, dass
+    // dieselbe Mechanik auch fuer sie ueber ihre TATSAECHLICHE Bewegungs-
+    // berechnung wirkt (nicht nur formal im Statusobjekt steht).
+    {
+      const st = spiderRoom();
+      stepState(st, CMD, 1 / 60);
+      // t_pink (hunter, Tempo 70) statt t_brown -- t_brown ist "guardian" und
+      // bewegt sich als Untertan (erbt seinen Typ komplett) grundsaetzlich
+      // NIE, das haette den Bewegungsvergleich unten fuer BEIDE Seiten auf
+      // 0 px gebracht und den Test wirkungslos gemacht.
+      const g = createGhost(st, 500, 300, 0, 't_pink');
+      pushGhost(st, g);
+      st.spiderWebs = [{ x: g.x, y: g.y, hp: 20, maxHp: 20, age: 0 }];
+      updateSpiderWebs(st, 1 / 60);
+      check(st.spiderWebs.length === 0, 'Abschnitt 66n: das Netz verschwindet nicht sofort bei Beruehrung durch einen Geist');
+      check(Math.abs(statusSpeedMult(st, g) - 0.5) < 1e-9, `Abschnitt 66n: Geist-Tempomultiplikator ${statusSpeedMult(st, g)} statt 0.5`);
+      // Tatsaechliche Bewegung: ein verlangsamter Geist legt in derselben
+      // Zeit spuerbar weniger Weg zurueck als ein unverlangsamter.
+      g.x = 500;
+      g.y = 300;
+      g.status.web.timeLeft = 999; // haelt die Verlangsamung fuer diesen Vergleich konstant
+      const before = { x: g.x, y: g.y };
+      const { updateGhosts } = await import('../src/game/ghost.js');
+      for (let i = 0; i < 30; i++) updateGhosts(st, 1 / 60);
+      const slowedDist = Math.hypot(g.x - before.x, g.y - before.y);
+
+      const st3 = spiderRoom();
+      stepState(st3, CMD, 1 / 60);
+      const g2 = createGhost(st3, 500, 300, 0, 't_pink');
+      pushGhost(st3, g2);
+      const before2 = { x: g2.x, y: g2.y };
+      for (let i = 0; i < 30; i++) updateGhosts(st3, 1 / 60);
+      const normalDist = Math.hypot(g2.x - before2.x, g2.y - before2.y);
+      check(
+        normalDist > 0 && slowedDist < normalDist * 0.7,
+        `Abschnitt 66n: ein verlangsamter Geist bewegt sich nicht spuerbar langsamer (verlangsamt ${slowedDist.toFixed(2)} px, normal ${normalDist.toFixed(2)} px)`,
+      );
+    }
+  }
+
+  // ---- (o) isBossCfg erkennt den Spinnenboss (keine Wiederbelebung) ------
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    check(isBossCfg(st.spiderBoss.cfg), 'Abschnitt 66o: isBossCfg erkennt t_spider (spiderBoss-Flag) nicht als Boss');
+  }
+
+  // ---- (p) Respawn-Fix: der Spielertod darf den Spinnenboss nicht auf ----
+  //          seinen urspruenglichen Raum-Spawnpunkt zuruecksetzen. Ueber den
+  //          echten, oeffentlichen Weg getestet (Spielertod -> RESPAWN_DELAY
+  //          ablaufen lassen -> state.js ruft respawnPlayer() intern selbst
+  //          auf), nicht ueber einen direkten Aufruf der nicht exportierten
+  //          Funktion.
+  {
+    const st = spiderRoom();
+    stepState(st, CMD, 1 / 60);
+    const boss = st.spiderBoss;
+    // Versetzt den Boss direkt in die STATIONAERE Phase 3 (statt nur die
+    // Koordinaten zu ueberschreiben): in Phase 1/2 verfolgt stepSpiderBoss()
+    // JEDEN Tick eigenstaendig den Spieler -- ohne diesen Schritt wuerde
+    // der Boss ueber die vielen folgenden stepState()-Ticks unabhaengig
+    // vom Respawn-Verhalten weiterlaufen und den Test verfaelschen (er soll
+    // exakt nur den EINEN respawnPlayer()-Positions-Reset pruefen).
+    boss.spiderLegsAlive = 0;
+    boss.spiderPhase = 3;
+    boss.x = bcfg.stationaryPos.x;
+    boss.y = bcfg.stationaryPos.y;
+    boss.cfg.speed = 0;
+    const before = { x: boss.x, y: boss.y };
+    st.killTank(st.player, 'test');
+    check(st.respawnTimer > 0, 'Abschnitt 66p: Testvoraussetzung -- der Spielertod loest keinen Respawn-Timer aus');
+    for (let i = 0; i < 90; i++) stepState(st, CMD, 1 / 60); // > RESPAWN_DELAY (1.0s)
+    check(st.player.alive, 'Abschnitt 66p: der Spieler ist nach Ablauf des Respawn-Timers nicht wieder am Leben');
+    check(
+      boss.x === before.x && boss.y === before.y,
+      `Abschnitt 66p: der Spieler-Respawn versetzt den Spinnenboss von (${before.x},${before.y}) nach (${boss.x},${boss.y})`,
+    );
   }
 }
 

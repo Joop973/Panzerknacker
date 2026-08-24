@@ -108,11 +108,20 @@ export function hasStatus(tank) {
 }
 
 // Ein Physikschritt fuer alle Panzer.
+//
+// Spinnenboss-Auftrag Abschnitt 19: Geisterpanzer und der Champion leben
+// GETRENNT in state.ghosts, nicht in state.tanks -- ohne diese Erweiterung
+// wuerde das Netz-Statuseffekt (und jeder kuenftige Status) sie unbemerkt
+// auslassen. state.ghosts-Eintraege tragen dieselbe .alive/.cfg/.status-
+// Form wie ein Panzer, applyStatus()/statusSpeedMult() lesen also
+// unveraendert dieselben Felder -- ein einziger zusammengefuegter Durchlauf
+// deckt beide Gruppen ab, keine zweite Kopie der Tick-Logik noetig.
 export function updateStatus(state, dt) {
   const cfg = state.data.status;
   if (!cfg) return;
   const tickS = cfg.tickS ?? 0.5;
-  for (const t of state.tanks) {
+  const entities = state.ghosts ? [...state.tanks, ...state.ghosts] : state.tanks;
+  for (const t of entities) {
     if (!t.alive || !t.status) continue;
     for (const id of Object.keys(t.status)) {
       const e = t.status[id];
