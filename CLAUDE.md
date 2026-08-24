@@ -328,6 +328,15 @@ geschützter Körper, drei Kampfphasen (Labyrinth → Labyrinth mit mehr Tempo
 Spinnennetze (Erweiterung des Statuseffekt-Systems). Details, Balancewerte,
 gefundene Bugs und die Testabdeckung im eigenen Abschnitt weiter unten
 „Spinnenboss (Akt 3)".
+**Zuletzt gemergt: Kinderzimmer-Reskin** (Nutzergrafik, rein optisch) — die
+Arena zeigt jetzt einen ganzflächigen Kinderzimmer-Hintergrund statt der
+gekachelten Bodentextur, normale Wände zeigen 20 verschiedene Bauklotz-
+Varianten, beschädigte/zerstörbare Wände 7 angerissene Varianten, das Loch
+einen Spielzeughaufen. Keine Gameplay-/Kollisions-/Balance-Änderung, alle
+vier gelieferten Referenzbilder mussten erst per PIL/scipy zu den
+tatsächlich benötigten Sprite-Dateien verarbeitet werden (Details im
+eigenen Abschnitt weiter unten „Kinderzimmer-Reskin (Nutzergrafik, rein
+optisch)").
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -6918,6 +6927,125 @@ einen echten Spieldurchlauf/Bot vermessen — dafür fehlte in dieser Sitzung
 die Zeit. Balance-Werte sind alle zentral in `data/balance.json`, eine
 spätere Justierung braucht keine Code-Änderung.
 
+### Kinderzimmer-Reskin (Nutzergrafik, rein optisch) — gemergt
+Vier gelieferte Referenzbilder ersetzen die Arena-Optik: ein ganzflächiger
+Kinderzimmer-Hintergrund statt der gekachelten Bodentextur, 20 Bauklotz-
+Varianten für normale Wände, 7 angerissene Bauklotz-Varianten für
+`breakable`/`destructible`-Wände, ein Spielzeughaufen statt des alten
+Loch-Icons. **Reine Optik** — keine Kollisions-, Balance- oder
+Gameplay-Änderung.
+- **Ist-Abgleich der gelieferten Dateien (wichtig, weicht vom Auftragstext
+  ab):** die vier beigefügten Bilder waren KEINE fertigen Sprite-Dateien in
+  den geforderten Exakt-Maßen (768×512 / 1280×64 / 448×64 / 64×64), sondern
+  Referenzfotos/-collagen in Rohauflösung: ein 1536×1024-Kinderzimmerfoto,
+  ein 1237×1272-Rastergrid mit 20 Bauklötzen (5×4, schwarzer Hintergrund),
+  ein 1448×1086-Rastergrid mit 7 angerissenen Blöcken (Schachbrett-
+  "Transparenz", tatsächlich ein flaches JPEG ohne echten Alphakanal — die
+  altbekannte Falle aus der Spinnenboss-Sitzung) und eine 1254×1254-
+  Moodboard-Collage (Spielzeughaufen) als einzig plausible Quelle für das
+  Loch-Icon. **Alle vier mussten deshalb erst per PIL/scipy zu den vier
+  Zieldateien verarbeitet werden** (Grid-Zuschnitt, randverbundene Flood-
+  Fill-Freistellung, Verwerfen kleiner Bleed-Reste aus Nachbarzellen über
+  die größte zusammenhängende Vordergrundfläche, Zuschnitt auf die
+  Inhalts-Bounding-Box, Skalierung in ein 64×64-Feld) — dasselbe Verfahren,
+  das schon für die Klassen-/Champion-Sprites in früheren Sitzungen
+  etabliert wurde. Glücklicher Zufallsfund: die Reihenfolge der Zellen in
+  BEIDEN Rastergrids entspricht bereits exakt der im Auftrag verlangten
+  Varianten-Reihenfolge (0=Rot, 1=Blau, … 19=Dreieck bzw. 0=Rot…6=Stern) —
+  keine Umsortierung nötig.
+- **`assets/sprites/arena_kinderzimmer_768x512.png`**: reiner Resize
+  1536×1024 → 768×512 (exaktes 3:2-Seitenverhältnis, keine Verzerrung).
+- **`assets/sprites/tile_wall_sheet_20x64.png`** (1280×64) /
+  **`tile_breakable_sheet_7x64.png`** (448×64): je Zelle isoliert, größte
+  zusammenhängende Fläche behalten (verwirft Bleed-Reste, die beim groben
+  Rasterzuschnitt aus Nachbarzellen mit hineingerutscht waren — ein echter,
+  beim Bauen gefundener und behobener Fehler, s. u.), auf 94 % der 64-px-
+  Zielgröße skaliert und zentriert, transparenter Rand (absichtlich, s. u.).
+- **`assets/sprites/tile_hole.png`** (64×64): aus der Moodboard-Collage
+  abgeleitet (Rotes LEGO + Gummiente dominieren nach dem Downscale sichtbar,
+  der Rest der Collage geht bei diesem Verkleinerungsfaktor unter — ehrlich
+  benannter Kompromiss, kein eigens gebautes Icon).
+- **Ein echter Bugfund beim Bauen**: die erste Fassung der Grid-Isolierung
+  entfernte nur den (randverbundenen) Hintergrund je Zelle, ohne danach
+  zusätzlich die größte zusammenhängende Vordergrundfläche zu isolieren —
+  bei einem groben, nur proportional berechneten Rasterzuschnitt reichte
+  ein Pixel Nachbarzellen-Bleed über die Zellgrenze, um als isolierte,
+  NICHT randverbundene "Insel" fälschlich mit ins fertige Sprite zu
+  rutschen (sichtbar an Kachel 9 „Holzklotz mit Stern" und 10 „5-Würfel":
+  je ein Farbfleck der jeweils benachbarten Zelle hing am Rand). Fix: nach
+  dem Freistellen zusätzlich `scipy.ndimage.label()` auf die verbleibende
+  Vordergrundfläche anwenden und nur die GRÖSSTE Komponente behalten, alles
+  andere verwerfen — per Vorher/Nachher-Kontaktabzug am eigenen
+  Zwischenergebnis verifiziert, nicht nur behauptet.
+- **`src/render/sprites.js`**: zwei neue Kategorien `SPRITES.arena`
+  (ganzflächiges Hintergrundbild, keine Kachel) und `SPRITES.tileSheet`
+  (die beiden Wand-Variantensheets) neben den unveränderten `body`/
+  `turret`/`bullet`/`tile`-Kategorien. `tile.hole`/`tile.wall`/
+  `tile.breakable`/`tile.floor` bleiben unverändert bestehen — sie sind
+  jetzt der explizite Fallback, falls eines der neuen Sheets (noch) nicht
+  geladen ist.
+- **`src/render/renderer.js`**:
+  - **Hintergrund**: `bakeFloorSprite()` bekommt statt eines einzelnen
+    `floorBaked`-Booleans ein `floorBakedKind` (`null|'tile'|'arena'`) —
+    prüft bei JEDEM Aufruf zuerst, ob `sprite('arena','kinderzimmer')`
+    inzwischen verfügbar ist, und backt dann NEU (ersetzt eine zuvor mit
+    der alten Bodenkachel gebackene Übergangslösung), statt für immer beim
+    ersten Bake stehen zu bleiben. Das Bild wird GENAU EINMAL in voller
+    Arenagröße (0,0,WIDTH,HEIGHT) in den bestehenden `floorCanvas`
+    gezeichnet (kein Kacheln), danach wie gehabt frame-kostenlos nur noch
+    geblittet — misst weiterhin komfortabel im Fogperf-Frame-Budget
+    (2,2–2,9 ms Median, Budget 6 ms, unverändert zum Stand vor dieser
+    Änderung).
+  - **Wandvarianten**: neue `wallVariantHash(col,row,count)` (reiner
+    Bit-Mix-Hash aus der Rasterposition, **kein** `Math.random()`, **kein**
+    Verbrauch des Gameplay-RNG) + `drawWallVariant(sheet,index,x,y)`
+    (schneidet ein 64×64-Sprite aus dem Sheet und zeichnet es auf die
+    unveränderte Zellgröße `CELL`=32). Greift für `wall.type === 'wall'`
+    (20 Varianten) und `'breakable'` (7 Varianten) VOR der bisherigen
+    Einzelbild-Logik — ist das jeweilige Sheet nicht geladen, fällt der
+    Code unverändert auf `sprite('tile', key)` bzw. die alte prozedurale
+    Form zurück (keine Verhaltensänderung ohne die neuen Dateien).
+    `wall.type === 'destructible'` bekam denselben Umbau (nutzt jetzt das
+    `breakable`-Sheet statt `tile.wall` als Basis) — das bestehende orange
+    Riss-Overlay (steigt mit `dmg`) bleibt UNVERÄNDERT obendrauf bestehen,
+    real am Bildschirm mit einer künstlich beschädigten Wand gegengeprüft.
+    `wall.type === 'hole'` bleibt bewusst außen vor (kein Sheet, nur ein
+    einzelnes Ersatzbild) und läuft weiter über den alten Einzelbild-Pfad.
+  - **Determinismus bewusst OHNE Seed-Parameter gelöst**: die Wandvariante
+    ist eine reine Funktion von `(col,row)`, kein Raum-/Run-Seed wird durch
+    die Render-Aufrufkette gereicht. Das reicht aus, weil das Raumlayout
+    selbst (welche Zelle überhaupt eine Wand ist) bereits seed-gesteuert
+    ist — dieselbe Zelle bekommt dadurch automatisch immer dieselbe
+    Variante, ohne Frame-zu-Frame-Flackern, ohne eine der zahlreichen
+    Aufrufstellen von `drawWalls()`/`createRenderer()` anzufassen. Zwei
+    verschiedene Räume können sich zufällig dieselbe Variante an derselben
+    relativen Position teilen — rein kosmetisch, keine Determinismus-
+    Verletzung.
+  - **Transparenz ist Absicht, kein Rest-Bug**: die isolierten Bauklötze
+    füllen (bewusst wie im Referenzmaterial) nicht randlos die volle
+    64×64-Fläche, sondern behalten ihre gerundeten Ecken mit kleinem
+    transparentem Rand — angrenzende Wandzellen zeigen dadurch schmale
+    Boden-Lücken zwischen den Blöcken (passend zum "Klötzchen"-Look der
+    Referenzbilder, kein nahtloses Backstein-Muster).
+- **Tests**: kein neuer Abschnitt in `tests/regression.mjs` (rein optische
+  Änderung ohne neue Spiellogik, per Ist-Abgleich bewusst keine Fehlerklasse
+  gefunden, die eine Logikprüfung bräuchte) — die volle Suite bleibt
+  unverändert grün, inkl. aller 5 Seeds bis zum Sieg. Zusätzlich ein
+  eigenständiger Playwright-Smoke im echten Browser: baut einen echten
+  generierten Kampfraum (nicht nur eine feste Arena), rendert ihn über die
+  echten `createRenderer()`/`createTracks()`-Funktionen, prüft **Determinismus**
+  (zwei identisch aufgebaute Räume ergeben exakt dasselbe Wandmuster nach
+  Typ UND Position) und liefert Screenshots — visuell bestätigt: der
+  Hintergrund erscheint als ein einziges, nicht gekacheltes Bild, die 20
+  Wandvarianten zeigen sichtbare Vielfalt ohne erkennbares Wiederholungs-
+  muster, eine beschädigte `breakable`-Wand ist klar von unbeschädigten
+  Nachbarzellen unterscheidbar, eine `destructible`-Wand zeigt das orange
+  Riss-Overlay korrekt über der neuen Bauklotz-Basis, das Loch-Icon
+  erscheint erkennbar als bunter Spielzeughaufen. `sw.js` auf `v119`
+  gebumpt (drei neue Dateien in `ASSETS`, `tile_hole.png` bleibt unter
+  gleichem Dateinamen, kein Listeneintrag nötig), `telemetry.js:
+  GAME_VERSION` mitgezogen.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -7370,8 +7498,19 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 - Panzer je Typ: `assets/sprites/body_<typ>.png` (Front zeigt nach oben →
   Rotation `heading + PI/2`) + `turret_<typ>.png` (Rohr zeigt nach rechts =
   Winkel 0, Dom-Pivot zentriert → Rotation `turret`).
-- Kacheln `tile_{floor,wall,breakable,hole}.png`, Geschosse
-  `bullet_{normal,rocket,bounce,tungsten,explosive}.png`.
+- Kacheln `tile_{floor,wall,breakable,hole}.png` (jetzt der Fallback, s. u.),
+  Geschosse `bullet_{normal,rocket,bounce,tungsten,explosive}.png`.
+- **Kinderzimmer-Reskin (Nutzergrafik):** der Boden ist kein Kachel-Tile mehr,
+  sondern ein ganzflächiges Hintergrundbild `arena_kinderzimmer_768x512.png`
+  (`SPRITES.arena`, EINMAL in voller Arenagröße gezeichnet). Normale und
+  beschädigte/zerstörbare Wände ziehen ihr Sprite aus zwei horizontalen
+  Variantensheets (`tile_wall_sheet_20x64.png`/`tile_breakable_sheet_7x64.png`,
+  `SPRITES.tileSheet`, je 64×64 pro Variante), deterministisch nach
+  Rasterposition gewählt (`renderer.js: wallVariantHash()`, kein RNG). Das
+  Loch bleibt ein einzelnes Bild (`tile_hole.png`, jetzt ein Spielzeughaufen
+  statt einer Grube). Alle alten `tile_*.png`-Einzelbilder bleiben als
+  Fallback bestehen, falls das jeweilige neue Sheet/Hintergrundbild (noch)
+  nicht geladen ist.
 - Typen: `player`, `t_brown`, `t_grey`, `t_teal`, `t_yellow`, `t_pink`,
   `t_green`, `t_purple`, `t_white`, `t_black`. `t_armored` und `t_prism`
   haben **keine eigenen Sprites** — `sprites.js` mappt sie über

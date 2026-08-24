@@ -184,12 +184,32 @@ export function createRenderer(ctx) {
   // Kostenbremse ist stattdessen die Quellen-Obergrenze weiter unten.
   const LIGHT_INNER_FRAC = { player: 0.45, enemy: 0.3, mine: 0.25, bullet: 0.2 };
 
-  // Sobald das Boden-Sprite geladen ist, wird der Offscreen-Boden EINMAL
-  // mit der gekachelten Grafik neu gebacken (danach frame-kostenlos).
-  let floorBaked = false;
+  // Sobald ein Boden-Sprite geladen ist, wird der Offscreen-Boden EINMAL
+  // neu gebacken (danach frame-kostenlos) -- floorBakedKind haelt fest,
+  // MIT WELCHER Quelle zuletzt gebacken wurde ('tile' = alte gekachelte
+  // Bodenkachel, 'arena' = das neue ganzflaechige Kinderzimmer-Hintergrund-
+  // bild). Der Kinderzimmer-Hintergrund ist bewusst KEINE Kachel: er wird
+  // genau EINMAL in voller Groesse (WIDTH x HEIGHT) gezeichnet, nicht
+  // wiederholt. `bakeFloorSprite()` prueft die Arena-Grafik JEDES Mal
+  // zuerst -- laedt `tile.floor` schneller (asynchron, keine feste
+  // Ladereihenfolge), backt die Funktion zunaechst mit 'tile', ersetzt das
+  // aber automatisch durch 'arena', sobald die neue Grafik nachlaedt (kein
+  // dauerhaft blockierendes floorBaked-Flag mehr).
+  let floorBakedKind = null; // null | 'tile' | 'arena'
   function bakeFloorSprite() {
+    const bg = sprite('arena', 'kinderzimmer');
+    if (bg) {
+      if (floorBakedKind === 'arena') return;
+      const f = floorCanvas.getContext('2d');
+      f.imageSmoothingEnabled = true; // fotorealistisches Hintergrundbild -- weiches Skalieren gewuenscht
+      f.clearRect(0, 0, WIDTH, HEIGHT);
+      f.drawImage(bg, 0, 0, WIDTH, HEIGHT);
+      floorBakedKind = 'arena';
+      return;
+    }
+    if (floorBakedKind) return; // schon mit 'tile' gebacken, Arena-Bild (noch) nicht da
     const img = sprite('tile', 'floor');
-    if (!img || floorBaked) return;
+    if (!img) return;
     const f = floorCanvas.getContext('2d');
     f.imageSmoothingEnabled = false;
     for (let r = 0; r < HEIGHT / CELL; r++) {
@@ -197,12 +217,40 @@ export function createRenderer(ctx) {
         f.drawImage(img, c * CELL, r * CELL, CELL, CELL);
       }
     }
-    floorBaked = true;
+    floorBakedKind = 'tile';
   }
 
   function drawFloor() {
     bakeFloorSprite();
     ctx.drawImage(floorCanvas, 0, 0);
+  }
+
+  // Kinderzimmer-Reskin: Wandvariante je Rasterzelle. Rein deterministisch
+  // aus der (col,row)-Position gehasht -- KEIN Math.random(), kein
+  // Gameplay-RNG-Verbrauch. Die Raumlayout-Erzeugung selbst ist bereits
+  // seed-gesteuert (welche Zellen ueberhaupt Waende sind), die Variante ist
+  // nur eine reine Funktion dieser bereits deterministischen Position:
+  // gleicher Seed -> gleiches Layout -> dieselben (col,row)-Paare -> dieselbe
+  // Variante, JEDEN Frame, ohne dass ein zusaetzlicher Raum-/Run-Seed durch
+  // die gesamte Render-Aufrufkette gereicht werden muesste. Zwei
+  // verschiedene Raeume koennen sich zufaellig dieselbe Variante an derselben
+  // relativen Position teilen -- rein kosmetisch, keine Determinismus-
+  // Verletzung.
+  function wallVariantHash(col, row, count) {
+    let h = ((col * 374761393) ^ (row * 668265263)) >>> 0;
+    h = Math.imul(h ^ (h >>> 15), 2246822519) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 3266489917) >>> 0;
+    h ^= h >>> 16;
+    return (h >>> 0) % count;
+  }
+  const WALL_SHEET_CELL = 64; // Quellgroesse je Variante im Sprite-Sheet
+  const WALL_VARIANT_COUNT = 20;
+  const BREAKABLE_VARIANT_COUNT = 7;
+  // Schneidet EIN 64x64-Sprite aus einem horizontalen Variantensheet aus und
+  // zeichnet es auf die normale 32x32-Zellgroesse (CELL) -- die Quellgroesse
+  // aendert sich dadurch nie, nur die Zielgroesse bleibt wie bisher CELL.
+  function drawWallVariant(sheet, variantIndex, x, y) {
+    ctx.drawImage(sheet, variantIndex * WALL_SHEET_CELL, 0, WALL_SHEET_CELL, WALL_SHEET_CELL, x, y, CELL, CELL);
   }
 
   function drawWalls(walls, time) {
@@ -265,16 +313,35 @@ export function createRenderer(ctx) {
         const dur = wall.destructibleHits || 1;
         const rest = Math.max(0, dur - (wall.hits || 0));
         const dmg = dur ? 1 - rest / dur : 0; // 0 = unbeschaedigt, 1 = letzter Treffer
-        const img = sprite('tile', 'wall');
-        if (img) {
+        // Kinderzimmer-Reskin: eine zerstoerbare Wand ist konzeptionell
+        // ebenfalls eine "beschaedigte" Wand -- bekommt deshalb dieselben
+        // 7 angerissenen Bauklotzvarianten wie wall.type === 'breakable'
+        // (Aufgabe: "beide bestehenden Wandtypen beruecksichtigen"). Das
+        // orange Riss-Overlay direkt darunter bleibt UNVERAENDERT bestehen
+        // -- die Bauklotzvariante zeigt permanent sichtbare Sprungrisse,
+        // das Overlay bleibt weiterhin das Signal fuer den AKTUELLEN
+        // Lebenspunktestand.
+        const breakSheet = sprite('tileSheet', 'breakable');
+        if (breakSheet) {
           for (let y = wall.y; y < wall.y + wall.h; y += CELL) {
             for (let x = wall.x; x < wall.x + wall.w; x += CELL) {
-              ctx.drawImage(img, x, y, CELL, CELL);
+              drawWallVariant(breakSheet, wallVariantHash(x / CELL, y / CELL, BREAKABLE_VARIANT_COUNT), x, y);
             }
           }
         } else {
-          ctx.fillStyle = COLORS.wall;
-          ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+          // Unveraenderter alter Fallback, solange das neue Sheet (noch)
+          // nicht geladen ist -- keine Verhaltensaenderung ohne die neue Datei.
+          const img = sprite('tile', 'wall');
+          if (img) {
+            for (let y = wall.y; y < wall.y + wall.h; y += CELL) {
+              for (let x = wall.x; x < wall.x + wall.w; x += CELL) {
+                ctx.drawImage(img, x, y, CELL, CELL);
+              }
+            }
+          } else {
+            ctx.fillStyle = COLORS.wall;
+            ctx.fillRect(wall.x, wall.y, wall.w, wall.h);
+          }
         }
         ctx.strokeStyle = `rgba(255,150,60,${(0.25 + dmg * 0.55).toFixed(3)})`;
         ctx.lineWidth = 1.5;
@@ -321,6 +388,24 @@ export function createRenderer(ctx) {
         }
         ctx.stroke();
         continue;
+      }
+      // Kinderzimmer-Reskin: normale ('wall') und beschaedigte ('breakable')
+      // Waende bekommen zuerst eine Chance auf eine der Sheet-Varianten (20
+      // bzw. 7 Bauklotz-Looks je Zelle) -- das Loch ('hole') hat kein Sheet
+      // (nur EIN Ersatzbild, s. u.) und bleibt aussen vor. Ist das jeweilige
+      // Sheet (noch) nicht geladen, faellt die Funktion unveraendert durch
+      // zur alten Einzelbild-Logik darunter.
+      if (wall.type !== 'hole') {
+        const sheet = wall.type === 'breakable' ? sprite('tileSheet', 'breakable') : sprite('tileSheet', 'wall');
+        const count = wall.type === 'breakable' ? BREAKABLE_VARIANT_COUNT : WALL_VARIANT_COUNT;
+        if (sheet) {
+          for (let y = wall.y; y < wall.y + wall.h; y += CELL) {
+            for (let x = wall.x; x < wall.x + wall.w; x += CELL) {
+              drawWallVariant(sheet, wallVariantHash(x / CELL, y / CELL, count), x, y);
+            }
+          }
+          continue;
+        }
       }
       // Kachel-Sprite (falls geladen) über die ganze Wandfläche legen.
       const key = wall.type === 'hole' ? 'hole' : wall.type === 'breakable' ? 'breakable' : 'wall';
