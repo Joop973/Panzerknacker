@@ -42,7 +42,13 @@ export const CHAMPION_AURA_FRAME_COUNT = 12;
 const BULLET_KEYS = ['normal', 'rocket', 'bounce', 'tungsten', 'explosive'];
 const TILE_KEYS = ['floor', 'wall', 'breakable', 'hole'];
 
-export const SPRITES = { body: {}, turret: {}, bullet: {}, tile: {}, championAura: {} };
+// Kinderzimmer-Reskin (Nutzergrafik): 'arena' ist ein ganzflächiger
+// Hintergrund (kein Kachel-Tile), 'tileSheet' sind horizontale Sprite-Sheets
+// mit mehreren 64x64-Varianten pro Wandtyp (renderer.js schneidet daraus je
+// Zelle EIN Sprite aus, s. dortiger Kommentar). Eigene Kategorien statt
+// TILE_KEYS, weil beide ein anderes Zeichen-Verfahren brauchen als eine
+// einzelne, wiederholbare Kachel.
+export const SPRITES = { body: {}, turret: {}, bullet: {}, tile: {}, championAura: {}, arena: {}, tileSheet: {} };
 
 let total = 0;
 let loaded = 0;
@@ -74,6 +80,14 @@ export function initSprites() {
   }
   for (const k of BULLET_KEYS) load('bullet', k, `bullet_${k}.png`);
   for (const k of TILE_KEYS) load('tile', k, `tile_${k}.png`);
+  // Kinderzimmer-Reskin: ganzflächiger Arena-Hintergrund + zwei Wand-
+  // Variantensheets. Fehlen sie (noch), bleiben die TILE_KEYS-Fallbacks
+  // oben aktiv -- renderer.js prüft `sprite('arena', …)`/`sprite('tileSheet',
+  // …)` und fällt sonst auf `sprite('tile', …)` bzw. die prozedurale Form
+  // zurück (dasselbe Ladefehler-Verhalten wie jedes andere Sprite hier).
+  load('arena', 'kinderzimmer', 'arena_kinderzimmer_768x512.png');
+  load('tileSheet', 'wall', 'tile_wall_sheet_20x64.png');
+  load('tileSheet', 'breakable', 'tile_breakable_sheet_7x64.png');
   for (let i = 0; i < CHAMPION_AURA_FRAME_COUNT; i++) {
     const key = String(i).padStart(2, '0');
     load('championAura', key, `champion_aura_${key}.png`);

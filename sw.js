@@ -2,8 +2,8 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v118';
-const PREV_CACHE = 'panzerknacker-v117'; // bleibt fuer eine evtl. offene Alt-Seite intakt
+const CACHE = 'panzerknacker-v119';
+const PREV_CACHE = 'panzerknacker-v118'; // bleibt fuer eine evtl. offene Alt-Seite intakt
 
 const ASSETS = [
   './',
@@ -115,6 +115,13 @@ const ASSETS = [
   'assets/sprites/tile_wall.png',
   'assets/sprites/tile_breakable.png',
   'assets/sprites/tile_hole.png',
+  // Kinderzimmer-Reskin (Nutzergrafik): ganzflaechiger Arena-Hintergrund +
+  // zwei Wand-Variantensheets (20 bzw. 7 Bauklotz-Looks je 64x64, horizontal
+  // aneinandergereiht). tile_wall.png/tile_breakable.png oben bleiben als
+  // Fallback bestehen, falls eines der beiden Sheets fehlt/noch nicht laedt.
+  'assets/sprites/arena_kinderzimmer_768x512.png',
+  'assets/sprites/tile_wall_sheet_20x64.png',
+  'assets/sprites/tile_breakable_sheet_7x64.png',
   'assets/sprites/bullet_normal.png',
   'assets/sprites/bullet_rocket.png',
   'assets/sprites/bullet_bounce.png',
