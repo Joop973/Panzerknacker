@@ -105,10 +105,14 @@ export function resolveCfg(data, type) {
     // Boss-Sonderfaelle (Phase 14) -- reine Datenuebernahme, ebenso
     // orthogonal wie armor/miner. bossInvincible gated killTank() (Reaktor);
     // mirrorBoss/phalanx schalten in stepState() auf die Boss-Fahrfunktionen
-    // aus bossai.js statt der normalen Rolle um.
+    // aus bossai.js statt der normalen Rolle um. spiderBoss (Spinnenboss-
+    // Auftrag, Abschnitt 6) schaltet auf stepSpiderBoss() um -- dieselbe
+    // Whitelist-Erweiterung wie bei den drei bestehenden Bossen noetig,
+    // sonst kaeme das Flag nie im aufgeloesten cfg an (Phase-14-Testfund).
     bossInvincible: t.bossInvincible || false,
     mirrorBoss: t.mirrorBoss || false,
     phalanx: t.phalanx || false,
+    spiderBoss: t.spiderBoss || false,
   };
 }
 
@@ -1030,7 +1034,7 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
 // dieselbe Erkennung, die stepState() (mirrorBoss/phalanx) und applyDamage()
 // (bossInvincible) ohnehin benutzen, nur an einer Stelle benannt.
 export function isBossCfg(cfg) {
-  return !!(cfg && (cfg.bossInvincible || cfg.mirrorBoss || cfg.phalanx));
+  return !!(cfg && (cfg.bossInvincible || cfg.mirrorBoss || cfg.phalanx || cfg.spiderBoss));
 }
 
 // Lebenspunkte pro Raum hochskalieren (UMBAUPLAN-LP Phase 2). Wird VOR

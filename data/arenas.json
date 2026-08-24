@@ -84,6 +84,35 @@
       ".": "floor"
     }
   },
+  "boss_spider": {
+    "_comment": "Spinnenboss (Akt 3). Nur EIN 'E' -- run.js: buildCombatRoom() kuerzt enemyTypes auf arenaEnemySpawnCount()==1, es spawnt also ausschliesslich t_spider, keine eingekaufte Unterstuetzung (Abschnitt 6/26: nur Spieler/Geister/Champion sollen Beine treffen). Gaenge durchgehend >=2 Kacheln breit, Wandinseln hoechstens 2 Kacheln dick (Abschnitt 20: keine Bloecke, in denen der wandkletternde Boss lange unangreifbar bliebe). Fuer Phase 3 (Abschnitt 21/22) werden diese inneren Waende NICHT durch ein zweites Arena-Layout ersetzt, sondern zur Laufzeit direkt aus state.walls/grid entfernt (src/game/spider.js: transitionToPhase3()) -- die beiden Saeulen-Zellen (Spalte 8/15, Zeile 9, s. data/balance.json: boss.spider.pillars) sind hier bewusst normaler Boden.",
+    "grid": [
+      "########################",
+      "#......................#",
+      "#..........E...........#",
+      "#...###..........###...#",
+      "#...###..........###...#",
+      "#......................#",
+      "#......................#",
+      "#.........####.........#",
+      "#.........####.........#",
+      "#......................#",
+      "#......................#",
+      "#...###..........###...#",
+      "#...###..........###...#",
+      "#..........P...........#",
+      "#......................#",
+      "########################"
+    ],
+    "legend": {
+      "#": "wall",
+      "b": "breakable",
+      "o": "hole",
+      "P": "spawn",
+      "E": "enemy",
+      ".": "floor"
+    }
+  },
   "test_arena": {
     "grid": [
       "########################",

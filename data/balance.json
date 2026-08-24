@@ -182,6 +182,79 @@
     "phalanx": {
       "radiusPx": 150,
       "rotationSpeedRad": 1
+    },
+    "_comment_spider": "Spinnenboss (Akt 3, ersetzt boss_phalanx/t_black). t_spider.maxHp (1800) steht in tanks.json und ist der FINALE Wert -- spiderBoss triggert isBossCfg() genau wie bossInvincible/mirrorBoss/phalanx, applyHpScaling() ueberspringt ihn deshalb VOLLSTAENDIG (kein zweites Mal mit acts[2].bossHpMult verrechnet, s. cfg.js). legHp: LP je der 8 Beine (150 x 8 = 1200, macht mit dem Koerper zusammen 3000 wie in der Vorgabe vorgerechnet). legStunS: Betaeubung + Koerper-Verwundbarkeitsfenster nach jedem Beinverlust (erneuert sich, ueberlappt nicht). legReachPx/legJointPx: Fuss- bzw. Gelenkabstand vom Koerpermittelpunkt (rein optisch/Hitbox, keine Kollisionsphysik). baseSpeedPxS: Tempo mit allen 8 Beinen -- src/game/spider.js setzt tank.cfg.speed jeden Tick neu auf baseSpeedPxS*lebendeBeine/8 (Abschnitt 8). phase2AtHpPct/phase3ProtectHpPct: die beiden Phasenschwellen (50%/mindestens 30% vor Phase 3). transitionS: Dauer der Wandumbau-Sequenz. stationaryPos/pillars: feste Positionen fuer Phase 3 (Pixel bzw. Spaltenn/Zeile, CELL=32px). phases.[1|2|3]: die drei Angriffsprofile aus der Uebersichtstabelle. mine/web: geteilte Werte ueber alle Phasen (Abschnitt 28). bulletHellMaxActive: eigenes Geschossbudget fuer Phase 3 (Abschnitt 24), state.js nimmt bewusst das Maximum aus enemyBullet.maxActive und diesem Wert, nicht einen Ersatzwert.",
+    "spider": {
+      "legCount": 8,
+      "legHp": 150,
+      "legStunS": 3.5,
+      "legHitRadiusPx": 15,
+      "legReachPx": 46,
+      "legJointPx": 15,
+      "baseSpeedPxS": 48,
+      "phase2AtHpPct": 0.5,
+      "phase3ProtectHpPct": 0.3,
+      "transitionS": 2.0,
+      "stationaryPos": { "x": 384, "y": 96 },
+      "pillars": [
+        { "col": 8, "row": 9 },
+        { "col": 15, "row": 9 }
+      ],
+      "pillarCycleS": 6,
+      "pillarUpS": 3.6,
+      "pillarWarnS": 0.45,
+      "pillarOffsetS": 3,
+      "phases": {
+        "1": {
+          "bossDamage": 26,
+          "fireRateS": 1.6,
+          "bulletSpeedPxS": 130,
+          "mineEveryS": 9,
+          "mineCount": 1,
+          "maxMines": 2,
+          "mineChaseSpeedPxS": 80,
+          "webEveryS": 8
+        },
+        "2": {
+          "bossDamage": 30,
+          "fireRateS": 1.1,
+          "bulletSpeedPxS": 145,
+          "mineEveryS": 6.5,
+          "mineCount": 2,
+          "maxMines": 4,
+          "mineChaseSpeedPxS": 90,
+          "webEveryS": 5
+        },
+        "3": {
+          "mineEveryS": 9,
+          "mineCount": 1,
+          "maxMines": 3,
+          "mineChaseSpeedPxS": 85,
+          "webEveryS": 7,
+          "bulletHellDamage": 14,
+          "bulletHellSpeedMinPxS": 110,
+          "bulletHellSpeedMaxPxS": 135,
+          "warnS": 0.7,
+          "waveS": 5,
+          "pauseS": 3.5
+        }
+      },
+      "mine": {
+        "spawnS": 1.5,
+        "spawnDamage": 12,
+        "spawnRadiusPx": 36,
+        "activeDamage": 34,
+        "activeRadiusPx": 48,
+        "chaseDurationS": 12,
+        "repathS": 0.25
+      },
+      "web": {
+        "maxHp": 20,
+        "maxLifeS": 10,
+        "decayPerS": 2,
+        "hitRadiusPx": 26
+      },
+      "bulletHellMaxActive": 48
     }
   }
 }

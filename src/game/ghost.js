@@ -58,6 +58,8 @@ import { resolveCfg, isBossCfg } from './cfg.js';
 import { explodeAt } from './mine.js';
 import { onGhostRemoved, addNecroStack, getNecroStack, addNecroTimedStack, fireRateFactor } from './necro.js';
 import { flankZone } from './armor.js';
+import { spiderAimPoint } from './spider.js';
+import { statusSpeedMult } from './status.js';
 
 const TURN_SPEED = 4; // rad/s -- Drehen von Rumpf UND Turm Richtung Ziel
 const FIRE_CONE = 0.15; // rad -- muss so genau ausgerichtet sein, um zu feuern
@@ -1127,7 +1129,13 @@ export function updateGhosts(state, dt) {
       continue; // kein Gegner mehr im Raum
     }
 
-    const angleToTarget = Math.atan2(target.y - g.y, target.x - g.x);
+    // Spinnenboss-Auftrag Abschnitt 25: solange der Bosskoerper geschuetzt
+    // ist, soll ein Untertan lieber auf ein vorhandenes Bein zielen statt
+    // wirkungslos auf den Koerper zu schiessen -- reine AIM-Umlenkung (nur
+    // Turmwinkel/Feuerentscheidung), `target` selbst (fuer resolveTarget/
+    // Distanz-Systeme) bleibt unveraendert der Bosskoerper.
+    const aimAt = spiderAimPoint(target, g.x, g.y);
+    const angleToTarget = Math.atan2(aimAt.y - g.y, aimAt.x - g.x);
     g.turret = turnToward(g.turret, angleToTarget, TURN_SPEED * dt);
     g.heading = g.turret; // Rohr zeigt immer aufs Ziel, unabhaengig vom Bewegungskurs unten
 
@@ -1158,8 +1166,15 @@ export function updateGhosts(state, dt) {
     // ein Untertan sein Ziel verfolgt (praktisch immer -- Basisverhalten ist
     // reine Verfolgung), gilt der Anflug-Tempobonus.
     const stormSpeedMult = playerCfg?.necroStormApproachSpeedMult || 1;
-    g.x += dx * g.cfg.speed * stormSpeedMult * dt;
-    g.y += dy * g.cfg.speed * stormSpeedMult * dt;
+    // Spinnenboss-Auftrag Abschnitt 19: Geister/Champion sind KEINE
+    // state.tanks-Eintraege und wurden bislang von JEDEM Statuseffekt-
+    // Tempoabzug (nicht nur dem neuen Netz) uebersehen -- tank.js: moveTank()
+    // liest statusSpeedMult() fuer echte Panzer, updateGhosts() bewegte
+    // Geister aber komplett unabhaengig davon. Dieselbe Funktion, dasselbe
+    // status.js-Datenblatt -- kein zweiter Verlangsamungs-Mechanismus.
+    const webSpeedMult = statusSpeedMult(state, g);
+    g.x += dx * g.cfg.speed * stormSpeedMult * webSpeedMult * dt;
+    g.y += dy * g.cfg.speed * stormSpeedMult * webSpeedMult * dt;
     // Nicht durch Waende clippen, aber keine resolveTankBlocking --
     // Geister blockieren echte Panzer nicht und werden nicht von ihnen
     // blockiert (passend zu "blockieren keine Kugeln").
@@ -1186,12 +1201,16 @@ export function updateGhosts(state, dt) {
       (g.isChampion ? playerCfg?.necroCrownRangePct || 0 : 0) +
       (g.anchored ? playerCfg?.necroCrownAnchorRangePct || 0 : 0);
     const effFireRangePx = g.cfg.fireRangePx * (1 + rangeBonusPct);
-    const distToTarget = Math.hypot(target.x - g.x, target.y - g.y);
+    // Reichweite/Sichtlinie richten sich nach demselben umgelenkten
+    // Aim-Punkt (aimAt) wie der Turmwinkel oben -- sonst koennte ein
+    // Untertan zwar aufs Bein zielen, aber nach der Distanz zum (weiter
+    // entfernten) Koerper faelschlich ausserhalb der Reichweite gelten.
+    const distToTarget = Math.hypot(aimAt.x - g.x, aimAt.y - g.y);
     if (
       g.cooldown <= 0 &&
       distToTarget <= effFireRangePx &&
       Math.abs(angleDiff(g.turret, angleToTarget)) < FIRE_CONE &&
-      clearLine(state, g.x, g.y, target.x, target.y)
+      clearLine(state, g.x, g.y, aimAt.x, aimAt.y)
     ) {
       const muzzle = g.cfg.radius + 8;
       g.shotCount = (g.shotCount || 0) + 1;

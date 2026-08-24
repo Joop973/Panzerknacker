@@ -36,6 +36,8 @@ import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, reg
 import { applyStatus, updateStatus } from './status.js';
 import { applyTypeEffects } from './damagetypes.js';
 import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
+import { stepSpiderBoss, updateSpiderLegHits, updateSpiderWebs } from './spider.js';
+import { updateSpiderMines } from './spidermine.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
 import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, applyNecroRunScaling, isBossCfg } from './cfg.js';
@@ -68,6 +70,7 @@ const DEBRIS_COLORS = {
   t_reactor: '#e0a83c',
   t_mirror: '#8fd8ee',
   t_phalanx: '#9aa6b4',
+  t_spider: '#8a6ad8',
 };
 
 // Nekromant-V2 Phase 2: Schadensresistenz + Schild-Punktepool als
@@ -104,6 +107,22 @@ function absorbWithShieldPool(state, entity, amount) {
   state.sounds.push({ name: 'shield', x: entity.x });
   state.spawnParticles(entity.x, entity.y, '#7fe6c8', 8, 110);
   return (amount ?? 1) - absorbed;
+}
+
+// Spinnenboss (Spinnenboss-Auftrag Abschnitt 11): der Koerper darf VOR der
+// letzten Phase nicht vollstaendig sterben. Klemmt hp auf mindestens
+// phase3ProtectHpPct * maxHp, SOLANGE noch mindestens ein Bein lebt --
+// sobald das letzte Bein faellt, entfaellt die Klammer ersatzlos (Abschnitt
+// 10, Punkt 10: "wird wieder geschuetzt, SOFERN NOCH BEINE VORHANDEN SIND").
+// Reine Phasen-/Ablauflogik fuer GENAU diesen einen Bosstyp -- keine
+// Obergrenze fuer irgendein Spieler-Upgrade (Abschnitt 7: "keine versteckte
+// automatische Anpassung ... starke Builds duerfen weiterhin spuerbar
+// staerker sein" bleibt unberuehrt, die Klemme wirkt nur auf den BOSS).
+function applySpiderFloor(state, tank) {
+  if (!tank.cfg.spiderBoss || !(tank.spiderLegsAlive > 0)) return;
+  const pct = state.data.balance?.boss?.spider?.phase3ProtectHpPct ?? 0.3;
+  const floor = tank.cfg.maxHp * pct;
+  if (tank.hp < floor) tank.hp = floor;
 }
 
 // Nekromant-V2 Phase 3: Wiederbelebungs-Anzahl fuer EINEN Kill, "Rechenweg
@@ -468,6 +487,16 @@ export function createState(data, tiles, opts) {
     player,
     bullets: [],
     mines: [],
+    // Spinnenboss-Auftrag: spiderBoss ist eine bequeme direkte Referenz auf
+    // die t_spider-Tankinstanz (falls dieser Raum einer ist) -- erspart ein
+    // wiederholtes state.tanks.find(...) an mehreren Stellen (Geschossbudget,
+    // Rendering, Leg-Hit-Schleife). spiderMines/spiderWebs/spiderFlowField
+    // sind eigene, von state.mines GETRENNTE Arrays (s. spidermine.js).
+    spiderBoss: tanks.find((t) => t.cfg.spiderBoss) || null,
+    spiderMines: [],
+    spiderWebs: [],
+    spiderFlowField: null,
+    spiderPillars: null,
     traps: [],
     mortars: [], // Grundsteinumbau Phase 3: fliegende Moerser-Granaten (t_green)
     ghosts: [], // Phase 7: Geisterpanzer (kein Eintrag in tanks -- s. ghost.js)
@@ -581,6 +610,28 @@ export function createState(data, tiles, opts) {
       }
       state.spawnParticles(wall.x + wall.w / 2, wall.y + wall.h / 2, '#8a7355', 6, 90);
     },
+    // Spinnenboss (Abschnitt 21/22): generischer Wand-Ein-/Ausschalter, der
+    // GRID (isSolid()/KI-Sichtlinien/Renderer lesen alle dasselbe grid) UND
+    // state.walls synchron haelt -- dasselbe Grundmuster wie
+    // tickMovingWalls() darunter, hier aber von AUSSEN (src/game/spider.js)
+    // aufrufbar: einmalig fuer den kompletten Wandabriss beim Uebergang in
+    // Phase 3, wiederholt fuer die zwei auf-/abfahrenden Saeulen danach.
+    setWallSolid(col, row, solid) {
+      const existing = walls.find((w) => w.col === col && w.row === row);
+      if (solid) {
+        if (existing) return existing;
+        const w = { x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'solid', col, row };
+        walls.push(w);
+        grid[row][col] = '#';
+        return w;
+      }
+      if (existing) {
+        const i = walls.indexOf(existing);
+        if (i >= 0) walls.splice(i, 1);
+      }
+      grid[row][col] = '.';
+      return null;
+    },
     // Bewegliche Wand (Phase 15): togglet alle `hazard.intervalS` Sekunden
     // zwischen solid und offen -- reiner add/remove eines 'solid'-Wand-
     // objekts, kein neuer Grid-Char noetig (isSolid()/hasLos() kennen '#'
@@ -637,6 +688,25 @@ export function createState(data, tiles, opts) {
         state.spawnParticles(tank.x, tank.y, '#ffd23c', 6, 80);
         return;
       }
+      // Spinnenboss (Abschnitt 10/26): der Koerper ist geschuetzt, solange
+      // noch mindestens ein Bein lebt UND kein Bein-Verlust-Betaeubungsfenster
+      // laeuft (tank.spiderVulnerableTimer) -- EIN Gatter deckt JEDE
+      // Schadensquelle ab (Kugel, Explosion, Statuseffekt-Tick), statt es an
+      // jeder Aufrufstelle einzeln nachzubauen. meta.code
+      // 'spider_spawn_mine' ist die EINE ausdrueckliche Ausnahme (Abschnitt
+      // 15: eine frisch am Boss haengende Spinnenmine kann ihn trotzdem
+      // treffen). Sobald kein Bein mehr lebt, greift dieses Gatter nicht mehr
+      // (Phase 3: dauerhaft verwundbar).
+      if (
+        tank.cfg.spiderBoss &&
+        tank.spiderLegsAlive > 0 &&
+        !(tank.spiderVulnerableTimer > 0) &&
+        meta?.code !== 'spider_spawn_mine'
+      ) {
+        state.sounds.push({ name: 'reflect', x: tank.x });
+        state.spawnParticles(tank.x, tank.y, '#8a6ad8', 5, 70);
+        return;
+      }
       // Schadensresistenz (Nekromant-V2 Phase 2): wirkt GENERISCH auf JEDEN
       // Schaden, der diesen Panzer ueberhaupt erreicht -- auch auf Schaden
       // ueber Zeit (ein resistenter Panzer soll auch gegen Brand/Gift zaeher
@@ -663,6 +733,7 @@ export function createState(data, tiles, opts) {
         // gereicht haette (ein bereits rauchender Gegner stirbt so auch an
         // einem kleinen Statuseffekt-Tick).
         tank.hp -= amount ?? 1;
+        applySpiderFloor(state, tank);
         if (tank.hp > 0 && !tank.executing) return;
         state.killTank(tank, cause, meta);
         return;
@@ -762,6 +833,7 @@ export function createState(data, tiles, opts) {
       // Kein Gatter hat gegriffen -> der Treffer geht durch. Der Schaden wird
       // immer abgezogen (hp bleibt eine ehrliche Zahl).
       tank.hp -= amount ?? 1;
+      applySpiderFloor(state, tank);
       // Exekutionsschwelle (Grundsteinumbau Phase 2): war das Ziel VOR
       // diesem Treffer schon im Exekutionszustand (t.executing, s.
       // stepState()-Timer-Schleife), toetet dieser Treffer garantiert --
@@ -772,6 +844,24 @@ export function createState(data, tiles, opts) {
       // durchkommt, ist garantiert toedlich.
       if (tank.hp > 0 && !tank.executing) return;
       state.killTank(tank, cause, meta);
+    },
+    // Spinnenboss (Abschnitt 16): explodeAt() (mine.js) iteriert nur
+    // state.tanks -- Geister/Champion leben getrennt in state.ghosts und
+    // brauchen denselben Resistenz-/Schildpool-Rechenweg wie die
+    // "Gegner-Geschosse gegen Geister"-Schleife weiter unten, nur fuer eine
+    // KREISFOERMIGE Quelle statt eines einzelnen Geschosses (spidermine.js:
+    // detonateSpiderMine() ruft dies direkt NACH explodeAt() auf). Generisch
+    // genug fuer jede kuenftige AOE-Quelle gegen Geister.
+    damageGhostsInRadius(x, y, R, dmg) {
+      for (const g of state.ghosts) {
+        if (!g.alive || g.invulnUntil > state.time) continue;
+        if (!circlesOverlap(x, y, R, g.x, g.y, g.cfg.radius)) continue;
+        let amount = applyResistToAmount(g.cfg, state.data.balance?.resist, dmg);
+        amount = absorbWithShieldPool(state, g, amount);
+        if (amount <= 0) continue;
+        g.hp -= amount;
+        if (g.hp <= 0) killGhost(state, g);
+      }
     },
     // Reine Todeslogik -- ab hier ist der Panzer tot, es gibt keine
     // Abwehr mehr. Bewusst weiterhin direkt aufrufbar (Tests raeumen damit
@@ -1182,6 +1272,15 @@ function respawnPlayer(state) {
   state.player = fresh;
   for (const t of state.tanks) {
     if (t === fresh || !t.alive) continue;
+    // Spinnenboss (Abschnitt 26, "Ein Spieler-Respawn erhaelt Bossphase,
+    // Bossleben und zerstoerte Beine korrekt"): das generische Zuruecksetzen
+    // aller anderen Panzer auf ihren URSPRUENGLICHEN Spawnpunkt wuerde den
+    // Boss mitten im Kampf (oder aus seiner fest verankerten Phase-3-
+    // Position) an seinen Arena-Eingang zurueckreissen -- hp/Phase/Beine
+    // bleiben zwar ohnehin unberuehrt (kein Feld hier betrifft sie), aber
+    // die Position/Ausrichtung sollen exakt dort bleiben, wo der Kampf
+    // gerade steht.
+    if (t.cfg.spiderBoss) continue;
     t.x = t.spawnX;
     t.y = t.spawnY;
     t.prevX = t.spawnX;
@@ -1417,6 +1516,10 @@ export function stepState(state, cmd, dt) {
       stepPhalanxBoss(t, state, dt);
       continue;
     }
+    if (t.cfg.spiderBoss) {
+      stepSpiderBoss(t, state, dt);
+      continue;
+    }
     const { move, fire, mine } = updateEnemy(t, state, dt);
     // Gefahrensinn-Upgrade (Phase 18, Welle 3): reine Anzeige-Markierung.
     // Nutzt die Feuerfreigabe, die die KI ohnehin schon berechnet hat --
@@ -1458,6 +1561,15 @@ export function stepState(state, cmd, dt) {
       }
     }
   }
+
+  // Spinnenboss-Auftrag: Bein-Trefferpruefung MUSS vor der generischen
+  // Panzer-Trefferschleife laufen, nicht danach (war der eigentliche Bug:
+  // ein Schuss, der nahe genug am Koerper einschlaegt, um zugleich ein Bein-
+  // UND das normale Panzer-Kollisionsrund zu ueberlappen, wurde sonst schon
+  // dort verbraucht -- 0 Schaden am geschuetzten Koerper, tot, nie bei den
+  // Beinen angekommen). Ein Bein-Treffer macht die Kugel hier bereits
+  // `dead`, die folgende Schleife ueberspringt sie dann ganz normal.
+  updateSpiderLegHits(state);
 
   // Geschoss gegen Panzer: toedlich fuer JEDEN, auch den Schuetzen -- ausser
   // (a) innerhalb der Selbst-Immunitaet direkt nach dem Abschuss oder (b)
@@ -1845,6 +1957,14 @@ export function stepState(state, cmd, dt) {
   updateTraps(state, dt);
   updateMortars(state, dt); // Grundsteinumbau Phase 3
   updateGhosts(state, dt);
+  // Spinnenboss-Auftrag: eigene, kleine Tick-Funktionen (Muster wie
+  // updateMines/updateMortars oben) statt sie in bestehende Schleifen zu
+  // pressen. Die Bein-Trefferpruefung selbst laeuft bereits VOR der
+  // generischen Panzer-Trefferschleife weiter oben (s. dortiger Kommentar);
+  // hier nur noch Minen/Netze, die eigene Bullet-Erzeugungswege haben und
+  // deshalb regulaer in der naechsten Runde geprueft werden.
+  updateSpiderMines(state, dt);
+  updateSpiderWebs(state, dt);
   tickNecroTimers(state, dt); // Nekromant-V2 Phase 5: zeitlich befristete Stapel
   updateWave(state, dt);
 
@@ -1892,9 +2012,20 @@ export function stepState(state, cmd, dt) {
   // Gegner-Geschosse deckeln (E4: enemyBullet.maxActive, aelteste zuerst).
   // Beim SPIELER wird bewusst NICHT verdraengt -- dort sperrt das Feuern
   // (sonst raeumen Verlegenheitsschuesse den gelegten Abprallschuss weg).
-  const enemyCap = state.data.balance.enemyBullet?.maxActive;
+  // Spinnenboss-Auftrag Abschnitt 24 (Ist-Abgleich-Fund): der alte Filter
+  // "owner !== state.player" zaehlte GEISTER-/CHAMPION-Geschosse (Besitzer
+  // ist nie state.player, aber auch nicht gegnerisch) faelschlich als
+  // gegnerisch mit -- sie waeren dadurch am gleichen Budget verdraengbar
+  // gewesen wie echte Bossschuesse. `!b.owner.isGhost` korrigiert das.
+  // In der dritten Bossphase (Bullet Hell) gilt zusaetzlich ein eigenes,
+  // hoeheres Budget (boss.spider.bulletHellMaxActive) -- state.js nimmt
+  // bewusst das GROESSERE der beiden Werte, nicht einen Ersatzwert, damit
+  // normale Raeume ihr bisheriges Verhalten unveraendert behalten.
+  const spiderHellCap = state.spiderBoss?.spiderPhase === 3 ? state.data.balance?.boss?.spider?.bulletHellMaxActive : null;
+  const baseEnemyCap = state.data.balance.enemyBullet?.maxActive;
+  const enemyCap = spiderHellCap ? Math.max(baseEnemyCap || 0, spiderHellCap) : baseEnemyCap;
   if (enemyCap) {
-    const enemyBullets = state.bullets.filter((b) => b.owner && b.owner !== state.player);
+    const enemyBullets = state.bullets.filter((b) => b.owner && b.owner !== state.player && !b.owner.isGhost);
     if (enemyBullets.length > enemyCap) {
       const drop = new Set(enemyBullets.slice(0, enemyBullets.length - enemyCap));
       state.bullets = state.bullets.filter((b) => !drop.has(b));

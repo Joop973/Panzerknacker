@@ -320,6 +320,14 @@ verschiedenen legendären Karten, ein zentrales Glossar (`data/glossary.json`,
 `src/ui/glossary.js`) markiert Fachbegriffe in Kartentexten blau mit
 Hover-/Tap-Erklärung, der pinke Panzer ist 10 % langsamer im Geschosstempo,
 der Grüne (Mörser) hat 1,7 s statt 1,1 s Flug-/Warnzeit.
+**Zuletzt gemergt: Spinnenboss (Akt 3)** — der `t_black`-Platzhalter aus
+Akt 3 ist durch einen vollständigen, eigenständigen Bosstyp `t_spider`
+ersetzt: acht einzeln zerstörbare, animierte Beine, ein normalerweise
+geschützter Körper, drei Kampfphasen (Labyrinth → Labyrinth mit mehr Tempo
+→ stationär mit Bullet-Hell), Spinnenminen (Erweiterung von `mine.js`) und
+Spinnennetze (Erweiterung des Statuseffekt-Systems). Details, Balancewerte,
+gefundene Bugs und die Testabdeckung im eigenen Abschnitt weiter unten
+„Spinnenboss (Akt 3)".
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -6637,6 +6645,279 @@ bauen auf den bestehenden Feldern (`state.necroStacks`/`shield`/`hp`/
   waren nicht in `ASSETS` eingetragen — beide ergänzt, `sw.js` auf `v117`
   gebumpt (+ `telemetry.js: GAME_VERSION` mitgezogen).
 
+### Spinnenboss (Akt 3) — gemergt
+Vollständiger Ersatz des `t_black`-Platzhalters (s. „Bosse (Platzhalter,
+Nutzerentscheidung)" weiter oben) durch einen eigenständigen, datengetriebenen
+Bosstyp `t_spider` mit acht einzeln zerstörbaren Beinen, drei Kampfphasen,
+Spinnenminen und Spinnennetzen. Umgesetzt nach einer 31-Abschnitte-
+Spezifikation samt drei Referenzbildern (Boss/Mine mit acht nummerierten
+Beinen, Spinnennetz).
+
+**Sprite-Ehrlichkeit (Abschnitt 3 der Vorgabe):** die drei gelieferten
+Referenzbilder sind Schachbrett-Hintergrund-JPEGs mit eingebrannten Text-
+Labels ("Bein 1" …) — Spezifikations-Mockups, keine freigestellten
+Transparent-PNGs. Sie wurden bewusst NICHT als Spiel-Sprites importiert (das
+hätte Schachbrettmuster + Beschriftung mit ins Spiel gebracht). Stattdessen
+zeichnet `src/render/spiderrender.js` eine erkennbare **prozedurale**
+Darstellung, die Form/Uhr-Zuordnung/Ausrichtung der Referenzbilder nachbildet
+(acht Beine im Uhr-Schema aus Abschnitt 4, Gelenkpunkt zeigt zur Körpermitte,
+Radialnetz-Optik fürs Spinnennetz). **Es liegen keine echten
+`body_t_spider.png`/`turret_t_spider.png`/`spider_boss_leg_0N.png`/
+`body_spider_mine.png`/`spider_mine_leg_0N.png`/`spider_web.png` in
+`assets/sprites/` — falls echte Grafiken geliefert werden, ist
+`sprites.js: TANK_TYPES` + ein neuer Boss-Sprite-Zweig in
+`spiderrender.js` der Anschlusspunkt (Muster: Champion-Sprite-Nachtrag).**
+
+- **Datenmodell** (`data/tanks.json: types.t_spider`, `player: false`,
+  `spiderBoss: true`, `maxHp: 1800`, `damage`/`fireRate`/… werden pro Phase
+  in `stepSpiderBoss()` überschrieben): neue Geschwindigkeitsstufe
+  `"spider": 48` in der `speeds`-Tabelle. `data/difficulty.json:
+  acts[2].boss` zeigt jetzt auf `"boss_spider"` statt `"boss_phalanx"` —
+  Akt 1/2 (`boss_reactor`/`boss_mirror`, weiterhin `t_black`-Platzhalter)
+  bleiben unangetastet. Neue feste Arena `data/arenas.json: boss_spider`
+  (24×16, ein `E`-Marker → `arenaEnemySpawnCount()` truncated die
+  Unterstützungs-Einkaufsliste automatisch auf 0, der Boss ist der einzige
+  Gegner) mit einem Labyrinth aus vier symmetrischen Wandinseln,
+  durchgehend ≥2 Kacheln breiten Korridoren, keiner Sackgasse — von
+  `validateArenas()` beim Laden mitgeprüft.
+- **`data/balance.json: boss.spider`** ist die zentrale, einzige
+  Zahlenquelle (keine hartkodierten Werte verstreut): `legCount: 8`,
+  `legHp: 150` (8×150=1200 + 1800 Körper = 3000 Gesamt-LP), `legStunS: 3.5`,
+  `legHitRadiusPx: 15`, `legReachPx: 46`, `legJointPx: 15`,
+  `baseSpeedPxS: 48`, `phase2AtHpPct: 0.5`, `phase3ProtectHpPct: 0.3`,
+  `transitionS: 2`, `stationaryPos: {x:384,y:96}`, `pillars` (zwei Zellen,
+  `col:8/row:9` und `col:15/row:9`), `pillarCycleS: 6`/`pillarUpS: 3.6`/
+  `pillarWarnS: 0.45`/`pillarOffsetS: 3`, `phases["1"/"2"/"3"]` (siehe
+  unten), `mine: {spawnS:1.5, spawnDamage:12, spawnRadiusPx:36,
+  activeDamage:34, activeRadiusPx:48, chaseDurationS:12, repathS:0.25}`,
+  `web: {maxHp:20, maxLifeS:10, decayPerS:2, hitRadiusPx:26}`,
+  `bulletHellMaxActive: 48`. Das 50%/1,5s-Netz-Verlangsamungspaar liegt
+  bewusst NICHT hier, sondern in `data/status.json: effects.web`
+  (`speedMult:0.5`, `durationS:1.5`) — dieselbe Datei, die auch Feuer/Frost/
+  Gift trägt, kein zweiter Ort für Statuseffekt-Zahlen.
+- **Phase 1** (`bossDamage:26`, `fireRateS:1.6`, `bulletSpeedPxS:130`,
+  `mineEveryS:9`/`mineCount:1`/`maxMines:2`/`mineChaseSpeedPxS:80`,
+  `webEveryS:8`): Labyrinth, langsame direkte Verfolgung, einzelne klare
+  Schüsse.
+- **Phase 2** (ab 50 % Boss-LP, `bossDamage:30`, `fireRateS:1.1`,
+  `bulletSpeedPxS:145`, `mineEveryS:6.5`/`mineCount:2`/`maxMines:4`/
+  `mineChaseSpeedPxS:90`, `webEveryS:5`): gleiches Labyrinth, gleiches
+  Beintempo, aber häufigere Angriffe — die Mehrschwierigkeit kommt bewusst
+  NICHT aus mehr Bewegungstempo (Abschnitt 8: "Phase 2 erhöht das Tempo
+  nicht künstlich").
+- **Phase 3** (nach allen 8 Beinen, `mineEveryS:9`/`maxMines:3`/
+  `mineChaseSpeedPxS:85`, `webEveryS:7`, `bulletHellDamage:14`,
+  `bulletHellSpeedMinPxS:110`/`bulletHellSpeedMaxPxS:135`, `warnS:0.7`,
+  `waveS:5`, `pauseS:3.5`): stationärer Boss, offener Innenraum, zwei
+  Säulen, rotierender Fünf-Speichen-Geschossfächer im Wellenrhythmus
+  Pause→Warnung→Welle→Pause (Zyklus ~9,2 s) — während der Pause ist der
+  (dauerhaft verwundbare) Körper ein verlässliches, sicheres Schadensfenster.
+- **Acht Beine** (`src/game/spider.js: initSpiderLegs`): Uhr-Zuordnung exakt
+  nach Abschnitt 4 (`JOINT_DEG`/`FOOT_DEG`-Tabellen, 1=1-Uhr…8=11-Uhr,
+  1–4 rechts/5–8 links), die vier oberen Beine (1/2/7/8) zeigen mit der
+  Fußspitze zusätzlich nach außen+oben, 3–6 bleiben rein radial. Jedes Bein
+  ist ein eigenes Objekt auf der Tank-Instanz (`tank.spiderLegs[]`, KEIN
+  Eintrag in `state.tanks` — dieselbe Architekturentscheidung wie bei
+  Geisterpanzern: eine eigene, kleine Trefferschleife
+  (`updateSpiderLegHits`) statt Beine in die generische Panzer-Kollision zu
+  pressen), mit eigener HP/maxHp und eigenem, immer sichtbarem Lebensbalken
+  (`spiderrender.js`).
+- **Gangzyklus** (Abschnitt 5, `updateLegGeometry`): zwei diagonale
+  Gruppen (`GAIT_GROUP_A = {8,6,2,4}`, `GAIT_GROUP_B = {1,3,7,5}`, ~halbe
+  Phasenverschiebung + winzige, deterministische Streuung je Bein aus der
+  Beinnummer). Jedes Bein durchläuft Aufsetzen→Standphase (Fuß bleibt fix
+  auf `groundX/Y`, kein sichtbares Rutschen)→Abheben→Schwung (mit leichter
+  "Anheben"-Andeutung Richtung Körpermitte, top-down-tauglich ohne
+  Z-Achse)→erneutes Aufsetzen. Schrittgeschwindigkeit ist an die
+  TATSÄCHLICHE Bewegung gekoppelt (`Math.hypot(vx,vy)`, nicht an die
+  Zeit), Stillstand/Betäubung/Phase 3 ohne Beine hält die Animation
+  komplett an ("endet in einer natürlichen Ruheposition"). Da kein
+  segmentiertes Sprite vorliegt, wird die Bewegung über den korrekten
+  inneren Drehpunkt (Gelenk bleibt starr am Körper) + versetzte
+  Schwungphasen + plausible Standpositionen dargestellt (Abschnitt 5,
+  expliziter Fallback für genau diesen Fall). Spinnenminen teilen sich
+  dieselbe Uhr-Tabelle (`spiderrender.js: drawSpiderMines`, eine leichte,
+  deterministische "Wiggle"-Bewegung statt des vollen Gangzyklus — eine
+  Mine ist klein genug, dass ein vereinfachter Gang optisch ausreicht).
+- **Geschwindigkeitsformel** (Abschnitt 8, `applySpiderSpeed`): **exakt**
+  `48 × verbleibendeBeine / 8`, jeden Tick neu gesetzt, ohne Übergangs-
+  Tween — 48/42/36/30/24/18/12/6/0 für 8→0 Beine.
+- **Beinschaden/-verlust** (Abschnitt 10, `damageLeg`): ein zerstörtes Bein
+  verschwindet dauerhaft, `applySpiderSpeed()` greift sofort, ein neuer
+  Beinverlust setzt (nicht addiert) das Betäubungsfenster auf volle
+  `legStunS`. Während der Betäubung: keine Bewegung, kein normaler Schuss,
+  keine neuen Minen/Netze (die Timer werden bewusst NICHT dekrementiert —
+  "kein unfaires Aufstauen"), UND der Körper ist genau in diesem Fenster
+  verwundbar. Nach Ablauf ist der Körper wieder geschützt, SOFERN noch
+  mindestens ein Bein lebt.
+- **Körperschutz + 30%-Bodenklammer** (`state.js: applyDamage()`, ein
+  einziges Gatter deckt Kugel/Explosion/Statuseffekt-Tick gleichermaßen ab;
+  `applySpiderFloor()`): der Körper ist geschützt, solange
+  `spiderLegsAlive > 0 && !(spiderVulnerableTimer > 0)`. Eine explizite
+  Ausnahme (`meta.code === 'spider_spawn_mine'`) lässt eine frische
+  Spinnenmine trotzdem durch (Abschnitt 15). Solange noch ein Bein lebt,
+  wird `hp` nach jedem Treffer auf mindestens `maxHp × 0.3` (540)
+  angehoben — reine Phasen-Gating-Logik für GENAU diesen Bosstyp, klemmt
+  nie ein Spieler-Upgrade und ist auf der Lebensleiste als Strich sichtbar
+  (`spiderrender.js`). Phase 2 beginnt strikt bei ≤50 % Boss-LP.
+- **Bewegung** (Abschnitt 9, `stepSpiderBoss`, Muster
+  `stepMirrorBoss`/`stepPhalanxBoss`): verfolgt in Phase 1/2 geradlinig den
+  Hauptpanzer, ignoriert dabei innere Wände komplett (harte Pixel-Klammer
+  nur gegen die Außenwand statt `resolveCircleWalls`) — Spieler/Geister/
+  Champion/Spinnenminen bleiben normal an die Wandkollision gebunden.
+  Feuern läuft weiterhin über die normale `roleTurret()`+`fireBullet()`-
+  Logik (Sichtlinie/Kegel/`accuracy` unverändert), nur Schaden/Feuerrate/
+  Geschosstempo kommen aus dem Phasenprofil.
+- **Phase-3-Übergang** (Abschnitt 21, `beginTransition`/`finishTransition`,
+  ~2 s): alle inneren Wände fallen (`state.setWallSolid()`, neue generische
+  Methode, Muster `tickMovingWalls()`), vorhandene Bossgeschosse/-minen/
+  -netze werden kontrolliert geräumt (keine unvermeidbaren Treffer während
+  des Umbaus), der Boss springt auf `stationaryPos` (384,96), Tempo 0,
+  zwei Säulen werden initialisiert. HP/Kampffortschritt bleiben
+  unangetastet.
+- **Zwei Säulen** (Abschnitt 22, `initPillars`/`updatePillars`): eigene,
+  zeitversetzte Timer (`pillarOffsetS: 3`) auf demselben
+  `setWallSolid()`-Mechanismus wie der Wandabriss — Zyklus ~6 s (3,6 s
+  fest/2,4 s offen), mit 0,45 s Vorwarnfenster (`p.warned`) vor jedem
+  Wechsel. Durch die Staffelung ist praktisch immer mindestens eine offen.
+- **Spinnenminen** (Abschnitt 14–17, NEUES Modul `src/game/spidermine.js`,
+  bewusst KEIN zweites Explosionssystem — baut auf `mine.js: createMine()`/
+  `explodeAt()` auf): zwei Phasen. **Spawnphase** (1,5 s): hängt sichtbar
+  am Boss (`m.x=owner.x/m.y=owner.y` jeden Tick), ist ab Frame 1
+  beschießbar (keine normale Zündverzögerung), kann bei Explosion trotz
+  geschütztem Körper Schaden anrichten (schwacher `spawnDamage:12`,
+  `spawnRadiusPx:36` — verhindert, dass mehrere gleichzeitige Spawnminen
+  das Gleichgewicht kippen), löst NICHT durch reine Berührung des eigenen
+  Besitzers (Boss) oder durch einen eigenen Bossschuss aus. **Aktive
+  Phase**: löst sich vom Boss, verfolgt über ein **gemeinsames
+  Distanzfeld** (s. u.) den Hauptpanzer, `activeDamage:34`/
+  `activeRadiusPx:48`, läuft nach `chaseDurationS:12` automatisch ab (KEIN
+  3-Sekunden-Standard-Minen-Fuse — eine Spinnenmine braucht die längere
+  Zeit, um das Labyrinth wirklich zu durchqueren). Kontakt/Explosion
+  wirken auf Hauptpanzer, Geister UND Champion (`state.
+  damageGhostsInRadius()`, neue Methode, dieselbe Resistenz-/Schildpool-
+  Kette wie die bestehende Geist-Kollisionsschleife) sowie — nur im
+  Spawnphasen-Sonderfall — auf den Bosskörper selbst
+  (`damageSpiderLegsInRadius()` trifft dabei zusätzlich mehrere Beine auf
+  einmal, Abschnitt 26).
+- **Wegfindung** (Abschnitt 17, `spidermine.js: rebuildFlowField`): EIN
+  gemeinsames 4-direktionales BFS-Distanzfeld vom Spieler aus (`Int16Array`
+  über alle 24×16 Zellen), das sich ALLE Spinnenminen gleichzeitig teilen
+  — genau der im Auftrag vorgeschlagene Ansatz. Neu gebaut höchstens alle
+  `repathS` (0,25 s) ODER sofort, wenn der Spieler die Rasterzelle
+  gewechselt hat (`ensureFlowField`). Eine Mine folgt dem Nachbarn mit dem
+  kleinsten Feldwert (Zielzelle = deren Mittelpunkt, keine harten
+  Zellsprünge → sichtbar weiche, leicht diagonale Bewegung), schneidet
+  dadurch nie eine diagonal gesperrte Ecke. Beim Wechsel Spawn→aktiv sucht
+  `nearestFreeCell()` die nächste ERREICHBARE freie Zelle (BFS-Distanz
+  ≥ 0), falls der Boss beim Auslösen zufällig über einer inneren Wand
+  stand — verhindert eine unerreichbare/feststeckende Mine.
+- **Spinnennetze** (Abschnitt 18/19, `spider.js: updateSpiderWebs`, direkt
+  ein Array `state.spiderWebs`, kein neues Rendermodul-übergreifendes
+  System): max. 20 HP, zerfallen mit 2 HP/s, maximale Lebensdauer 10 s.
+  **HP-basierte Zerstörung** (nicht "ein beliebiger Treffer zerstört
+  sofort" — echter Bug, s. u.): ein Treffer von Spieler/Geist/Champion
+  zieht `b.damage` von `w.hp` ab, das Netz verschwindet erst bei `hp<=0`.
+  Bei Berührung durch Hauptpanzer/Geist/Champion verschwindet es SOFORT
+  und trägt den neuen `web`-Statuseffekt auf (50 % Tempo, 1,5 s,
+  `data/status.json`) — nutzt bewusst das bestehende Statuseffekt-System
+  (`state.applyStatus`) statt einer zweiten Verlangsamungs-Mechanik.
+- **Gegner-Geschoss-Deckel + Bullet-Hell-Budget** (Abschnitt 24,
+  `state.js`): das erhöhte Phase-3-Budget (`bulletHellMaxActive: 48`) gilt
+  NUR während `spiderPhase === 3` und nimmt das GRÖSSERE der beiden Werte
+  (normale Räume bleiben unverändert bei `enemyBullet.maxActive`).
+- **Ghosts/Champion greifen bevorzugt Beine an** (Abschnitt 25,
+  `spider.js: spiderAimPoint`, in `ghost.js: updateGhosts()` eingehängt):
+  solange der Körper geschützt ist, zielt ein Untertan auf das nächste
+  lebende Bein statt wirkungslos auf den Körper.
+
+**Fünf echte Bugs gefunden und behoben** (nicht nur behauptet — jeder mit
+bestandener Gegenprobe, s. u.):
+1. **Bein-vs-Körper-Trefferordnung**: `updateSpiderLegHits()` lief
+   ursprünglich NACH der großen, generischen Panzer-Trefferschleife — ein
+   Schuss, der zugleich ein Bein UND den (kleinen) Körper-Kollisionskreis
+   überlappte, wurde dort schon verbraucht (0 Schaden am geschützten
+   Körper, Kugel tot), bevor die Bein-Prüfung ihn je sah. Fix: die
+   Bein-Trefferprüfung läuft jetzt VOR der generischen Schleife
+   (`state.js`).
+2. **`updateBulletHell()` griff auf `state.data.balance.physics
+   .bulletRadius` zu** (existiert nicht — `physics` liegt direkt auf
+   `state.data`, nicht unter `balance`) — hätte das Spiel beim ERSTEN
+   Bullet-Hell-Schuss in Phase 3 mit einer `TypeError` abstürzen lassen.
+   Fix: `state.data.physics.bulletRadius`.
+3. **Gegner-Geschoss-Deckel zählte Geister-/Champion-Geschosse
+   fälschlich als "gegnerisch"** (`owner !== state.player` traf auch auf
+   Geister zu) — Abschnitt 24 hatte das explizit als bekanntes Problem
+   benannt; behoben über `!b.owner.isGhost`.
+4. **Spinnennetze wurden von JEDEM Treffer sofort zerstört**, unabhängig
+   vom Schaden — widersprach den vorgerechneten Beispielen aus Abschnitt
+   18 (ein frisches Netz braucht exakt 2 Treffer à 10 Spielerschaden bzw.
+   3 à 8 Nekromant-Schaden). Fix: `b.damage` wird jetzt von `w.hp`
+   abgezogen, das Netz stirbt erst bei `hp<=0`.
+5. **Geisterpanzer/Champion lasen `statusSpeedMult()` nie** — `tank.js:
+   moveTank()` wendet Statuseffekt-Verlangsamung seit jeher auf echte
+   Panzer an, `ghost.js: updateGhosts()` bewegte Untertanen aber komplett
+   unabhängig davon. Der neue `web`-Status hätte sie dadurch nie
+   tatsächlich verlangsamt, obwohl `updateStatus()` (Phase 5 dieses
+   Auftrags s. o.) sie längst mitzählte. Fix: `updateGhosts()` multipliziert
+   die Bewegung jetzt zusätzlich mit `statusSpeedMult(state, g)`.
+
+**Boss-Erkennung/Sonderfälle**: `t_spider` trägt `cfg.spiderBoss` (neues
+Feld in `resolveCfg()`s Boss-Whitelist), `isBossCfg()` (`cfg.js`) prüft es
+zusätzlich zu `mirrorBoss`/`phalanx`/`bossInvincible` — dadurch greifen
+ALLE bestehenden Boss-Mechanismen automatisch: keine Nekromant-
+Wiederbelebung, keine Exekutionsschwelle/Flankenschaden (Grundsteinumbau
+Phase 2), korrekte Boss-Belohnung (drei garantierte, unterschiedliche
+Legendäre) am Ende von Akt 3. Zusätzlich gefunden und gefixt: **`respawnPlayer()`
+hätte den Spinnenboss bei jedem Spielertod auf seinen ursprünglichen
+Raum-Spawnpunkt zurückgesetzt** (derselbe Fund/Fix wie schon im Ist-Abgleich
+zu Beginn dieser Sitzung dokumentiert) — ein `if (t.cfg.spiderBoss)
+continue;` in der Reset-Schleife verhindert das.
+
+**Tests**: neuer Abschnitt 66 in `tests/regression.mjs` (~18 Prüfblöcke,
+kein Anspruch auf alle 59 einzeln benannten Auftrags-Testfälle, aber eine
+repräsentative, sicherheitskritische Abdeckung): Struktur/Balance-Werte,
+der Bein-vs-Körper-Ordnungsfehler selbst (mit einem bewusst auf 20 px
+vergrößerten Testgeschoss — ein normaler Spielerschuss, 4 px, ist zu klein,
+um das Überlapp-Fenster überhaupt zu erreichen, siehe Kommentar im Test),
+die Geschwindigkeitstabelle 8→4 Beine, das Betäubungsfenster (Erneuern
+statt Addieren), die 30%-Bodenklammer, die Phase-2-Schwelle (kein
+Rückfall), der komplette Weg bis Phase 3 (Position, zwei Säulen,
+Dauerverwundbarkeit, geräumte Minen/Netze), die Säulenstaffelung, der
+Gegner-Geschoss-Deckel-Fix, das erhöhte Bullet-Hell-Budget, Spinnenminen
+(Spawnphase beschießbar/kein Selbstbeschuss/kein Bossschuss-Trigger,
+aktive Phase trifft Spieler+Geist, kein 3s-Fuse — isoliert vom echten
+Kontaktverhalten über ein kurzzeitig als "tot" markiertes `player.alive`),
+Spinnennetze (HP-basierte Zerstörung mit den exakten Beispielrechnungen
+aus Abschnitt 18, Zerfall, maximale Lebensdauer), die 50%/1,5s-
+Verlangsamung für Spieler UND Geist (echte Bewegungsmessung, nicht nur der
+Statuswert), `isBossCfg`, der Respawn-Fix. **Jeder der fünf echten Bugs
+oben wurde per Gegenprobe am Quellcode bestätigt** (Fix temporär
+zurückgenommen, genau der erwartete Check wurde rot, danach wieder
+hergestellt) — inklusive zweier eigener Testfallen dabei gefunden: ein
+erster Testentwurf für den Ordnungsfehler nutzte ein 50-px-Testgeschoss
+(reines Testartefakt, hätte selbst mit intaktem Fix nichts geprüft) und
+wurde auf 20 px korrigiert; ein Bewegungsvergleichstest für die Geist-
+Verlangsamung nutzte anfangs `t_brown` (Rolle `guardian`, bewegt sich als
+geerbter Untertanen-Typ grundsätzlich nie) und wurde auf `t_pink` (Rolle
+`hunter`) korrigiert. Zusätzlich ein eigenständiger Playwright-Smoke im
+ECHTEN Browser (nicht nur Node-Import): baut über die echten, per
+`fetch()` geladenen `data/*.json` einen `boss_spider`-Raum, zerstört ein
+Bein, fügt eine Spinnenmine + ein Spinnennetz hinzu und zeichnet über die
+echten `spiderrender.js`-Funktionen auf einen echten Canvas — keine
+Konsolenfehler, Screenshot bestätigt eine erkennbare Spinnensilhouette
+(Körper + acht Beinstriche) und das Radialnetz-Icon.
+`sw.js` auf `v118` gebumpt (drei neue Dateien `src/game/spider.js`/
+`src/game/spidermine.js`/`src/render/spiderrender.js` in `ASSETS`, +
+`telemetry.js: GAME_VERSION` mitgezogen) — keine neuen Bild-/Audio-Assets
+(reine Prozedural-Darstellung).
+**Nicht empirisch geprüft** (Abschnitt 27 der Vorgabe nennt Zielwerte,
+keine harten Anforderungen): die vorgeschlagene Gesamt-Kampfdauer
+(~3,5–4,5 Minuten für einen durchschnittlichen Build) wurde NICHT über
+einen echten Spieldurchlauf/Bot vermessen — dafür fehlte in dieser Sitzung
+die Zeit. Balance-Werte sind alle zentral in `data/balance.json`, eine
+spätere Justierung braucht keine Code-Änderung.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -6685,6 +6966,16 @@ bauen auf den bestehenden Feldern (`state.necroStacks`/`shield`/`hp`/
       `c_ricochet`/`c_engineer`) borgen sich weiter `player` (`SPRITE_ALIAS`).
       Bei gelieferten Grafiken analog zu `c_frost` & Co. einhängen (in
       `TANK_TYPES` aufnehmen + Alias entfernen).
+- [ ] **Spinnenboss ist komplett prozedural** (kein Sprite-Asset, s. eigener
+      Abschnitt „Spinnenboss (Akt 3)"). Bei echten, freigestellten Grafiken
+      (`body_t_spider.png`/`turret_t_spider.png`/acht Bein-Sprites für Boss
+      UND Mine/`spider_web.png`) `sprites.js: TANK_TYPES` + einen neuen
+      Sprite-Renderpfad in `spiderrender.js` ergänzen, analog zum
+      Champion-Sprite-Nachtrag.
+- [ ] **Spinnenboss-Kampfdauer nicht empirisch gemessen** (Zielwert laut
+      Vorgabe ~3,5–4,5 Min. für einen Durchschnitts-Build) — bei Bedarf
+      einen echten Durchlauf/Bot-Test nachholen und `data/balance.json:
+      boss.spider` danach justieren.
 
 Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 
@@ -6774,6 +7065,19 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `fireMortar`/`updateMortars`. Kein physisches Geschoss (`state.mortars`
   statt `state.bullets`) — Deflektor/Frontpanzerung greifen dadurch
   automatisch nicht. Einschlag über den vorhandenen `mine.js: explodeAt()`.
+- `src/game/spider.js` — Spinnenboss (Akt 3): `stepSpiderBoss`
+  (Bewegung/Phasenlogik, Muster `bossai.js`), `updateSpiderLegHits` (MUSS
+  vor der generischen Panzer-Trefferschleife laufen, s. eigener
+  CLAUDE.md-Abschnitt), `damageSpiderLegsInRadius`, `updateSpiderWebs`
+  (HP-basierte Zerstörung), `spiderAimPoint` (Geister/Champion zielen auf
+  ein Bein statt den geschützten Körper). Exportiert außerdem die
+  Uhr-Winkel-Tabellen (`LEG_SLOTS`/`JOINT_DEG`/`FOOT_DEG`/`deg2rad`) für
+  `spidermine.js` und `spiderrender.js` — eine Quelle statt zwei Kopien.
+- `src/game/spidermine.js` — Spinnenminen, Erweiterung von `mine.js`
+  (`createMine`/`explodeAt` wiederverwendet, kein zweites Explosions-
+  system): `spawnSpiderMine`/`updateSpiderMines`/`detonateSpiderMine`.
+  Eigenes, geteiltes BFS-Distanzfeld vom Spieler aus (`rebuildFlowField`,
+  höchstens alle `repathS` neu bzw. sofort bei Rasterzellenwechsel).
 - `src/game/ai_turrets.js` — `roleTurret()` (Phase 8: eine generische
   Funktion statt sechs benannter). Grundsteinumbau Phase 3: ein zusätzliches
   `minRangePx`-Gate ganz am Ende, nur für `cfg.weapon === 'mortar'`.
@@ -7092,6 +7396,15 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Sprite nicht lädt).
 - Spieler-Glow, Schild-Ring, Ziellinie, Betäubungs-Ring und die
   Unsichtbarkeit des Weißen sind Renderer-Overlays (nicht im Sprite).
+- **Spinnenboss (`t_spider`) ist komplett prozedural** (`src/render/
+  spiderrender.js`, eigenes Modul statt `renderer.js`/`effects.js` weiter
+  wachsen zu lassen) — kein Sprite-Asset. Die drei gelieferten Referenz-
+  bilder (Boss/Mine mit acht nummerierten Beinen, Spinnennetz) sind
+  Schachbrett-Hintergrund-JPEGs mit eingebrannten Text-Labels, keine
+  freigestellten PNGs, und wurden deshalb bewusst NICHT importiert (s.
+  eigener Abschnitt „Spinnenboss (Akt 3)"). `drawTank()` in `renderer.js`
+  überspringt `cfg.spiderBoss`-Panzer explizit ganz am Anfang, damit kein
+  doppelter (generischer + Spinnen-eigener) Körper gezeichnet wird.
 
 ## Mobile / PWA
 - PWA (`manifest.json`), Vollbild im Querformat: `100dvh` + `viewport-fit=cover`,
