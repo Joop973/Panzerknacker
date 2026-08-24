@@ -328,15 +328,19 @@ geschützter Körper, drei Kampfphasen (Labyrinth → Labyrinth mit mehr Tempo
 Spinnennetze (Erweiterung des Statuseffekt-Systems). Details, Balancewerte,
 gefundene Bugs und die Testabdeckung im eigenen Abschnitt weiter unten
 „Spinnenboss (Akt 3)".
-**Zuletzt gemergt: Kinderzimmer-Reskin** (Nutzergrafik, rein optisch) — die
-Arena zeigt jetzt einen ganzflächigen Kinderzimmer-Hintergrund statt der
+Zwischenstand: Kinderzimmer-Reskin** (Nutzergrafik, rein optisch) — die
+Arena zeigte einen ganzflächigen Kinderzimmer-Hintergrund statt der
 gekachelten Bodentextur, normale Wände zeigen 20 verschiedene Bauklotz-
 Varianten, beschädigte/zerstörbare Wände 7 angerissene Varianten, das Loch
 einen Spielzeughaufen. Keine Gameplay-/Kollisions-/Balance-Änderung, alle
 vier gelieferten Referenzbilder mussten erst per PIL/scipy zu den
 tatsächlich benötigten Sprite-Dateien verarbeitet werden (Details im
 eigenen Abschnitt weiter unten „Kinderzimmer-Reskin (Nutzergrafik, rein
-optisch)").
+optisch)"). **Zuletzt gemergt: Hintergrund ausgetauscht** (Nutzergrafik,
+rein optisch) — dieselbe Datei `arena_kinderzimmer_768x512.png` zeigt jetzt
+ein anderes Nutzerbild (Holzboden mit rundem Sternteppich), kein Code
+geändert, nur `sw.js`-Bump. Details im eigenen Abschnitt weiter unten
+„Hintergrund ausgetauscht (Nutzergrafik, rein optisch)".
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -7045,6 +7049,19 @@ Gameplay-Änderung.
   gebumpt (drei neue Dateien in `ASSETS`, `tile_hole.png` bleibt unter
   gleichem Dateinamen, kein Listeneintrag nötig), `telemetry.js:
   GAME_VERSION` mitgezogen.
+
+### Hintergrund ausgetauscht (Nutzergrafik, rein optisch) — gemergt
+Der Nutzer hat ein neues Hintergrundbild geliefert (Holzboden mit rundem
+blauem Teppich + gelbem Stern in der Mitte, bereits exakt 768×512 px) und
+per `assets/sprites/arena_kinderzimmer_768x512.png` **dieselbe Datei**
+ausgetauscht, die seit dem Kinderzimmer-Reskin geladen wird — kein Code
+musste angefasst werden (`sprites.js: SPRITES.arena`, `renderer.js:
+bakeFloorSprite()`, `sw.js: ASSETS` referenzieren weiterhin denselben
+Dateinamen). Wände/Loch-Sprites sind unverändert. `sw.js` auf `v120`
+gebumpt (Asset-Änderung, gleicher Dateiname wird sonst offline nicht neu
+geladen), `telemetry.js: GAME_VERSION` mitgezogen. Playwright-Smoke
+bestätigt: der neue Hintergrund rendert ganzflächig im Spielfeld, keine
+Konsolenfehler.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
