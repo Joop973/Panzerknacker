@@ -16,7 +16,7 @@ const MAX_RUNS = 100;
 // Bei jeder Bedeutungsaenderung der Felder hochzaehlen -- sonst werden
 // spaeter Runs verglichen, die gar nicht vergleichbar sind.
 const SCHEMA_VERSION = 2;
-const GAME_VERSION = 'v120'; // an den sw.js-Cache-Namen gekoppelt halten
+const GAME_VERSION = 'v121'; // an den sw.js-Cache-Namen gekoppelt halten
 
 let current = null; // Sammelpuffer des laufenden Runs (null = keiner aktiv)
 
@@ -111,6 +111,9 @@ export function recordRoom(r) {
     // unveraendert aus state.js/ghost.js/bossai.js. null bei jedem
     // Nicht-Nekromanten-Raum (main.js: teleNecro bleibt dann null).
     necro: r.necro || null,
+    // Amboss-Auftrag (Abschnitt 20): dasselbe Muster wie necro -- Rohzaehler
+    // aus genau EINEM Raum, null bei jedem Nicht-Amboss-Raum.
+    anvil: r.anvil || null,
   });
 }
 
@@ -334,9 +337,52 @@ export function computeMetrics(runs) {
         bossShotsPlayerPct: necroBossTotal ? Math.round((100 * necroBossPlayer) / necroBossTotal) : null,
       }
     : null;
+  // Amboss-Auftrag (Abschnitt 20): ueber ALLE Amboss-Raeume ALLER Runs
+  // aufsummiert -- ein Run kann den Bossraum nach einem Tod mehrfach
+  // betreten, jede dieser Begegnungen liefert einen eigenen room.anvil-Eintrag.
+  let anvilFights = 0, anvilDurationSum = 0, anvilRageSum = 0, anvilMaxRage = 0;
+  let anvilFrenzy = 0, anvilFront = 0, anvilSide = 0, anvilRear = 0;
+  let anvilOuter = 0, anvilInner = 0, anvilRamHits = 0, anvilOverheatDmg = 0;
+  let anvilGhostRage = 0, anvilMaxGap = 0;
+  for (const r of runs) for (const room of r.rooms || []) {
+    const av = room.anvil;
+    if (!av) continue;
+    anvilFights++;
+    anvilDurationSum += av.fightDuration || 0;
+    anvilRageSum += av.averageRage || 0;
+    anvilMaxRage = Math.max(anvilMaxRage, av.maxRage || 0);
+    anvilFrenzy += av.frenzyCount || 0;
+    anvilFront += av.frontHits || 0;
+    anvilSide += av.sideHits || 0;
+    anvilRear += av.rearHits || 0;
+    anvilOuter += av.outerCrashes || 0;
+    anvilInner += av.innerCrashes || 0;
+    anvilRamHits += av.ramHitsPlayer || 0;
+    anvilOverheatDmg += av.damageDuringOverheat || 0;
+    anvilGhostRage += av.ghostRageGenerated || 0;
+    anvilMaxGap = Math.max(anvilMaxGap, av.timeWithoutRageHit || 0);
+  }
+  const anvil = anvilFights
+    ? {
+        fights: anvilFights,
+        avgFightDurationS: Math.round((anvilDurationSum / anvilFights) * 10) / 10,
+        avgRage: Math.round(anvilRageSum / anvilFights),
+        maxRage: anvilMaxRage,
+        frenzyCount: anvilFrenzy,
+        frontHits: anvilFront,
+        sideHits: anvilSide,
+        rearHits: anvilRear,
+        outerCrashes: anvilOuter,
+        innerCrashes: anvilInner,
+        ramHitsPlayer: anvilRamHits,
+        damageDuringOverheat: anvilOverheatDmg,
+        ghostRageGenerated: anvilGhostRage,
+        maxTimeWithoutRageHitS: Math.round(anvilMaxGap * 10) / 10,
+      }
+    : null;
   return {
     runs: n, wins, winRate: Math.round((100 * wins) / n),
-    medianDeathRoom: median, causes, necro,
+    medianDeathRoom: median, causes, necro, anvil,
     damagePerRun: dmgPerRun,
     minFps: minFps === Infinity ? null : minFps,
     neverChosen, mostRejected,
@@ -373,6 +419,16 @@ function refreshSummary() {
         `Opferung ${m.necro.diedByReason.sacrifice}) · Wiederbelebungsquote ${m.necro.reviveQuotePct ?? '–'} % · ` +
         `⌀ Championstaerke ${m.necro.avgChampionStrength ?? '–'} · ` +
         `Bossschuesse auf Spieler ${m.necro.bossShotsPlayerPct ?? '–'} %`
+      : '') +
+    // Amboss-Auftrag (Abschnitt 20): nur bei mindestens einer aufgezeichneten
+    // Amboss-Begegnung ueber alle gespeicherten Runs.
+    (m.anvil
+      ? `<br><b>Amboss</b> ${m.anvil.fights} Begegnungen · ⌀ Dauer ${m.anvil.avgFightDurationS}s ` +
+        `(Ziel 105–150s kontrolliert / 75–110s Raserei) · ⌀ Zorn ${m.anvil.avgRage} · max. Zorn ${m.anvil.maxRage} · ` +
+        `Raserei ${m.anvil.frenzyCount}× · Front/Seite/Heck ${m.anvil.frontHits}/${m.anvil.sideHits}/${m.anvil.rearHits} · ` +
+        `Aussen-/Innencrash ${m.anvil.outerCrashes}/${m.anvil.innerCrashes} · Rammtreffer ${m.anvil.ramHitsPlayer} · ` +
+        `Schaden waehrend Ueberhitzung ${m.anvil.damageDuringOverheat} · Geister-Zorn ${m.anvil.ghostRageGenerated} · ` +
+        `laengste Zorn-Pause ${m.anvil.maxTimeWithoutRageHitS}s`
       : '');
 }
 

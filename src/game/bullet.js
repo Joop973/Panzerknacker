@@ -38,6 +38,7 @@ export function createBullet(
     crit,
     critMultBonus,
     pierce,
+    rageEventId,
   },
 ) {
   return {
@@ -87,6 +88,14 @@ export function createBullet(
     // dass dasselbe Ziel zweimal getroffen wird.
     pierce: pierce || 0,
     pierceHits: null,
+    // Amboss-Auftrag (Zorn-Ereignispaket-System): stabile Kennung, die ALLE
+    // Kugeln DESSELBEN Abzugs teilen (Doppelrohr/Streuschuss/Geistersalve) --
+    // vom Erzeuger einmal pro Abzug vergeben (tank.js: fireBullet(),
+    // ghost.js), null fuer jedes Geschoss, das keinen Schuetzen-Abzug hat
+    // (Schrapnell, Ziellinien-Schattengeschoss). state.js faellt bei einem
+    // fehlenden Wert auf b.id zurueck (jedes Geschoss hat ohnehin eine
+    // eindeutige id).
+    rageEventId: rageEventId || null,
     detonated: false,
     // Aasgeier (state.js: killTank): true = zaehlt nicht mehr gegen das
     // Magazin des Schuetzen, fliegt und toetet aber normal weiter.

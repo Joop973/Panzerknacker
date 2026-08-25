@@ -35,7 +35,7 @@ import {
 import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
 import { applyTypeEffects } from './damagetypes.js';
-import { stepMirrorBoss, stepPhalanxBoss } from './bossai.js';
+import { stepMirrorBoss, stepPhalanxBoss, stepAnvilBoss, showAnvilHint } from './bossai.js';
 import { stepSpiderBoss, updateSpiderLegHits, updateSpiderWebs } from './spider.js';
 import { updateSpiderMines } from './spidermine.js';
 import { circlesOverlap } from './collision.js';
@@ -71,6 +71,7 @@ const DEBRIS_COLORS = {
   t_mirror: '#8fd8ee',
   t_phalanx: '#9aa6b4',
   t_spider: '#8a6ad8',
+  t_anvil: '#c9a03c',
 };
 
 // Nekromant-V2 Phase 2: Schadensresistenz + Schild-Punktepool als
@@ -497,6 +498,15 @@ export function createState(data, tiles, opts) {
     spiderWebs: [],
     spiderFlowField: null,
     spiderPillars: null,
+    // Amboss-Auftrag: bequeme direkte Referenz (Muster wie spiderBoss oben)
+    // -- src/game/anvil.js, mine.js und die Trefferschleife weiter unten
+    // lesen sie, statt jedes Mal state.tanks zu durchsuchen. anvilShockwaves/
+    // anvilTrails sind eigene, von state.mines GETRENNTE Arrays fuer die
+    // beiden ueberdauernden Angriffs-Gefahrenflaechen (Hammerschlag/
+    // Schleifspur, s. src/game/anvil.js).
+    anvilBoss: tanks.find((t) => t.cfg.anvilBoss) || null,
+    anvilShockwaves: [],
+    anvilTrails: [],
     traps: [],
     mortars: [], // Grundsteinumbau Phase 3: fliegende Moerser-Granaten (t_green)
     ghosts: [], // Phase 7: Geisterpanzer (kein Eintrag in tanks -- s. ghost.js)
@@ -863,12 +873,112 @@ export function createState(data, tiles, opts) {
         if (g.hp <= 0) killGhost(state, g);
       }
     },
+    // Amboss-Auftrag (Abschnitt 6, Zorn als Angriffspaket): der ZENTRALE
+    // Zorn-Zugang -- als state-Methode statt als Modulfunktion, damit
+    // mine.js/tank.js/ghost.js/damagetypes.js sie ohne einen weiteren Import
+    // (und ohne Zirkelimport-Risiko) einfach ueber das bereits vorhandene
+    // `state`-Argument aufrufen koennen (Muster wie state.applyDamage/
+    // state.spawnParticles). Kennt NUR `kind` ('direct'/'explosion'/'ghost')
+    // + eine STABILE Ereigniskennung -- kein Aufrufer muss die Zornbetraege
+    // selbst kennen, die stehen ausschliesslich in data/balance.json.
+    //
+    // Dedupe: `processedRageEvents` (ein Set aus "kind:eventId"-Schluesseln)
+    // verhindert, dass dasselbe Angriffspaket (z. B. mehrere Kugeln eines
+    // Doppelrohr-/Streuschuss-Abzugs, die sich EINE rageEventId teilen, oder
+    // eine Kugel UND ihre eigene Explosion) zweimal Zorn ausloest. Bewusst
+    // KEIN Zorn durch Statuseffekt-Ticks/Blitzketten/Kamikaze/Sabotage:
+    // diese Quellen rufen registerAnvilRage() schlicht nie auf (die einzigen
+    // drei Aufrufstellen sind die Haupttrefferschleife, der explosive-
+    // Geschoss-Detonationsblock unten in dieser Datei und mine.js: explode()).
+    //
+    // rageLocked (Raserei + Zusammenbruch, Abschnitt 13/14): Zornaufbau UND
+    // -abbau sind dort VOLLSTAENDIG gesperrt -- ein frueher return hier
+    // deckt das fuer den Aufbau ab, der passive/aktive Abbau in
+    // src/game/anvil.js liest dasselbe Feld.
+    //
+    // Geistersalven-Buendelung (ghostBatchS): mehrere GETRENNTE Salven
+    // (verschiedene eventId, aber innerhalb des Zeitfensters) werden zu
+    // einem gemeinsamen Zornbetrag zusammengefasst -- die zweite und jede
+    // weitere Salve im Fenster dedupt zwar ihre eigene eventId (kein
+    // zweites Auftreten derselben Salve moeglich), traegt aber selbst
+    // keinen zusaetzlichen Zornbetrag bei (Test 19/20).
+    registerAnvilRage(kind, eventId) {
+      const boss = state.anvilBoss;
+      if (!boss || !boss.alive) return;
+      const acfg = state.data.balance?.boss?.anvil;
+      if (!acfg) return;
+      if (boss.rageLocked) return;
+      if (!boss.processedRageEvents) boss.processedRageEvents = new Set();
+      const fullKey = kind + ':' + eventId;
+      if (boss.processedRageEvents.has(fullKey)) return;
+      boss.processedRageEvents.add(fullKey);
+      const amount =
+        kind === 'direct' ? acfg.directRage ?? 0 : kind === 'explosion' ? acfg.explosionRage ?? 0 : kind === 'ghost' ? acfg.ghostVolleyRage ?? 0 : 0;
+      let applied = amount;
+      if (kind === 'ghost') {
+        const withinBatch = boss.lastGhostRageAt != null && state.time - boss.lastGhostRageAt < (acfg.ghostBatchS ?? 0.25);
+        if (withinBatch) applied = 0; // gemeinsamer Beschuss -- schon abgegolten
+        else boss.lastGhostRageAt = state.time;
+      }
+      // Startet die Karenz des passiven Abbaus neu -- gilt fuer JEDES
+      // zornrelevante Ereignis, auch ein in ein Buendel eingereihtes
+      // (Abschnitt 7: "Ein neuer zornrelevanter Angriff startet die Karenz
+      // neu", ohne Einschraenkung auf einzelne, nicht gebuendelte Treffer).
+      boss.lastRageEventAt = state.time;
+      // Telemetrie (Abschnitt 20): laengste Pause zwischen zwei angenommenen
+      // (nicht doppelt gezaehlten) zornrelevanten Ereignissen.
+      if (state.anvilLastRageTrackedAt != null) {
+        state.anvilTimeWithoutRageHit = Math.max(
+          state.anvilTimeWithoutRageHit || 0,
+          state.time - state.anvilLastRageTrackedAt
+        );
+      }
+      state.anvilLastRageTrackedAt = state.time;
+      if (kind === 'ghost' && applied > 0) {
+        state.anvilGhostRageGenerated = (state.anvilGhostRageGenerated || 0) + applied;
+      }
+      if (applied > 0) {
+        boss.rage = Math.min(acfg.rageMax ?? 100, (boss.rage || 0) + applied);
+        // Trefferanzeige (Abschnitt 17): hoechstens EINE pro Angriffspaket --
+        // ergibt sich automatisch, weil applied>0 nur einmal je Paket erreicht
+        // wird (Dedupe oben) bzw. nur einmal je Geistersalven-Buendel.
+        state.texts.push({
+          x: boss.x,
+          y: boss.y - boss.cfg.radius - 20,
+          text: `+${applied} Zorn`,
+          age: 0,
+          life: 0.7,
+          color: '#ff9a4a',
+        });
+      }
+    },
     // Reine Todeslogik -- ab hier ist der Panzer tot, es gibt keine
     // Abwehr mehr. Bewusst weiterhin direkt aufrufbar (Tests raeumen damit
     // Raeume ab), aber im Spielcode ruft sie nur noch applyDamage().
     killTank(tank, cause, meta) {
       if (!tank.alive) return; // doppelter Tod im selben Frame (Kettenreaktion)
       tank.alive = false;
+      // Amboss-Auftrag (Abschnitt 19, Boss-Tod und Aufraeumen): Raserei/
+      // Rammwarnung sind reine Modus-/Timer-Felder auf dem Panzer selbst und
+      // verschwinden automatisch (kein weiterer stepAnvilBoss()-Aufruf mehr,
+      // da die Gegner-Schleife `!t.alive` bereits ueberspringt UND der
+      // Renderer `drawTank()`/die Panzerungs-/Zorn-Overlays bei !t.alive gar
+      // nicht erst zeichnet). Schockwellen und Schleifspuren leben dagegen
+      // in EIGENEN, vom Panzer getrennten Arrays -- die muessen hier explizit
+      // geleert werden, sonst blieben sie als "unsichtbare, aber noch
+      // aktive" Gefahrenflaechen stehen bzw. wuerden ohne einen weiteren
+      // stepAnvilBoss()-Tick nie mehr aufgeraeumt.
+      if (tank.cfg.anvilBoss) {
+        state.anvilShockwaves = [];
+        state.anvilTrails = [];
+        // Telemetrie (Abschnitt 20): Kampfdauer = Zeit seit Raumstart (der
+        // Amboss-Raum enthaelt sonst keine weiteren Gegner, state.time
+        // laeuft seit `createState()` bei 0 los) + durchschnittlicher Zorn
+        // aus der pro Tick gesampelten Summe (anvil.js: stepAnvilBoss()).
+        state.anvilFightDuration = state.time;
+        state.anvilAverageRage =
+          state.anvilRageSampleCount > 0 ? state.anvilRageSampleSum / state.anvilRageSampleCount : 0;
+      }
       // Phase 7b (Abnahmekriterium aus PLAN.md): bis hierher spielte JEDER
       // Tod denselben 'death'-Ton -- ein Gegner-Kill klang identisch zum
       // eigenen Tod. Jetzt zwei klar getrennte Sounds; zusammen mit dem
@@ -1281,6 +1391,13 @@ function respawnPlayer(state) {
     // die Position/Ausrichtung sollen exakt dort bleiben, wo der Kampf
     // gerade steht.
     if (t.cfg.spiderBoss) continue;
+    // Amboss-Auftrag: derselbe Grund wie beim Spinnenboss oben -- ein
+    // Spieler-Respawn mitten im Rammstoss/Hammerschlag/in der Schleifspur
+    // darf den Amboss nicht an seinen Arena-Eingang zurueckreissen (Zorn/
+    // Modus/Timer blieben unveraendert, nur die Position wuerde nicht mehr
+    // dazu passen -- z. B. ein bereits eingefrorener chargeDir, der auf
+    // einmal von einer ganz anderen Stelle aus zeigt).
+    if (t.cfg.anvilBoss) continue;
     t.x = t.spawnX;
     t.y = t.spawnY;
     t.prevX = t.spawnX;
@@ -1520,6 +1637,13 @@ export function stepState(state, cmd, dt) {
       stepSpiderBoss(t, state, dt);
       continue;
     }
+    // Amboss-Auftrag: eigener Zustandsautomat, bypasst DRIVES/updateEnemy()
+    // komplett (Muster wie die drei Boss-Sonderbewegungen oben) -- ruft
+    // NIEMALS fireBullet()/roleTurret() auf (der Amboss feuert nie).
+    if (t.cfg.anvilBoss) {
+      stepAnvilBoss(t, state, dt);
+      continue;
+    }
     const { move, fire, mine } = updateEnemy(t, state, dt);
     // Gefahrensinn-Upgrade (Phase 18, Welle 3): reine Anzeige-Markierung.
     // Nutzt die Feuerfreigabe, die die KI ohnehin schon berechnet hat --
@@ -1598,6 +1722,21 @@ export function stepState(state, cmd, dt) {
       // stehende) Ziel im naechsten Tick ein zweites Mal trifft.
       if (b.pierceHits?.has(t)) continue;
       if (circlesOverlap(b.x, b.y, b.radius, t.x, t.y, t.cfg.radius)) {
+        // Amboss-Auftrag (Abschnitt 6): JEDER Kontakt eines Spieler- oder
+        // Geisterschusses mit dem Amboss ist ein zornrelevantes Ereignis --
+        // AUCH ein Fronttreffer, der gleich darauf komplett abgeprallt wird
+        // (armorBlocks() lauft erst weiter unten). Explosive Geschosse
+        // werden hier bewusst uebersprungen: ihr Kontakt UND ihre Explosion
+        // zaehlen zusammen als EIN Paket (+11, nicht +7 plus +11) -- die
+        // Registrierung passiert dafuer ausschliesslich im explosiven
+        // Detonationsblock weiter unten in dieser Funktion.
+        if (t.cfg.anvilBoss && !b.explosive) {
+          if (b.owner === state.player) {
+            state.registerAnvilRage('direct', 'shot:' + (b.rageEventId ?? b.id));
+          } else if (b.owner?.isGhost) {
+            state.registerAnvilRage('ghost', 'gshot:' + (b.rageEventId ?? b.id));
+          }
+        }
         // Sekundärslot "Deflektor" (Phase 6): reflektiert den naechsten
         // Treffer in Blickrichtung.
         if (t === state.player && t.deflectorCharges > 0 && b.owner !== t) {
@@ -1608,6 +1747,14 @@ export function stepState(state, cmd, dt) {
         // Gerichtete Panzerung (Phase 4): Frontsektor faengt den Treffer ab
         // -- reflects wirft die Kugel zurueck (E3).
         if (armorBlocks(t, b)) {
+          // Amboss-Auftrag (Abschnitt 18/20): erster geblockter Fronttreffer
+          // zeigt den Lernhinweis + zaehlt fuer die Telemetrie -- der
+          // eigentliche Zornzuwachs ist oben schon (vor diesem Block)
+          // registriert worden, unabhaengig davon, ob er gleich abgeblockt wird.
+          if (t.cfg.anvilBoss) {
+            state.anvilFrontHits = (state.anvilFrontHits || 0) + 1;
+            showAnvilHint(state, 'anvilHintFront', 'Fronttreffer heizen den Amboss auf.');
+          }
           if (t.cfg.armor?.reflects) reflectBullet(b, t, state);
           else b.dead = true;
           break;
@@ -1658,9 +1805,18 @@ export function stepState(state, cmd, dt) {
         // den entfernten Bandenschuss): nur gegen normale Gegner + Elites
         // (Entscheidung C -- Bosse behalten ihre eigene Panzerungslogik, der
         // Spieler ist selbst nie Ziel dieser Mechanik). front = 1x.
+        // Amboss-Auftrag: `flankable` schaltet den sonst fuer Bosse
+        // ausgeschlossenen Flanken-/Heckschaden GEZIELT wieder ein (t_anvil
+        // ist der erste und bislang einzige Nutzer). Front bleibt weiterhin
+        // die 140-Grad-Frontpanzerung -- nur Treffer AUSSERHALB dieses
+        // Sektors erreichen ueberhaupt applyDamage() (armorBlocks() haelt
+        // Fronttreffer schon vorher an), flankZone() klassifiziert sie dann
+        // wie bei jedem normalen Gegner in Front/Seite/Heck.
         const flankCfg = state.data.balance.flank;
         const flankZoneHit =
-          flankCfg && t !== state.player && !isBossCfg(t.cfg) ? flankZone(t, b.x, b.y, flankCfg) : 'front';
+          flankCfg && t !== state.player && (!isBossCfg(t.cfg) || t.cfg.flankable)
+            ? flankZone(t, b.x, b.y, flankCfg)
+            : 'front';
         const baseFlankMult =
           flankZoneHit === 'rear' ? flankCfg.rearMult : flankZoneHit === 'side' ? flankCfg.sideMult : 1;
         // ghost_010 "Jenseitsziel" (Nekromant-V2 Phase 6): zusaetzlicher
@@ -1754,6 +1910,18 @@ export function stepState(state, cmd, dt) {
             champion.hp -= dmg;
             if (champion.hp <= 0) killGhost(state, champion);
           }
+        }
+        // Amboss-Auftrag (Abschnitt 20, Telemetrie): Seiten-/Heck-Treffer +
+        // Schaden waehrend des Zusammenbruchs. Ein hier gezaehlter 'front'
+        // kommt nur waehrend des Zusammenbruchs vor (armorBlocks() haelt
+        // Fronttreffer sonst schon vorher an, s. o.) -- flankZoneHit klemmt
+        // deshalb bewusst NICHT auf 'front' zurueck, sondern spiegelt genau
+        // diesen Fall.
+        if (t.cfg.anvilBoss) {
+          if (flankZoneHit === 'rear') state.anvilRearHits = (state.anvilRearHits || 0) + 1;
+          else if (flankZoneHit === 'side') state.anvilSideHits = (state.anvilSideHits || 0) + 1;
+          else state.anvilFrontHits = (state.anvilFrontHits || 0) + 1;
+          if (t.mode === 'overheated') state.anvilDamageDuringOverheat = (state.anvilDamageDuringOverheat || 0) + schaden;
         }
         state.applyDamage(t, schaden, cause, trefferMeta);
         // Telemetrie (Phase 2): Treffer auf Panzer, nicht Waende.
@@ -1983,6 +2151,18 @@ export function stepState(state, cmd, dt) {
         enemyType: own ? null : b.owner?.type || null,
         killer: b.owner, // Kill-Zuordnung (Phase 6)
       }, explDmg);
+      // Amboss-Auftrag (Abschnitt 6): eine explosive Kugel UND ihre
+      // Explosion sind EIN Angriffspaket -- 'shot:' + dieselbe rageEventId,
+      // die ein evtl. direkter Kontakt oben in der Trefferschleife bewusst
+      // NICHT registriert hat (b.explosive schliesst dort aus). Nur, wenn
+      // der Amboss ueberhaupt im Explosionsradius liegt, wie bei Mine/
+      // Direkttreffer auch.
+      if ((own || b.owner?.isGhost) && state.anvilBoss?.alive) {
+        const ab = state.anvilBoss;
+        if (circlesOverlap(b.x, b.y, b.explosionRadius, ab.x, ab.y, ab.cfg.radius)) {
+          state.registerAnvilRage('explosion', 'shot:' + (b.rageEventId ?? b.id));
+        }
+      }
       // Schrapnell: Splitterkugeln in alle Richtungen.
       const n = b.owner?.cfg?.schrapnell;
       if (n && b.owner.alive) spawnRadialBullets(state, b.owner, b.x, b.y, n);

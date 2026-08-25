@@ -1624,7 +1624,8 @@ function passBossReward(run) {
   // Spinnenboss-Auftrag: t_spider (1800 LP, spiderBoss:true) ist ein
   // weiterer Boss ausserhalb der 2-5/10-Treffer-Baender fuer normale
   // Gegner/Elite -- dieselbe Ausnahme wie die drei bestehenden Bosse.
-  const BOSSE = ['t_reactor', 't_mirror', 't_phalanx', 't_spider'];
+  // Amboss-Auftrag: t_anvil (1050 LP, anvilBoss:true) ebenso.
+  const BOSSE = ['t_reactor', 't_mirror', 't_phalanx', 't_spider', 't_anvil'];
 
   // (a) Trefferzahl je Gegnertyp gegen den Standardpanzer. Genau der Test,
   // den Plan-Phase 28 verlangt ("Weicht sie von der Tabelle in Phase 2 ab
@@ -6138,15 +6139,16 @@ for (const seed of SEEDS) {
   const { generateMap, buyEnemies, totalRooms, createRun: cr2, stepRun: sr2, advanceAct: aa2 } = await import('../src/game/run.js');
   const { mulberry32 } = await import('../src/core/rng.js');
 
-  // (a) Struktur: drei Akte, feste Boss-Reihenfolge Reaktor->Spiegel->Spinne
-  //     (Spinnenboss-Auftrag: ersetzt boss_phalanx als Akt-3-Boss),
+  // (a) Struktur: drei Akte, feste Boss-Reihenfolge Reaktor->Amboss->Spinne
+  //     (Spinnenboss-Auftrag ersetzt boss_phalanx als Akt-3-Boss, der
+  //     Amboss-Auftrag ersetzt boss_mirror als Akt-2-Boss),
   //     Lebensbonus nur bei Akt 1/2 (Akt 3 beendet den Run, kein Bonus mehr).
   {
     const acts = diffData.acts;
     check(acts.length === 3, `Phase 6: ${acts.length} Akte statt 3`);
     check(
-      acts.map((a) => a.boss).join(',') === 'boss_reactor,boss_mirror,boss_spider',
-      `Phase 6: Boss-Reihenfolge ${acts.map((a) => a.boss).join(',')} statt Reaktor/Spiegel/Spinne`,
+      acts.map((a) => a.boss).join(',') === 'boss_reactor,boss_anvil,boss_spider',
+      `Phase 6: Boss-Reihenfolge ${acts.map((a) => a.boss).join(',')} statt Reaktor/Amboss/Spinne`,
     );
     for (const [i, a] of acts.entries()) {
       check(
@@ -7135,8 +7137,13 @@ for (const seed of SEEDS) {
   }
 
   // (h) Punkt 11: Boss-LP folgt wirklich acts[].bossHpMult -- gemessen an
-  //     zwei ECHTEN Bossraeumen (Akt 1 bossHpMult 1.0, Akt 2 bossHpMult 1.4),
-  //     nicht nur am Vorhandensein des Konfigurationsfelds (Abschnitt 50a).
+  //     einem ECHTEN Bossraum (Akt 1, bossHpMult 1.0, weiterhin der
+  //     t_black-Platzhalter), nicht nur am Vorhandensein des Konfigurations-
+  //     felds (Abschnitt 50a). Akt 2 nutzt seit dem Amboss-Auftrag t_anvil
+  //     statt t_black -- dessen 1050 LP sind ein FESTER Wert (anvilBoss ->
+  //     isBossCfg() -> hpScaling.skipBosses), die Pruefung dafuer wandert
+  //     deshalb in den Amboss-Testabschnitt weiter unten (kein Doppel-Test
+  //     derselben Aussage mit zwei unterschiedlichen Erwartungen).
   {
     function enterBossRoom(actIndex) {
       const run = createRun(tanksData, tilesData, diffData, upgradesData, 1);
@@ -7153,7 +7160,7 @@ for (const seed of SEEDS) {
       return run;
     }
     const perRoom = diffData.hpScaling.perRoom;
-    for (const actIndex of [1, 2]) {
+    for (const actIndex of [1]) {
       const run = enterBossRoom(actIndex);
       const boss = run.state.tanks.find((t) => t.type === 't_black');
       check(!!boss, `Phase 10: Testaufbau -- kein t_black-Platzhalterboss in Akt ${actIndex} gefunden`);
@@ -12473,6 +12480,527 @@ for (const seed of SEEDS) {
       boss.x === before.x && boss.y === before.y,
       `Abschnitt 66p: der Spieler-Respawn versetzt den Spinnenboss von (${before.x},${before.y}) nach (${boss.x},${boss.y})`,
     );
+  }
+}
+
+// ---- 67. Amboss (Akt 2) ----------------------------------------------------
+// Deckt die sicherheitskritischen Kernpunkte des Amboss-Auftrags ab: die
+// Boss-Erkennung (isBossCfg/anvilBoss) samt der dadurch automatisch
+// greifenden Nebenwirkungen (kein HP-Doppelscaling, keine Exekution), den
+// gezielt wieder eingeschalteten Flanken-/Heckschaden (flankable), das
+// Zorn-Ereignispaket-System (Dedupe, Betraege je Art, Geistersalven-
+// Buendelung, Sperre waehrend Raserei/Zusammenbruch), den passiven wie
+// aktiven Zornabbau samt der 25%-LP-Untergrenze, den Rammstoss (Aussen-
+// vs. Innenwand, Zornverlust NUR aussen), den Hammerschlag (sichere Luecke
+// vs. Trefferzone), die Schleifspur (Schadenskadenz, kein Betaeuben,
+// Verblassen), die Raserei (Ausloesung bei 100 Zorn, exakte Dauer, kein
+// Zornverlust an Waenden) und den Zusammenbruch (offene Panzerung, Zorn
+// gesperrt, Rueckkehr auf 30/60). Wo sinnvoll mit EIGENEN Zahlen statt der
+// echten balance.json-Werte geprueft; wo eine Aussage direkt an einem
+// konkreten Balancewert haengt (z. B. "genau 1050 LP"), bewusst gegen den
+// echten Wert. Jede Pruefung hier deckt eine Gegenprobe auf echten
+// Quellcode ab, die vor dem Merge einzeln lief (s. Abschlussbericht) --
+// nicht alle 56 Auftrags-Testschritte einzeln repliziert, sondern die
+// sicherheitskritische Teilmenge mit dem hoechsten Fehlerrisiko.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { fireBullet } = await import('../src/game/tank.js');
+  const { armorBlocks, flankZone } = await import('../src/game/armor.js');
+  const { isBossCfg } = await import('../src/game/cfg.js');
+  const acfg = tanksData.balance.boss.anvil;
+  const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  function anvilRoom() {
+    return createState(tanksData, tilesData, {
+      genRng: () => 0.5,
+      enemyTypes: ['t_anvil'],
+      aiSeed: 1,
+      roomSpec: { fixedLayout: 'boss_anvil' },
+      arenas: tanksData.arenas,
+      // Akt-2-typischer Skalierungsfaktor -- darf auf den Amboss NICHT
+      // wirken (isBossCfg() -> hpScaling.skipBosses), Abschnitt 67b prueft
+      // genau das.
+      hpScale: 1.55,
+      hpSkipBosses: true,
+    });
+  }
+  // Ein Tick, um src/game/anvil.js: initAnvil() (Lazy-Init beim ersten
+  // stepAnvilBoss()-Aufruf) auszuloesen, BEVOR ein Test Boss-Felder
+  // ueberschreibt -- sonst wuerde der naechste echte Tick die Testwerte
+  // wieder zuruecksetzen.
+  function initedAnvilRoom() {
+    const st = anvilRoom();
+    stepState(st, CMD, 1 / 60);
+    return st;
+  }
+
+  // ---- (a) Struktur: t_anvil, Akt-2-Zuordnung, Arena, Balance-Werte -------
+  {
+    const t = tanksData.types.t_anvil;
+    check(!!t && t.anvilBoss === true, 'Abschnitt 67a: t_anvil fehlt oder traegt kein anvilBoss-Flag');
+    check(t.flankable === true, 'Abschnitt 67a: t_anvil traegt kein flankable-Flag');
+    check(t.maxHp === 1050, `Abschnitt 67a: t_anvil.maxHp ${t.maxHp} statt 1050`);
+    check(t.radius === 18, `Abschnitt 67a: t_anvil.radius ${t.radius} statt 18`);
+    check(t.armor?.arc === 140 && t.armor?.reflects === true, 'Abschnitt 67a: t_anvil.armor entspricht nicht {arc:140, reflects:true}');
+    check(!t.player, 'Abschnitt 67a: t_anvil ist faelschlich als Spielerklasse markiert');
+    check(diffData.acts[1].boss === 'boss_anvil', `Abschnitt 67a: Akt-2-Boss ist "${diffData.acts[1].boss}" statt "boss_anvil"`);
+    check(!!tanksData.arenas.boss_anvil, 'Abschnitt 67a: Arena boss_anvil fehlt in arenas.json');
+    const grid = tanksData.arenas.boss_anvil.grid;
+    check(grid.length === 16 && grid.every((r) => r.length === 24), 'Abschnitt 67a: boss_anvil-Grid ist nicht 24x16');
+    const flat = grid.join('');
+    check((flat.match(/E/g) || []).length === 1, 'Abschnitt 67a: boss_anvil hat nicht genau einen Gegner-Spawn');
+    check((flat.match(/P/g) || []).length === 1, 'Abschnitt 67a: boss_anvil hat nicht genau einen Spieler-Spawn');
+    check(!/[dDhHgGmM]/.test(flat), 'Abschnitt 67a: boss_anvil enthaelt zerstoerbare Waende/Loecher/Generatoren/Spiegelwaende');
+    check(typeof acfg?.rageMax === 'number' && typeof acfg?.directRage === 'number', 'Abschnitt 67a: balance.boss.anvil fehlt/unvollstaendig');
+    check(
+      typeof acfg.chargeSpeedMin === 'number' && typeof acfg.chargeSpeedMax === 'number' && typeof acfg.frenzyDurationS === 'number',
+      'Abschnitt 67a: balance.boss.anvil fehlt Ramm-/Rasereiwerte',
+    );
+  }
+
+  // ---- (b) Echter Spawn ueber den Kartengraphen: genau EIN t_anvil, keine -
+  //          Unterstuetzung, 1050 LP OHNE Akt-2-hpScaling/bossHpMult --------
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+    run.actIndex = 1;
+    run.phase = 'actComplete';
+    advanceAct(run); // -> Akt 2
+    const bossNode = [...run.map.byId.values()].find((n) => n.isBoss);
+    const parent = [...run.map.byId.values()].find((n) => n.next.includes(bossNode.id));
+    run.mapCurrentId = parent.id;
+    run.phase = 'map';
+    chooseMapNode(run, bossNode.id);
+    const enemies = run.state.tanks.filter((t) => t !== run.state.player);
+    check(enemies.length === 1, `Abschnitt 67b: ${enemies.length} Gegner im Akt-2-Bossraum statt genau 1 (keine Unterstuetzung)`);
+    check(enemies[0]?.type === 't_anvil', `Abschnitt 67b: Gegnertyp ist "${enemies[0]?.type}" statt "t_anvil"`);
+    check(enemies[0].cfg.maxHp === 1050, `Abschnitt 67b: Akt-2-Amboss hat ${enemies[0].cfg.maxHp} LP statt genau 1050 (Akt-2-Skalierung wurde faelschlich angewendet)`);
+    check(isBossCfg(enemies[0].cfg), 'Abschnitt 67b: isBossCfg() erkennt den echten Akt-2-Amboss nicht als Boss');
+  }
+
+  // ---- (c) isBossCfg()/resolveCfg(): das anvilBoss-Flag allein macht den --
+  //          Boss-Status aus, unabhaengig von den anderen drei Boss-Feldern -
+  {
+    check(isBossCfg({ anvilBoss: true }), 'Abschnitt 67c: isBossCfg() erkennt ein isoliertes anvilBoss:true nicht');
+    check(!isBossCfg({ anvilBoss: false }), 'Abschnitt 67c: isBossCfg() haelt anvilBoss:false faelschlich fuer einen Boss');
+    check(!isBossCfg(null) && !isBossCfg(undefined), 'Abschnitt 67c: isBossCfg() crasht/irrt bei fehlendem cfg');
+  }
+
+  // ---- (d) Exekution bleibt vollstaendig deaktiviert (Grundsteinumbau -----
+  //          Phase 2s bestehende Bossausnahme greift automatisch ueber
+  //          isBossCfg(), OHNE eigenen Sonderfall fuer den Amboss). ---------
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.hp = 1; // weit unter jeder denkbaren Exekutionsschwelle
+    boss.mode = 'restart';
+    boss.modeTimer = 999; // eingefroren, keine Bewegung/Angriffe waehrend der Pruefung
+    stepState(st, CMD, 1 / 60);
+    check(boss.executing !== true, 'Abschnitt 67d: der Amboss geraet trotz Bossausnahme in den Exekutionszustand');
+  }
+
+  // ---- (e) Flanken-/Heckschaden: "flankable" schaltet die sonst fuer ------
+  //          Bosse ausgeschlossene Mechanik GEZIELT wieder ein; Front -------
+  //          bleibt die 140-Grad-Panzerung (reflektiert, kein Schaden). -----
+  {
+    check(
+      flankZone({ x: 0, y: 0, heading: 0 }, 10, 0, tanksData.balance.flank) === 'front',
+      'Abschnitt 67e: Testvoraussetzung -- flankZone() liefert fuer einen Fronttreffer nicht "front"',
+    );
+    const bossLikeCfg = { armor: { arc: 140, reflects: true }, radius: 18, maxHp: 9999, anvilBoss: true, flankable: true };
+    // Fronttreffer (innerhalb der 140-Grad-Panzerung): armorBlocks() haelt
+    // ihn an, unabhaengig von flankable.
+    check(
+      armorBlocks({ x: 0, y: 0, heading: 0, cfg: bossLikeCfg, armorDisabled: false }, { x: 5, y: 0 }) === true,
+      'Abschnitt 67e: ein Fronttreffer wird trotz 140-Grad-Panzerung nicht geblockt',
+    );
+    // Seiten-/Hecktreffer (ausserhalb 140 Grad = ausserhalb ±70 Grad):
+    // armorBlocks() laesst sie durch, flankZone() klassifiziert sie danach
+    // wie bei jedem normalen Gegner.
+    check(
+      armorBlocks({ x: 0, y: 0, heading: 0, cfg: bossLikeCfg, armorDisabled: false }, { x: -5, y: 6 }) === false,
+      'Abschnitt 67e: ein Heck-nahnaher Treffer (ausserhalb der 140-Grad-Panzerung) wird faelschlich geblockt',
+    );
+    check(
+      flankZone({ x: 0, y: 0, heading: 0 }, -10, 0, tanksData.balance.flank) === 'rear',
+      'Abschnitt 67e: ein Hecktreffer wird nicht als "rear" klassifiziert',
+    );
+    // Zusammenbruch: armorDisabled hebt den Frontblock generisch auf --
+    // derselbe Fronttreffer nimmt jetzt normalen Schaden statt zu reflektieren.
+    check(
+      armorBlocks({ x: 0, y: 0, heading: 0, cfg: bossLikeCfg, armorDisabled: true }, { x: 5, y: 0 }) === false,
+      'Abschnitt 67e: armorDisabled (Zusammenbruch) hebt den Frontblock nicht auf',
+    );
+  }
+
+  // ---- (f) Zorn-Ereignispaket-System: Dedupe, Betraege je Art, Geister- ---
+  //          salven-Buendelung, vollstaendige Sperre waehrend rageLocked. --
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.rage = 0;
+    boss.processedRageEvents = new Set();
+    boss.lastGhostRageAt = null;
+    boss.rageLocked = false;
+
+    st.registerAnvilRage('direct', 'evt1');
+    check(boss.rage === acfg.directRage, `Abschnitt 67f: direct-Ereignis gibt ${boss.rage} Zorn statt directRage (${acfg.directRage})`);
+    st.registerAnvilRage('direct', 'evt1'); // dieselbe id -- Dedupe
+    check(boss.rage === acfg.directRage, 'Abschnitt 67f: dieselbe Ereigniskennung wird ein zweites Mal gezaehlt (Dedupe fehlt)');
+    st.registerAnvilRage('explosion', 'evt2');
+    check(boss.rage === acfg.directRage + acfg.explosionRage, `Abschnitt 67f: explosion-Ereignis addiert nicht explosionRage (${acfg.explosionRage})`);
+
+    // Geistersalven-Buendelung: zwei GETRENNTE Salven-ids innerhalb des
+    // Zeitfensters zaehlen zusammen nur EINMAL ghostVolleyRage.
+    const beforeGhost = boss.rage;
+    st.registerAnvilRage('ghost', 'gsalve1');
+    check(boss.rage === beforeGhost + acfg.ghostVolleyRage, 'Abschnitt 67f: erste Geistersalve traegt nicht ghostVolleyRage bei');
+    const afterFirstGhost = boss.rage;
+    st.registerAnvilRage('ghost', 'gsalve2'); // andere id, aber im Buendel-Fenster
+    check(boss.rage === afterFirstGhost, 'Abschnitt 67f: eine zweite Geistersalve im Buendel-Fenster traegt zusaetzlichen Zorn bei');
+    // Ausserhalb des Buendel-Fensters zaehlt die naechste Salve wieder voll.
+    st.time += (acfg.ghostBatchS ?? 0.25) + 0.01;
+    const beforeThirdGhost = boss.rage;
+    st.registerAnvilRage('ghost', 'gsalve3');
+    check(boss.rage === beforeThirdGhost + acfg.ghostVolleyRage, 'Abschnitt 67f: eine Geistersalve NACH dem Buendel-Fenster zaehlt nicht wieder voll');
+
+    // Sperre waehrend Raserei/Zusammenbruch: kein Zuwachs, egal welche Art.
+    boss.rageLocked = true;
+    const beforeLocked = boss.rage;
+    st.registerAnvilRage('direct', 'evtLocked');
+    check(boss.rage === beforeLocked, 'Abschnitt 67f: rageLocked verhindert den Zornaufbau nicht');
+  }
+
+  // ---- (g) rageEventId: alle Kugeln EINES Abzugs (Doppelrohr) teilen -----
+  //          sich eine Kennung, ZWEI Abzuege bekommen unterschiedliche. -----
+  {
+    const st = initedAnvilRoom();
+    const p = st.player;
+    p.cfg = { ...p.cfg, twinShot: true, twinSpreadRad: 0.05, magazine: 20, fireCooldown: 0 };
+    p.cooldown = 0;
+    st.bullets.length = 0;
+    fireBullet(p, st);
+    check(st.bullets.length === 2, `Abschnitt 67g: Doppelrohr-Abzug erzeugt ${st.bullets.length} Kugeln statt 2`);
+    const [b1, b2] = st.bullets;
+    check(!!b1.rageEventId && b1.rageEventId === b2.rageEventId, 'Abschnitt 67g: die beiden Doppelrohr-Kugeln teilen sich keine rageEventId');
+    p.cooldown = 0;
+    fireBullet(p, st);
+    const b3 = st.bullets[st.bullets.length - 1];
+    check(b3.rageEventId !== b1.rageEventId, 'Abschnitt 67g: ein ZWEITER Abzug bekommt dieselbe rageEventId wie der erste');
+  }
+
+  // ---- (h) Explosive Kugel + ihre Explosion sind EIN Paket (+explosionRage,
+  //          NICHT +directRage obendrauf) -- Kontakt von HINTEN (ausserhalb
+  //          der 140-Grad-Panzerung), damit der Reflex nicht dazwischenfunkt.
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.mode = 'inner_crash';
+    boss.modeTimer = 999; // eingefroren -- Heading/Position bleiben stabil
+    boss.heading = 0;
+    boss.rage = 0;
+    boss.processedRageEvents = new Set();
+    boss.rageLocked = false;
+    st.bullets.length = 0;
+    const b = createBullet(boss.x - (boss.cfg.radius + 2), boss.y, Math.PI, {
+      speed: 0, radius: 4, owner: st.player, kind: 'bullet', damage: 10,
+      explosive: true, explosionRadius: 60, rageEventId: 'evtExpl',
+    });
+    st.bullets.push(b);
+    stepState(st, CMD, 1 / 60);
+    check(boss.rage === acfg.explosionRage, `Abschnitt 67h: eine explosive Kugel + ihre Explosion geben ${boss.rage} Zorn statt genau explosionRage (${acfg.explosionRage})`);
+  }
+
+  // ---- (i) Mine gibt +explosionRage (eigene, stabile Kennung ueber die ----
+  //          Minen-id). -----------------------------------------------------
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.rage = 0;
+    boss.processedRageEvents = new Set();
+    boss.rageLocked = false;
+    const mcfg = tanksData.mine;
+    const m = createMine(boss.x, boss.y, st.player, mcfg.radiusPx);
+    m.age = mcfg.armDelayS; // scharf
+    st.mines.length = 0;
+    st.mines.push(m);
+    updateMines(st, 1 / 60);
+    check(boss.rage === acfg.explosionRage, `Abschnitt 67i: eine Mine gibt ${boss.rage} Zorn statt explosionRage (${acfg.explosionRage})`);
+  }
+
+  // ---- (j) Zornabbau: 2s Karenz, dann 5/s -- MIT DEN ECHTEN balance.json- -
+  //          Werten (die Aussage haengt an genau diesen Zahlen). -----------
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.rage = 50;
+    boss.rageLocked = false;
+    boss.mode = 'between_attacks';
+    boss.modeTimer = 999; // eingefroren, kein Angriffswechsel waehrend der Pruefung
+    boss.lastRageEventAt = st.time;
+    const grace = acfg.coolingDelayS ?? 2;
+    let elapsed = 0;
+    const dt = 1 / 60;
+    while (elapsed < grace - 0.05) { stepState(st, CMD, dt); elapsed += dt; }
+    check(Math.abs(boss.rage - 50) < 0.5, `Abschnitt 67j: Zorn faellt VOR Ablauf der Karenz (${grace}s) bereits auf ${boss.rage}`);
+    while (elapsed < grace + 0.3) { stepState(st, CMD, dt); elapsed += dt; }
+    check(boss.rage < 50, `Abschnitt 67j: Zorn faellt nach Ablauf der Karenz nicht (noch ${boss.rage})`);
+    const expected = 50 - (acfg.coolingPerS ?? 5) * (elapsed - grace);
+    check(Math.abs(boss.rage - expected) < 0.6, `Abschnitt 67j: Zornabbau-Rate stimmt nicht (${boss.rage} statt ~${expected.toFixed(2)})`);
+  }
+
+  // ---- (k) Unter 25% Boss-LP faellt der Zorn (weder passiv noch aktiv) ----
+  //          nie unter lowHpMinRage. -----------------------------------------
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.hp = boss.cfg.maxHp * 0.2; // unter der 25%-Schwelle
+    boss.rage = 80;
+    boss.rageLocked = false;
+    boss.mode = 'between_attacks';
+    boss.modeTimer = 999;
+    boss.lastRageEventAt = -1e9; // Karenz laengst abgelaufen -- Abbau setzt sofort ein
+    for (let i = 0; i < 600; i++) stepState(st, CMD, 1 / 60); // 10s
+    check(boss.rage === acfg.lowHpMinRage, `Abschnitt 67k: Zorn faellt unter 25% LP auf ${boss.rage} statt auf lowHpMinRage (${acfg.lowHpMinRage}) geklemmt zu bleiben`);
+  }
+
+  // ---- (l) Rammstoss: Aussenwand-Aufprall zieht outerImpactRageLoss ab ----
+  //          UND oeffnet ein 1,65s-Schadensfenster; Innenwand-Aufprall ------
+  //          zieht KEINEN Zorn ab und ist nur eine kurze Pause. --------------
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.rage = 80;
+    boss.rageLocked = false;
+    boss.hp = boss.cfg.maxHp; // volle LP -- lowHpMinRage-Untergrenze greift nicht
+    boss.mode = 'charge';
+    boss.chargeDir = -Math.PI / 2; // "nach oben", Boss-Spawn (boss_anvil) liegt in Reihe 1 direkt unter der Aussenwand
+    boss.chargeHitTargets = new Set();
+    // Karenz-Reset: initedAnvilRoom() hinterlaesst lastRageEventAt bei
+    // -1e9 (initAnvil()) -- ohne diesen Reset wuerde der passive Zornabbau
+    // waehrend der (kurzen) Fahrt zur Wand bereits mitzaehlen und die
+    // gemessene outer_crash-Differenz um ein paar Hundertstel verfaelschen.
+    boss.lastRageEventAt = st.time;
+    let ticks = 0;
+    while (boss.mode === 'charge' && ticks < 300) { stepState(st, CMD, 1 / 60); ticks++; }
+    check(boss.mode === 'outer_crash', `Abschnitt 67l: Testaufbau -- Boss landete in Modus "${boss.mode}" statt "outer_crash" (nach ${ticks} Ticks)`);
+    check(boss.rage === 80 - acfg.outerImpactRageLoss, `Abschnitt 67l: Aussenwand-Aufprall zieht ${80 - boss.rage} Zorn ab statt outerImpactRageLoss (${acfg.outerImpactRageLoss})`);
+    check(Math.abs(boss.modeTimer - acfg.outerCrashS) < 0.02, `Abschnitt 67l: outer_crash startet nicht mit outerCrashS (${acfg.outerCrashS}) Restzeit`);
+
+    // Innenwand-Gegenprobe: derselbe Mechanismus, aber ein Block IM RAUM
+    // (statt der Aussenwand) darf KEINEN Zorn abziehen.
+    const st2 = initedAnvilRoom();
+    const boss2 = st2.anvilBoss;
+    boss2.rage = 80;
+    boss2.rageLocked = false;
+    boss2.hp = boss2.cfg.maxHp;
+    boss2.x = 5 * 32 + 16; // vor dem ersten 2x2-Innenblock (boss_anvil-Grid, Spalten 5-6/Zeile 4-5)
+    boss2.y = 3 * 32 + 16;
+    boss2.mode = 'charge';
+    boss2.chargeDir = Math.PI / 2; // "nach unten", direkt in den Innenblock
+    boss2.chargeHitTargets = new Set();
+    boss2.lastRageEventAt = st2.time; // s. Karenz-Reset-Kommentar oben
+    let ticks2 = 0;
+    while (boss2.mode === 'charge' && ticks2 < 300) { stepState(st2, CMD, 1 / 60); ticks2++; }
+    check(boss2.mode === 'inner_crash', `Abschnitt 67l: Testaufbau -- Boss2 landete in Modus "${boss2.mode}" statt "inner_crash" (nach ${ticks2} Ticks)`);
+    check(boss2.rage === 80, `Abschnitt 67l: eine Innenwand zieht Zorn ab (${80 - boss2.rage}), erlaubt sind 0`);
+    check(Math.abs(boss2.modeTimer - acfg.innerCrashS) < 0.02, `Abschnitt 67l: inner_crash startet nicht mit innerCrashS (${acfg.innerCrashS}) Restzeit`);
+  }
+
+  // ---- (m) Hammerschlag: sichere Luecke schuetzt, die Trefferzone trifft --
+  //          (mit Betaeubung); ein eingefrorener Modus laesst NUR die -------
+  //          modusunabhaengige Schockwellen-Aktualisierung laufen. ----------
+  {
+    function slamRoom() {
+      const st = initedAnvilRoom();
+      const boss = st.anvilBoss;
+      boss.mode = 'restart'; // eingefroren: keine Bewegung, kein neuer Angriff, kein Zorn-Tick
+      boss.modeTimer = 999;
+      boss.rage = 0;
+      boss.rageLocked = false;
+      boss.heading = 0;
+      // Arena-Mitte statt des originalen Spawnpunkts (Reihe 1, direkt unter
+      // der Aussenwand) -- sonst liegt eine der beiden 100px-Testpositionen
+      // ausserhalb des Raums und eine Sichtlinienpruefung schlaegt aus dem
+      // falschen Grund fehl (Testaufbau-Falle, nicht der echte Mechanismus).
+      boss.x = 384;
+      boss.y = 256;
+      st.anvilShockwaves.length = 0;
+      st.anvilShockwaves.push({ x: boss.x, y: boss.y, heading: 0, radius: 0, hitTargets: new Set() });
+      return st;
+    }
+    // Sichere Luecke: direkt "hinter" dem Boss (heading + PI + Offset 0).
+    {
+      const st = slamRoom();
+      const boss = st.anvilBoss;
+      st.player.x = boss.x - 100;
+      st.player.y = boss.y;
+      st.player.hp = 999;
+      st.player.protect = 0;
+      let ticks = 0;
+      while (st.anvilShockwaves.length && ticks < 120) { stepState(st, CMD, 1 / 60); ticks++; }
+      check(st.player.hp === 999, `Abschnitt 67m: eine sichere Schockwellen-Luecke traf den Spieler trotzdem (hp ${st.player.hp})`);
+    }
+    // Trefferzone: 90 Grad neben der Luecke, deutlich ausserhalb von deren
+    // halber Breite (shockwaveGapDeg/2).
+    {
+      const st = slamRoom();
+      const boss = st.anvilBoss;
+      st.player.x = boss.x;
+      st.player.y = boss.y - 100;
+      st.player.hp = 999;
+      st.player.protect = 0;
+      let ticks = 0;
+      // Sofort abbrechen, sobald der Treffer passiert ist -- shockwaveStunS
+      // ist kurz und zaehlt in den Folgeticks (die Welle laeuft noch bis
+      // shockwaveMaxRadiusPx weiter) sonst laengst wieder auf 0 herunter,
+      // bevor die Pruefung unten sie noch sehen koennte.
+      while (st.player.hp === 999 && st.anvilShockwaves.length && ticks < 120) { stepState(st, CMD, 1 / 60); ticks++; }
+      check(st.player.hp === 999 - acfg.shockwaveDamage, `Abschnitt 67m: die Trefferzone einer Schockwelle schadet ${999 - st.player.hp} statt shockwaveDamage (${acfg.shockwaveDamage})`);
+      check(st.player.stunTimer > 0, 'Abschnitt 67m: ein Schockwellentreffer betaeubt nicht');
+    }
+  }
+
+  // ---- (n) Schleifspur: Schadenskadenz statt Dauerschaden, keine Betaeu- -
+  //          bung, sichtbares Verblassen vor dem Entfernen. ------------------
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.mode = 'restart'; // eingefroren -- nur die modusunabhaengige Spur-Aktualisierung laeuft
+    boss.modeTimer = 999;
+    boss.rage = 0;
+    boss.rageLocked = false;
+    st.anvilTrails.length = 0;
+    st.player.x = 400;
+    st.player.y = 300;
+    st.player.hp = 999;
+    st.player.protect = 0;
+    st.anvilTrails.push({ x: st.player.x, y: st.player.y, hitAt: new Map(), expireAt: null });
+    stepState(st, CMD, 1 / 60);
+    check(st.player.hp === 999 - acfg.trailDamage, `Abschnitt 67n: erster Spur-Tick schadet ${999 - st.player.hp} statt trailDamage (${acfg.trailDamage})`);
+    const afterFirst = st.player.hp;
+    check(!(st.player.stunTimer > 0), 'Abschnitt 67n: die Schleifspur betaeubt (soll sie laut Auftrag nicht)');
+    stepState(st, CMD, 1 / 60); // deutlich vor Ablauf von trailDamageIntervalS
+    check(st.player.hp === afterFirst, `Abschnitt 67n: die Spur schadet erneut vor Ablauf der Kadenz (trailDamageIntervalS ${acfg.trailDamageIntervalS})`);
+    // Verblassen: ein gesetztes expireAt entfernt das Segment erst NACH
+    // Ablauf, nicht sofort.
+    st.anvilTrails[0].expireAt = st.time + 0.05;
+    stepState(st, CMD, 1 / 60);
+    check(st.anvilTrails.length === 1, 'Abschnitt 67n: ein Segment verschwindet, bevor seine expireAt-Zeit erreicht ist');
+    for (let i = 0; i < 10; i++) stepState(st, CMD, 1 / 60);
+    check(st.anvilTrails.length === 0, 'Abschnitt 67n: ein abgelaufenes Segment wird nicht entfernt');
+  }
+
+  // ---- (o) Raserei bei 100 Zorn: sauberer Abbruch des laufenden Angriffs, -
+  //          Gefahrenobjekte werden geleert, Zorn wird gesperrt. -----------
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.mode = 'slam'; // ein "laufender Angriff", der abgebrochen werden muss
+    boss.modeTimer = 5;
+    boss.rage = acfg.rageMax ?? 100;
+    boss.rageLocked = false;
+    st.anvilShockwaves = [{ x: 0, y: 0, heading: 0, radius: 10, hitTargets: new Set() }];
+    st.anvilTrails = [{ x: 0, y: 0, hitAt: new Map(), expireAt: null }];
+    const before = st.anvilFrenzyCount || 0;
+    stepState(st, CMD, 1 / 60);
+    check(boss.mode === 'frenzy_warning', `Abschnitt 67o: 100 Zorn fuehrt nicht sofort in "frenzy_warning" (Modus ist "${boss.mode}")`);
+    check(boss.rageLocked === true, 'Abschnitt 67o: die Raserei sperrt den Zorn nicht');
+    check(st.anvilShockwaves.length === 0 && st.anvilTrails.length === 0, 'Abschnitt 67o: laufende Gefahrenobjekte werden beim Rasereistart nicht geleert');
+    check((st.anvilFrenzyCount || 0) === before + 1, 'Abschnitt 67o: anvilFrenzyCount zaehlt den Rasereistart nicht');
+  }
+
+  // ---- (p) Raserei dauert exakt frenzyDurationS; ein Wandkontakt WAEHREND -
+  //          der Raserei zieht KEINEN Zorn ab (anders als ein normaler ------
+  //          Aussenwand-Aufprall in (l)). ------------------------------------
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.rage = acfg.rageMax ?? 100;
+    boss.rageLocked = true;
+    boss.mode = 'frenzy_charge';
+    boss.modeTimer = 0;
+    boss.frenzyRemaining = acfg.frenzyDurationS ?? 5;
+    boss.chargeDir = -Math.PI / 2; // treibt den Boss (Spawn nahe der Aussenwand) sofort in einen Wandkontakt
+    boss.chargeHitTargets = new Set();
+    let simulated = 0;
+    let hitWallOnce = false;
+    let ticks = 0;
+    while (boss.mode !== 'overheated' && ticks < 700) {
+      const before = boss.mode;
+      stepState(st, CMD, 1 / 60);
+      simulated += 1 / 60;
+      if (before === 'frenzy_charge' && boss.mode === 'frenzy_turnaround') hitWallOnce = true;
+      ticks++;
+    }
+    check(hitWallOnce, 'Abschnitt 67p: Testaufbau -- die Raserei traf waehrend der Simulation keine Wand');
+    check(boss.mode === 'overheated', `Abschnitt 67p: Raserei endet nicht in "overheated" (Modus "${boss.mode}" nach ${ticks} Ticks)`);
+    check(boss.rage === (acfg.rageMax ?? 100), `Abschnitt 67p: der Zorn faellt waehrend der Raserei auf ${boss.rage} (Wandkontakte duerfen ihn NICHT senken)`);
+    const total = (acfg.frenzyWarningS ?? 0) + (acfg.frenzyDurationS ?? 5);
+    check(
+      Math.abs(simulated - (acfg.frenzyDurationS ?? 5)) < 0.15,
+      `Abschnitt 67p: die simulierte Rasereidauer (ab frenzy_charge) betraegt ${simulated.toFixed(2)}s, erwartet ~${(acfg.frenzyDurationS ?? 5).toFixed(2)}s`,
+    );
+    void total;
+  }
+
+  // ---- (q) Zusammenbruch: offene Panzerung genau overheatedS lang, Zorn --
+  //          bleibt gesperrt, danach Rueckkehr auf rageAfterOverheat (bzw. --
+  //          lowHpMinRage bei niedriger Boss-LP). ---------------------------
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    boss.hp = boss.cfg.maxHp; // volle LP -- rageAfterOverheat, NICHT lowHpMinRage, wird erwartet
+    boss.mode = 'overheated';
+    boss.modeTimer = acfg.overheatedS ?? 3.5;
+    boss.armorDisabled = true;
+    boss.rage = acfg.rageMax ?? 100;
+    boss.rageLocked = true;
+    let elapsed = 0;
+    const dt = 1 / 60;
+    while (elapsed < (acfg.overheatedS ?? 3.5) - 0.05) {
+      stepState(st, CMD, dt);
+      elapsed += dt;
+      check(boss.armorDisabled === true, 'Abschnitt 67q: die Panzerung reaktiviert sich VOR Ablauf von overheatedS');
+      check(boss.rage === (acfg.rageMax ?? 100), 'Abschnitt 67q: der Zorn aendert sich waehrend des Zusammenbruchs');
+    }
+    while (boss.armorDisabled) stepState(st, CMD, dt);
+    check(boss.rage === (acfg.rageAfterOverheat ?? 0), `Abschnitt 67q: Zorn nach dem Zusammenbruch ist ${boss.rage} statt rageAfterOverheat (${acfg.rageAfterOverheat})`);
+    check(boss.mode === 'restart', `Abschnitt 67q: nach der Reaktivierung ist der Modus "${boss.mode}" statt "restart"`);
+
+    // Gegenprobe bei niedriger Boss-LP: rageAfterOverheat wird durch
+    // lowHpMinRage ERSETZT, nicht ergaenzt.
+    const st2 = initedAnvilRoom();
+    const boss2 = st2.anvilBoss;
+    boss2.hp = boss2.cfg.maxHp * 0.1; // deutlich unter 25%
+    boss2.mode = 'overheated';
+    boss2.modeTimer = acfg.overheatedS ?? 3.5;
+    boss2.armorDisabled = true;
+    boss2.rage = acfg.rageMax ?? 100;
+    boss2.rageLocked = true;
+    while (boss2.armorDisabled) stepState(st2, CMD, dt);
+    check(boss2.rage === (acfg.lowHpMinRage ?? 0), `Abschnitt 67q: Zorn nach Zusammenbruch bei niedriger LP ist ${boss2.rage} statt lowHpMinRage (${acfg.lowHpMinRage})`);
+  }
+
+  // ---- (r) Der Amboss feuert nie eine echte Kugel -------------------------
+  {
+    const st = initedAnvilRoom();
+    st.player.x = st.anvilBoss.x + 40; // nah am Boss, damit ein etwaiger Schuss nicht am Kegel scheitert
+    st.player.y = st.anvilBoss.y;
+    for (let i = 0; i < 400; i++) stepState(st, CMD, 1 / 60);
+    check(!st.bullets.some((b) => b.owner === st.anvilBoss), 'Abschnitt 67r: der Amboss hat eine echte Kugel abgefeuert');
+  }
+
+  // ---- (s) Boss-Tod raeumt Schockwellen/Schleifspuren restlos auf ---------
+  {
+    const st = initedAnvilRoom();
+    const boss = st.anvilBoss;
+    st.anvilShockwaves = [{ x: 0, y: 0, heading: 0, radius: 10, hitTargets: new Set() }];
+    st.anvilTrails = [{ x: 0, y: 0, hitAt: new Map(), expireAt: null }];
+    st.killTank(boss, 'test');
+    check(st.anvilShockwaves.length === 0, 'Abschnitt 67s: der Boss-Tod raeumt state.anvilShockwaves nicht');
+    check(st.anvilTrails.length === 0, 'Abschnitt 67s: der Boss-Tod raeumt state.anvilTrails nicht');
+    check(typeof st.anvilFightDuration === 'number', 'Abschnitt 67s: anvilFightDuration wird beim Boss-Tod nicht gesetzt (Telemetrie)');
   }
 }
 

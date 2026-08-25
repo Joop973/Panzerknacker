@@ -56,6 +56,33 @@
       ".": "floor"
     }
   },
+  "boss_anvil": {
+    "_comment": "Amboss-Auftrag (Akt 2, ersetzt boss_mirror). 24x16, drei asymmetrisch platzierte 2x2-Bloecke als innere Hindernisse (Deckung vor Schockwellen/Schleifspur, Ziel fuer die Aussenwand-Kuehlung des Rammstosses) -- keine breakable-/destructible-Waende, keine Loecher, keine Generatoren, keine zusaetzlichen Gegner-Spawns. Nur der geschlossene Aussenrahmen zaehlt als kuehlende Wand (state.js: buildWalls() -- col===0/row===0/col===COLS-1/row===ROWS-1, s. src/game/anvil.js).",
+    "grid": [
+      "########################",
+      "#..........E...........#",
+      "#......................#",
+      "#......................#",
+      "#....##................#",
+      "#....##................#",
+      "#......................#",
+      "#..............##......#",
+      "#..............##......#",
+      "#......................#",
+      "#.......##.............#",
+      "#.......##.............#",
+      "#......................#",
+      "#......................#",
+      "#..........P...........#",
+      "########################"
+    ],
+    "legend": {
+      "#": "wall",
+      "P": "spawn",
+      "E": "enemy",
+      ".": "floor"
+    }
+  },
   "boss_phalanx": {
     "grid": [
       "########################",

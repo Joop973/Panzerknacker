@@ -336,11 +336,20 @@ einen Spielzeughaufen. Keine Gameplay-/Kollisions-/Balance-Änderung, alle
 vier gelieferten Referenzbilder mussten erst per PIL/scipy zu den
 tatsächlich benötigten Sprite-Dateien verarbeitet werden (Details im
 eigenen Abschnitt weiter unten „Kinderzimmer-Reskin (Nutzergrafik, rein
-optisch)"). **Zuletzt gemergt: Hintergrund ausgetauscht** (Nutzergrafik,
-rein optisch) — dieselbe Datei `arena_kinderzimmer_768x512.png` zeigt jetzt
-ein anderes Nutzerbild (Holzboden mit rundem Sternteppich), kein Code
+optisch)"). Zwischenstand: Hintergrund ausgetauscht (Nutzergrafik, rein
+optisch) — dieselbe Datei `arena_kinderzimmer_768x512.png` zeigt jetzt ein
+anderes Nutzerbild (Holzboden mit rundem Sternteppich), kein Code
 geändert, nur `sw.js`-Bump. Details im eigenen Abschnitt weiter unten
-„Hintergrund ausgetauscht (Nutzergrafik, rein optisch)".
+„Hintergrund ausgetauscht (Nutzergrafik, rein optisch)". **Zuletzt
+gemergt: Amboss (Akt 2)** — der `t_black`-Platzhalter aus Akt 2 ist durch
+einen vollständigen, eigenständigen Bosstyp `t_anvil` ersetzt: ein schwer
+gepanzerter Rammboss, dessen Zorn nur durch echte Spielerangriffe steigt
+und nur durch einen Rammstoss gegen die Aussenwand sinkt — drei Angriffe
+(Rammstoss, Hammerschlag mit Schockwellen-Sicherheitslücken, Schleifspur),
+eine Raserei bei 100 Zorn und ein Zusammenbruch mit offener Panzerung
+danach. Details, Balancewerte, gefundene Bugs (u. a. ein echter
+1050→2646-LP-Doppelscaling-Fund, verhindert über `isBossCfg()`) und die
+Testabdeckung im eigenen Abschnitt weiter unten „Amboss (Akt 2)".
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -7062,6 +7071,315 @@ gebumpt (Asset-Änderung, gleicher Dateiname wird sonst offline nicht neu
 geladen), `telemetry.js: GAME_VERSION` mitgezogen. Playwright-Smoke
 bestätigt: der neue Hintergrund rendert ganzflächig im Spielfeld, keine
 Konsolenfehler.
+### Amboss (Akt 2) — gemergt
+Ersetzt den `t_black`-Platzhalter aus „Bosse (Platzhalter, Nutzerentscheidung)"
+für **Akt 2** durch einen vollstaendigen, eigenstaendigen Bosstyp `t_anvil`
+(„Der Amboss"): ein schwer gepanzerter Rammboss, dessen Aggressivitaet an
+einem **Zorn**-Wert haengt, den nur echte Spielerangriffe erhoehen und den
+nur ein Rammstoss gegen die Aussenwand senkt. Akt 1 (`boss_reactor`) und
+Akt 3 (`boss_spider`) bleiben unangetastet — nur `diffData.acts[1].boss`
+zeigt jetzt auf `"boss_anvil"` statt `"boss_mirror"`; die alte Spiegel-
+Mechanik (`t_mirror`, `bossai.js: stepMirrorBoss`, `boss_mirror`-Arena)
+bleibt vollstaendig im Code stehen, nur nicht mehr erreicht (Muster wie bei
+Reaktor/Phalanx zuvor).
+- **`data/tanks.json: t_anvil`**: `anvilBoss:true`, `flankable:true`,
+  `radius:18`, `maxHp:1050`, `damage:34`, `armor:{arc:140,reflects:true}`,
+  `weapon:"bullet"` (rein strukturelle Kompatibilitaet fuer `resolveCfg()` —
+  der Amboss feuert **nie**, `roleTurret()`/`fireBullet()` werden in seinem
+  gesamten Zustandsautomaten kein einziges Mal aufgerufen).
+- **Boss-Erkennung ohne Sonderfall**: `cfg.js: isBossCfg()` erkennt
+  `cfg.anvilBoss` als vierte Boss-Flagge (neben `mirrorBoss`/`phalanx`/
+  `spiderBoss`). Dadurch greifen automatisch, OHNE eigenen Code: **kein
+  HP-Doppelscaling** (`applyHpScaling()`s `hpScaling.skipBosses`-Zweig laesst
+  die 1050 aus `tanks.json` unangetastet, auch in Akt 2 mit seinem eigenen
+  `bossHpMult`), **keine Exekutionsschwelle** (Grundsteinumbau Phase 2s
+  `!isBossCfg(t.cfg)`-Ausschluss), **keine Nekromant-Wiederbelebung**
+  (Elite-/Boss-Ausnahme, Nekromant-V2 Phase 3), **korrekte Boss-Belohnung**
+  (drei garantierte Legendaries am Akt-2-Ende). Per Gegenprobe verifiziert:
+  ohne `anvilBoss` in `isBossCfg()`s Bedingung landet der Akt-2-Amboss bei
+  2646 statt 1050 LP (Akt-1,55×-Raumskalierung UND `bossHpMult` greifen
+  dann zusaetzlich) — genau der Fehler, den Abschnitt 5 des Auftrags
+  ausdruecklich verhindern wollte.
+- **`t.radius`-Override neu in `resolveCfg()`**: `radius: t.radius ??
+  data.physics.tankRadius` (vorher fest `data.physics.tankRadius`) — noetig,
+  weil der Amboss mit 18 px einen eigenen, vom globalen Standardradius
+  abweichenden Wert braucht. Wirkt sich auf keinen anderen Typ aus (kein
+  Bestandstyp setzt `radius` bisher).
+- **Flanken-/Heckschaden gezielt wieder aktiviert**: `flankable:true`
+  durchbricht die sonst geltende Bossausnahme (`!isBossCfg(t.cfg) ||
+  t.cfg.flankable`, state.js-Trefferschleife) — Seiten-/Hecktreffer nehmen
+  den normalen `balance.flank`-Multiplikator (×1,5/×2,5), waehrend die
+  140-Grad-Frontpanzerung weiterhin reflektiert. Kein zweites
+  Flankensystem, dieselbe `flankZone()`/`armorBlocks()`-Logik wie bei jedem
+  normalen Gegner.
+- **Zorn als Angriffspaket** (`state.js: registerAnvilRage(kind, eventId)`,
+  eine neue state-Methode statt eines Moduls — vermeidet einen
+  Zirkelimport, da `mine.js`/`tank.js`/`ghost.js` sie einfach ueber das
+  ohnehin vorhandene `state`-Argument aufrufen): dedupliziert ueber
+  `boss.processedRageEvents` (Set aus `"kind:eventId"`), liest die
+  Zornbetraege ausschliesslich aus `data/balance.json: boss.anvil`
+  (`directRage:7`/`explosionRage:11`/`ghostVolleyRage:2`). **Direkter
+  Treffer** (+7): jeder Abzug (auch Doppelrohr/Streuschuss) traegt eine
+  gemeinsame `b.rageEventId` (`state.nextRageEventId`, ein reiner Zaehler
+  auf `state` — **kein** Verbrauch des Gameplay-RNG), erzeugt in
+  `tank.js: fireBullet()` einmal pro Abzug und an alle Kugeln derselben
+  Salve vergeben; `ghost.js`s Untertanen-/Champion-Schuss (inkl. der
+  „Erbgeschuetz"-Zusatzkugel) teilt sich ebenso eine id pro Feuerstoss.
+  Ein Fronttreffer registriert **vor** der Panzerungspruefung — auch ein
+  komplett reflektierter Schuss heizt den Amboss auf. **Explosion** (+11,
+  nicht +7 obendrauf): die Haupttrefferschleife registriert bei
+  `b.explosive` bewusst **nichts** (`!b.explosive`-Bedingung), die
+  Detonation im spaeteren Sprengschuss-Block registriert stattdessen
+  `'explosion'` unter derselben `'shot:'+rageEventId` — eine explosive
+  Kugel und ihre Explosion sind dadurch strukturell EIN Paket. **Mine**
+  (+11): `mine.js: explode()` nutzt die ohnehin stabile Minen-`id`
+  (`'mine:'+mine.id`) — Kettenreaktionen/Streuminen-Splitter sind automatisch
+  eigene Ereignisse (andere Mine, andere id). **Geistersalve** (+2, mit
+  Buendelung): `ghostBatchS` (0,25 s) fasst mehrere GETRENNTE Salven-ids
+  innerhalb des Fensters zu einem Zornbetrag zusammen (die zweite Salve
+  dedupt zwar ihre eigene id, traegt aber 0 zusaetzlichen Zorn bei) — die
+  Karenz des passiven Abbaus (`lastRageEventAt`) wird trotzdem bei JEDEM
+  angenommenen Ereignis neu gestartet, auch einem gebuendelten. **Kein
+  Zorn** durch Statuseffekt-Ticks, Blitzketten, Kamikaze, Sabotage-Explosion
+  oder Gegnertode — diese Quellen rufen `registerAnvilRage()` schlicht nie
+  auf, kein Ausschlusscode noetig. `boss.rageLocked` (Raserei+Zusammenbruch)
+  ist ein frueher Return in `registerAnvilRage()` selbst — Zornaufbau ist in
+  dieser Zeit strukturell unmoeglich.
+- **Zornabbau** (`data/balance.json: boss.anvil.coolingDelayS:2.0`/
+  `coolingPerS:5.0`): passiv erst 2 s NACH dem letzten Ereignis, dann 5/s
+  (`anvil.js: handleRageTicking()`, laeuft jeden Tick unabhaengig vom
+  Modus, ausser waehrend der Raserei-Familie). Aktiv: ein
+  **Aussenwand**-Aufprall zieht `outerImpactRageLoss` (15) ab, ein
+  **Innenwand**(Block)-Aufprall **nichts** — dieselbe Substep-Bewegung
+  (`moveChargeSubsteps()`, 4-px-Schritte gegen `state.walls` via
+  `circleOverlapsAABB`) erkennt ueber `wall.col===0||row===0||col===COLS-1
+  ||row===ROWS-1`, welche Wand getroffen wurde. Unter 25 % Boss-LP
+  (`lowHpThresholdPct:0.25`) klemmt `lowHpMinRage` (60) sowohl den passiven
+  als auch den aktiven Abbau — der Amboss wird gegen Ende des Kampfes nicht
+  mehr ganz ruhig.
+- **Zustandsautomat** (`src/game/anvil.js`, NEUES Modul — `bossai.js`
+  exportiert `stepAnvilBoss`/`showAnvilHint` nur noch per Re-Export daraus,
+  Muster wie `mine.js`/`mortar.js`/`spider.js`, haelt `bossai.js` unter der
+  ~300-Zeilen-Konvention): 15 Zustaende
+  (`between_attacks`/`charge_windup`/`charge`/`outer_crash`/`inner_crash`/
+  `slam_windup`/`slam`/`trail_windup`/`trail`/`frenzy_warning`/`frenzy_aim`/
+  `frenzy_charge`/`frenzy_turnaround`/`overheated`/`restart`). Deterministische
+  Angriffsauswahl **ohne RNG**: `PATTERNS = [['ram'],['ram','hammer'],
+  ['ram','trail','ram','hammer']]` nach Zornband (<40/<70/sonst), der
+  Musterindex laeuft weiter, ein Bandwechsel setzt ihn auf 0 zurueck (nur
+  beim naechsten Angriffswahl-Zeitpunkt geprueft, ein laufender Angriff wird
+  nie mittendrin unterbrochen). Boss zielt strukturell IMMER auf
+  `state.player` — kein Aufruf von `resolveTarget()`/der normalen
+  Boss-Fixierung, damit er nie mitten in einer Rammbahn das Ziel wechselt.
+- **Rammstoss**: Windup friert die Richtung auf die AKTUELLE Spielerposition
+  ein (kein Nachdrehen), Telegraphzeit interpoliert 1,15→0,55 s nach
+  Zornstufe. Fahrt ueber `moveChargeSubsteps()` (dieselbe Funktion wie beim
+  Zornabbau-Wandkontakt), Tempo 175→280 px/s, Schaden 34→48, je linear nach
+  `rage/rageMax`. Kontakt (`ramHitCheck()`): Spieler UND Geister/Champion
+  koennen je Rammlauf **hoechstens einmal** getroffen werden
+  (`tank.chargeHitTargets`-Set), 0,9 s Schutzfenster danach, seitlicher
+  Rueckstoss ueber ein Kreuzprodukt (welche Seite) mit drei Ausweichkandidaten
+  (Primaerseite → Gegenseite → geradewegs zurueck, jeder ueber
+  `resolveCircleWalls()` aufgeloest — garantiert nie eine Position innerhalb
+  einer Wand) + kleinem Vorwaertsschub. Der Sprint laeuft nach einem
+  erfolgreichen Treffer normal weiter (kein Anhalten). Aussenwand-Aufprall:
+  1,65 s Schadensfenster (`outerCrashS`), Zornverlust, Panzerung bleibt
+  aktiv, kein eigener Schaden; Innenwand(block)-Aufprall: nur 0,45 s Stolper-
+  Pause (`innerCrashS`), kein Zornverlust.
+- **Hammerschlag** (ab Zorn 40): Boss friert Position UND Blickrichtung ein,
+  0,7 s Windup, dann drei zeitversetzte Schockwellen (`shockwaveDelayS:0,55`,
+  `state.anvilShockwaves[]`, eigenes von `state.mines` getrenntes Array).
+  Jede Welle waechst mit `shockwaveSpeedPx` (170), Breite 12 px, maximal
+  420 px Radius, 14 Schaden + 0,25 s Betaeubung bei Treffer, hoechstens EIN
+  Treffer je Ziel je Welle (`wave.hitTargets`-Set). Drei sichere Luecken
+  (80° breit) um `wave.heading + Math.PI + offset` (0°/±32°) — direkt hinter
+  dem eingefrorenen Boss plus zwei seitlich versetzte. Innere solide Bloecke
+  blocken einzelne Wellensegmente ueber einen manuellen Raymarch
+  (`state.isSolid()`, dasselbe Muster wie die bestehende Sichtlinien-
+  Vorhersage in `effects.js`). Ghosts/Champion werden ueber die vorhandene
+  `state.damageGhostsInRadius()` getroffen — keine Duplikation der Resistenz-/
+  Schildpool-/Todeslogik. Schockwellen ueberdauern das Angriffsende bewusst
+  (`updateAnvilShockwaves()` laeuft JEDEN Tick, unabhaengig vom aktuellen
+  Modus) — der Boss zieht schon weiter, die Ringe laufen unabhaengig aus.
+- **Schleifspur** (ab Zorn 70): 0,7 s Warnung, 5,2 s Fahrt mit 45 px/s,
+  Wendegeschwindigkeit auf 1,35 rad/s gedeckelt (kein sofortiges Einrasten
+  auf die Spielerrichtung), normale `resolveCircleWalls()`-Kollision gegen
+  innere Bloecke. Alle ~18 px ein neues Segment (`state.anvilTrails[]`,
+  eigenes Array, Deckel 24 Segmente per FIFO), Radius 13 px, 6 Schaden mit
+  0,5 s Kadenz je Ziel (`seg.hitAt`-Map, kein Dauerschaden), **keine
+  Betaeubung**. Nach Angriffsende bekommen ALLE noch lebenden Segmente
+  GEMEINSAM hoechstens 0,8 s Restzeit (`endTrailAttack()` setzt eine geteilte
+  `expireAt`-Deadline statt individueller Segment-Alter) — sichtbar
+  verblassend statt abrupt zu verschwinden. Wie bei den Schockwellen laeuft
+  `updateAnvilTrails()` jeden Tick unabhaengig vom Modus.
+- **Raserei bei 100 Zorn**: `handleRageTicking()` erkennt `rage>=rageMax`
+  ausserhalb der Rasereifamilie, bricht den laufenden Angriff SOFORT ab
+  (leert `anvilShockwaves`/`anvilTrails`, resettet `chargeHitTargets`),
+  startet `frenzy_warning` (0,65 s, weisses Aufblitzen + Dampf, wiederver-
+  wendeter `'wave'`-Ton statt eines neuen Audio-Assets) und sperrt
+  `rageLocked`. Danach **exakt 5 s** (`frenzyDurationS`) mit wiederholten
+  Rammsequenzen: je 0,45 s Zielaufnahme (`frenzy_aim`, neu ausgerichtet auf
+  die aktuelle Spielerposition), Volltempo/Vollschaden-Sprint
+  (`frenzy_charge`, dieselbe `moveChargeSubsteps()`), ein Wandkontakt fuehrt
+  NUR zu 0,18 s Drehpause (`frenzy_turnaround`) — **kein** outer_crash/
+  inner_crash-Unterschied, **kein** Zornverlust (per Gegenprobe verifiziert:
+  ein kuenstlich wieder eingebauter Zornabzug bei Wandkontakt waehrend der
+  Raserei faellt sofort auf, weil der Test genau das erwartet). Jede
+  Sequenz kann jedes Ziel wieder nur einmal treffen (frisches
+  `chargeHitTargets`-Set pro Sequenz), das 0,9-s-Schutzfenster gilt weiter.
+- **Zusammenbruch** (`overheated`, `beginOverheated()`): sofort nach Ablauf
+  der 5 s — `tank.armorDisabled=true` (ein neuer, generischer Schalter, den
+  `armor.js: armorBlocks()` als ALLERERSTE Zeile prueft, `if
+  (tank.armorDisabled) return false;` — automatisch normaler ×1-Schaden auf
+  Fronttreffer, ohne die Renderer-Panzerungsanzeige selbst anzufassen), Boss
+  bewegt/dreht sich nicht, macht keinen Kontaktschaden, exakt 3,5 s
+  (`overheatedS`), Zorn ist waehrend der ganzen Zeit gesperrt (weder Aufbau
+  noch Abbau — `boss.rageLocked` bleibt `true`). Danach: Panzerung reaktiviert,
+  Zorn auf `rageAfterOverheat` (30) — oder `lowHpMinRage` (60), falls die
+  Boss-LP weiterhin unter 25 % liegen —, 0,6 s sichtbarer Neustart
+  (`restart`), dann normale Angriffsauswahl.
+- **Externe Kontrolleffekte** (`anvil.js: externalControl()`): ausserhalb
+  von Raserei/Zusammenbruch werden Betaeubung (Dauer ×
+  `externalControlDurationMult:0.4`) und Verlangsamung (Staerke ×
+  `slowEffectMult:0.5`, ueber `statusSpeedMult()` aus `status.js` gelesen)
+  gedaempft, aber NICHT ignoriert — eine eigene, vom generischen `stunTimer`
+  UNABHAENGIGE Buchfuehrung (`tank.extStunUntil`), damit ein EMP/eine
+  Krallenfalle den Boss nicht komplett lahmlegt, ohne den `stunTimer` selbst
+  fuer andere Systeme (Renderer-Anzeige) zu verfaelschen. Waehrend
+  Raserei/Zusammenbruch ist die Funktion ein reiner No-op (`{stunned:false,
+  slowMult:1}`) — die eigenen Modus-Timer treiben diese Zustaende, nie der
+  allgemeine `stunTimer`.
+- **Neue Arena `boss_anvil`** (`data/arenas.json`): 24×16, ein Gegner-Spawn,
+  ein Spieler-Spawn, drei asymmetrisch platzierte 2×2-Wandbloecke, keine
+  zerstoerbaren Waende/Loecher/Generatoren, geschlossener Aussenrahmen — nur
+  der zaehlt als „kuehlende" Wand (`isOuterWall()`). `supportBudget` bleibt
+  global konfiguriert, spawnt aber wegen des einzigen `E`-Markers
+  strukturell keine Unterstuetzung (`arenaEnemySpawnCount()`, unveraendert
+  seit Phase 14).
+- **Darstellung** (kein eigenes Sprite — `t_anvil` aliast auf `t_black` in
+  `sprites.js: SPRITE_ALIAS`, Anschlusspunkt fuer eine spaetere echte
+  `body_t_anvil.png`/`turret_t_anvil.png` bleibt offen): Zornband-Farb-
+  Overlay direkt in `renderer.js: drawTank()` (kalt/dunkel unter 40, orange
+  Naehte/Puls 40–69, rot pulsierend 70–99, weissgluehend + blinkend ab 100
+  bzw. waehrend der Raserei, dunkle aufgebrochene Panzerung + blauer
+  Kuehldampf waehrend des Zusammenbruchs — bewusst NIE nur Farbe allein,
+  jede Stufe hat ihr eigenes Puls-/Partikelmuster), ein pulsierender
+  „Schaufel"-Streifen ueber der Frontpanzerung waehrend `charge_windup`.
+  Neues `src/render/effects.js: drawAnvilHazards()` (Muster `drawMortars`):
+  Rammwarnkorridor (Breite = Amboss- + Spielerradius, Laenge bis zur ersten
+  Wand per Ray-March, verschwindet GENAU beim Sprintstart), Schockwellen-
+  Ringe mit farblich klar abgesetzten sicheren Luecken, verblassende
+  Schleifspur-Segmente. HUD (`hud.js: drawAnvilBoss()`, neu, im
+  Kopfzeilenbereich unter der normalen Leiste, NIE ueber den Touch-
+  Bedienelementen an den Bildschirmraendern): Boss-Lebensleiste + eine
+  Zehner-Zornleiste „ZORN" (Segmentfarbe folgt demselben Zornband wie das
+  Koerper-Overlay), Textzeile „PANZERUNG OFFEN" waehrend des Zusammenbruchs.
+  Trefferindikatoren („+7/+11/+2 Zorn", „−15 Zorn") laufen ueber das
+  bestehende `state.texts`-System — hoechstens einer je Angriffspaket, weil
+  `registerAnvilRage()` den Text nur bei `applied>0` schreibt (Dedupe/
+  Buendelung sorgen automatisch fuer „nie mehr als einer je Paket").
+- **Einmalige Lernhinweise** (`anvil.js: showAnvilHint()`, ueber
+  `storage.js: getFlag()`/`setFlag()` — dasselbe localStorage-Flag-System
+  wie „Tutorial gesehen", ueberlebt Tod/Raumneustart/neue Runs): „Fronttreffer
+  heizen den Amboss auf." (erster geblockter Fronttreffer, `state.js`s
+  Panzerungs-Zweig), „Außenwände kühlen ihn ab." (erster Aussenwand-Aufprall,
+  `finishCharge()`), „Überlebe die Raserei – danach bricht seine
+  Panzerung." (erstes Erreichen von 100 Zorn, `handleRageTicking()`).
+  `effects.js: drawTexts()` bekommt dafuer einen `tx.hint`-Sonderfall:
+  deutlich groesserer Text, FEST ueber der Arena (keine Aufwaertsdrift wie
+  ein normaler Schwebetext) + dunkler Kontrasthintergrund fuer Handydisplays.
+- **Boss-Tod**: `killTank()`s bestehender `anvilBoss`-Zweig leert
+  `state.anvilShockwaves`/`state.anvilTrails` sofort (kein weiterer
+  `stepAnvilBoss()`-Tick raeumt sie sonst auf) und schreibt die Kampfdauer-/
+  Durchschnittszorn-Telemetrie fest — der normale Boss-Belohnungsablauf
+  (drei garantierte Legendaries) laeuft unveraendert, keine neue Belohnungs-
+  mechanik in dieser Aufgabe.
+- **Telemetrie** (Muster wie die Nekromant-V2-Phase-10-Vierschicht-Pipeline:
+  Rohzaehler auf `state` → `main.js: teleAnvil` → `telemetry.js:
+  recordRoom({anvil})` → `computeMetrics()`-Aggregation → Debug-Ansicht):
+  `anvilFightDuration`, `anvilAverageRage`, `anvilMaxRage`,
+  `anvilFrenzyCount`, `anvilFrontHits`/`-SideHits`/`-RearHits`,
+  `anvilOuterCrashes`/`-InnerCrashes`, `anvilRamHitsPlayer`,
+  `anvilDamageDuringOverheat`, `anvilGhostRageGenerated`,
+  `anvilTimeWithoutRageHit`. Debug-Ansicht zeigt eine neue Zeile mit den
+  Zielwerten aus dem Auftrag (kontrolliert 105–150 s, bewusster
+  Ueberhitzungs-Rush 75–110 s) als Referenz — **nicht als harte Testgrenze**,
+  reine Balance-Beobachtungshilfe wie beim Nekromanten auch.
+- **Neuer Testabschnitt 67** (`tests/regression.mjs`, ~19 Pruefblocke,
+  Gegenprobe fuer die zwoelf sicherheitskritischsten Mechanismen einzeln am
+  echten Quellcode bestanden — je absichtlich rot gemacht und zurueckgesetzt:
+  Zorn-Dedupe, Geistersalven-Buendelung, explosive Kugel registriert
+  zusaetzlich direkt (+7 obendrauf statt nur +11), Minen-Zornregistrierung
+  entfernt, passive Abbau-Karenz entfernt, Aussenwand-Zornverlust entfernt,
+  Innenwand zieht faelschlich Zorn ab, Schockwellen-Sicherheitsluecke
+  deaktiviert, Raserei-Wandkontakt senkt faelschlich Zorn,
+  `armorDisabled`-Gate in `armorBlocks()` entfernt, `isBossCfg()` erkennt
+  `anvilBoss` nicht mehr (deckte dabei zusaetzlich den echten
+  1050→2646-LP-Doppelscaling-Fehler auf), rageEventId wird pro Kugel statt
+  pro Abzug neu erzeugt): Struktur (`t_anvil`-Felder, Arena-Grid 24×16 mit
+  genau einem `E`/`P`, `balance.boss.anvil` vollstaendig), ein ECHTER Spawn
+  ueber den Kartengraphen (Akt 2 betreten → genau ein `t_anvil`, keine
+  Unterstuetzung, **exakt 1050 LP**), `isBossCfg()`-Mechanismus isoliert,
+  Exekution bleibt deaktiviert, Flanken-/Panzerungs-Gating (`flankable`
+  schaltet die sonst ausgeschlossene Mechanik gezielt wieder ein,
+  `armorDisabled` hebt den Frontblock generisch auf), das komplette
+  Zorn-Ereignispaket-System (Dedupe/Betraege/Buendelung/Sperre) direkt ueber
+  die echte `state.registerAnvilRage()`-Methode, `rageEventId`-Teilung bei
+  einem echten Doppelrohr-Abzug (`fireBullet()`), explosive Kugel + ihre
+  Explosion als EIN Paket ueber einen echten, hinten auftreffenden Schuss,
+  eine echte Mine, Zornabbau-Karenz+Rate MIT DEN ECHTEN balance.json-Werten,
+  die 25-%-LP-Zornuntergrenze ueber 10 simulierte Sekunden, Rammstoss
+  Aussen- vs. Innenwand (beide ueber eine echte, substep-gefahrene
+  Kollision), Hammerschlag sichere Luecke vs. Trefferzone (inkl.
+  Betaeubung), Schleifspur-Kadenz/kein-Betaeuben/Verblassen, Rasereistart
+  bei 100 Zorn (Angriffsabbruch, Gefahrenobjekte geleert, Sperre), die
+  komplette Rasereidauer mit Wandkontakt UND unveraendertem Zorn, der
+  Zusammenbruch (offene Panzerung genau `overheatedS` lang, Zorn
+  eingefroren, Rueckkehr auf `rageAfterOverheat`/`lowHpMinRage`), „der
+  Amboss feuert nie" ueber 400 simulierte Ticks, Boss-Tod raeumt Schockwellen/
+  Schleifspuren restlos auf. **Drei echte Testkonstruktionsfehler beim
+  eigenen Testbau gefunden und behoben** (kein Code-Bug, reine Testaufbau-
+  Fallen — dokumentiert, weil sie sonst als falsche Positive durchgegangen
+  waeren): (1) `armorBlocks()` braucht `tank.x`/`tank.y` fuer seine
+  Winkelmathematik — ein Test-Tank-Objekt ohne diese Felder liefert `NaN`
+  und damit immer `false`; (2) `createMine()`s Radiusparameter heisst in
+  `tanksData.mine` `radiusPx`, nicht `radius` — ein `undefined`-Radius laesst
+  `circlesOverlap()` nie ausloesen; (3) `boss.lastRageEventAt` blieb nach
+  `initedAnvilRoom()`s einmaligem Init-Tick bei `-1e9` stehen — ohne einen
+  expliziten Reset auf die aktuelle Zeit lief der passive Zornabbau schon
+  waehrend der wenigen Ticks bis zum Wandkontakt mit und verfaelschte die
+  gemessene Differenz um ein paar Hundertstel. **Ein weiterer Fund beim
+  Schockwellen-Test**: der Spieler wurde anfangs 100 px NOERDLICH des
+  originalen Boss-Spawns (Reihe 1, direkt unter der Aussenwand) platziert —
+  das liegt AUSSERHALB der Arena und die Sichtlinienpruefung schlug aus dem
+  falschen Grund fehl; behoben durch Umpositionieren des Bosses zur
+  Arena-Mitte fuer diesen isolierten Test.
+- Zusaetzlich ein eigenstaendiger Playwright-Smoke im echten Browser (nicht
+  in die Suite eingecheckt, reine Vor-Merge-Verifikation): baut ueber die
+  echten, per `fetch()` geladenen `data/*.json` + Spielmodule einen echten
+  `boss_anvil`-Raum, laesst den Spieler 600 Ticks lang auf den Boss feuern —
+  der Zorn steigt sichtbar (0→100), der Boss durchlaeuft dabei
+  `between_attacks`/`charge_windup`/`charge`/`inner_crash`/`outer_crash`/
+  `frenzy_warning`/`frenzy_aim`/`frenzy_charge`/`frenzy_turnaround` genau wie
+  vorgesehen, Boss-LP bestaetigt exakt 1050 — und rendert einen echten Frame
+  ueber `renderer.js`/`hud.js` (inkl. der neuen `drawAnvilHazards()`/
+  Zornband-Overlay/HUD-Zornleiste) ohne einen einzigen Konsolenfehler.
+- `sw.js` auf `v121` gebumpt (`src/game/anvil.js` neu in `ASSETS` — war
+  beim ersten Anlegen der Datei versehentlich vergessen worden, erst beim
+  finalen `ASSETS`-Abgleich aufgefallen und ergaenzt; `v120` war durch den
+  parallel gemergten Hintergrundtausch bereits belegt, ein echter Code-
+  aenderungs-Merge braucht eine eigene, frische Cache-Version), `telemetry.js:
+  GAME_VERSION` mitgezogen. Keine neuen Bild-/Audio-Assets (Sprite-Alias +
+  ausschliesslich wiederverwendete Sounds aus `data/sounds.json`).
+- **Bewusst offen gelassen** (echtes Nutzer-Balancing braucht gespielte
+  Runs, `localStorage.runs` ist in dieser Umgebung durchgehend leer, wie
+  schon bei jeder frueheren Balance-Abnahme in diesem Projekt dokumentiert):
+  alle ~40 Zahlenwerte in `data/balance.json: boss.anvil` sind exakt die im
+  Auftrag vorgegebenen Werte, noch nicht am echten Spielgefuehl nachjustiert.
+  Die Linien-Sicht-Blockade der Schockwellen durch innere Bloecke
+  (`shockwaveBlocked()`) ist nicht als eigener isolierter Testfall geprueft
+  (sie teilt sich die Raymarch-Technik mit der bestehenden, bereits an
+  anderer Stelle bewachten Sichtlinien-KI) — bei Bedarf nachholen.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -7121,6 +7439,15 @@ Konsolenfehler.
       Vorgabe ~3,5–4,5 Min. für einen Durchschnitts-Build) — bei Bedarf
       einen echten Durchlauf/Bot-Test nachholen und `data/balance.json:
       boss.spider` danach justieren.
+- [ ] **Amboss ist komplett prozedural** (kein Sprite-Asset, `t_anvil`
+      aliast auf `t_black`, s. eigener Abschnitt „Amboss (Akt 2)"). Bei
+      echten, freigestellten Grafiken (`body_t_anvil.png`/
+      `turret_t_anvil.png`) `sprites.js: TANK_TYPES` + den Sprite-Alias
+      anpassen, analog zum Champion-Sprite-Nachtrag. Die ~40 Amboss-
+      Balancewerte (`data/balance.json: boss.anvil`) sind ebenfalls noch
+      nicht am echten Spielgefühl geprüft (kein gespielter Run verfügbar,
+      s. Abschnitt-eigener Hinweis) — bei Bedarf nach echtem Testfeedback
+      nachjustieren.
 
 Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
 
@@ -7391,8 +7718,22 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Nekromant-V2 Phase 10: `state.bossShotsAtPlayer`/`bossShotsAtGhost` zählen
   NUR echte Treffer von `fireBullet()`s RÜCKGABEWERT, nicht `roleTurret()`s
   bloße Feuerabsicht (echter Bugfund, s. eigener Abschnitt oben — `if (fire)`
-  allein zählte ein Vielfaches der echten Schüsse). Läuft im echten Spiel
-  aktuell nie (Bosse sind Platzhalter, s. u.).
+  allein zählte ein Vielfaches der echten Schüsse). `stepMirrorBoss`/
+  `stepPhalanxBoss` laufen im echten Spiel aktuell nie (Akt 2 nutzt seit
+  dem Amboss-Auftrag `t_anvil` statt `t_mirror`, Akt 1 bleibt der
+  `t_black`-Platzhalter, s. u.) — `stepAnvilBoss` (Akt 2, s. u.) wird nur
+  noch per Re-Export aus `anvil.js` durchgereicht.
+- `src/game/anvil.js` — Amboss (Akt 2, Amboss-Auftrag): eigenständiger
+  Zustandsautomat `stepAnvilBoss()` (15 Zustände, deterministische
+  Angriffsauswahl nach Zornband, kein RNG). Bewegung/Kollision der drei
+  Angriffe laufen komplett außerhalb von `moveTank()`/`DRIVES` (Muster wie
+  `stepMirrorBoss`/`stepSpiderBoss`), inkl. einer eigenen substep-genauen
+  Wandtreffer-Erkennung (`moveChargeSubsteps()`, unterscheidet Außen- von
+  Innenwand). `showAnvilHint()` (einmalige Lernhinweise über
+  `storage.js: getFlag/setFlag`) ist die einzige weitere Exportfunktion,
+  beide werden ausschließlich über `bossai.js` re-exportiert (Auftrags-
+  vorgabe: „Implementiere stepAnvilBoss() in src/game/bossai.js"). Kennt
+  kein `fireBullet()`/`roleTurret()` — der Amboss feuert nie.
 - `src/game/cfg.js` — Panzer-cfg + alle Upgrade-Effekte. Der Kern ist seit
   UMBAUPLAN-LP Phase 10 EINE generische `core`-Schleife (eine neue Karte
   braucht keine Codezeile, nur ihren `core`-Eintrag in `upgrades.json`);
@@ -7532,7 +7873,9 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `t_green`, `t_purple`, `t_white`, `t_black`. `t_armored` und `t_prism`
   haben **keine eigenen Sprites** — `sprites.js` mappt sie über
   `SPRITE_ALIAS` auf `t_grey`/`t_teal`; ihre Identität ist das
-  Panzerungs-Overlay.
+  Panzerungs-Overlay. `t_anvil` (Amboss, Akt 2) aliast ebenso auf `t_black`
+  — seine Identität trägt vollständig das Zornband-Farb-Overlay in
+  `renderer.js: drawTank()` (s. eigener Abschnitt „Amboss (Akt 2)").
 - **Klassen-Sprites (Nutzergrafik):** `c_frost`, `c_flame`, `c_necro`,
   `c_blast` haben jetzt **eigene** `body_*/turret_*`-Sprites; die übrigen
   fünf Klassen (`c_tesla`/`c_toxic`/`c_scrap`/`c_ricochet`/`c_engineer`)

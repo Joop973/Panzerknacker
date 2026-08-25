@@ -93,6 +93,64 @@ export function createHud(ctx) {
       ctx.fillText(`COMBO ×${run.combo}`, WIDTH / 2, 44);
       ctx.textAlign = 'left';
     }
+
+    drawAnvilBoss(run);
+  }
+
+  // Amboss-Auftrag (Abschnitt 17, Darstellung): Boss-Lebensleiste + eine
+  // Zehner-Zornleiste ("ZORN") direkt darunter -- fest im HUD-Bereich unter
+  // der Kopfzeile (y 24..48), damit sie NIE die Touch-Sticks/-Knoepfe an den
+  // Bildschirmraendern verdeckt. Nur sichtbar, solange der Amboss lebt.
+  function drawAnvilBoss(run) {
+    const st = run.state;
+    const boss = st.anvilBoss;
+    if (!boss || !boss.alive) return;
+    const bx = 20;
+    const bw = WIDTH - 40;
+
+    // Boss-Lebensleiste.
+    ctx.font = 'bold 10px monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#e8e4d8';
+    ctx.fillText('DER AMBOSS', bx, 32);
+    const hpFrac = Math.max(0, Math.min(1, boss.hp / boss.cfg.maxHp));
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(bx - 1, 34, bw + 2, 7);
+    ctx.fillStyle = '#c9a03c';
+    ctx.fillRect(bx, 35, Math.max(1, Math.round(bw * hpFrac)), 5);
+
+    // Zornleiste: zehn Segmente zu je zehn Zorn (Abschnitt 17). Segmentfarbe
+    // folgt dem Zornband -- dieselbe Bandeinteilung wie das Koerper-Overlay
+    // in renderer.js, damit HUD und Panzer nie widersprechen.
+    const rage = boss.rage || 0;
+    const segGap = 2;
+    const segW = (bw - segGap * 9) / 10;
+    const segY = 45;
+    const bandColor = rage >= 100 ? '#ffffff' : rage >= 70 ? '#ff5a3c' : rage >= 40 ? '#ff9a4a' : '#c9a03c';
+    for (let i = 0; i < 10; i++) {
+      const sx = bx + i * (segW + segGap);
+      const fillFrac = rage >= (i + 1) * 10 ? 1 : rage > i * 10 ? (rage - i * 10) / 10 : 0;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(sx - 1, segY - 1, segW + 2, 8);
+      if (fillFrac > 0) {
+        ctx.fillStyle = bandColor;
+        ctx.fillRect(sx, segY, Math.max(0, segW * fillFrac), 6);
+      }
+    }
+    ctx.font = 'bold 9px monospace';
+    const flashing = rage >= 100 || (boss.mode && boss.mode.startsWith('frenzy'));
+    ctx.fillStyle = flashing
+      ? `rgba(255,255,255,${(0.55 + 0.45 * Math.sin(run.playTime * 10)).toFixed(3)})`
+      : '#e0c860';
+    ctx.fillText('ZORN', bx, segY + 16);
+    // Zusammenbruch: eindeutiger Text statt nur einer Balkenfarbe -- die
+    // offene Panzerung ist die wichtigste taktische Information im Kampf.
+    if (boss.armorDisabled) {
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#7fe6c8';
+      ctx.fillText('PANZERUNG OFFEN', bx + bw, segY + 16);
+      ctx.textAlign = 'left';
+    }
   }
 
   function dim(alpha) {

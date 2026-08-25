@@ -370,13 +370,132 @@ export function drawLeadMarkers(ctx, state) {
 
 // Schwebende Kurztexte ("Abpraller!").
 export function drawTexts(ctx, state) {
-  ctx.font = 'bold 12px monospace';
   ctx.textAlign = 'center';
   for (const tx of state.texts) {
+    // Amboss-Auftrag (Abschnitt 18): einmalige Lernhinweise brauchen einen
+    // eigenen Look -- deutlich groesser, FEST ueber der Arena (keine
+    // Aufwaertsdrift wie ein normaler Trefferschwebetext, der sonst nach
+    // 3,5 s laengst aus dem Bild gewandert waere) + dunkler Kontrast-
+    // hintergrund, sonst auf einem Handydisplay neben den vielen kleinen
+    // Zorn-/Flankentexten kaum lesbar.
+    if (tx.hint) {
+      ctx.globalAlpha = 1 - tx.age / tx.life;
+      ctx.font = 'bold 15px monospace';
+      const w = ctx.measureText(tx.text).width;
+      ctx.fillStyle = 'rgba(10,10,14,0.75)';
+      ctx.fillRect(tx.x - w / 2 - 10, tx.y - 14, w + 20, 22);
+      ctx.fillStyle = tx.color;
+      ctx.fillText(tx.text, tx.x, tx.y + 2);
+      continue;
+    }
+    ctx.font = 'bold 12px monospace';
     ctx.globalAlpha = 1 - tx.age / tx.life;
     ctx.fillStyle = tx.color;
     ctx.fillText(tx.text, tx.x, tx.y - tx.age * 22);
   }
   ctx.globalAlpha = 1;
   ctx.textAlign = 'left';
+}
+
+// Amboss-Auftrag (Abschnitt 17, Darstellung): Rammwarnkorridor, Schockwellen
+// mit deutlich erkennbaren Sicherheitsluecken und die verblassende
+// Schleifspur -- alle drei ueberdauern bzw. kuendigen sich unabhaengig vom
+// normalen Panzer-Rendering an, deshalb ein eigener Zeichenblock (Muster:
+// drawMortars/drawHazards). Bewusst NUR Darstellung -- die eigentliche
+// Trefferlogik (Sicherheitsluecken, Wandblockade) lebt komplett in
+// src/game/anvil.js, hier wird nur nachgezeichnet, was dort schon gilt.
+export function drawAnvilHazards(ctx, state) {
+  const boss = state.anvilBoss;
+  const acfg = state.data.balance?.boss?.anvil;
+  if (!acfg) return;
+
+  // Rammwarnkorridor: nur waehrend der Zielaufnahme sichtbar (normaler
+  // Windup UND die kurze Raserei-Zielphase), verschwindet GENAU wenn der
+  // Sprint beginnt -- kein uebrig bleibendes unsichtbares Gefahrenfeld.
+  // Breite = Amboss- + Spielerradius (die tatsaechliche Kollisionsbreite,
+  // keine duenne Linie), Laenge bis zur ersten Wand entlang der eingefrorenen
+  // Richtung (dieselbe Ray-March-Technik wie die kurze Ziellinien-Andeutung
+  // am Spielerrohr in drawTank()).
+  if (boss && boss.alive && (boss.mode === 'charge_windup' || boss.mode === 'frenzy_aim')) {
+    const dir = boss.chargeDir;
+    const player = state.player;
+    const halfWidth = boss.cfg.radius + (player?.cfg?.radius || 14);
+    const perp = dir + Math.PI / 2;
+    let len = 900;
+    for (let d = 8; d < len; d += 8) {
+      if (state.isSolid(boss.x + Math.cos(dir) * d, boss.y + Math.sin(dir) * d)) {
+        len = d;
+        break;
+      }
+    }
+    const px = Math.cos(perp) * halfWidth;
+    const py = Math.sin(perp) * halfWidth;
+    const ex = boss.x + Math.cos(dir) * len;
+    const ey = boss.y + Math.sin(dir) * len;
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,90,50,0.22)';
+    ctx.beginPath();
+    ctx.moveTo(boss.x + px, boss.y + py);
+    ctx.lineTo(boss.x - px, boss.y - py);
+    ctx.lineTo(ex - px, ey - py);
+    ctx.lineTo(ex + px, ey + py);
+    ctx.closePath();
+    ctx.fill();
+    // Klare Endkante -- zeigt, wie weit der Sprint reicht.
+    ctx.strokeStyle = 'rgba(255,150,100,0.65)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ex - px, ey - py);
+    ctx.lineTo(ex + px, ey + py);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Schockwellen (Hammerschlag): gefaehrlicher Ring rot, jede sichere Luecke
+  // ein deutlich abgesetzter, andersfarbiger Keil -- Treffer/sicher muessen
+  // auch auf einem kleinen Handydisplay ohne Nachdenken unterscheidbar sein.
+  if (state.anvilShockwaves?.length) {
+    const gapHalfRad = ((acfg.shockwaveGapDeg ?? 80) * Math.PI) / 360;
+    const offsets = (acfg.shockwaveGapOffsetsDeg ?? [0]).map((d) => (d * Math.PI) / 180);
+    const width = Math.max(2, acfg.shockwaveWidthPx ?? 12);
+    for (const w of state.anvilShockwaves) {
+      const r = Math.max(1, w.radius);
+      ctx.save();
+      ctx.lineWidth = width;
+      ctx.strokeStyle = 'rgba(255,110,60,0.72)';
+      ctx.beginPath();
+      ctx.arc(w.x, w.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(110,235,180,0.9)';
+      for (const off of offsets) {
+        const gc = w.heading + Math.PI + off;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, r, gc - gapHalfRad, gc + gapHalfRad);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Schleifspur: gluehende Splitter, verblassen sichtbar VOR dem
+  // Verschwinden (endTrailAttack() gibt allen noch lebenden Segmenten
+  // dieselbe Restlebensdauer, hier nur ausgelesen).
+  if (state.anvilTrails?.length) {
+    const R = acfg.trailRadiusPx ?? 13;
+    const fadeWindow = acfg.trailFadeAfterAttackS ?? 0.8;
+    for (const seg of state.anvilTrails) {
+      let alpha = 0.55;
+      if (seg.expireAt != null) {
+        const remain = Math.max(0, seg.expireAt - state.time);
+        alpha = 0.55 * Math.min(1, remain / fadeWindow);
+      }
+      ctx.fillStyle = `rgba(255,140,70,${alpha.toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(seg.x, seg.y, R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255,205,130,${(alpha * 0.9).toFixed(3)})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
 }

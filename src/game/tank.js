@@ -340,6 +340,14 @@ export function fireBullet(tank, state, pressed) {
     state.rng() < Math.min(critCfg.cap ?? 1, (tank.cfg.critChance ?? 0) + buffCritChanceAdd);
 
   const muzzle = tank.cfg.radius + 8; // Spitze des Rohrs
+  // Amboss-Auftrag: EINE Ereigniskennung fuer diesen ganzen Abzug -- alle
+  // Kugeln, die die folgende Schleife erzeugt (Doppelrohr, Streuschuss),
+  // teilen sie sich, damit ein Zorn-Angriffspaket (state.js:
+  // registerAnvilRage) sie als EINEN Treffer zaehlt statt mehrere. Ein reiner
+  // Zaehler auf `state` (kein Gameplay-RNG-Verbrauch, keine Determinismus-
+  // Auswirkung -- die Kennung selbst beeinflusst kein Spielverhalten, sie
+  // dient nur der Dedupe-Logik).
+  const rageEventId = 'r' + (state.nextRageEventId = (state.nextRageEventId || 0) + 1);
   let fired = false;
   for (let i = 0; i < angles.length; i++) {
     if (liveBulletsOf(state, tank) >= mag) break;
@@ -378,6 +386,7 @@ export function fireBullet(tank, state, pressed) {
         // beim Treffer zusaetzlich zu oc?.critMultBonus).
         critMultBonus: buffCritMultAdd,
         pierce: (tank.cfg.pierce || 0) + buffPierceAdd, // Nekromant-V2 Phase 2/6: Durchschlag + Einmal-Ladung
+        rageEventId,
       }),
     );
     // Muendungsblitz -- bei t_white der einzige immer sichtbare Kanal.
