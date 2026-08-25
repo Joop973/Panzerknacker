@@ -29,6 +29,11 @@ const TANK_TYPES = [
   // in drawGhosts() -- ersetzt dort body_ghost/turret_ghost, alle anderen
   // Untertanen bleiben beim gemeinsamen 'ghost'-Sprite.
   'champion',
+  // Spinnenboss (Nutzergrafik, Akt 3): eigenes body_t_spider.png/
+  // turret_t_spider.png -- laedt ueber denselben body/turret-Mechanismus,
+  // gezeichnet aber NICHT von renderer.js: drawTank() (das ueberspringt
+  // spiderBoss-Panzer explizit), sondern von spiderrender.js.
+  't_spider',
 ];
 
 // Champion-Aura (Nutzergrafik): 12-Frame-Loop-Animation (champion_aura_00..11.png),
@@ -48,7 +53,14 @@ const TILE_KEYS = ['floor', 'wall', 'breakable', 'hole'];
 // Zelle EIN Sprite aus, s. dortiger Kommentar). Eigene Kategorien statt
 // TILE_KEYS, weil beide ein anderes Zeichen-Verfahren brauchen als eine
 // einzelne, wiederholbare Kachel.
-export const SPRITES = { body: {}, turret: {}, bullet: {}, tile: {}, championAura: {}, arena: {}, tileSheet: {} };
+// Spinnenboss (Nutzergrafik): 'leg' ist EIN gemeinsames, rotierbares
+// Bein-Sprite fuer Boss UND Minen (Boss zieht es groesser, Minen kleiner --
+// eine reine Skalierungsfrage in spiderrender.js, kein zweites Bein-Sprite
+// noetig, s. dortiger Kommentar), 'mineBody' die kleine Minen-Huelle
+// (t_spider selbst nutzt body/turret ueber TANK_TYPES oben), 'web' das
+// Spinnennetz-Sprite. Eigene Kategorie statt tile/body, weil keins der drei
+// in das bestehende Kachel- oder Rumpf/Turm-Schema passt.
+export const SPRITES = { body: {}, turret: {}, bullet: {}, tile: {}, championAura: {}, arena: {}, tileSheet: {}, spider: {} };
 
 let total = 0;
 let loaded = 0;
@@ -92,6 +104,14 @@ export function initSprites() {
     const key = String(i).padStart(2, '0');
     load('championAura', key, `champion_aura_${key}.png`);
   }
+  // Spinnenboss (Nutzergrafik): body_t_spider/turret_t_spider laufen schon
+  // ueber die TANK_TYPES-Schleife oben mit. 'leg' hat den Gelenkpunkt am
+  // LINKEN Bildrand (statt Bildmitte wie bei body/turret) -- spiderrender.js
+  // rotiert/skaliert es wie einen Zeiger vom Gelenk zum Fuss, s. dortiger
+  // Kommentar.
+  load('spider', 'leg', 'spider_leg.png');
+  load('spider', 'mineBody', 'body_spider_mine.png');
+  load('spider', 'web', 'spider_web.png');
 }
 
 // true, sobald alle Sprites bereit sind (dann Sprite- statt Vektor-Look).
