@@ -441,6 +441,25 @@
       "maxHp": 1800,
       "damage": 26,
       "desc": "Acht angreifbare Beine schützen den Körper. Klettert über innere Wände, erzeugt Spinnenminen und verschießt Netze."
+    },
+    "t_anvil": {
+      "_comment": "Amboss-Auftrag: Akt-2-Boss, ersetzt den t_black-Platzhalter auf boss_mirror (die Arena selbst heisst jetzt boss_anvil). speed='fix' ist nur der resolveCfg()-Ausgangswert -- src/game/anvil.js steuert Bewegung/Rammtempo komplett selbst ausserhalb von moveTank()/DRIVES (Muster wie stepMirrorBoss/stepPhalanxBoss/stepSpiderBoss). weapon='bullet' bleibt aus Kompatibilitaetsgruenden stehen (resolveCfg() braucht einen bulletSpeeds-Schluessel), der Boss ruft fireBullet() aber nie auf -- seine eigene Boss-KI hat keine Feuerfunktion. anvilBoss:true macht isBossCfg() wahr (cfg.js) UND aktiviert gezielt den Flanken-/Heckschaden ueber flankable:true (state.js) -- ohne flankable waere isBossCfg() allein ein Ausschlussgrund, mit flankable greift Seite x1.5/Heck x2.5 trotzdem. radius:18 ueberschreibt den globalen Panzerradius (cfg.js: resolveCfg() liest t.radius, falls gesetzt). armor.arc:140 ist die reine Frontpanzerung (bestehende armor.js-Logik, unveraendert) -- Zorn/Rammstoss/Hammerschlag/Schleifspur/Raserei/Zusammenbruch sind komplett datengetrieben in data/balance.json: boss.anvil und laufen ueber src/game/anvil.js.",
+      "speed": "fix",
+      "magazine": 0,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "guardian",
+      "anvilBoss": true,
+      "flankable": true,
+      "radius": 18,
+      "label": "Der Amboss",
+      "maxHp": 1050,
+      "damage": 34,
+      "armor": {
+        "arc": 140,
+        "reflects": true
+      },
+      "desc": "Ein schwer gepanzerter Rammboss. Jeder Angriff schürt seinen Zorn. Außenwand-Aufpralle kühlen ihn ab."
     }
   }
 }

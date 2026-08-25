@@ -14,12 +14,13 @@
       "_todo": "balance"
     },
     {
-      "boss": "boss_mirror",
+      "boss": "boss_anvil",
       "rooms": 16,
       "bossHpMult": 1.4,
       "lifeReward": 1,
       "budget": { "base": 6, "perRoom": 2.6 },
-      "_todo": "balance"
+      "_todo": "balance",
+      "_comment_anvil": "Amboss-Auftrag: ersetzt boss_mirror/t_black. bossHpMult bleibt stehen, greift aber NICHT auf t_anvil (isBossCfg()/anvilBoss ueberspringt applyHpScaling() komplett, s. cfg.js) -- t_anvil.maxHp (1050, tanks.json) ist bereits der finale Wert, keine Doppelskalierung."
     },
     {
       "boss": "boss_spider",

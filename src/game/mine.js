@@ -135,6 +135,19 @@ function explode(mine, state) {
   const mineDmg =
     (state.data.balance?.damage?.explosion ?? 1) * (mine.owner?.cfg?.explosionDamageMult || 1);
   explodeAt(state, mine.x, mine.y, R, null, meta, mineDmg);
+  // Amboss-Auftrag (Abschnitt 6): eine Mine benoetigt eine stabile
+  // Ereigniskennung -- ihre eigene, laengst vorhandene id ("mine:" + id)
+  // erfuellt das automatisch, auch fuer Kettenreaktionen (jedes weitere
+  // Glied ist eine ANDERE Mine mit einer ANDEREN id, also ein eigenes
+  // Ereignis) und Streuminen-Splitter (ebenfalls eigene ids). Nur, wenn der
+  // Amboss ueberhaupt im Explosionsradius liegt und die Mine vom Spieler
+  // oder einem Geist gelegt wurde.
+  if ((mine.owner === state.player || mine.owner?.isGhost) && state.anvilBoss?.alive) {
+    const ab = state.anvilBoss;
+    if (circlesOverlap(mine.x, mine.y, R, ab.x, ab.y, ab.cfg.radius)) {
+      state.registerAnvilRage('explosion', 'mine:' + mine.id);
+    }
+  }
   // Streumine-Upgrade: schleudert kleine Splitterminen (die nicht
   // weiter splittern -> keine Endloskette).
   const sub = mine.owner?.cfg?.clusterMine;

@@ -45,9 +45,15 @@ const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
 // hat bewusst nur EINEN Gegner-Spawn (arenaEnemySpawnCount()===1), es
 // spawnt also ausschliesslich der Spinnenboss, keine eingekaufte
 // Unterstuetzung (Abschnitt 6/26).
+// Amboss-Auftrag: Akt 2 (acts[1].boss) zeigt jetzt auf 'boss_anvil' statt
+// 'boss_mirror' -- t_anvil ist wie t_spider ein echter, ausgearbeiteter
+// Bosstyp (kein Platzhalter mehr). boss_anvil hat ebenfalls nur EINEN
+// Gegner-Spawn (arenaEnemySpawnCount()===1), es spawnt also ausschliesslich
+// der Amboss, keine eingekaufte Unterstuetzung -- supportBudget bleibt
+// global unveraendert, greift hier aber durch den einzelnen Spawnplatz nie.
 const BOSS_ENEMY_TYPES = {
   boss_reactor: ['t_black'],
-  boss_mirror: ['t_black'],
+  boss_anvil: ['t_anvil'],
   boss_phalanx: ['t_black'],
   boss_spider: ['t_spider'],
 };

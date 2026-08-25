@@ -283,6 +283,9 @@ async function init() {
   // monoton, state selbst ist pro Raum frisch -- kein Delta-Sync noetig,
   // anders als die RUNWEITEN necroStacks).
   let teleNecro = null;
+  // Amboss-Auftrag (Abschnitt 20): dasselbe Muster wie teleNecro -- reine
+  // Rohzaehler aus state.js/anvil.js, unveraendert abgelesen.
+  let teleAnvil = null;
   // Phase 11b: schlechtester Logik-/Render-Frame IM AKTUELLEN RAUM, nur fuer
   // die Debug-Anzeige -- bewusst nicht in der Telemetrie (die hat mit
   // minFps schon ihre eigene, persistierte Kennzahl seit Phase 1).
@@ -306,6 +309,7 @@ async function init() {
     teleShotsHit = 0;
     teleMagBlocked = 0;
     teleNecro = null;
+    teleAnvil = null;
   }
 
   // Momentaufnahme des laufenden Raums (jeden Tick, sehr billig).
@@ -346,6 +350,25 @@ async function init() {
       bossShotsAtPlayer: st.bossShotsAtPlayer,
       bossShotsAtGhost: st.bossShotsAtGhost,
     };
+    // Amboss-Auftrag (Abschnitt 20): nur befuellen, wenn der Raum wirklich
+    // einen Amboss enthaelt -- reine Rohzaehler, main.js schreibt nur ab.
+    if (st.anvilBoss) {
+      teleAnvil = {
+        fightDuration: st.anvilFightDuration ?? null,
+        averageRage: st.anvilAverageRage ?? null,
+        maxRage: st.anvilMaxRage || 0,
+        frenzyCount: st.anvilFrenzyCount || 0,
+        frontHits: st.anvilFrontHits || 0,
+        sideHits: st.anvilSideHits || 0,
+        rearHits: st.anvilRearHits || 0,
+        outerCrashes: st.anvilOuterCrashes || 0,
+        innerCrashes: st.anvilInnerCrashes || 0,
+        ramHitsPlayer: st.anvilRamHitsPlayer || 0,
+        damageDuringOverheat: st.anvilDamageDuringOverheat || 0,
+        ghostRageGenerated: st.anvilGhostRageGenerated || 0,
+        timeWithoutRageHit: st.anvilTimeWithoutRageHit || 0,
+      };
+    }
   }
 
   function flushRoomTelemetry() {
@@ -369,6 +392,7 @@ async function init() {
       shotsHit: teleShotsHit,
       magBlockedTime: teleMagBlocked,
       necro: teleNecro,
+      anvil: teleAnvil,
     });
     run.scrapThisRoom = 0;
   }

@@ -44,6 +44,13 @@ export function isLive(b) {
 
 // Blockt die Panzerung dieses Panzers den Treffer? true = kein Kill.
 export function armorBlocks(tank, b) {
+  // Amboss-Auftrag (Zusammenbruch nach der Raserei): tank.armorDisabled ist
+  // ein generischer, zur Laufzeit gesetzter Schalter -- ein Boss deaktiviert
+  // damit vorübergehend seine eigene Frontpanzerung (src/game/anvil.js),
+  // ohne cfg.armor selbst zu veraendern (das wuerde auch die Renderer-
+  // Anzeige treffen, die stattdessen bewusst weiterlaeuft, s. dort). Bei
+  // jedem anderen Panzer bleibt das Feld undefined/false und damit wirkungslos.
+  if (tank.armorDisabled) return false;
   const arc = tank.cfg.armor?.arc;
   if (!arc) return false;
   if (arc >= 360) return true;

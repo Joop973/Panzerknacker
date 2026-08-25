@@ -19,6 +19,12 @@ import { WIDTH, HEIGHT } from '../config.js';
 import { fireBullet } from './tank.js';
 import { roleTurret } from './ai_turrets.js';
 import { resolveTarget, pickTarget } from './ai.js';
+// Amboss (Akt 2): eigenstaendiger Zustandsautomat, ausgelagert nach
+// anvil.js (Dateigroessen-Konvention aus CLAUDE.md, Muster spider.js).
+// Reiner Re-Export -- state.js importiert stepAnvilBoss weiterhin von HIER
+// (wie den Auftrag es verlangt: "Implementiere stepAnvilBoss() in
+// src/game/bossai.js"), die eigentliche Logik lebt aber in anvil.js.
+export { stepAnvilBoss, showAnvilHint } from './anvil.js';
 
 // Upgradepool-v2 Phase 5: Bosse wechseln zeitgesteuert (kein RNG) zwischen
 // Fixierung auf den Spieler (ignoriert Geister komplett) und freier

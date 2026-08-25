@@ -112,6 +112,12 @@ const SPRITE_ALIAS = {
   t_reactor: 't_green',
   t_mirror: 't_teal',
   t_phalanx: 't_grey',
+  // Amboss-Auftrag (Abschnitt 17): "existiert noch kein eigenes Sprite ->
+  // t_anvil vorlaeufig auf ein vorhandenes dunkles Boss-/Panzerbild aliasen,
+  // keine neue Grafik erzeugen" -- t_black ist der naechstliegende dunkle
+  // Bestandstyp. Anschlusspunkt fuer eine spaetere echte body_t_anvil.png/
+  // turret_t_anvil.png bleibt offen (einfach hier entfernen).
+  t_anvil: 't_black',
   // UMBAUPLAN-LP Phase 9: die zehn Klassen teilen sich das Spieler-Sprite --
   // ihre Identitaet traegt (vorerst) die Elementfarbe/der Wert, kein eigenes
   // Asset. 'player' selbst ist die Standard-Klasse und braucht keinen Alias.

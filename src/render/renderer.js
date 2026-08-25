@@ -21,6 +21,7 @@ import {
   drawThreatRings,
   drawLeadMarkers,
   drawMortars,
+  drawAnvilHazards,
 } from './effects.js';
 import { drawSpiderBossLegs, drawSpiderBossBody, drawSpiderMines, drawSpiderWebs } from './spiderrender.js';
 import { traceTrajectory } from '../game/bullet.js';
@@ -79,6 +80,7 @@ export const TANK_COLORS = {
   t_mirror: '#7fe6ff', // Der Spiegel -- kaltes Cyan
   t_phalanx: '#c9d0da', // Phalanx-Wache -- helles Stahlgrau
   t_spider: '#8a6ad8', // Spinnenboss -- dieselbe violette Leitfarbe wie seine Lebensbalken
+  t_anvil: '#c9a03c', // Amboss -- warmes Metallgold, wird je nach Zorn ueberzeichnet (drawAnvilGlow)
 
   ghost_tank: '#cfe0f5', // Geisterpanzer (Anhang B) -- blasses Kaltweiss
 };
@@ -659,6 +661,68 @@ export function createRenderer(ctx) {
     // Muss auf einem Handydisplay in einer Sekunde lesbar sein, deshalb
     // bewusst zu deutlich: dicker Balken bzw. eigener Rautenkranz.
     drawArmor(state, t, x, y, r);
+
+    // Amboss-Auftrag (Abschnitt 17, Darstellung): der Zornzustand muss auch
+    // OHNE Blick auf die HUD-Zornleiste erkennbar sein -- Farbe UND Puls/
+    // Funkenverhalten je Band (nie Farbe allein, s. Tabelle in Abschnitt 17).
+    // armorDisabled (Zusammenbruch) hat Vorrang vor jeder Zornfarbe: eine
+    // offene Panzerung muss anders aussehen als jeder Zornzustand, sonst
+    // waere "Front nimmt jetzt normalen Schaden" unsichtbar. Kein eigenes
+    // Sprite (t_anvil aliast auf t_black, s. sprites.js) -- die Farbe/das
+    // Puls-Overlay TRAEGT hier die Zustandsidentitaet.
+    if (t.cfg.anvilBoss) {
+      // Rammstoss-Windup (Abschnitt 10): "Schaufel"/Frontpanzerung bekommt
+      // eine sichtbare Aufladeanimation -- ein schnell pulsierender heller
+      // Streifen direkt ueber dem normalen Panzerungsbalken.
+      if (t.mode === 'charge_windup' && t.cfg.armor?.arc) {
+        const half = (t.cfg.armor.arc * Math.PI) / 360;
+        ctx.strokeStyle = `rgba(255,220,140,${(0.5 + 0.4 * Math.sin(state.time * 20)).toFixed(3)})`;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, r + 7, t.heading - half, t.heading + half);
+        ctx.stroke();
+      }
+      if (t.armorDisabled) {
+        ctx.strokeStyle = 'rgba(90,100,110,0.8)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([3, 5]);
+        ctx.beginPath();
+        ctx.arc(x, y, r + 6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // Blauer Kuehldampf -- unverwechselbar mit dem weissen Rasereigluehen.
+        for (let i = 0; i < 3; i++) {
+          const a = state.time * 1.4 + (i * Math.PI * 2) / 3;
+          const px = x + Math.cos(a) * (r + 10);
+          const py = y + Math.sin(a) * (r + 10) - ((state.time * 20) % 12);
+          ctx.fillStyle = `rgba(140,200,220,${(0.4 - 0.1 * i).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(px, py, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        const rage = t.rage || 0;
+        const frenzy = t.mode && t.mode.startsWith('frenzy');
+        if (rage >= 100 || frenzy) {
+          ctx.fillStyle = `rgba(255,255,255,${(0.25 + 0.25 * Math.sin(state.time * 14)).toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(x, y, r + 10, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (rage >= 70) {
+          ctx.strokeStyle = `rgba(255,70,50,${(0.4 + 0.3 * Math.sin(state.time * 8)).toFixed(3)})`;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(x, y, r + 8, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (rage >= 40) {
+          ctx.strokeStyle = 'rgba(255,150,60,0.55)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, r + 6, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+    }
 
     // Reaktorkern (Phase 14): solange Generatoren stehen, ein deutlicher
     // pulsierender Schutzring -- sonst wirkt jeder Treffer wie ein Bug
@@ -1382,6 +1446,7 @@ export function createRenderer(ctx) {
       drawHazards(ctx, state);
       drawWaveWarning(ctx, state);
       drawMortars(ctx, state); // Phase 3: immer sichtbar, kein Schalter
+      drawAnvilHazards(ctx, state); // Amboss-Auftrag: immer sichtbar, kein Schalter
       drawGhosts(ctx, state, alpha);
       drawSpiderBossLegs(ctx, state); // unter dem Koerper -- Gelenke sitzen am Panzerrand
       for (const t of state.tanks) drawTank(state, t, alpha);

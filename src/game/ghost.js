@@ -1321,6 +1321,11 @@ export function updateGhosts(state, dt) {
       // ghost_077 "Seelenverdichtung"/ghost_078 "Alpha-Schuss": Durchschlag.
       const pierceAdd =
         (g.isChampion ? playerCfg?.necroCrownPierceAdd || 0 : 0) + (isAlphaShot ? playerCfg?.necroCrownAlphaShotPierceAdd || 0 : 0);
+      // Amboss-Auftrag: EINE Ereigniskennung fuer diese ganze Geistersalve --
+      // die Haupt- UND eine evtl. zusaetzliche ghost_076-Kugel dieses Abzugs
+      // teilen sie sich (state.js: registerAnvilRage() zaehlt sie dann als
+      // EIN Ereignis, nicht zwei).
+      const rageEventId = 'r' + (state.nextRageEventId = (state.nextRageEventId || 0) + 1);
       state.bullets.push(
         createBullet(g.x + aimDx * muzzle, g.y + aimDy * muzzle, g.turret, {
           speed: g.cfg.bulletSpeed * (1 + spdPct) * (overwhelm ? playerCfg.necroOverwhelmBulletSpeedMult || 1 : 1),
@@ -1337,6 +1342,7 @@ export function updateGhosts(state, dt) {
           // Geistes selbst, nicht diesen einmaligen Kroenen-Zuschlag.
           critMultBonus: crownCritMultAdd,
           pierce: g.cfg.pierce ? g.cfg.pierce + pierceAdd : pierceAdd || undefined,
+          rageEventId,
         }),
       );
       // ghost_076 "Erbgeschuetz": jeder dritte Schuss des Champions feuert
@@ -1355,6 +1361,7 @@ export function updateGhosts(state, dt) {
             kind: g.cfg.weapon,
             damage: Math.round(dmg * (playerCfg.necroCrownExtraShotDamagePct || 0)),
             damageType: g.cfg.damageType,
+            rageEventId,
           }),
         );
       }

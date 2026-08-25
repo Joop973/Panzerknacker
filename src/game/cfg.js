@@ -12,7 +12,11 @@ export function resolveCfg(data, type) {
   // ueberschreiben; fehlen sie, greifen die Player-Defaults aus balance.json.
   const isPlayerClass = t.player === true || type === 'player';
   return {
-    radius: data.physics.tankRadius,
+    // Amboss-Auftrag: ein Typ darf den globalen Panzerradius ueberschreiben
+    // (t_anvil: 18 statt der ueblichen 12) -- vorher war radius fest an
+    // data.physics.tankRadius gebunden. `?? ` statt `||`, damit ein
+    // theoretischer radius:0 nicht auf den Fallback zurueckfaellt.
+    radius: t.radius ?? data.physics.tankRadius,
     bulletRadius: data.physics.bulletRadius,
     // Lebenspunkte + Schadenswert (UMBAUPLAN-LP Phase 1). Beide stehen in
     // tanks.json und sind dort vorerst ueberall 1 -- damit toetet jeder
@@ -113,6 +117,16 @@ export function resolveCfg(data, type) {
     mirrorBoss: t.mirrorBoss || false,
     phalanx: t.phalanx || false,
     spiderBoss: t.spiderBoss || false,
+    // Amboss-Auftrag: anvilBoss macht isBossCfg() wahr (s. u.) -- gated damit
+    // automatisch Exekution (Grundsteinumbau Phase 2) und Nekromant-
+    // Wiederbelebung (state.js: killTank()) aus UND ueberspringt die
+    // Akt-2-HP-Skalierung (cfg.js: applyHpScaling() unten), ohne dass eine
+    // dieser drei Stellen den Amboss einzeln kennen muesste. flankable
+    // schaltet GEZIELT den (sonst fuer Bosse ausgeschlossenen) Flanken-/
+    // Heckschaden wieder ein -- state.js: die Flankenzonen-Pruefung liest
+    // `!isBossCfg(t.cfg) || t.cfg.flankable`.
+    anvilBoss: t.anvilBoss || false,
+    flankable: t.flankable || false,
   };
 }
 
@@ -1034,7 +1048,7 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
 // dieselbe Erkennung, die stepState() (mirrorBoss/phalanx) und applyDamage()
 // (bossInvincible) ohnehin benutzen, nur an einer Stelle benannt.
 export function isBossCfg(cfg) {
-  return !!(cfg && (cfg.bossInvincible || cfg.mirrorBoss || cfg.phalanx || cfg.spiderBoss));
+  return !!(cfg && (cfg.bossInvincible || cfg.mirrorBoss || cfg.phalanx || cfg.spiderBoss || cfg.anvilBoss));
 }
 
 // Lebenspunkte pro Raum hochskalieren (UMBAUPLAN-LP Phase 2). Wird VOR
