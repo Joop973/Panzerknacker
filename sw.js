@@ -84,6 +84,7 @@ const ASSETS = [
   'assets/sprites/body_c_blast.png',
   'assets/sprites/body_ghost.png',
   'assets/sprites/body_champion.png',
+  'assets/sprites/body_t_spider.png',
   'assets/sprites/champion_aura_00.png',
   'assets/sprites/champion_aura_01.png',
   'assets/sprites/champion_aura_02.png',
@@ -112,6 +113,7 @@ const ASSETS = [
   'assets/sprites/turret_c_blast.png',
   'assets/sprites/turret_ghost.png',
   'assets/sprites/turret_champion.png',
+  'assets/sprites/turret_t_spider.png',
   'assets/sprites/tile_floor.png',
   'assets/sprites/tile_wall.png',
   'assets/sprites/tile_breakable.png',
@@ -123,6 +125,13 @@ const ASSETS = [
   'assets/sprites/arena_kinderzimmer_768x512.png',
   'assets/sprites/tile_wall_sheet_20x64.png',
   'assets/sprites/tile_breakable_sheet_7x64.png',
+  // Spinnenboss-Sprites (Nutzergrafik): koerper_t_spider/turret_t_spider
+  // liegen oben bei den anderen body_/turret_-Eintraegen; die drei hier sind
+  // die neue eigene Kategorie SPRITES.spider (ein gemeinsames Bein-Sprite
+  // fuer Boss UND Minen, s. src/render/sprites.js).
+  'assets/sprites/spider_leg.png',
+  'assets/sprites/body_spider_mine.png',
+  'assets/sprites/spider_web.png',
   'assets/sprites/bullet_normal.png',
   'assets/sprites/bullet_rocket.png',
   'assets/sprites/bullet_bounce.png',

@@ -7381,6 +7381,122 @@ Reaktor/Phalanx zuvor).
   (sie teilt sich die Raymarch-Technik mit der bestehenden, bereits an
   anderer Stelle bewachten Sichtlinien-KI) — bei Bedarf nachholen.
 
+### Spinnenboss-Sprites (Nutzergrafik) — gemergt
+Löst den im Spinnenboss-Abschnitt oben dokumentierten Platzhalterzustand
+auf: der Nutzer hat drei Referenzbilder geliefert (Boss-Körper+Turm+acht
+Beine auf echtem Alpha-Transparenz-Hintergrund; Spinnenmine mit acht
+Bein-Positionen auf einem Schachbrett-Foto mit eingebrannten „Bein N"-
+Labels; ein glänzendes weißes Spinnennetz-Icon auf Schachbrett-Foto) —
+daraus sind fünf spielbare Sprite-Dateien entstanden:
+`body_t_spider.png`/`turret_t_spider.png`/`spider_leg.png`/
+`body_spider_mine.png`/`spider_web.png`.
+- **Nur das erste Referenzbild war eine echte freigestellte Lieferung**
+  (Schachbrettmuster = Transparenz-Indikator, kein Foto-Hintergrund) — Körper,
+  Turm und alle acht Beine ließen sich daraus per randverbundener Flood-Fill-
+  Freistellung (Muster wie bei jeder früheren Sprite-Lieferung) sauber
+  isolieren. Die beiden anderen Referenzbilder sind wie schon beim ersten
+  Spinnenboss-Auftrag dokumentiert **Foto-Mockups mit echtem Schachbrett-
+  Hintergrund und eingebrannten Text-Labels** — daraus ließ sich kein
+  Bild 1:1 direkt übernehmen, nur gezielt extrahieren (s. u.).
+- **EIN gemeinsames Bein-Sprite (`spider_leg.png`) für Boss UND Minen**
+  (bewusste Vereinfachung gegenüber der ursprünglich angenommenen „acht
+  Bein-Sprites je Einheitentyp"): aus einem der acht isolierten Boss-Beine
+  aufbereitet — der Gelenk-Ball (Pivot) sitzt exakt am LINKEN Bildrand
+  (vertikal zentriert, `LEG_PIVOT_MARGIN_PX` in `spiderrender.js`), das
+  Bein zeigt nach der Aufbereitung horizontal nach rechts zur Klaue.
+  `spiderrender.js: drawLegSprite()` rotiert es wie einen Zeiger vom Gelenk
+  zum Fuß und skaliert es auf die tatsächliche Gelenk-Fuß-Distanz — dieselbe
+  Funktion zeichnet die acht Bein-Sprites des Boss UND (viel kleiner
+  skaliert) die acht der Spinnenminen. Die Mine-Referenzbein-Grafiken aus
+  dem zweiten Foto wurden dafür NICHT verwendet (Checkerboard-Extraktion
+  eines einzelnen kleinen Beins aus einem Foto mit ähnlich dunklen
+  Objektfarben wäre unzuverlässig gewesen) — ein optisch stimmiges,
+  bereits sauberes Bein wiederzuverwenden war robuster als eine zweite,
+  fehleranfällige Freistellung.
+- **Body-/Turm-Zentrierung nach demselben „Loch = Drehpunkt"-Verfahren**
+  wie bei den früheren Klassen-/Champion-Sprites: das runde weiße Loch im
+  Körperbild (unterhalb des Spinnen-Icons) wurde per Helligkeits-
+  Schwellenwert im richtigen Suchbereich lokalisiert und die Leinwand
+  asymmetrisch darauf zentriert; beim Turm wurde zuerst der Lauf per
+  Zeilen-/Spalten-Breitenprofil von der Kuppel getrennt (Kuppel breit,
+  Lauf schmal), der Turm um 90° gedreht (**empirisch verifiziert**, nicht
+  nur angenommen: Zielkoordinate des Laufs nach der Drehung geprüft, s.
+  Kommentar in `spiderrender.js`) bis der Lauf nach rechts zeigt (Konvention
+  „Rohr zeigt nach rechts = Winkel 0"), und die Leinwand auf den
+  Kuppel-Schwerpunkt zentriert.
+- **Body-Rotation ist bewusst `heading - PI/2`, nicht die sonst übliche
+  `+ PI/2`**: die Mandibel/das „Gesicht" im Quellbild zeigt nach UNTEN statt
+  nach oben wie bei der allgemeinen Panzer-Sprite-Konvention. Der Turm
+  rotiert dagegen ganz normal mit `tank.turret` (keine Sonderrolle) — beide
+  Werte sind über `tests/spidersprites.mjs` explizit gegen die exakten
+  Rotationswinkel geprüft, nicht nur „irgendein Winkel".
+- **Minenkörper (`body_spider_mine.png`) aus dem Foto extrahiert**: die
+  Freistellung eines dunklen Objekts auf einem SCHWARZ/WEISS-Schachbrett
+  (nicht dem hellen Transparenz-Indikator-Muster) brauchte einen eigenen
+  Ansatz — Hough-Kreiserkennung (`cv2.HoughCircles`) fand den Minenkörper-
+  Kreis zuverlässig, ein Grauwert-/Rotton-Schwellenwert (Minenkörper ist
+  durchgehend dunkelgrau ~25–40, das Schachbrett strikt schwarz~7 oder
+  weiß~246 — deutlich getrennte Wertebereiche) plus Verbindungskomponenten-
+  Filterung + eine ROI-Kreisbegrenzung (schließt die eingebrannte
+  Textbeschriftung und Bein-Hinweislinien aus) lieferten ein sauberes
+  Ergebnis. Kleine Reste an den vier Bildecken (Textfragment-/Linien-Ticks)
+  sind bei der kleinen In-Game-Größe der Mine nicht wahrnehmbar.
+- **Spinnennetz (`spider_web.png`) war der mit Abstand aufwendigste Teil**:
+  ein glänzendes weißes Objekt auf einem SCHWARZ/WEISS-Schachbrett lässt
+  sich nicht per einfachem Farbschwellenwert trennen, weil JPEG-
+  Kompressionsartefakte an JEDER Schachbrett-Kante genug Zwischenwerte
+  erzeugen, um das gesamte Schachbrett zu einem einzigen verbundenen
+  „Störungsnetz" zusammenzuschließen, sobald es die Objektmaske berührt.
+  Gelöst über eine explizite Ausschlusszone (± 3 px) um jede einzelne
+  Schachbrett-Gitterlinie (Rasterperiode + Phase per linearer Regression aus
+  allen sauberen Rand-Zeilen/-Spalten bestimmt), gefolgt von einer
+  Verbindungskomponenten-Filterung nach Form (fast perfekt quadratische,
+  fast vollständig gefüllte Fragmente in der Größe einer einzelnen
+  Schachbrett-Kachel werden verworfen — ein Anzeichen für eine durch
+  Bildphasen-Drift komplett fehlklassifizierte Einzelkachel, kein echtes
+  Netzfragment), einer begrenzten Rückverbindung über die ausgeschlossenen
+  Gitterlinien-Bänder hinweg und einem SELEKTIVEN Lückenfüllen (nur kleine
+  Löcher füllen, die großen Maschenlöcher des Netzes selbst müssen
+  transparent bleiben — ein erster Versuch mit uneingeschränktem
+  `binary_fill_holes` hat genau diese Maschenlöcher fälschlich zugefüllt).
+  **Ergebnis ist kein pixelperfektes Netz** (ein paar sehr kleine
+  Schachbrett-Reste bleiben in einzelnen Maschen sichtbar), aber bei der
+  kleinen In-Game-Darstellungsgröße (`drawSpiderWebs()` skaliert auf
+  `hitRadiusPx * 2.3`) praktisch nicht wahrnehmbar — ein bewusster
+  Kompromiss angesichts der Fotoqualität der Quelle, kein weiterer
+  Zeitaufwand für einen kaum sichtbaren Rest gerechtfertigt.
+- **Alle vier Zeichenfunktionen in `spiderrender.js`
+  (`drawSpiderBossBody`/`drawSpiderBossLegs`/`drawSpiderMines`/
+  `drawSpiderWebs`) prüfen zuerst per `sprite()`, ob ihr Bild geladen ist**,
+  und fallen sonst unverändert auf die alte PROZEDURALE Darstellung zurück
+  (exakt das Muster aus dem Champion-Sprite-Nachtrag) — das Spiel bleibt
+  dadurch auch ohne/während des Ladens der neuen Dateien spielbar, und die
+  bestehende `tests/regression.mjs`-Abdeckung (Abschnitt 66, domstub mit
+  fehlschlagendem Image-Stub) bewacht weiterhin genau diesen Fallback-Pfad.
+- **Neuer, eigener Test `tests/spidersprites.mjs`** (dependency-frei, Muster
+  `tests/championsprite.mjs` — ein EIGENER, ERFOLGREICHER Image-Stub VOR dem
+  ersten Import von `renderer.js`, weil `initSprites()` sonst mit dem
+  Standard-domstub-Stub liefe, der immer fehlschlägt): prüft Struktur (alle
+  fünf Dateien werden mit den erwarteten Namen angefordert, `SPRITES.spider`
+  hat genau 3 Einträge), dass `drawSpiderBossBody()`/`drawSpiderBossLegs()`/
+  `drawSpiderMines()`/`drawSpiderWebs()` bei geladenem Sprite tatsächlich
+  `drawImage(...)` aufrufen statt der alten `arc()`/`stroke()`-Aufrufe, die
+  exakten Rotationswinkel (`heading-PI/2` für den Körper, `turret` für den
+  Turm) und die korrekte Bein-/Minen-Anzahl (nur lebende Beine, acht
+  Mine-Beine). Gegenprobe für jeden Kernpunkt einzeln bestanden (`'t_spider'`
+  aus `TANK_TYPES` entfernt → Struktur- und Body/Turm-Checks rot; die drei
+  `sprite('spider', …)`-Abfragen einzeln auf `null` gesetzt → die jeweiligen
+  Bein-/Minen-/Netz-Checks rot, danach zurückgesetzt).
+- Playwright-Smoke (echter Server, echte PNG-Dateien, kein Node-Stub): ein
+  handgebauter Spinnenboss mit sechs lebenden + zwei toten Beinen, eine
+  Mine und ein Netz werden über die echten `spiderrender.js`-Funktionen auf
+  einen echten Canvas gezeichnet — Screenshot bestätigt ein visuell
+  stimmiges Ergebnis (Körper+Turm mit sichtbarem Spinnen-Icon-Rand, acht
+  radial angeordnete Beine mit Lebensbalken, Mine mit kleinen Beinen, klar
+  erkennbares Spinnennetz-Icon), keine Konsolenfehler.
+- `sw.js` auf `v121` gebumpt (5 neue Dateien in `ASSETS`),
+  `telemetry.js: GAME_VERSION` mitgezogen.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
@@ -7429,12 +7545,12 @@ Reaktor/Phalanx zuvor).
       `c_ricochet`/`c_engineer`) borgen sich weiter `player` (`SPRITE_ALIAS`).
       Bei gelieferten Grafiken analog zu `c_frost` & Co. einhängen (in
       `TANK_TYPES` aufnehmen + Alias entfernen).
-- [ ] **Spinnenboss ist komplett prozedural** (kein Sprite-Asset, s. eigener
-      Abschnitt „Spinnenboss (Akt 3)"). Bei echten, freigestellten Grafiken
-      (`body_t_spider.png`/`turret_t_spider.png`/acht Bein-Sprites für Boss
-      UND Mine/`spider_web.png`) `sprites.js: TANK_TYPES` + einen neuen
-      Sprite-Renderpfad in `spiderrender.js` ergänzen, analog zum
-      Champion-Sprite-Nachtrag.
+- [ ] **Spinnennetz-Sprite hat sichtbare Restartefakte** (s. Abschnitt
+      „Spinnenboss-Sprites"): ein paar sehr kleine Schachbrett-Reste aus der
+      Foto-Freistellung bleiben in einzelnen Netzmaschen sichtbar, bei der
+      kleinen In-Game-Größe kaum wahrnehmbar. Bei Bedarf ein sauberer
+      freigestelltes Netzbild nachliefern lassen (echter Alpha-Hintergrund
+      statt Schachbrett-Foto) statt weiter an der Foto-Extraktion zu feilen.
 - [ ] **Spinnenboss-Kampfdauer nicht empirisch gemessen** (Zielwert laut
       Vorgabe ~3,5–4,5 Min. für einen Durchschnitts-Build) — bei Bedarf
       einen echten Durchlauf/Bot-Test nachholen und `data/balance.json:
@@ -7895,15 +8011,17 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   Sprite nicht lädt).
 - Spieler-Glow, Schild-Ring, Ziellinie, Betäubungs-Ring und die
   Unsichtbarkeit des Weißen sind Renderer-Overlays (nicht im Sprite).
-- **Spinnenboss (`t_spider`) ist komplett prozedural** (`src/render/
-  spiderrender.js`, eigenes Modul statt `renderer.js`/`effects.js` weiter
-  wachsen zu lassen) — kein Sprite-Asset. Die drei gelieferten Referenz-
-  bilder (Boss/Mine mit acht nummerierten Beinen, Spinnennetz) sind
-  Schachbrett-Hintergrund-JPEGs mit eingebrannten Text-Labels, keine
-  freigestellten PNGs, und wurden deshalb bewusst NICHT importiert (s.
-  eigener Abschnitt „Spinnenboss (Akt 3)"). `drawTank()` in `renderer.js`
-  überspringt `cfg.spiderBoss`-Panzer explizit ganz am Anfang, damit kein
-  doppelter (generischer + Spinnen-eigener) Körper gezeichnet wird.
+- **Spinnenboss (`t_spider`) hat jetzt echte Sprites** (Nutzergrafik-
+  Nachtrag, s. eigener Abschnitt „Spinnenboss-Sprites"):
+  `body_t_spider.png`/`turret_t_spider.png` (eigenes Modul
+  `src/render/spiderrender.js` statt `renderer.js`/`effects.js` weiter
+  wachsen zu lassen), `spider_leg.png` (EIN gemeinsames Bein-Sprite für Boss
+  UND Minen, rotiert/skaliert als Zeiger vom Gelenk zum Fuß),
+  `body_spider_mine.png`, `spider_web.png`. Jede Zeichenfunktion fällt ohne
+  geladenes Sprite unverändert auf die alte prozedurale Form zurück.
+  `drawTank()` in `renderer.js` überspringt `cfg.spiderBoss`-Panzer
+  weiterhin explizit ganz am Anfang, damit kein doppelter (generischer +
+  Spinnen-eigener) Körper gezeichnet wird.
 
 ## Mobile / PWA
 - PWA (`manifest.json`), Vollbild im Querformat: `100dvh` + `viewport-fit=cover`,
@@ -7920,6 +8038,7 @@ node tests/regression.mjs           # Regressionssuite (eingecheckt!)
 node tests/gamepad.mjs              # Controller-Eingabe (dependency-frei, gestubbtes Gamepad)
 node tests/music.mjs                # Hintergrundmusik-Loop + Fallback (dependency-frei, gestubbtes AudioContext/fetch)
 node tests/championsprite.mjs       # Champion-Sprite/-Aura (dependency-frei, EIGENER erfolgreicher Image-Stub)
+node tests/spidersprites.mjs        # Spinnenboss-Sprites (dependency-frei, EIGENER erfolgreicher Image-Stub)
 node tests/gamepadcursor.mjs        # Gamepad-Cursor end-to-end (Playwright, eigener Server)
 node tests/uilayout.mjs             # Overlay-Layout (braucht Playwright)
 node tests/viewport.mjs             # DPR/Viewport + Zielkoordinaten (Playwright, braucht eigenen Server auf :8099)
