@@ -720,6 +720,12 @@ export function createState(data, tiles, opts) {
     },
     // Sekundärslot "Sperrmauer" (Phase 6): platziert eine haltbare Wand auf
     // der Zielzelle, sofern diese begehbar und frei von Panzern ist.
+    // Rueckgabe: die neu angelegte Wand (truthy, wie das alte `true`) oder
+    // `false` bei Fehlschlag. G5 (t_mason) braucht die Wand-REFERENZ selbst
+    // (um sie mit masonExpiresAt zu markieren) -- ein reiner Boolean genuegte
+    // bis dahin nur dem Spieler-Gadget (tank.js: placeTrapWall()), das das
+    // Ergebnis rein als "used"-Wahrheitswert weiterreicht und mit einem
+    // Objekt statt `true` unveraendert funktioniert.
     placeTrapWall(x, y, hits) {
       const col = Math.floor(x / CELL);
       const row = Math.floor(y / CELL);
@@ -730,10 +736,11 @@ export function createState(data, tiles, opts) {
       for (const t of state.tanks) {
         if (t.alive && circlesOverlap(cx, cy, CELL / 2, t.x, t.y, t.cfg.radius)) return false;
       }
-      state.walls.push({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'trap', col, row, customDurability: hits });
+      const wall = { x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'trap', col, row, customDurability: hits };
+      state.walls.push(wall);
       grid[row][col] = '#';
       state.sounds.push({ name: 'mine', x: cx });
-      return true;
+      return wall;
     },
     destroyWall(wall) {
       // Transformation "Baumeister" (Phase 5): Waende halten wallDurability

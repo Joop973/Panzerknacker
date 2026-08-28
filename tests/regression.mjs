@@ -14147,13 +14147,248 @@ for (const seed of SEEDS) {
     for (let seed = 1; seed <= 60; seed++) {
       const rng = mulberry32(seed);
       // Raum 8, Akt 2: Budget 26.8 (acts[1].budget.base 6 + 8*2.6) -- an
-      // dieser Stelle sind alle fuenf G4-Kompositionen bereits freigeschaltet.
+      // dieser Stelle sind mehrere Akt-2-Kompositionen bereits freigeschaltet
+      // (G4 + G5-Nachtrag).
       const budget = diffData.acts[1].budget.base + 8 * diffData.acts[1].budget.perRoom;
       const out = buyEnemies(diffData, rng, 2, 8, budget, tanksData.types, diffData.compositions);
       const sorted = [...out].sort().join(',');
       if (knownSorted.includes(sorted)) hits++;
     }
-    check(hits > 0, 'G4 (f): mit den ECHTEN Daten feuert an Akt 2/Raum 8 nie eine der fuenf gebauten Kompositionen -- main.js-aequivalente Verdrahtung (diffData.compositions) ist nicht korrekt');
+    check(hits > 0, 'G4 (f): mit den ECHTEN Daten feuert an Akt 2/Raum 8 nie eine der gebauten Kompositionen -- main.js-aequivalente Verdrahtung (diffData.compositions) ist nicht korrekt');
+  }
+}
+
+// ---- 73. Gegner-Umbau Phase G5 (UMBAUPLAN-GEGNER.md): Akt 2, Welle 3 -----
+// Zwei letzte Akt-2-Gegner, damit sind alle acht gebaut. t_medic ("Der
+// Zehrer"): repariert dauerhaft den am staerksten beschaedigten Verbuendeten
+// in Reichweite mit Sichtlinie -- Baustein B (G1, tankLinks) traegt den
+// Heilstrahl, kein neuer Renderer. t_mason ("Der Maurer"): baut periodisch
+// eine zerstoerbare Wand ueber den seit Phase 6 bestehenden
+// state.placeTrapWall()-Mechanismus (hier zum ersten Mal von der Gegner-KI
+// statt vom Spieler genutzt), abgesichert durch eine neue, kleine BFS-
+// Erreichbarkeitspruefung (state.wouldIsolateArea()) -- der in
+// UMBAUPLAN-GEGNER.md Fund 15 vorhergesagte einzige echte Neubau dieser Welle.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createTank } = await import('../src/game/tank.js');
+  const { updateEnemy } = await import('../src/game/ai.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+  const { CELL, COLS, ROWS } = await import('../src/config.js');
+
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  // Komplett offener Innenraum mit solidem Rand -- volle, vorhersagbare
+  // Kontrolle ueber Kandidatenzellen/Erreichbarkeit statt eines zufaellig
+  // generierten Layouts (Muster wie g2Room()/g3Room() oben, aber mit einem
+  // von Grund auf neu gebauten Grid statt nur `isSolid`/`walls` zu leeren --
+  // t_masons Mechanismus liest `grid` DIREKT, nicht ueber isSolid()).
+  function masonRoom() {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: [],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+    });
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        st.grid[r][c] = r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1 ? '#' : '.';
+      }
+    }
+    st.walls = [];
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (st.grid[r][c] === '#') st.walls.push({ x: c * CELL, y: r * CELL, w: CELL, h: CELL, type: 'solid', col: c, row: r });
+    // Bewusst KEIN blocksSight-Override (anders als g2Room/g3Room) -- die
+    // LOS-Pruefung in (c) braucht die ECHTE, grid-basierte Sichtlinie.
+    return st;
+  }
+  // Bewusst KEIN eigener blocksSight-Override (anders als g2Room/g3Room) --
+  // die LOS-Pruefung in (c) braucht die ECHTE, grid-basierte Sichtlinie
+  // (masonRoom() rebuildet das Grid bereits vollstaendig offen, ein Wall-Cell
+  // reicht als echtes Hindernis). Ein Alias reicht, medicRoom() ist identisch
+  // zu masonRoom().
+  const medicRoom = masonRoom;
+
+  // ---- (a) Struktur: beide Typen + Akt-2-Freischaltung ---------------------
+  {
+    const m = tanksData.types.t_medic;
+    check(!!m?.heal && m.weapon === 'bullet', 'G5 (a): t_medic fehlt oder traegt kein heal');
+    check(
+      typeof m.heal.ratePerS === 'number' && typeof m.heal.rangePx === 'number' && m.heal.needsLos === true,
+      'G5 (a): t_medic.heal unvollstaendig',
+    );
+    const b = tanksData.types.t_mason;
+    check(!!b?.build && b.weapon === 'bullet', 'G5 (a): t_mason fehlt oder traegt kein build');
+    check(
+      typeof b.build.everyS === 'number' && typeof b.build.buildS === 'number' && typeof b.build.maxAlive === 'number',
+      'G5 (a): t_mason.build unvollstaendig',
+    );
+    check(diffData.danger.t_medic?.unlockAct === 2, 'G5 (a): t_medic ist nicht in Akt 2 freigeschaltet');
+    check(diffData.danger.t_mason?.unlockAct === 2 && diffData.danger.t_mason?.maxPerRoom === 1, 'G5 (a): t_mason fehlt Akt-2-Freischaltung oder maxPerRoom:1');
+  }
+
+  // Isoliert das Heilsystem von zwei Stoerquellen, die beim Testbau echte
+  // Ergebnisse verfaelscht haben (kein Code-Bug, reine Testaufbau-Fallen):
+  // (1) t_medic UND t_grey sind Rolle "sapper" und wandern -- ueber viele
+  // Ticks laufen sie aus heal.rangePx heraus, der Heilfortschritt bleibt
+  // dann auf halbem Weg stehen. (2) die Trefferschleife kennt kein
+  // Teamsystem (UMBAUPLAN-GEGNER.md Falle 2) -- der Zehrer trifft mit
+  // seiner EIGENEN Waffe (25 Schaden) den nur 10 px entfernten Verbuendeten
+  // fast sofort und wirft dessen LP weit unter das erwartete Ergebnis.
+  // freeze() macht einen Testpanzer bewegungs- UND wehrlos, ohne die
+  // Heil-cfg (heal) anzutasten.
+  function freeze(tank) {
+    tank.cfg = { ...tank.cfg, role: 'guardian', weapon: null };
+    return tank;
+  }
+
+  // ---- (b) t_medic: heilt den staerker beschaedigten von zwei moeglichen ---
+  //          Zielen, nicht sich selbst, nicht den Spieler, deckelt auf maxHp.
+  {
+    const st = medicRoom();
+    const medic = freeze(createTank('t_medic', resolveCfg(tanksData, 't_medic'), 200, 200));
+    const near = freeze(createTank('t_brown', resolveCfg(tanksData, 't_brown'), 210, 200)); // 10px entfernt, LOS frei
+    const far = freeze(createTank('t_grey', resolveCfg(tanksData, 't_grey'), 200, 260)); // 60px entfernt, LOS frei
+    near.hp = near.cfg.maxHp - 5; // leicht beschaedigt
+    far.hp = far.cfg.maxHp - 20; // STAERKER beschaedigt -- muss gewinnen
+    st.tanks = [medic, near, far];
+    stepState(st, CMD0, 1 / 60);
+    check(far.hp > far.cfg.maxHp - 20, 'G5 (b): der STAERKER beschaedigte Verbuendete wird nicht geheilt');
+    check(near.hp === near.cfg.maxHp - 5, 'G5 (b): der leichter beschaedigte Verbuendete wird faelschlich MITgeheilt (Zehrer heilt nur EINEN)');
+    check(medic.hp === medic.cfg.maxHp, 'G5 (b): der Zehrer heilt sich selbst');
+    check(st.tankLinks.some((l) => l.x0 === medic.x && l.y0 === medic.y), 'G5 (b): kein Heilstrahl-Eintrag in state.tankLinks');
+    // Deckel auf maxHp: viele Ticks duerfen NICHT ueber maxHp heilen -- UND
+    // beide Ziele muessen (der Reihe nach) volle LP erreichen, sobald die
+    // Gesamt-Heilkapazitaet ueber der Gesamt-Deckungsluecke liegt.
+    for (let i = 0; i < 600; i++) stepState(st, CMD0, 1 / 60);
+    check(far.hp === far.cfg.maxHp, `G5 (b): far erreicht nicht maxHp (${far.hp} statt ${far.cfg.maxHp})`);
+    check(near.hp === near.cfg.maxHp, `G5 (b): near erreicht nicht maxHp, obwohl genug Zeit/Heilkapazitaet da war (${near.hp} statt ${near.cfg.maxHp})`);
+  }
+
+  // ---- (c) t_medic: Reichweite + Sichtlinie ---------------------------------
+  {
+    const st = medicRoom();
+    const medic = freeze(createTank('t_medic', resolveCfg(tanksData, 't_medic'), 200, 200));
+    const farAway = freeze(createTank('t_brown', resolveCfg(tanksData, 't_brown'), 200, 200 + medic.cfg.heal.rangePx + 50));
+    farAway.hp = farAway.cfg.maxHp - 10;
+    st.tanks = [medic, farAway];
+    stepState(st, CMD0, 1 / 60);
+    check(farAway.hp === farAway.cfg.maxHp - 10, 'G5 (c): heilt trotz Ziel ausserhalb von heal.rangePx');
+    // Sichtlinie blockiert -- eine Wand direkt zwischen beiden.
+    const st2 = medicRoom();
+    const medic2 = freeze(createTank('t_medic', resolveCfg(tanksData, 't_medic'), 200, 200));
+    const blocked = freeze(createTank('t_brown', resolveCfg(tanksData, 't_brown'), 260, 200));
+    blocked.hp = blocked.cfg.maxHp - 10;
+    st2.tanks = [medic2, blocked];
+    const wallCol = Math.floor(230 / CELL);
+    const wallRow = Math.floor(200 / CELL);
+    st2.grid[wallRow][wallCol] = '#';
+    stepState(st2, CMD0, 1 / 60);
+    check(blocked.hp === blocked.cfg.maxHp - 10, 'G5 (c): heilt trotz blockierter Sichtlinie');
+  }
+
+  // ---- (d) t_mason: kompletter Baukreislauf -- Geruest -> echte Wand -------
+  {
+    const st = masonRoom();
+    const mason = createTank('t_mason', resolveCfg(tanksData, 't_mason'), 300, 200);
+    mason.masonTimer = 0; // erster Versuch sofort, nicht erst nach everyS
+    // Ziel WEIT hinter der Baudistanz (nicht genau bei distancePx -- sonst
+    // faellt die Kandidatenzelle exakt auf den Spieler und minPlayerDistCells
+    // wuerde den Bau selbst ablehnen, s. Testfund unten bei (e)). Kandidaten-
+    // zelle liegt dadurch deterministisch bei (300, 320), weit vom Spieler.
+    st.player.x = 300;
+    st.player.y = 200 + mason.cfg.build.distancePx * 2;
+    st.tanks = [mason];
+    stepState(st, CMD0, 1 / 60);
+    check(!!mason.masonBuildState, 'G5 (d): kein Bauversuch gestartet, obwohl freie Zelle + Timer abgelaufen');
+    check(st.masonScaffolds.length === 1, 'G5 (d): kein Geruest-Telegraph erschienen');
+    const { col, row } = mason.masonBuildState;
+    check(st.grid[row][col] === '.', 'G5 (d): die Zelle ist waehrend des Geruests schon solide (muss erst NACH buildS entstehen)');
+    // Waehrend des Bauens steht der Maurer still. updateEnemy() liefert
+    // {move:{x,y}, fire, mine} -- die Bewegung steckt in .move, nicht direkt
+    // im Rueckgabewert (Testaufbau-Fund, per Gegenprobe an der falschen
+    // Feldzugriff-Fassung bestaetigt).
+    const result = updateEnemy(mason, st, 1 / 60);
+    check(result.move.x === 0 && result.move.y === 0, 'G5 (d): der Maurer bewegt sich waehrend der Bauzeit');
+    // buildS Sekunden vergehen -> die Wand wird real.
+    for (let i = 0; i < Math.ceil(mason.cfg.build.buildS * 60) + 2; i++) stepState(st, CMD0, 1 / 60);
+    check(st.grid[row][col] === '#', 'G5 (d): nach Ablauf der Bauzeit ist die Zelle nicht solide');
+    check(st.masonScaffolds.length === 0, 'G5 (d): das Geruest verschwindet nach der Fertigstellung nicht');
+    const wall = st.walls.find((w) => w.col === col && w.row === row);
+    check(!!wall && wall.customDurability === mason.cfg.build.hits, `G5 (d): keine echte Wand mit ${mason.cfg.build.hits} Treffern an der Zielzelle`);
+    check(mason.masonWalls.includes(wall), 'G5 (d): die neue Wand ist nicht in mason.masonWalls eingetragen');
+    check(!mason.masonBuildState, 'G5 (d): masonBuildState wird nach der Fertigstellung nicht zurueckgesetzt');
+  }
+
+  // ---- (e) t_mason: minPlayerDistCells -- keine Wand zu nah am Spieler -----
+  {
+    const st = masonRoom();
+    const mason = createTank('t_mason', resolveCfg(tanksData, 't_mason'), 300, 200);
+    mason.masonTimer = 0;
+    // Ziel (Spieler) genau in Bauentfernung -- die Kandidatenzelle liegt
+    // damit praktisch AUF dem Spieler, weit unter minPlayerDistCells.
+    st.player.x = 300 + mason.cfg.build.distancePx;
+    st.player.y = 200;
+    st.tanks = [mason];
+    // Spieler auf die exakte Kandidatenzelle setzen (statt daneben), damit
+    // der Abstand garantiert < minPlayerDistCells ist.
+    stepState(st, CMD0, 1 / 60);
+    check(!mason.masonBuildState, 'G5 (e): baut trotz Spieler auf/neben der Kandidatenzelle (minPlayerDistCells missachtet)');
+  }
+
+  // ---- (f) t_mason: state.wouldIsolateArea() -- "Sicherung gegen Frust" ----
+  {
+    const st = masonRoom();
+    // Eine durchgehende Trennwand ueber die GANZE Raumhoehe (Spalte
+    // doorCol, jede Innenzeile) mit GENAU EINER Luecke bei doorRow -- die
+    // einzige Verbindung zwischen links und rechts. Testfund: eine erste
+    // Fassung setzte nur drei Waendchen ueber/unter der Luecke, liess Zeile
+    // doorRow selbst aber komplett durchgehend offen -- die "Luecke" war
+    // dadurch gar kein Flaschenhals (links und rechts blieben laengs der
+    // Zeile ohnehin verbunden), die Pruefung also trivial unerreichbar.
+    const doorCol = 12;
+    const doorRow = 8;
+    for (let r = 1; r < ROWS - 1; r++) {
+      if (r !== doorRow) st.grid[r][doorCol] = '#';
+    }
+    st.player.x = 5 * CELL;
+    st.player.y = doorRow * CELL + CELL / 2;
+    check(st.wouldIsolateArea(doorCol, doorRow), 'G5 (f): die einzige Verbindungszelle eines Engpasses gilt als unbedenklich (BFS-Mechanismus kaputt)');
+    // Eine Zelle NEBEN dem Engpass (nicht der Flaschenhals selbst) darf
+    // dagegen normal verbaut werden -- Kontrolle, dass wouldIsolateArea()
+    // nicht pauschal alles blockiert.
+    check(!st.wouldIsolateArea(3, 3), 'G5 (f): eine harmlose, offene Zelle gilt faelschlich als Flaschenhals');
+  }
+
+  // ---- (g) t_mason: maxAlive-Deckel + Verfall nach decayS -------------------
+  {
+    const st = masonRoom();
+    const mason = createTank('t_mason', resolveCfg(tanksData, 't_mason'), 300, 200);
+    mason.cfg = { ...mason.cfg, build: { ...mason.cfg.build, maxAlive: 1, everyS: 0.01, decayS: 0.2 } }; // eigene, kleine Werte
+    mason.masonTimer = 0;
+    // Wie bei (d): Ziel WEIT hinter der Baudistanz, sonst faellt die
+    // Kandidatenzelle auf den Spieler und minPlayerDistCells blockiert
+    // jeden Bauversuch.
+    st.player.x = 300;
+    st.player.y = 200 + mason.cfg.build.distancePx * 2;
+    st.tanks = [mason];
+    // Erste Wand fertigstellen.
+    stepState(st, CMD0, 1 / 60);
+    for (let i = 0; i < Math.ceil(mason.cfg.build.buildS * 60) + 2; i++) stepState(st, CMD0, 1 / 60);
+    check(mason.masonWalls.length === 1, `G5 (g): erste Wand nicht gebaut (masonWalls=${mason.masonWalls.length})`);
+    const firstWallCount = st.walls.length;
+    // Naechster Zyklus (Timer laeuft dank everyS:0.01 sofort wieder ab) --
+    // darf wegen maxAlive:1 KEINE zweite Wand anlegen.
+    for (let i = 0; i < 60; i++) stepState(st, CMD0, 1 / 60);
+    check(mason.masonWalls.length === 1, `G5 (g): maxAlive:1 haelt den Maurer nicht auf hoechstens 1 eigene Wand (${mason.masonWalls.length})`);
+    // Verfall: nach decayS (0,2 s) muss die Wand von selbst verschwinden --
+    // unabhaengig von Treffern.
+    for (let i = 0; i < 30; i++) stepState(st, CMD0, 1 / 60);
+    check(mason.masonWalls.length === 0, 'G5 (g): die eigene Wand verfaellt nicht nach decayS');
+    check(st.walls.length < firstWallCount, 'G5 (g): die verfallene Wand steht noch in state.walls');
   }
 }
 
