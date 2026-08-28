@@ -394,6 +394,29 @@ export function drawMortars(ctx, state) {
   }
 }
 
+// Anker-Bodenfeld (G3, t_anchor): ein PERMANENTER, deutlich abgesetzter
+// Bodenring -- bewusst NICHT pulsierend ("er aendert sich nie", Designtabelle
+// 7.5) und deshalb bewusst KEIN drawGrowingRingTelegraph()-Wiederverwendung
+// (das ist fuer wachsende/abklingende Gefahr gedacht, ein Anker-Feld ist eine
+// statische Zonenmarkierung). Gezeichnet auf Bodenebene, VOR allen Panzern.
+export function drawAnchorFields(ctx, state) {
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.suppressField) continue;
+    const r = t.cfg.suppressField.radiusPx;
+    ctx.save();
+    ctx.fillStyle = 'rgba(120,96,168,0.10)';
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(168,156,216,0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 // Rammler-Sturmkorridor (G2, t_rusher): waehrend des Windups (Richtung
 // bereits eingefroren, ai_drives.js: ramDrive()) zeigt drawCorridorTelegraph
 // (Baustein C) den Sturmweg -- IMMER sichtbar, dieselbe Fairness-Regel wie

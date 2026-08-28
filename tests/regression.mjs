@@ -13739,6 +13739,204 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 71. Gegner-Umbau Phase G3 (UMBAUPLAN-GEGNER.md): Welle 2 ----------
+// Zwei Gegner, beide ohne neue Architektur: t_relay (state.relaySight, ein
+// globaler Boolean/Tick, gelesen an genau einer Stelle in ai_turrets.js:
+// roleTurret()) und t_anchor (Baustein A/G1s tank.auraFlags -- der erste
+// echte Setzer). Beide nutzen ausserdem Baustein B (G1, tankLinks) fuer den
+// Lichtfaden bzw. gar keinen neuen Renderer-Mechanismus (t_anchors Ring ist
+// eine eigene, bewusst NICHT-Baustein-C-Funktion, s. CLAUDE.md).
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createTank } = await import('../src/game/tank.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { roleTurret } = await import('../src/game/ai_turrets.js');
+  const { createGhost, pushGhost } = await import('../src/game/ghost.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  function g3Room() {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: [],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+    });
+    st.walls = [];
+    st.isSolid = () => false;
+    st.blocksSight = () => false;
+    return st;
+  }
+
+  // ---- (a) Struktur: beide neuen Typen + Akt-2-Freischaltung ---------------
+  {
+    const r = tanksData.types.t_relay;
+    check(!!r?.sightRelay && r.role === 'sapper' && r.aggression === 0.05, 'G3 (a): t_relay fehlt oder entspricht nicht der Spec (sightRelay/role/aggression)');
+    check(typeof r.sightRelay.rangePx === 'number', 'G3 (a): t_relay.sightRelay.rangePx fehlt');
+    const a = tanksData.types.t_anchor;
+    check(!!a?.suppressField && a.role === 'guardian' && a.speed === 'fix', 'G3 (a): t_anchor fehlt oder entspricht nicht der Spec (suppressField/role/speed)');
+    check(a.suppressField.noFlank === true && a.suppressField.noExecute === true, 'G3 (a): t_anchor.suppressField setzt nicht beide Flaggen');
+    for (const id of ['t_relay', 't_anchor']) {
+      check(diffData.danger[id]?.unlockAct === 2, `G3 (a): ${id} ist nicht ab Akt 2 freigeschaltet`);
+    }
+  }
+
+  // ---- (b) state.relaySight: Reichweite + Sichtlinie, EIN globaler Boolean -
+  {
+    const st = g3Room();
+    const relay = createTank('t_relay', resolveCfg(tanksData, 't_relay'), 400, 50);
+    st.tanks.push(relay);
+    st.player.x = 400;
+    st.player.y = 100; // 50px entfernt, weit unter rangePx (520)
+    stepState(st, CMD0, 1 / 60);
+    check(st.relaySight === true, 'G3 (b): relaySight bleibt false trotz Sichtlinie + Reichweite');
+
+    // Ausserhalb der Reichweite: dieselbe freie Sicht, aber zu weit weg.
+    const st2 = g3Room();
+    const relay2 = createTank('t_relay', resolveCfg(tanksData, 't_relay'), 0, 0);
+    st2.tanks.push(relay2);
+    st2.player.x = 600; // > 520px
+    st2.player.y = 0;
+    stepState(st2, CMD0, 1 / 60);
+    check(st2.relaySight === false, 'G3 (b): relaySight ignoriert die Reichweite (rangePx)');
+
+    // Sichtlinie blockiert (blocksSight zwischen Relay und Ziel).
+    const st3 = g3Room();
+    st3.blocksSight = (x, y) => x > 100 && x < 300 && Math.abs(y) < 5;
+    const relay3 = createTank('t_relay', resolveCfg(tanksData, 't_relay'), 0, 0);
+    st3.tanks.push(relay3);
+    st3.player.x = 400;
+    st3.player.y = 0;
+    stepState(st3, CMD0, 1 / 60);
+    check(st3.relaySight === false, 'G3 (b): relaySight ignoriert eine blockierte Sichtlinie');
+  }
+
+  // ---- (c) roleTurret(): relaySight erlaubt einer sichtlosen Waffe zu ------
+  //          feuern, tank.relayAssisted markiert genau das --------------------
+  {
+    // Geometrie: Ziel bei (400,100), Verbuendeter bei (100,100) -- eine Wand
+    // liegt NUR auf der Verbuendeten-Ziel-Linie (y=100, x zwischen 150/350),
+    // nicht auf einer spaeteren Relay-Ziel-Linie (wird hier gar nicht
+    // gebraucht -- roleTurret() liest nur das FERTIGE state.relaySight).
+    const wallBlocksAllyOnly = (x, y) => y > 90 && y < 110 && x > 150 && x < 350;
+
+    const st = g3Room();
+    st.blocksSight = wallBlocksAllyOnly;
+    const ally = createTank('t_pink', resolveCfg(tanksData, 't_pink'), 100, 100);
+    ally.turret = 0; // zeigt exakt zum Ziel (400,100), Kegel damit erfuellt
+    st.tanks.push(ally);
+    st.player.x = 400;
+    st.player.y = 100;
+
+    st.relaySight = false;
+    const ohneRelay = roleTurret(ally, st, 1 / 60);
+    check(ohneRelay === false, 'G3 (c): Verbuendeter feuert ohne Sichtlinie UND ohne relaySight');
+    check(!ally.relayAssisted, 'G3 (c): relayAssisted ist faelschlich gesetzt, obwohl relaySight false ist');
+
+    st.relaySight = true;
+    const mitRelay = roleTurret(ally, st, 1 / 60);
+    check(mitRelay === true, 'G3 (c): Verbuendeter feuert trotz relaySight=true nicht');
+    check(ally.relayAssisted === true, 'G3 (c): relayAssisted wird nicht gesetzt, obwohl nur dank relaySight gefeuert wurde');
+
+    // Kontrolle: hat der Verbuendete selbst freie Sicht, braucht es KEINEN
+    // Horcher -- relayAssisted darf dann nicht gesetzt werden.
+    const st2 = g3Room();
+    const ally2 = createTank('t_pink', resolveCfg(tanksData, 't_pink'), 100, 100);
+    ally2.turret = 0;
+    st2.tanks.push(ally2);
+    st2.player.x = 400;
+    st2.player.y = 100;
+    st2.relaySight = false;
+    const eigeneSicht = roleTurret(ally2, st2, 1 / 60);
+    check(eigeneSicht === true, 'G3 (c): Testaufbau -- mit echter Sichtlinie sollte auch ohne Horcher gefeuert werden');
+    check(!ally2.relayAssisted, 'G3 (c): relayAssisted wird faelschlich auch bei echter eigener Sichtlinie gesetzt');
+  }
+
+  // ---- (d) t_anchor: Suppress-Feld markiert alle Panzer im Radius (inkl. --
+  //          der Quelle selbst), NICHT ausserhalb, NICHT Geister ------------
+  {
+    const st = g3Room();
+    const anchor = createTank('t_anchor', resolveCfg(tanksData, 't_anchor'), 300, 300);
+    const nah = createTank('t_grey', resolveCfg(tanksData, 't_grey'), 380, 300); // 80px, < 160
+    const fern = createTank('t_grey', resolveCfg(tanksData, 't_grey'), 300, 600); // 300px, > 160
+    st.tanks.push(anchor, nah, fern);
+    const geist = createGhost(st, 320, 300, 0, 't_grey'); // 20px vom Anker, waere IM Radius
+    pushGhost(st, geist);
+    stepState(st, CMD0, 1 / 60);
+    check(anchor.auraFlags.noFlank === true && anchor.auraFlags.noExecute === true, 'G3 (d): der Anker markiert sich nicht selbst ("inkl. ihm selbst")');
+    check(nah.auraFlags.noFlank === true && nah.auraFlags.noExecute === true, 'G3 (d): ein Panzer INNERHALB des Feldes wird nicht markiert');
+    check(fern.auraFlags.noFlank === false && fern.auraFlags.noExecute === false, 'G3 (d): ein Panzer AUSSERHALB des Feldes wird faelschlich markiert');
+    check(geist.auraFlags === undefined, 'G3 (d): ein Geist bekommt faelschlich auraFlags (die Aura darf Geister strukturell nie erreichen)');
+  }
+
+  // ---- (e) "geankert ×1.0"-Rueckmeldung ersetzt die normale Seiten-/-------
+  //          Heck-Anzeige, NUR wenn die Aura wirklich greift -----------------
+  {
+    const gepanzertTreffer = (offsetAngleDeg, mitAnker) => {
+      const st = g3Room();
+      const z = createTank('t_brown', { ...resolveCfg(tanksData, 't_brown'), maxHp: 100, role: 'guardian' }, 200, 250);
+      z.heading = 0;
+      st.tanks.push(st.player, z);
+      if (mitAnker) {
+        const anchor = createTank('t_anchor', resolveCfg(tanksData, 't_anchor'), z.x, z.y); // ueberlappt z, radius deckt jeden Offset
+        st.tanks.push(anchor);
+      }
+      const off = (offsetAngleDeg * Math.PI) / 180;
+      const b = createBullet(z.x + Math.cos(off) * 2, z.y + Math.sin(off) * 2, 0, {
+        speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10,
+      });
+      b.age = 5;
+      st.bullets.length = 0;
+      st.mines.length = 0;
+      st.bullets.push(b);
+      stepState(st, CMD0, 1 / 60);
+      return st;
+    };
+
+    const ohneAnker = gepanzertTreffer(90, false);
+    check(
+      ohneAnker.texts.some((t) => t.text.startsWith('Seite')),
+      'G3 (e): ohne Anker fehlt die normale Seiten-Rueckmeldung (Testvoraussetzung)',
+    );
+    const mitAnker = gepanzertTreffer(90, true);
+    check(
+      mitAnker.texts.some((t) => t.text === 'geankert ×1.0'),
+      'G3 (e): ein unterdrueckter Seitentreffer im Suppress-Feld zeigt nicht "geankert ×1.0"',
+    );
+    check(
+      !mitAnker.texts.some((t) => t.text.startsWith('Seite')),
+      'G3 (e): zeigt zusaetzlich noch die normale Seiten-Rueckmeldung (haette nur EINE Rueckmeldung geben sollen)',
+    );
+  }
+
+  // ---- (f) state.tankLinks: G3 ist der erste echte Erzeuger + der erste ---
+  //          Pro-Tick-Reset (Baustein B, G1, war bis dahin dauerhaft leer) --
+  {
+    const st = g3Room();
+    const relay = createTank('t_relay', resolveCfg(tanksData, 't_relay'), 0, 0);
+    st.tanks.push(relay);
+    st.player.x = 100;
+    st.player.y = 0;
+    stepState(st, CMD0, 1 / 60);
+    check(st.tankLinks.length === 1, `G3 (f): erwarte genau einen Lichtfaden-Eintrag, habe ${st.tankLinks.length}`);
+    // Gegen die literalen Startkoordinaten pruefen, NICHT gegen relay.x/y
+    // NACH stepState(): der Horcher ist role:'sapper' und wandert -- die
+    // Pre-Pass-Position (Tickanfang, was tankLinks tatsaechlich festhaelt)
+    // und die Post-Tick-Position (nach der Bewegungsphase desselben Ticks)
+    // sind dadurch bereits ein winziges Stueck auseinander (Testfund).
+    check(st.tankLinks[0].x0 === 0 && st.tankLinks[0].y0 === 0, 'G3 (f): Lichtfaden startet nicht am Horcher');
+    // Bricht die Sicht im naechsten Tick weg, muss der Eintrag verschwinden --
+    // NICHT liegen bleiben (Beweis, dass state.js den Reset wirklich faehrt).
+    st.blocksSight = () => true;
+    stepState(st, CMD0, 1 / 60);
+    check(st.tankLinks.length === 0, 'G3 (f): ein veralteter Lichtfaden-Eintrag ueberlebt einen Tick ohne Sichtlinie');
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

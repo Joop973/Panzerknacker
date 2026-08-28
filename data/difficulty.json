@@ -84,6 +84,16 @@
       "unlockAct": 2,
       "unlockRoomInAct": 4
     },
+    "t_relay": {
+      "points": 5,
+      "unlockAct": 2,
+      "unlockRoomInAct": 5
+    },
+    "t_anchor": {
+      "points": 7,
+      "unlockAct": 2,
+      "unlockRoomInAct": 8
+    },
     "t_green": {
       "points": 6,
       "unlockAct": 2,
