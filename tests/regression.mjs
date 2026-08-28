@@ -14367,6 +14367,22 @@ for (const seed of SEEDS) {
     // dagegen normal verbaut werden -- Kontrolle, dass wouldIsolateArea()
     // nicht pauschal alles blockiert.
     check(!st.wouldIsolateArea(3, 3), 'G5 (f): eine harmlose, offene Zelle gilt faelschlich als Flaschenhals');
+    // Integrationsnachweis: derselbe Engpass, aber jetzt ueber den ECHTEN
+    // Baukreislauf (updateMasons()) statt nur den direkten wouldIsolateArea()-
+    // Aufruf -- Testfund per Gegenprobe: den Aufruf in updateMasons() selbst
+    // zu entfernen liess (f) bis hierhin unbemerkt, weil bis dahin nur die
+    // freistehende BFS-Methode geprueft wurde, nie ihre Verdrahtung in den
+    // Bauentscheid.
+    const doorX = doorCol * CELL + CELL / 2;
+    const doorY = doorRow * CELL + CELL / 2;
+    const mason = createTank('t_mason', resolveCfg(tanksData, 't_mason'), doorX - tanksData.types.t_mason.build.distancePx, doorY);
+    mason.masonTimer = 0;
+    st.player.x = doorX + 200; // rechts von der Luecke, gleiche Zeile -- Kandidatenzelle faellt exakt auf die Luecke
+    st.player.y = doorY;
+    st.tanks = [mason];
+    stepState(st, CMD0, 1 / 60);
+    check(!mason.masonBuildState, 'G5 (f): der Maurer versucht trotzdem, die einzige Verbindungszelle eines Engpasses zu verbauen');
+    check(st.grid[doorRow][doorCol] === '.', 'G5 (f): die Engpass-Zelle wurde solide, obwohl der Bau haette verweigert werden muessen');
   }
 
   // ---- (g) t_mason: maxAlive-Deckel + Verfall nach decayS -------------------
