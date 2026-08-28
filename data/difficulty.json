@@ -98,6 +98,17 @@
       "unlockRoomInAct": 8,
       "maxPerRoom": 1
     },
+    "t_medic": {
+      "points": 6,
+      "unlockAct": 2,
+      "unlockRoomInAct": 6
+    },
+    "t_mason": {
+      "points": 6,
+      "unlockAct": 2,
+      "unlockRoomInAct": 7,
+      "maxPerRoom": 1
+    },
     "t_green": {
       "points": 6,
       "unlockAct": 2,

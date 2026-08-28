@@ -351,7 +351,12 @@ export function updateEnemy(tank, state, dt) {
   // Sturm laeuft -- ramDrive() gibt null zurueck (keine Vorrangwirkung),
   // solange kein Sturm ausgeloest ist.
   const ramMove = tank.cfg.ram ? ramDrive(tank, state, dt) : null;
-  const move = ramMove || (seekCover && coverDrive(tank, state, dt)) || DRIVES[role](tank, state, dt);
+  // Maurer (G5, t_mason): steht waehrend der 0,8-s-Bauzeit still ("in denen
+  // er still steht", Designtext) -- nur die Bewegung friert ein, der Turm
+  // darf weiter zielen/feuern (roleTurret() unten liest masonBuildState
+  // nicht, bleibt also unveraendert).
+  const masonMove = tank.cfg.build && tank.masonBuildState ? { x: 0, y: 0 } : null;
+  const move = ramMove || masonMove || (seekCover && coverDrive(tank, state, dt)) || DRIVES[role](tank, state, dt);
   // EMP-Mine (Phase 6): betaeubte Gegner drehen den Turm nicht und feuern
   // nicht -- eigenes Feld turretStunTimer, damit die bestehende Krallenfalle
   // (stunTimer allein) den Turm weiter benutzbar laesst (siehe PLAN.md).

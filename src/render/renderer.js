@@ -28,6 +28,7 @@ import {
   drawLanceAim,
   drawRamTelegraphs,
   drawAnchorFields,
+  drawMasonScaffolds,
 } from './effects.js';
 import { drawSpiderBossLegs, drawSpiderBossBody, drawSpiderMines, drawSpiderWebs } from './spiderrender.js';
 import { traceTrajectory } from '../game/bullet.js';
@@ -1475,6 +1476,7 @@ export function createRenderer(ctx) {
       // nicht gezielt wird.
       if (gadgetAim !== null && gadgetAim !== undefined) drawHookPreview(ctx, state, gadgetAim);
       drawWalls(state.walls, state.time);
+      drawMasonScaffolds(ctx, state); // G5: t_mason-Baugeruest, bevor die Zelle solide wird
       drawHazards(ctx, state);
       drawWaveWarning(ctx, state);
       drawMortars(ctx, state); // Phase 3: immer sichtbar, kein Schalter

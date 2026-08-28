@@ -151,6 +151,10 @@ const SPRITE_ALIAS = {
   // traegt vollstaendig Verhalten + die neuen Marker/Telegraphen.
   t_relay: 't_grey',
   t_anchor: 't_purple',
+  // G5: "gedaempftes Weissgruen" (t_medic) -> t_white, "Betongrau"
+  // (t_mason) -> t_grey -- naechstliegende Bestandsfarben, gleiches Prinzip.
+  t_medic: 't_white',
+  t_mason: 't_grey',
   // UMBAUPLAN-LP Phase 9: die zehn Klassen teilen sich das Spieler-Sprite --
   // ihre Identitaet traegt (vorerst) die Elementfarbe/der Wert, kein eigenes
   // Asset. 'player' selbst ist die Standard-Klasse und braucht keinen Alias.

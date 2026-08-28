@@ -1,6 +1,6 @@
 {
   "_comment": "G4 (UMBAUPLAN-GEGNER.md Abschnitt 17.3 -- 'das eine System, das das Projekt wirklich braucht'). Benannte Rezepte statt reinem Zufall: src/game/run.js: buyEnemies() versucht zuerst, eine bezahlbare, treffende Komposition aus dieser Liste zu ziehen (actIndex+minRoom passt, alle Gegnertypen sind an dieser Stelle freigeschaltet, Punktsumme liegt zwischen der Haelfte des Raumbudgets und dem Raumbudget) -- gelingt das nicht, faellt es auf die alte Zufallsschleife zurueck ('der Rueckfall ist wichtig', Designdokument). id/name sind reine Dokumentation (kein Code liest sie), enemies[] ist {type, count}. Jede Komposition ist einem A#/B#-Encounter aus docs/AUFTRAG-GEGNERDESIGN.md Abschnitt 12/13 nachgebildet (Raumcharakter/Spawnreihenfolge/Wellen sind dort beschrieben, aber NICHT Teil dieser Datei -- die bestehenden Systeme dafuer, Raumcharaktere und Wellen-Split, bleiben unangetastet und generisch, s. CLAUDE.md).",
-  "_comment_akt2": "Erste Population (G4): nur Kompositionen, die ausschliesslich bereits gebaute Akt-2-Gegner (t_rusher/t_dud/t_shotgun/t_lance/t_relay/t_anchor, G2/G3) plus den Akt-1-Bestand nutzen. A4/A6/A9/A10 (brauchen t_medic/t_mason) folgen mit G5 -- s. dortiger CLAUDE.md-Abschnitt fuer die Nachtraege.",
+  "_comment_akt2": "G4 (a1/a2/a5/a7/a8, nur bereits gebaute Akt-2-Gegner) + G5-Nachtrag (a4/a6/a9/a10, brauchen t_medic/t_mason). tests/regression.mjs Abschnitt 72 (a) rechnet fuer jede Komposition die echte acts[1].budget-Formel + jeden Typ-unlockRoomInAct nach -- zwei Kompositionen (a5: 9 statt hoechstens 8 Einheiten; a2: nannte t_yellow vor dessen Freischaltung) waren beim Bau von G5 dadurch als still tot entdeckt und korrigiert worden.",
   "compositions": [
     {
       "id": "a1_erste_beruehrung",
@@ -17,7 +17,8 @@
       "id": "a2_freies_feld",
       "name": "Freies Feld / Enge Gasse",
       "actIndex": 2,
-      "minRoom": 4,
+      "minRoom": 5,
+      "_comment": "minRoom auf 5 statt 4 -- t_yellow (Bestandteil) schaltet in Akt 2 erst ab Raum 5 frei (data/difficulty.json: danger.t_yellow.unlockRoomInAct); pickComposition() haette die Komposition vorher ohnehin nie gefeuert (Freischaltungs-Gate), minRoom nur nachgezogen.",
       "weight": 1,
       "enemies": [
         { "type": "t_lance", "count": 1 },
@@ -31,10 +32,11 @@
       "name": "Der Zeuge",
       "actIndex": 2,
       "minRoom": 5,
+      "_comment": "Designtext nennt 4x t_brown (Summe 9 Einheiten) -- ueberschreitet maxEnemiesPerRoom:8 und wuerde von pickComposition() nie gezogen. Auf 3x t_brown gekuerzt (8 Einheiten).",
       "weight": 1,
       "enemies": [
         { "type": "t_relay", "count": 1 },
-        { "type": "t_brown", "count": 4 },
+        { "type": "t_brown", "count": 3 },
         { "type": "t_grey", "count": 2 },
         { "type": "t_rusher", "count": 2 }
       ]
@@ -61,6 +63,68 @@
         { "type": "t_dud", "count": 2 },
         { "type": "t_pink", "count": 2 },
         { "type": "t_yellow", "count": 1 }
+      ]
+    },
+    {
+      "id": "a4_der_schutzherr",
+      "name": "Der Schutzherr",
+      "actIndex": 2,
+      "minRoom": 7,
+      "_comment": "Designtext nennt Raum 6/22 Punkte (Summe hier 23) -- an der echten acts[1].budget-Formel (base 6/perRoom 2.6) reicht Raum 6 (21,6) nicht, Raum 7 (24,2) schon.",
+      "weight": 1,
+      "enemies": [
+        { "type": "t_medic", "count": 1 },
+        { "type": "t_armored", "count": 1 },
+        { "type": "t_teal", "count": 1 },
+        { "type": "t_pink", "count": 1 },
+        { "type": "t_yellow", "count": 1 }
+      ]
+    },
+    {
+      "id": "a6_baustelle",
+      "name": "Baustelle",
+      "actIndex": 2,
+      "minRoom": 7,
+      "weight": 1,
+      "enemies": [
+        { "type": "t_mason", "count": 1 },
+        { "type": "t_teal", "count": 2 },
+        { "type": "t_yellow", "count": 2 },
+        { "type": "t_grey", "count": 1 },
+        { "type": "t_brown", "count": 1 }
+      ]
+    },
+    {
+      "id": "a9_die_rechnung",
+      "name": "Die Rechnung",
+      "actIndex": 2,
+      "minRoom": 11,
+      "weight": 1,
+      "enemies": [
+        { "type": "t_anchor", "count": 1 },
+        { "type": "t_medic", "count": 1 },
+        { "type": "t_armored", "count": 1 },
+        { "type": "t_shotgun", "count": 2 },
+        { "type": "t_green", "count": 1 },
+        { "type": "t_grey", "count": 1 }
+      ]
+    },
+    {
+      "id": "a10_zweiter_anlauf",
+      "name": "Zweiter Anlauf (beide Wellen vereinigt)",
+      "actIndex": 2,
+      "minRoom": 14,
+      "_comment": "Designtext nennt Raum 15/8 Einheiten mit 2x t_pink -- die volle Vereinigung (46 Punkte) passt in keinen erreichbaren Kampfraum (Raum 16 ist immer der erzwungene Rastplatz vor dem Boss, hoechstbudget also Raum 15 = 45). Auf 1x t_pink gekuerzt (41 Punkte), dafuer Raum 14 statt 15.",
+      "weight": 1,
+      "enemies": [
+        { "type": "t_relay", "count": 1 },
+        { "type": "t_lance", "count": 1 },
+        { "type": "t_pink", "count": 1 },
+        { "type": "t_rusher", "count": 1 },
+        { "type": "t_mason", "count": 1 },
+        { "type": "t_medic", "count": 1 },
+        { "type": "t_green", "count": 1 },
+        { "type": "t_shotgun", "count": 1 }
       ]
     }
   ]

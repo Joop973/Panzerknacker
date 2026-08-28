@@ -13967,6 +13967,29 @@ for (const seed of SEEDS) {
     check(diffData.danger.t_anchor.maxPerRoom === 1, 'G4 (a): t_anchor hat kein maxPerRoom:1');
     check(diffData.danger.t_relay.maxPerRoom === 1, 'G4 (a): t_relay hat kein maxPerRoom:1');
     check(diffData.acts[2].minRoleQuota && typeof diffData.acts[2].minRoleQuota.minBudget === 'number', 'G4 (a): acts[2] (Akt 3) hat keine minRoleQuota');
+    // G5-Nachtrag zu G4 (a): jede ECHTE Komposition muss bei ihrem eigenen
+    // minRoom tatsaechlich feuern KOENNEN -- sonst ist sie totes Datum.
+    // Deckt genau die Fehlerklasse ab, die beim Bau von G5 gefunden wurde:
+    // a5_der_zeuge hatte 9 statt hoechstens 8 Einheiten (maxEnemiesPerRoom-
+    // Ueberschreitung), a2_freies_feld nannte einen Typ, der an ihrem
+    // minRoom noch gar nicht freigeschaltet war (t_yellow) -- beide waren
+    // dadurch STILL tot: pickComposition()s eigene Gates haetten sie nie
+    // gefeuert, aber KEIN bestehender Test (nicht mal das End-zu-Ende von
+    // (f) unten, das nur "irgendeine von mehreren passt") haette das je
+    // bemerkt. Rechnet die echte Akt-2-Budgetformel (acts[1].budget) nach,
+    // nicht nur eine Beispielzahl.
+    for (const c of diffData.compositions.filter((c) => c.actIndex === 2)) {
+      const actCfg = diffData.acts[1];
+      const budget = actCfg.budget.base + c.minRoom * actCfg.budget.perRoom;
+      const pts = c.enemies.reduce((s, e) => s + (diffData.danger[e.type]?.points ?? 0) * e.count, 0);
+      const count = c.enemies.reduce((s, e) => s + e.count, 0);
+      check(count <= diffData.maxEnemiesPerRoom, `G4 (a): "${c.id}" hat ${count} Einheiten, mehr als maxEnemiesPerRoom (${diffData.maxEnemiesPerRoom})`);
+      check(pts <= budget && pts >= budget * 0.5, `G4 (a): "${c.id}" (Summe ${pts}) passt bei minRoom ${c.minRoom} nicht ins Budgetfenster [${(budget * 0.5).toFixed(1)}, ${budget.toFixed(1)}]`);
+      for (const e of c.enemies) {
+        const need = diffData.danger[e.type]?.unlockRoomInAct ?? 1;
+        check(c.minRoom >= need, `G4 (a): "${c.id}" nennt "${e.type}" bei minRoom ${c.minRoom}, ist dort aber erst ab Raum ${need} freigeschaltet`);
+      }
+    }
   }
 
   // (b) pickComposition()-MECHANISMUS mit synthetischen Daten: actIndex-
