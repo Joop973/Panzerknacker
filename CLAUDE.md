@@ -7907,10 +7907,114 @@ bereits gefunden bzw. gebaut hatten.
   neuen Verhalten sind nicht teurer als die ersetzten Bestandsverhalten.
 Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien --
 alle vier Typen aliasen auf vorhandene Sprites, alle vier Sounds sind
-Wiederverwendungen aus `data/sounds.json`). **Naechste Sitzung: Phase G3**
-(Akt 2, Welle 2: `t_relay`/`t_anchor`).
+Wiederverwendungen aus `data/sounds.json`).
+
+**Phase G3 (Akt 2, Welle 2) ist gebaut.** Zwei Gegner, beide ohne neue
+Architektur -- sie aktivieren nur, was G1 bereits als Infrastruktur gebaut
+hatte (Baustein A: `tank.auraFlags`; Baustein B: `state.tankLinks`), und
+liefern den ersten ECHTEN Erzeuger fuer beide.
+- **`t_relay`** (Horcher, 5 Punkte, Raum 5): `state.relaySight` -- EIN
+  globaler, pro Tick berechneter Boolean (state.js, Vorberechnung ganz am
+  Anfang von `stepState()`, vor der Panzer-Schleife), `true`, sobald
+  IRGENDEIN lebender Horcher innerhalb `sightRelay.rangePx` (520) eine freie
+  Sichtlinie (`clearLine()`) zu seinem eigenen aufgeloesten Ziel
+  (`resolveTarget()`, meist der Spieler) hat. Gelesen an GENAU einer Stelle
+  in `ai_turrets.js: roleTurret()`s LOS-Gate: statt bei fehlender eigener
+  Sichtlinie sofort `false` zurueckzugeben, prueft die Funktion zuerst
+  `state.relaySight` -- ist er wahr, feuert der Verbuendete trotzdem, mit
+  seiner EIGENEN `accuracy`/seinem eigenen Kegel (die Pruefungen davor sind
+  schon bestanden, nur die Sichtlinien-Pflicht selbst wird umgangen).
+  `tank.relayAssisted` (neu, Reset-Muster wie `auraFlags`, in derselben
+  Vorberechnungs-Schleife in state.js) markiert genau diesen Fall fuer den
+  Renderer -- "der sieht mich" vs. "der wird eingewiesen" bleibt dadurch
+  unterscheidbar. Bewegungsverhalten bleibt bewusst der normale `sapper`
+  (kein eigenes "Sichtlinien-statt-Deckung-Suchen" gebaut -- dokumentierte
+  Vereinfachung, s. u.).
+- **`t_anchor`** (Anker, 7 Punkte, Raum 8): `suppressField: {radiusPx:160,
+  noFlank:true, noExecute:true}` -- Baustein A bekommt seinen ersten echten
+  Setzer. Eine neue Vorab-Sammlung `suppressors` (alle lebenden Panzer mit
+  `cfg.suppressField`) wird VOR der bestehenden Aura-Reset-Schleife gebaut;
+  innerhalb dieser Schleife markiert jeder Anker alle Panzer in seinem
+  Radius **inklusive sich selbst** (Distanz 0 ≤ radiusPx trifft immer zu) --
+  mehrere Anker OR-en sich zusammen. Wirkt STRUKTURELL nie auf Geister (die
+  stehen nie in `state.tanks`, kein Ausschluss-Code noetig). Die beiden
+  Lesepunkte (Flankenfaktor, Exekutionsflag) existierten bereits seit G1 als
+  wirkungslose No-ops -- G3 musste dort nichts anfassen.
+- **"geankert ×1.0" statt stummer Unterdrueckung**: die bestehende
+  `flankZoneHit`-Berechnung klemmt bei `auraFlags.noFlank` schon auf
+  `'front'` -- ein unterdrueckter Seiten-/Hecktreffer haette dadurch OHNE
+  weitere Aenderung gar KEINE Rueckmeldung mehr gezeigt (der bestehende Text-
+  Block feuert nur bei `flankZoneHit !== 'front'`). Neue, separate
+  `rawFlankZone` haelt die ECHTE Einschlagsgeometrie fest (ungeklemmt); ein
+  Treffer mit `rawFlankZone !== 'front' && auraFlags.noFlank` zeigt
+  "geankert ×1.0" (violett) statt der normalen "Seite/Heck ×N"-Meldung --
+  "die Regel wird im Moment ihrer Wirkung erklaert" (Designtabelle 7.5).
+- **`state.tankLinks` bekommt seinen ersten Reset**: G1 hatte das Array nur
+  bei Raumerstellung geleert, nie pro Tick -- ohne einen echten Erzeuger war
+  das folgenlos. G3 fuegt `state.tankLinks.length = 0;` direkt vor der neuen
+  `relaySight`-Vorberechnung ein (dieselbe Stelle, an der der Lichtfaden bei
+  aktiver Sichtlinie gepusht wird) -- ein Fund, der ohne einen echten
+  Erzeuger nie sichtbar geworden waere.
+- **Zwei neue, sehr kleine Renderer-Marker** (`renderer.js: drawTank()`,
+  eigener Radius `r+32`, kollidiert nie mit den Affix-Punkten bei `r+26`):
+  eine kleine violette Raute ("Ankersymbol") fuer jeden Panzer mit
+  `auraFlags.noFlank||noExecute`, ein pulsierender gelber Punkt fuer
+  `relayAssisted`. Kein neues Sprite noetig. Der Anker-Bodenring
+  (`effects.js: drawAnchorFields()`, NEU, bewusst KEINE Wiederverwendung von
+  Baustein C -- "permanent, aendert sich nie" ist das Gegenteil von
+  Baustein C's wachsender Gefahrenflaeche) wird ganz frueh im Renderpfad
+  gezeichnet (direkt nach `drawFloor()`/`tracks.draw()`, unter allem
+  anderen).
+- **Bewusste Vereinfachung gegenueber der Designtabelle**: `t_relay` soll
+  laut Designtext aktiv "Sichtlinien suchen, nicht Deckung" (Korridorenden,
+  Freiflaechenraender) -- eine eigene, `coverDrive()`-inverse Fahrfunktion
+  waere technisch machbar (dieselbe Ray-March-Technik, nur die Bedingung
+  umgedreht), wurde aber in dieser Sitzung NICHT gebaut. Der normale
+  `sapper` (niedrige Aggression, wandert) traegt das Kernversprechen (die
+  `relaySight`-Mechanik selbst) bereits vollstaendig; das gezielte
+  Positionierungsverhalten ist reine Verhaltens-Politur ohne eigenen
+  Testwert und bleibt ein offener Punkt (s. To-do-Liste).
+- **Sprite-Aliase statt neuer Dateien**: `t_relay→t_grey` ("helles
+  Gelbgrau"), `t_anchor→t_purple` ("dunkles Violettgrau") -- naechstliegende
+  Bestandsfarben.
+- **Ein echter Testaufbau-Fallstrick gefunden und behoben** (kein Code-Bug):
+  der erste Entwurf von Testschritt (f) verglich `state.tankLinks[0].x0`
+  NACH `stepState()` gegen `relay.x` (ebenfalls NACH `stepState()` gelesen)
+  -- da `t_relay` Rolle `sapper` ist und dadurch auch in einem einzigen Tick
+  ein winziges Stueck wandert, lag die im PRE-PASS (Tickanfang) festgehaltene
+  Linien-Position bereits ein Sub-Pixel-Stueck von der POST-TICK-Position des
+  Panzers entfernt -- der Test schlug fehl, obwohl der Mechanismus korrekt
+  arbeitete. Fix: gegen die literalen Startkoordinaten pruefen statt gegen
+  den Panzer nach der Bewegungsphase.
+- **Neuer Testabschnitt 71** (`tests/regression.mjs`, Gegenprobe fuer jeden
+  Kernmechanismus einzeln bestanden -- je einzeln absichtlich rot gemacht und
+  zurueckgesetzt: `relaySight`-Bypass in `roleTurret()` entfernt,
+  `suppressField`-Anwendung in state.js entfernt, der "geankert"-Textzweig
+  isoliert deaktiviert (bestaetigt: (d) bleibt gruen, nur (e) faellt --
+  Mechanismus und Rueckmeldung sind unabhaengig geprueft), `tankLinks`-Reset
+  entfernt, `rangePx`-Grenze aus der `relaySight`-Berechnung entfernt):
+  Struktur (beide Typen + Akt-2-Freischaltung), `state.relaySight` mit
+  Reichweiten-/Sichtlinien-Grenzfaellen, `roleTurret()`s Bypass +
+  `relayAssisted`-Markierung (inkl. Kontrolle: echte eigene Sichtlinie setzt
+  `relayAssisted` NICHT), `t_anchor`s Suppress-Feld (inkl. Selbstmarkierung
+  und Geister-Ausschluss), die "geankert ×1.0"-Rueckmeldung End-zu-Ende ueber
+  einen echten Treffer (Kontrolle: ohne Anker die normale Seiten-Meldung),
+  `state.tankLinks`-Reset + Erzeugung ueber einen echten `stepState()`-Tick.
+- **Schlechtester Frame** (Grundregel): Acht-Gegner-Raum (4× je neuer Typ)
+  vs. Baseline aus acht Bestandstypen, 600 Ticks, drittgroesster Wert:
+  Baseline **2,092 ms**, G3-Raum **0,792 ms** (Budget 6 ms).
+Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien).
+**Naechste Sitzung: Phase G4** (Kompositionssystem -- laut Auftrag "die
+wichtigste Phase").
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **`t_relay` (Horcher) hat noch keine eigene Sichtlinien-Suchfahrt**
+      (Gegner-Umbau G3): Designtext will aktives Aufsuchen von Korridorenden/
+      Freiflächenrändern statt normalem `sapper`-Wandern. Technisch machbar
+      als `coverDrive()`-Gegenstück (dieselbe Ray-March-Technik, umgedrehte
+      Bedingung), bewusst als reine Verhaltens-Politur zurückgestellt — die
+      eigentliche Mechanik (`state.relaySight`) funktioniert bereits
+      vollständig ohne sie.
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
       ersetzt (s. o.), bis ein neues Bosskonzept entsteht. Beim Neubau die

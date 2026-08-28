@@ -27,6 +27,7 @@ import {
   drawFireWindups,
   drawLanceAim,
   drawRamTelegraphs,
+  drawAnchorFields,
 } from './effects.js';
 import { drawSpiderBossLegs, drawSpiderBossBody, drawSpiderMines, drawSpiderWebs } from './spiderrender.js';
 import { traceTrajectory } from '../game/bullet.js';
@@ -829,6 +830,31 @@ export function createRenderer(ctx) {
       });
     }
 
+    // G3 (t_anchor/t_relay): zwei sehr kleine Statusmarker, eigener Radius
+    // (r+32), damit sie nie mit Affix-Punkten (r+26) kollidieren. Kein neues
+    // Sprite noetig: "Ankersymbol" = kleine violette Raute (Designauflage:
+    // "Gegner innerhalb tragen ein Ankersymbol"), "nur wegen des Horchers" =
+    // pulsierender gelber Punkt seitlich am Panzer (Designauflage: "der
+    // Spieler kann unterscheiden 'der sieht mich' vs. 'der wird eingewiesen'").
+    if (t.auraFlags?.noFlank || t.auraFlags?.noExecute) {
+      const my = y - r - 32;
+      ctx.fillStyle = '#a89cd8';
+      ctx.beginPath();
+      ctx.moveTo(x, my - 4);
+      ctx.lineTo(x + 4, my);
+      ctx.lineTo(x, my + 4);
+      ctx.lineTo(x - 4, my);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (t.relayAssisted) {
+      const pulse = 0.5 + 0.5 * Math.sin(state.time * 6);
+      ctx.fillStyle = `rgba(230,210,60,${(0.4 + 0.5 * pulse).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(x + r + 10, y - r - 10, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // Lebensleiste. Bei GEGNERN (Phase 2) nur, wenn sie angeschlagen sind:
     // auf einem Telefondisplay mit acht Gegnern waere ein Dauerbalken ueber
     // jedem Panzer unlesbar -- so ist der Balken selbst die Information
@@ -1436,6 +1462,7 @@ export function createRenderer(ctx) {
       }
       drawFloor();
       tracks.draw(ctx);
+      drawAnchorFields(ctx, state); // G3: permanente Bodenmarkierung, unter allem
       drawMines(ctx, state);
       drawSpiderMines(ctx, state);
       drawSpiderWebs(ctx, state);

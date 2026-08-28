@@ -165,8 +165,19 @@ export function roleTurret(tank, state, dt) {
   // strong_aim). Vorhaltezielen verlangt sie immer.
   const needSight = acc >= 0.3 || cfg.leadAim;
   if (needSight && !clearLine(state, tank.x, tank.y, targetX, targetY)) {
-    resetFireWindup(tank);
-    return false;
+    // G3 (t_relay): state.relaySight ist EIN globaler, pro Tick berechneter
+    // Boolean (state.js) -- solange irgendein lebender Horcher sein eigenes
+    // Ziel sieht, feuern ALLE Verbuendeten trotz fehlender eigener Sichtlinie
+    // weiter, mit ihrer eigenen Zielgenauigkeit (der Kegel-/Muendungs-Check
+    // oben ist bereits bestanden). tank.relayAssisted markiert das fuer den
+    // Renderer ("nur wegen des Horchers") -- zurueckgesetzt pro Tick in
+    // state.js, nicht hier (sonst muesste jeder fruehere return-false-Zweig
+    // ihn ebenfalls pflegen).
+    if (!state.relaySight) {
+      resetFireWindup(tank);
+      return false;
+    }
+    tank.relayAssisted = true;
   }
   // Mörser (Grundsteinumbau Phase 3, t_green): unter minRangePx feuert er
   // nicht -- sonst bombt er sich selbst weg und ist im Nahkampf absurd

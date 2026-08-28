@@ -442,6 +442,42 @@
       "damage": 35,
       "desc": "Hält Abstand und lädt einen durchschlagenden Schuss auf — die letzten 0,4 s ist die Richtung eingefroren. Bricht die Sichtlinie ab, verpufft der Ladevorgang wirkungslos."
     },
+    "t_relay": {
+      "speed": "slow",
+      "magazine": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "sapper",
+      "aggression": 0.05,
+      "accuracy": 0.2,
+      "fireRate": 2.5,
+      "sightRelay": {
+        "rangePx": 520,
+        "shareWithAllies": true
+      },
+      "label": "Horcher",
+      "maxHp": 20,
+      "damage": 25,
+      "desc": "Sucht Sichtlinien statt Deckung. Solange er sein Ziel sieht, dürfen alle Verbündeten im Raum ebenfalls blind feuern — brich seine Sicht oder töte ihn (2 Treffer)."
+    },
+    "t_anchor": {
+      "speed": "fix",
+      "magazine": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "guardian",
+      "accuracy": 0.4,
+      "fireRate": 2.2,
+      "suppressField": {
+        "radiusPx": 160,
+        "noFlank": true,
+        "noExecute": true
+      },
+      "label": "Anker",
+      "maxHp": 50,
+      "damage": 25,
+      "desc": "Steht immer still. Alle Gegner in 160 px Umkreis (ihn eingeschlossen) verlieren Flankenbonus und Exekutionsschwelle — die einzige Regel, die er bricht, verändert jede andere Entscheidung im Raum."
+    },
     "t_black": {
       "speed": "veryfast",
       "magazine": 2,

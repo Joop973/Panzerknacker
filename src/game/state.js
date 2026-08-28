@@ -32,7 +32,7 @@ import {
   addNecroTimedStack,
   getNecroStack,
 } from './necro.js';
-import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat } from './ai.js';
+import { updateEnemy, updateCoverPerception, updateTargeting, resolveTarget, registerThreat, clearLine } from './ai.js';
 import { applyStatus, updateStatus } from './status.js';
 import { applyTypeEffects } from './damagetypes.js';
 import { stepMirrorBoss, stepPhalanxBoss, stepAnvilBoss, showAnvilHint } from './bossai.js';
@@ -1538,22 +1538,69 @@ export function stepState(state, cmd, dt) {
   // Nur normale GEGNER (Entscheidung C: Bosse ausgenommen, der Spieler ist
   // nie Ziel dieser Mechanik).
   const exCfg = state.data.balance.execute;
+  // Gegner-Umbau G3: zwei Pro-Tick-Vorberechnungen, gebraucht von der
+  // folgenden Panzer-Schleife (t_anchor) bzw. von ai_turrets.js: roleTurret()
+  // (t_relay). state.tankLinks wird HIER zum ersten Mal wirklich geleert --
+  // Baustein B (G1) hatte noch keinen Erzeuger und damit auch keinen Bedarf
+  // dafuer. state.relaySight ist bewusst EIN globaler Boolean statt einer
+  // Pro-Ziel-Tabelle (Designtabelle: "kleine Erweiterung, ein Boolean je
+  // Tick"), gelesen an genau einer Stelle in ai_turrets.js: roleTurret().
+  state.tankLinks.length = 0;
+  state.relaySight = false;
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.sightRelay) continue;
+    const relayTarget = resolveTarget(t, state);
+    if (!relayTarget.alive) continue;
+    const relayD = Math.hypot(relayTarget.x - t.x, relayTarget.y - t.y);
+    if (relayD <= t.cfg.sightRelay.rangePx && clearLine(state, t.x, t.y, relayTarget.x, relayTarget.y)) {
+      state.relaySight = true;
+      // Lichtfaden (Baustein B): IMMER sichtbar, solange der Horcher wirklich
+      // sieht -- Designauflage "dünn, gelb, leicht flackernd".
+      state.tankLinks.push({
+        x0: t.x,
+        y0: t.y,
+        x1: relayTarget.x,
+        y1: relayTarget.y,
+        color: [230, 210, 60],
+        width: 1.5,
+        baseAlpha: 0.5,
+        pulseAlpha: 0.3,
+        pulseHz: 2.2,
+        dash: [4, 4],
+      });
+    }
+  }
+  // t_anchor: alle lebenden Suppress-Feld-Quellen vorab sammeln -- wirkt NIE
+  // auf Geister (die stehen strukturell nie in state.tanks, kein Ausschluss-
+  // Code noetig).
+  const suppressors = state.tanks.filter((s) => s.alive && s.cfg.suppressField);
   for (const t of state.tanks) {
     if (!t.alive) continue;
     // Gegner-Umbau Baustein A (Aura-Markierung, G1): EIN Reset pro Tick fuer
     // JEDEN Panzer, nach dem Muster ghost.js: necroAuraWeakened -- generisch
-    // statt eines Einzelfelds, damit spaetere Auren-Gegner (t_anchor/
-    // t_marshal, G3/G6) nur noch einen SETZER ergaenzen muessen, keinen
-    // weiteren Lesepunkt. Aktuell erzeugt noch KEIN Gegner eine Aura, die
-    // drei Lesestellen (hier: noExecute; Flankenfaktor weiter unten;
-    // fireRateMult in tank.js: fireBullet()) bleiben deshalb bis dahin
-    // wirkungslose No-ops -- exakt die "nichts sichtbar anders"-Abnahme aus
-    // UMBAUPLAN-GEGNER.md Phase G1.
+    // statt eines Einzelfelds, damit spaetere Auren-Gegner (t_marshal, G6)
+    // nur noch einen SETZER ergaenzen muessen, keinen weiteren Lesepunkt.
+    // Seit G3 hat t_anchor den ersten echten Setzer (naechster Block); der
+    // dritte Lesepunkt (fireRateMult in tank.js: fireBullet()) bleibt bis G6
+    // ein wirkungsloser No-op.
     if (!t.auraFlags) t.auraFlags = { noFlank: false, noExecute: false, fireRateMult: 1 };
     else {
       t.auraFlags.noFlank = false;
       t.auraFlags.noExecute = false;
       t.auraFlags.fireRateMult = 1;
+    }
+    // G3 (t_relay): Reset des "feuert nur DANK des Horchers"-Markers (Muster
+    // wie auraFlags oben) -- gesetzt in ai_turrets.js: roleTurret(), gelesen
+    // vom Renderer (drawAuraMarkers()).
+    t.relayAssisted = false;
+    // G3 (t_anchor): jeder Panzer innerhalb EINES Suppress-Felds (inkl. der
+    // Quelle selbst) verliert Flanken-/Exekutionsvorteil. Mehrere Anker OR-en
+    // sich zusammen (ein Panzer im Feld irgendeines Ankers ist betroffen).
+    for (const src of suppressors) {
+      const sf = src.cfg.suppressField;
+      if (Math.hypot(t.x - src.x, t.y - src.y) > sf.radiusPx) continue;
+      if (sf.noFlank) t.auraFlags.noFlank = true;
+      if (sf.noExecute) t.auraFlags.noExecute = true;
     }
     // ghost_026 "Opferstoss" (Nekromant-V2 Phase 6): eine Druckwelle hebt die
     // Exekutionsschwelle fuer GETROFFENE Gegner zeitlich befristet auf einen
@@ -1882,13 +1929,19 @@ export function stepState(state, cmd, dt) {
         // Fronttreffer schon vorher an), flankZone() klassifiziert sie dann
         // wie bei jedem normalen Gegner in Front/Seite/Heck.
         const flankCfg = state.data.balance.flank;
-        // Baustein A (Aura-Markierung, G1): t_anchor setzt t.auraFlags.noFlank
+        // Baustein A (Aura-Markierung, G1/G3): t_anchor setzt t.auraFlags.noFlank
         // -- ein Treffer zaehlt dann IMMER als Fronttreffer (kein Seiten-/
         // Heckbonus), unabhaengig von der tatsaechlichen Einschlagsgeometrie.
-        const flankZoneHit =
-          flankCfg && t !== state.player && (!isBossCfg(t.cfg) || t.cfg.flankable) && !t.auraFlags?.noFlank
+        // rawFlankZone haelt die ECHTE Geometrie separat fest (G3): nur so
+        // laesst sich unten "geankert ×1.0" statt der normalen Seiten-/
+        // Heck-Rueckmeldung zeigen -- ohne rawFlankZone wuerde ein
+        // unterdrueckter Seitentreffer STUMM bleiben (flankZoneHit ist ja
+        // schon 'front').
+        const rawFlankZone =
+          flankCfg && t !== state.player && (!isBossCfg(t.cfg) || t.cfg.flankable)
             ? flankZone(t, b.x, b.y, flankCfg)
             : 'front';
+        const flankZoneHit = t.auraFlags?.noFlank ? 'front' : rawFlankZone;
         const baseFlankMult =
           flankZoneHit === 'rear' ? flankCfg.rearMult : flankZoneHit === 'side' ? flankCfg.sideMult : 1;
         // ghost_010 "Jenseitsziel" (Nekromant-V2 Phase 6): zusaetzlicher
@@ -2002,7 +2055,20 @@ export function stepState(state, cmd, dt) {
         // Moment): Seiten-/Heck-Treffer zeigen den Faktor als schwebenden
         // Kurztext am Einschlagpunkt -- der Krit hat seit Phase 7 bereits
         // eigene Rueckmeldung (Ton/Shake/Text am Schuetzen).
-        if (flankZoneHit !== 'front') {
+        // G3 (t_anchor): "die Regel wird im Moment ihrer Wirkung erklärt" --
+        // ein GEOMETRISCH seitlicher/hinterer Treffer, der nur wegen des
+        // Suppress-Felds als Front zaehlt, zeigt "geankert ×1.0" statt gar
+        // nichts (rawFlankZone haelt die echte Geometrie fest, s. o.).
+        if (rawFlankZone !== 'front' && t.auraFlags?.noFlank) {
+          state.texts.push({
+            x: t.x,
+            y: t.y - 14,
+            text: 'geankert ×1.0',
+            age: 0,
+            life: 0.6,
+            color: '#b3a6e6',
+          });
+        } else if (flankZoneHit !== 'front') {
           state.texts.push({
             x: t.x,
             y: t.y - 14,
