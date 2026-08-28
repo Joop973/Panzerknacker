@@ -14386,10 +14386,17 @@ for (const seed of SEEDS) {
   }
 
   // ---- (g) t_mason: maxAlive-Deckel + Verfall nach decayS -------------------
+  // Zwei GETRENNTE Szenarien (Testfund per Gegenprobe): mit einer kurzen
+  // decayS UND einem kurzen everyS im selben Lauf verfaellt die erste Wand
+  // laengst von selbst, bevor der maxAlive-Check ueberhaupt greifen kann --
+  // ein entfernter maxAlive-Deckel fiel dadurch nie auf (der Zaehlerstand
+  // 0/1 war durch den Verfall bereits erklaert, nicht durch den Deckel).
   {
+    // (g1) maxAlive: decayS bewusst UNERREICHBAR gross, damit ausschliesslich
+    // der Deckel ueber den Zaehlerstand entscheidet.
     const st = masonRoom();
     const mason = createTank('t_mason', resolveCfg(tanksData, 't_mason'), 300, 200);
-    mason.cfg = { ...mason.cfg, build: { ...mason.cfg.build, maxAlive: 1, everyS: 0.01, decayS: 0.2 } }; // eigene, kleine Werte
+    mason.cfg = { ...mason.cfg, build: { ...mason.cfg.build, maxAlive: 1, everyS: 0.01, decayS: 1000 } };
     mason.masonTimer = 0;
     // Wie bei (d): Ziel WEIT hinter der Baudistanz, sonst faellt die
     // Kandidatenzelle auf den Spieler und minPlayerDistCells blockiert
@@ -14400,17 +14407,38 @@ for (const seed of SEEDS) {
     // Erste Wand fertigstellen.
     stepState(st, CMD0, 1 / 60);
     for (let i = 0; i < Math.ceil(mason.cfg.build.buildS * 60) + 2; i++) stepState(st, CMD0, 1 / 60);
-    check(mason.masonWalls.length === 1, `G5 (g): erste Wand nicht gebaut (masonWalls=${mason.masonWalls.length})`);
-    const firstWallCount = st.walls.length;
+    check(mason.masonWalls.length === 1, `G5 (g1): erste Wand nicht gebaut (masonWalls=${mason.masonWalls.length})`);
+    // Ziel wechselt die Richtung -- die naechste Kandidatenzelle liegt
+    // dadurch woanders (frei, nicht durch die schon gebaute erste Wand
+    // besetzt). Ohne diesen Richtungswechsel scheitert der zweite Versuch
+    // schon an der "besetzte Zelle"-Pruefung, NICHT am maxAlive-Deckel.
+    st.player.x = 300 + mason.cfg.build.distancePx * 2;
+    st.player.y = 200;
     // Naechster Zyklus (Timer laeuft dank everyS:0.01 sofort wieder ab) --
     // darf wegen maxAlive:1 KEINE zweite Wand anlegen.
     for (let i = 0; i < 60; i++) stepState(st, CMD0, 1 / 60);
-    check(mason.masonWalls.length === 1, `G5 (g): maxAlive:1 haelt den Maurer nicht auf hoechstens 1 eigene Wand (${mason.masonWalls.length})`);
-    // Verfall: nach decayS (0,2 s) muss die Wand von selbst verschwinden --
-    // unabhaengig von Treffern.
-    for (let i = 0; i < 30; i++) stepState(st, CMD0, 1 / 60);
-    check(mason.masonWalls.length === 0, 'G5 (g): die eigene Wand verfaellt nicht nach decayS');
-    check(st.walls.length < firstWallCount, 'G5 (g): die verfallene Wand steht noch in state.walls');
+    check(mason.masonWalls.length === 1, `G5 (g1): maxAlive:1 haelt den Maurer nicht auf hoechstens 1 eigene Wand (${mason.masonWalls.length})`);
+  }
+  {
+    // (g2) Verfall: maxAlive bewusst hoch (spielt keine Rolle), decayS kurz.
+    const st = masonRoom();
+    const mason = createTank('t_mason', resolveCfg(tanksData, 't_mason'), 300, 200);
+    mason.cfg = { ...mason.cfg, build: { ...mason.cfg.build, maxAlive: 10, everyS: 5, decayS: 0.2 } };
+    mason.masonTimer = 0;
+    st.player.x = 300;
+    st.player.y = 200 + mason.cfg.build.distancePx * 2;
+    st.tanks = [mason];
+    stepState(st, CMD0, 1 / 60);
+    for (let i = 0; i < Math.ceil(mason.cfg.build.buildS * 60) + 2; i++) stepState(st, CMD0, 1 / 60);
+    check(mason.masonWalls.length === 1, `G5 (g2): erste Wand nicht gebaut (masonWalls=${mason.masonWalls.length})`);
+    const firstWallCount = st.walls.length;
+    // Kurz VOR decayS (0,2 s minus ein paar Ticks): die Wand muss noch stehen.
+    for (let i = 0; i < 8; i++) stepState(st, CMD0, 1 / 60);
+    check(mason.masonWalls.length === 1, 'G5 (g2): die Wand verfaellt zu frueh (vor decayS)');
+    // Nach decayS: die Wand verschwindet von selbst, unabhaengig von Treffern.
+    for (let i = 0; i < 15; i++) stepState(st, CMD0, 1 / 60);
+    check(mason.masonWalls.length === 0, 'G5 (g2): die eigene Wand verfaellt nicht nach decayS');
+    check(st.walls.length < firstWallCount, 'G5 (g2): die verfallene Wand steht noch in state.walls');
   }
 }
 
