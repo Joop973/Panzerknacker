@@ -521,6 +521,81 @@
       "damage": 25,
       "desc": "Errichtet alle 5 s eine zerstörbare Wand zwischen sich und seinem Ziel (0,8 s Bauzeit, danach 3 Treffer haltbar, verfällt nach 20 s von selbst) — verändert die Raumgeometrie zur Laufzeit, ohne den Spieler je einzumauern."
     },
+    "t_marshal": {
+      "speed": "normal",
+      "magazine": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "sieger",
+      "aggression": 0.15,
+      "preferredRange": 260,
+      "accuracy": 0.5,
+      "fireRate": 2.0,
+      "rally": {
+        "fireRateMult": 0.7,
+        "needsLos": true,
+        "maxTargets": 6
+      },
+      "label": "Feldwebel",
+      "maxHp": 40,
+      "damage": 25,
+      "desc": "Verstärkt jeden Verbündeten mit freier Sichtlinie zu ihm um 30 % schnellere Feuerrate (bis zu 6 gleichzeitig) — Wände zwischen ihm und seinen Leuten brechen den Effekt sofort und sichtbar."
+    },
+    "t_bulwark": {
+      "speed": "slow",
+      "radius": 22,
+      "magazine": 2,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "hunter",
+      "aggression": 0.25,
+      "accuracy": 0.55,
+      "fireRate": 1.8,
+      "armor": {
+        "arc": 160,
+        "reflects": false
+      },
+      "label": "Bollwerk",
+      "maxHp": 50,
+      "damage": 25,
+      "desc": "Sehr großer, langsamer Körper mit nicht reflektierender 160°-Frontpanzerung — Treffer von vorn richten keinen Schaden an, sein Körper blockt Geschosse physisch (auch die eigener Verbündeter). Hinten völlig ungeschützt."
+    },
+    "t_stalker": {
+      "speed": "fast",
+      "magazine": 2,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "hunter",
+      "aggression": 0.7,
+      "accuracy": 0.75,
+      "fireRate": 1.5,
+      "fireWindupS": 0.6,
+      "stalk": {
+        "cloakBeyondPx": 220,
+        "revealBeforeShotS": 0.6,
+        "revealedS": 2.0
+      },
+      "label": "Pirscher",
+      "maxHp": 30,
+      "damage": 25,
+      "desc": "Unsichtbar (bis auf ein schwaches Flimmern und Kettenspuren im Boden), solange er weiter als 220 px entfernt ist und nicht feuert — wird 0,6 s vor jedem Schuss voll sichtbar und bleibt es danach."
+    },
+    "t_arclight": {
+      "speed": "normal",
+      "magazine": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "sieger",
+      "aggression": 0.35,
+      "preferredRange": 260,
+      "accuracy": 0.8,
+      "fireRate": 2.0,
+      "damageType": "lightning",
+      "label": "Lichtbogen",
+      "maxHp": 30,
+      "damage": 25,
+      "desc": "Sein Geschoss springt beim Treffer auf bis zu zwei weitere nahe Ziele über (30 % Schadensabfall je Sprung) — trifft er einen Geist, springt der Blitz auch auf den Spieler und umgekehrt."
+    },
     "t_black": {
       "speed": "veryfast",
       "magazine": 2,

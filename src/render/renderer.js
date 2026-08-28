@@ -536,6 +536,12 @@ export function createRenderer(ctx) {
       bodyAlpha = whiteAlpha(state);
       if (bodyAlpha <= 0) return;
     }
+    // G6 (t_stalker): getarnt (t.stalkCloaked, pro Tick in state.js
+    // berechnet) -- Designauflage "nicht 0 %, er ist nie vollstaendig weg",
+    // deshalb NUR reduzierte Deckkraft mit leichtem Flimmern, kein `return`.
+    if (t.cfg.stalk && t.stalkCloaked) {
+      bodyAlpha = 0.14 + 0.07 * Math.sin(state.time * 5);
+    }
 
     const x = lerp(t.prevX, t.x, alpha);
     const y = lerp(t.prevY, t.y, alpha);
@@ -854,6 +860,18 @@ export function createRenderer(ctx) {
       ctx.beginPath();
       ctx.arc(x + r + 10, y - r - 10, 3, 0, Math.PI * 2);
       ctx.fill();
+    }
+    // G6 (t_marshal): "verstaerkte Gegner tragen einen orangen Saum" --
+    // duenner pulsierender Ring direkt um den Koerper, bewusst auf einem
+    // anderen Radius (r+4) als die Affix-/Anker-/Horcher-Marker (r+11..32),
+    // damit alle Informationsschichten gleichzeitig lesbar bleiben.
+    if (t.auraFlags?.fireRateMult < 1) {
+      const pulse = 0.5 + 0.5 * Math.sin(state.time * 8);
+      ctx.strokeStyle = `rgba(255,150,40,${(0.4 + 0.4 * pulse).toFixed(3)})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 4, 0, Math.PI * 2);
+      ctx.stroke();
     }
 
     // Lebensleiste. Bei GEGNERN (Phase 2) nur, wenn sie angeschlagen sind:

@@ -14442,6 +14442,252 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 74. Gegner-Umbau Phase G6 (UMBAUPLAN-GEGNER.md): Akt 3, Welle 1 -----
+// Die vier "konservativen" Akt-3-Gegner -- keiner brauchte eine neue
+// Kernarchitektur. t_bulwark ist reine Datenuebernahme (radius-Override seit
+// dem Amboss-Auftrag, armor.reflects:false war bereits seit PLAN.md v2
+// vollstaendig ausgewertet, nur bisher von keinem Typ genutzt). t_arclight
+// aktiviert nur ein laengst gebautes, gegnerseitig bislang ungenutztes
+// System (damageType:'lightning', UMBAUPLAN-LP Phase 6). Echte neue Mechanik
+// gibt es nur bei t_marshal (Feuerraten-Aura ueber Baustein A/B aus G1) und
+// t_stalker (distanzbasierte Tarnung, Enttarnung ueber den bestehenden
+// fireWindupS-Mechanismus aus G2).
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createTank, fireBullet } = await import('../src/game/tank.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { roleTurret } = await import('../src/game/ai_turrets.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+  const { CELL, COLS, ROWS } = await import('../src/config.js');
+
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  // Komplett offener Innenraum mit solidem Rand (Muster masonRoom() oben) --
+  // volle, vorhersagbare Kontrolle ueber Positionen/Sichtlinien statt eines
+  // zufaellig generierten Layouts.
+  function openRoom() {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: [],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+    });
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) st.grid[r][c] = r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1 ? '#' : '.';
+    st.walls = [];
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (st.grid[r][c] === '#') st.walls.push({ x: c * CELL, y: r * CELL, w: CELL, h: CELL, type: 'solid', col: c, row: r });
+    return st;
+  }
+
+  // ---- (a) Struktur: alle vier Typen + Akt-3-Freischaltung -----------------
+  {
+    const M = tanksData.types.t_marshal;
+    check(!!M?.rally && M.weapon === 'bullet', 'G6 (a): t_marshal fehlt oder traegt kein rally');
+    check(
+      typeof M.rally.fireRateMult === 'number' && M.rally.needsLos === true && typeof M.rally.maxTargets === 'number',
+      'G6 (a): t_marshal.rally unvollstaendig',
+    );
+    const B = tanksData.types.t_bulwark;
+    check(!!B?.armor && B.armor.reflects === false && B.armor.arc === 160 && B.radius === 22, 'G6 (a): t_bulwark fehlt armor/radius-Override');
+    const S = tanksData.types.t_stalker;
+    check(!!S?.stalk && typeof S.fireWindupS === 'number', 'G6 (a): t_stalker fehlt stalk oder fireWindupS');
+    check(
+      typeof S.stalk.cloakBeyondPx === 'number' && typeof S.stalk.revealBeforeShotS === 'number' && typeof S.stalk.revealedS === 'number',
+      'G6 (a): t_stalker.stalk unvollstaendig',
+    );
+    check(
+      S.fireWindupS === S.stalk.revealBeforeShotS,
+      'G6 (a): t_stalker.fireWindupS stimmt nicht mit stalk.revealBeforeShotS ueberein (der Enttarnungsmechanismus setzt genau das voraus)',
+    );
+    const A = tanksData.types.t_arclight;
+    check(A?.damageType === 'lightning', 'G6 (a): t_arclight traegt kein damageType:lightning');
+    for (const id of ['t_marshal', 't_bulwark', 't_stalker', 't_arclight']) {
+      check(diffData.danger[id]?.unlockAct === 3, `G6 (a): ${id} ist nicht in Akt 3 freigeschaltet`);
+    }
+  }
+
+  // ---- (b) t_bulwark: Fronttreffer wirkungslos (kein Schaden, KEIN
+  //          Zurueckprallen -- reflects:false), Hecktreffer normal mit
+  //          dem vollen Heckbonus (2,5x, Grundsteinumbau Phase 2). -------
+  {
+    const bcfg = resolveCfg(tanksData, 't_bulwark');
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    const shootAt = (offsetAngleDeg) => {
+      const z = {
+        ...proto, x: 200, y: 250, prevX: 200, prevY: 250, heading: 0,
+        alive: true, hp: 9999, protect: 0, shieldReady: false, status: {},
+        cfg: { ...bcfg, maxHp: 9999 },
+      };
+      st.tanks.length = 0;
+      st.tanks.push(st.player, z);
+      const off = (offsetAngleDeg * Math.PI) / 180;
+      const b = createBullet(z.x + Math.cos(off) * 2, z.y + Math.sin(off) * 2, 0, {
+        speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 10,
+      });
+      b.age = 5;
+      st.bullets.length = 0;
+      st.mines.length = 0;
+      st.bullets.push(b);
+      stepState(st, CMD0, 1 / 60);
+      return { z, b };
+    };
+    const front = shootAt(0);
+    check(front.z.hp === 9999, `G6 (b): Fronttreffer gegen t_bulwark richtet Schaden an (hp ${front.z.hp})`);
+    check(front.b.dead === true && !front.b.reflected, 'G6 (b): der Fronttreffer stirbt nicht ohne zu reflektieren (armor.reflects:false)');
+    const rear = shootAt(180);
+    check(9999 - rear.z.hp === 25, `G6 (b): Hecktreffer gegen t_bulwark ${9999 - rear.z.hp} statt 25 (2,5x Heckbonus)`);
+  }
+
+  // ---- (c) t_marshal: Feuerraten-Aura ueber freie Sichtlinie, KEIN Radius,
+  //          Deckel PRO FELDWEBEL, Spieler/Selbst nie Ziel, Fahnenlinie,
+  //          und der Multiplikator wirkt wirklich auf tank.cooldown (seit
+  //          Baustein A/G1 in tank.js: fireBullet() verdrahtet). ----------
+  {
+    const mcfg = resolveCfg(tanksData, 't_marshal');
+    const allyCfg = resolveCfg(tanksData, 't_brown');
+
+    const st = openRoom();
+    const marshal = createTank('t_marshal', mcfg, 100, 100);
+    const seen = createTank('t_brown', allyCfg, 150, 100);
+    st.player.x = 9999;
+    st.player.y = 9999; // ausser jeder Reichweite -- darf nie verstaerkt werden
+    st.tanks = [st.player, marshal, seen];
+    stepState(st, CMD0, 1 / 60);
+    check(seen.auraFlags.fireRateMult === mcfg.rally.fireRateMult, `G6 (c): sichtbarer Verbuendeter bekommt fireRateMult nicht (${seen.auraFlags.fireRateMult})`);
+    check(marshal.auraFlags.fireRateMult === 1, 'G6 (c): der Feldwebel verstaerkt sich selbst');
+    check(st.player.auraFlags.fireRateMult === 1, 'G6 (c): der Spieler wird faelschlich verstaerkt');
+    // Gegen die literalen Startkoordinaten pruefen, nicht gegen die Panzer
+    // NACH dem Tick (G3-Fund: die Fahnenlinie wird frueh im Tick gepusht,
+    // VOR der spaeteren Gegner-Bewegungsphase -- der Feldwebel selbst ist
+    // Rolle 'sieger' und bewegt sich im selben Tick noch ein Stueck).
+    check(
+      st.tankLinks.some((l) => l.x0 === 100 && l.y0 === 100 && l.x1 === 150 && l.y1 === 100),
+      'G6 (c): keine Fahnenlinie fuer den verstaerkten Verbuendeten',
+    );
+
+    // LOS-Pflicht: eine Wand zwischen Feldwebel und Verbuendetem hebt die
+    // Verstaerkung wieder auf.
+    const st2 = openRoom();
+    const marshal2 = createTank('t_marshal', mcfg, 100, 100);
+    const blocked = createTank('t_brown', allyCfg, 200, 100);
+    st2.player.x = 9999;
+    st2.player.y = 9999;
+    st2.tanks = [st2.player, marshal2, blocked];
+    const wallCol = Math.floor(150 / CELL);
+    const wallRow = Math.floor(100 / CELL);
+    st2.grid[wallRow][wallCol] = '#';
+    stepState(st2, CMD0, 1 / 60);
+    check(blocked.auraFlags.fireRateMult === 1, 'G6 (c): eine Wand zwischen Feldwebel und Verbuendetem hebt die Verstaerkung nicht auf');
+
+    // maxTargets-Deckel: mehr Verbuendete als maxTargets -- nur bis zum
+    // Deckel werden verstaerkt.
+    const st3 = openRoom();
+    const marshal3 = createTank('t_marshal', { ...mcfg, rally: { ...mcfg.rally, maxTargets: 2 } }, 100, 100);
+    const allies = [0, 1, 2, 3].map((i) => createTank('t_brown', allyCfg, 100 + (i + 1) * 10, 100));
+    st3.player.x = 9999;
+    st3.player.y = 9999;
+    st3.tanks = [st3.player, marshal3, ...allies];
+    stepState(st3, CMD0, 1 / 60);
+    const boostedCount = allies.filter((a) => a.auraFlags.fireRateMult < 1).length;
+    check(boostedCount === 2, `G6 (c): maxTargets:2 wird nicht durchgesetzt (${boostedCount} statt 2 verstaerkte Verbuendete)`);
+
+    // End-zu-Ende: der Multiplikator wirkt wirklich auf tank.cooldown, nicht
+    // nur auf ein isoliertes Datenfeld.
+    const boosted = allies[0];
+    boosted.turret = 0;
+    fireBullet(boosted, st3, true);
+    const plain = allies[3]; // ausserhalb des Deckels -- nicht verstaerkt
+    plain.turret = 0;
+    fireBullet(plain, st3, true);
+    check(
+      boosted.cooldown < plain.cooldown,
+      `G6 (c): verstaerkte Feuerrate wirkt nicht auf tank.cooldown (${boosted.cooldown} vs. ${plain.cooldown})`,
+    );
+  }
+
+  // ---- (d) t_stalker: Tarnung ausserhalb cloakBeyondPx, Enttarnung ueber
+  //          den Windup-Start in roleTurret() (fireWindupS ==
+  //          stalk.revealBeforeShotS), Rueckkehr zur Tarnung nach Ablauf
+  //          des gesamten Enttarnungsfensters. -----------------------------
+  {
+    const scfg = resolveCfg(tanksData, 't_stalker');
+
+    const st = openRoom();
+    const stalker = createTank('t_stalker', scfg, 100, 100);
+    st.player.x = 100 + scfg.stalk.cloakBeyondPx + 50;
+    st.player.y = 100;
+    st.tanks = [st.player, stalker];
+    stepState(st, CMD0, 1 / 60);
+    check(stalker.stalkCloaked === true, 'G6 (d): ausserhalb cloakBeyondPx ohne Reveal-Fenster ist er sichtbar');
+
+    st.player.x = 100 + scfg.stalk.cloakBeyondPx - 20;
+    stepState(st, CMD0, 1 / 60);
+    check(stalker.stalkCloaked === false, 'G6 (d): innerhalb cloakBeyondPx bleibt er getarnt');
+
+    const st2 = openRoom();
+    const stalker2 = createTank('t_stalker', scfg, 100, 100);
+    st2.tanks = [st2.player, stalker2];
+    st2.player.x = 100 + scfg.stalk.cloakBeyondPx + 50;
+    st2.player.y = 100;
+    stalker2.turret = 0; // zeigt bereits exakt auf den Spieler
+    roleTurret(stalker2, st2, 1 / 60);
+    check(stalker2.stalkRevealUntil > st2.time, 'G6 (d): roleTurret() setzt beim Windup-Start kein stalkRevealUntil');
+    stepState(st2, CMD0, 1 / 60);
+    check(stalker2.stalkCloaked === false, 'G6 (d): das Reveal-Fenster hebt die Tarnung nicht auf');
+
+    // Bewegungs-/Feuerlogik einfrieren, damit die restlichen Ticks NUR den
+    // Timer pruefen (Fehlerklasse aus G5: Bewegungsdrift durch normale KI).
+    // weapon:null laesst roleTurret() VOR dem Windup-Block abbrechen (Trap-1-
+    // Sicherheitsnetz), stalkRevealUntil bleibt dadurch unangetastet stehen.
+    stalker2.cfg = { ...stalker2.cfg, role: 'guardian', weapon: null };
+    const totalWindow = scfg.stalk.revealBeforeShotS + scfg.stalk.revealedS;
+    const ticks = Math.ceil(totalWindow * 60) + 5;
+    for (let i = 0; i < ticks; i++) stepState(st2, CMD0, 1 / 60);
+    check(stalker2.stalkCloaked === true, 'G6 (d): die Tarnung kehrt nach Ablauf des Reveal-Fensters nicht zurueck');
+  }
+
+  // ---- (e) t_arclight: damageType 'lightning' traegt end-zu-ende durch die
+  //          Trefferschleife -- ein GEGNERISCHES (nicht spieler-eigenes)
+  //          Geschoss loest beim Aufschlag auf Ziel A eine Kette auf ein
+  //          nahes Ziel B aus (kein Team-System, s. CLAUDE.md -- die Kette
+  //          funktioniert unabhaengig vom Besitzer). --------------------------
+  {
+    const arcCfg = resolveCfg(tanksData, 't_arclight');
+    check(arcCfg.damageType === 'lightning', `G6 (e): t_arclight.damageType ist ${arcCfg.damageType} statt 'lightning'`);
+
+    const st = createRun(tanksData, tilesData, diffData, upgradesData, 42).state;
+    const proto = st.tanks.find((t) => t !== st.player && t.alive);
+    const mk = (x, y) => ({
+      ...proto, x, y, prevX: x, prevY: y, heading: 0, alive: true, hp: 999, protect: 0,
+      shieldReady: false, status: {}, cfg: { ...proto.cfg, role: 'guardian', maxHp: 999, armor: null, requiresRicochet: false },
+    });
+    const shooter = { ...proto, x: 0, y: 0, alive: true, hp: 999, cfg: { ...arcCfg, radius: proto.cfg.radius } };
+    // (200,250) statt (200,200): dieselbe offene Zelle wie im flankTreffer()-
+    // Helfer aus Abschnitt 47 -- (200,200) liegt in diesem Seed zufaellig auf
+    // einer Wand (Testaufbau-Fund, kein Code-Bug: die Kugel starb dort schon
+    // am Wandkontakt, bevor sie je ein Ziel erreichte).
+    const targetA = mk(200, 250);
+    const targetB = mk(250, 250); // 50px entfernt, deutlich innerhalb jumpRangePx (160)
+    st.tanks = [st.player, shooter, targetA, targetB];
+    const b = createBullet(targetA.x + 2, targetA.y, 0, {
+      speed: 1, radius: 3, owner: shooter, kind: 'bullet', damage: 40, damageType: 'lightning',
+    });
+    b.age = 5;
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.bullets.push(b);
+    stepState(st, CMD0, 1 / 60);
+    check(targetA.hp < 999, 'G6 (e): Ziel A nimmt keinen Aufschlagsschaden');
+    check(targetB.hp < 999, 'G6 (e): der Blitz springt nicht auf ein zweites, nahes Ziel (kein Kettensprung von einem Nicht-Spieler-Schuetzen)');
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

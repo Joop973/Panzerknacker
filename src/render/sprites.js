@@ -155,6 +155,16 @@ const SPRITE_ALIAS = {
   // (t_mason) -> t_grey -- naechstliegende Bestandsfarben, gleiches Prinzip.
   t_medic: 't_white',
   t_mason: 't_grey',
+  // G6: "olivgruen" (t_marshal) -> t_green, "dunkles Stahlgrau"
+  // (t_bulwark) -> t_grey, "dunkelgruen/verborgen" (t_stalker) -> t_black
+  // (thematisch: verschwindet im Schatten), "tiefblau" (t_arclight) ->
+  // t_teal -- naechstliegende Bestandsfarben, Identitaet traegt vollstaendig
+  // Verhalten + die neuen Telegraphen (Fahnenlinien/Frontbalken/Tarnalpha/
+  // Blitzbogen), kein eigenes Sprite.
+  t_marshal: 't_green',
+  t_bulwark: 't_grey',
+  t_stalker: 't_black',
+  t_arclight: 't_teal',
   // UMBAUPLAN-LP Phase 9: die zehn Klassen teilen sich das Spieler-Sprite --
   // ihre Identitaet traegt (vorerst) die Elementfarbe/der Wert, kein eigenes
   // Asset. 'player' selbst ist die Standard-Klasse und braucht keinen Alias.
