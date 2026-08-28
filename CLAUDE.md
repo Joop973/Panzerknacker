@@ -8004,8 +8004,92 @@ liefern den ersten ECHTEN Erzeuger fuer beide.
   vs. Baseline aus acht Bestandstypen, 600 Ticks, drittgroesster Wert:
   Baseline **2,092 ms**, G3-Raum **0,792 ms** (Budget 6 ms).
 Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien).
-**Naechste Sitzung: Phase G4** (Kompositionssystem -- laut Auftrag "die
-wichtigste Phase").
+
+**Phase G4 (Kompositionssystem) ist gebaut.** Laut Auftrag "das eine
+System, das das Projekt wirklich braucht" (UMBAUPLAN-GEGNER.md Abschnitt
+17.3) -- ohne dieses System sind die in `docs/AUFTRAG-GEGNERDESIGN.md`
+Abschnitt 11-13 entworfenen Kompositionen/Encounter nicht erzeugbar, weil
+`buyEnemies()` bis dahin rein zufaellig aus allen freigeschalteten Typen
+zog. Vier Bausteine, alle in `src/game/run.js: buyEnemies()`:
+- **`maxPerRoom` tatsaechlich belegt**: `t_anchor`/`t_relay` (bereits G3)
+  tragen jetzt `maxPerRoom: 1` in `data/difficulty.json`. Der Mechanismus
+  selbst existierte seit Phase 4 im Code ("hoechstens ein Prisma pro Raum"),
+  wurde aber nie von einem Typ GESETZT -- G4 ist der erste echte
+  Mechanismus-Nachweis mit einem tatsaechlich gesetzten Wert.
+- **Kompositionstabelle `data/compositions.json`** (neu, an `diffData
+  .compositions` angehaengt -- main.js UND tests/regression.mjs laden sie
+  identisch, Muster wie `upgrades_necro.json`/`glossary.json`):
+  `buyEnemies()` versucht zuerst `pickComposition()` (neu, in `run.js`) --
+  eine Komposition passt, wenn `actIndex`/`minRoom` stimmen, alle genannten
+  Typen an dieser Stelle bereits freigeschaltet sind UND ihre Punktsumme
+  zwischen der Haelfte und dem vollen Raumbudget liegt
+  (`COMPOSITION_MIN_BUDGET_FRACTION: 0.5`, Struktur-Konstante wie
+  `EARLY_LAYERS`, keine Balance-Zahl -- sonst wuerde ein fruehes
+  Niedrigbudget-Rezept auch in einem spaeten, viel groesseren Raum feuern
+  und ihn spuerbar leerer wirken lassen). Unter mehreren passenden
+  Kompositionen entscheidet eine gewichtete Ziehung (`weight`-Feld,
+  `pickWeighted()`). **Genau EIN zusaetzlicher `rng()`-Aufruf, NUR wenn
+  wirklich eine Komposition feuert** -- ein Aufruf ohne `comps` (der
+  Boss-Unterstuetzungskauf, aeltere Tests) bleibt dadurch bit-identisch zum
+  Vor-G4-Stand. Fuenf Erst-Rezepte (`a1_erste_beruehrung`/`a2_freies_feld`/
+  `a5_der_zeuge`/`a7_fundmunition`/`a8_standhaft`), den gleichnamigen A1/A2/
+  A5/A7/A8-Encountern aus dem Designdokument nachgebaut -- bewusst nur
+  Kompositionen, die ausschliesslich bereits gebaute Akt-2-Gegner nutzen
+  (`t_medic`/`t_mason` folgen mit G5). **Ein Abgleich gegen die echte
+  `acts[1].budget`-Formel war noetig**: A7 ("Fundmunition", Designtext
+  nennt Raum 3/16 Punkte) passt beim echten `base:6/perRoom:2.6` erst ab
+  Raum 4 (Budget 16,4) ins Fenster -- `minRoom` entsprechend gesetzt, statt
+  den Designtext blind zu uebernehmen.
+- **Mindestpunktzahl ab Akt 2** (O2): ein Typ mit `points < budget/12` wird
+  im Zufalls-Rueckfall nicht mehr gekauft -- entfernt die
+  `t_brown`/`t_grey`-Verstopfung bei grossen Budgets, OHNE die Typen zu
+  loeschen (bleiben fuer Akt 1 und fuer Kompositionen, die sie ausdruecklich
+  nennen). Bewusst NICHT in Akt 1 (dort sind sie das einzige Fuellmaterial,
+  O2-Befund).
+- **`acts[].minRoleQuota`** (optional, Abschnitt 17.3 Punkt 2): "mindestens
+  1 Gegner mit Rolle X, wenn Budget >= N" -- wirkt nur auf den
+  Zufalls-Rueckfall (Kompositionen sind bereits handkuratiert). Akt 3 traegt
+  `{role: "hunter", minBudget: 30}` als erste Instanz (greift real erst ab
+  G6, wenn `t_bulwark`/`t_stalker` existieren). `buyEnemies()` bekommt dafuer
+  einen neuen, optionalen `typeDefs`-Parameter (`tanksData.types`, fuer die
+  Rollenauflosung -- `diff.danger` kennt keine Rolle) -- ohne ihn (aeltere
+  Aufrufe) bleibt die Quote wirkungslos, kein Absturz.
+- **Boss-Unterstuetzungskauf bleibt bewusst aussen vor**: der `isFinal`-Zweig
+  ruft `buyEnemies()` weiterhin mit der alten 5-Argument-Form auf -- der
+  handgebaute Bosskampf soll nicht durch ein zufaellig treffendes Rezept
+  veraendert werden.
+- **Neuer Testabschnitt 72** (`tests/regression.mjs`, alle Mechanismen mit
+  EIGENEN synthetischen Daten geprueft, nicht den echten `difficulty.json`-
+  Werten -- Gegenprobe fuer jeden Kernpunkt einzeln bestanden, je absichtlich
+  rot gemacht und zurueckgesetzt): Struktur (Kompositionsschema, `maxPerRoom`
+  auf `t_anchor`/`t_relay`, `minRoleQuota` auf Akt 3), `pickComposition()`s
+  volle Gate-Kette (actIndex/minRoom/Budgetfenster ober+unter/Freischaltung/
+  `maxEnemiesPerRoom`-Deckel) inkl. RNG-Verbrauch (0 zusaetzliche Aufrufe
+  ohne Treffer, genau 1 mit Treffer), Mindestpunktzahl (Akt 1 unveraendert,
+  Akt 2 schliesst billige Typen bei grossem Budget aus), `minRoleQuota`
+  (Pflichtrolle erscheint in JEDEM von 40 Seeds ab `minBudget`), `maxPerRoom`
+  im Zufalls-Rueckfall, und ein Ende-zu-Ende-Nachweis mit den ECHTEN Daten
+  (main.js-aequivalente Verdrahtung `diffData.compositions`) an Akt 2/Raum 8.
+  **Zwei echte Testaufbau-Fallstricke gefunden und behoben** (kein Code-Bug):
+  (1) der erste `maxEnemiesPerRoom`-Gegenprobentest scheiterte schon am
+  Budgetfenster, bevor er den Deckel je erreichte (10 Einheiten a 2 Punkte
+  bei Budget 100 lagen unter der 50%-Untergrenze) -- korrigiert auf Werte,
+  die das Budgetfenster treffen UND den Deckel ueberschreiten; (2) die erste
+  `minRoleQuota`-Pruefung nutzte nur zwei gleich wahrscheinliche Typen und
+  blieb TROTZ ausgebauter Quote gruen (bei 5 Kaufslots trifft der reine
+  Zufall "irgendein Seed von 40" ohnehin fast immer) -- auf drei Typen (nur
+  einer traegt die Pflichtrolle) umgestellt und die Zusicherung von
+  "kommt irgendwo vor" auf "kommt in JEDEM Seed vor" verschaerft, mit einem
+  Kontrollfall unter `minBudget`, der beweist, dass reiner Zufall dort
+  tatsaechlich manchmal fehlt (sonst waere auch die verschaerfte Zusicherung
+  wertlos gewesen).
+- **Kein schlechtester-Frame-Vergleich** (Grundregel gilt fuer neue
+  Entitaeten/Tick-Kosten): `buyEnemies()` laeuft einmalig beim Raumaufbau,
+  nicht pro Tick -- G4 aendert nichts an der Simulationsschleife.
+- `sw.js` auf `v123` gebumpt (`data/compositions.json` neu in `ASSETS`),
+  `telemetry.js: GAME_VERSION` mitgezogen.
+**Naechste Sitzung: Phase G5** (Akt 2, Welle 3 -- `t_medic`/`t_mason`,
+komplettiert Akt 2).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`t_relay` (Horcher) hat noch keine eigene Sichtlinien-Suchfahrt**
