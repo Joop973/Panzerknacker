@@ -11,7 +11,7 @@
 
 import { range } from '../core/rng.js';
 import { roleTurret } from './ai_turrets.js';
-import { DRIVES, coverDrive } from './ai_drives.js';
+import { DRIVES, coverDrive, ramDrive } from './ai_drives.js';
 
 export function angleDiff(a, b) {
   // Kleinste Differenz b - a, gewrappt auf [-PI, PI].
@@ -347,7 +347,11 @@ export function updateEnemy(tank, state, dt) {
   // damit der Panzer nie einfach stehen bleibt.
   const seekCover =
     coverCfg && role !== 'guardian' && tank.cfg.aggression < coverCfg.aggressionThreshold && tank.ai.threatened;
-  const move = (seekCover && coverDrive(tank, state, dt)) || DRIVES[role](tank, state, dt);
+  // Rammverhalten (G2, t_rusher): hat Vorrang vor Deckung/Rolle, sobald ein
+  // Sturm laeuft -- ramDrive() gibt null zurueck (keine Vorrangwirkung),
+  // solange kein Sturm ausgeloest ist.
+  const ramMove = tank.cfg.ram ? ramDrive(tank, state, dt) : null;
+  const move = ramMove || (seekCover && coverDrive(tank, state, dt)) || DRIVES[role](tank, state, dt);
   // EMP-Mine (Phase 6): betaeubte Gegner drehen den Turm nicht und feuern
   // nicht -- eigenes Feld turretStunTimer, damit die bestehende Krallenfalle
   // (stunTimer allein) den Turm weiter benutzbar laesst (siehe PLAN.md).

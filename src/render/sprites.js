@@ -138,6 +138,14 @@ const SPRITE_ALIAS = {
   // Bestandstyp. Anschlusspunkt fuer eine spaetere echte body_t_anvil.png/
   // turret_t_anvil.png bleibt offen (einfach hier entfernen).
   t_anvil: 't_black',
+  // G2 (UMBAUPLAN-GEGNER.md): "keine neuen Asset-Dateien" -- die vier neuen
+  // Typen aliasen auf vorhandene Huellen, ihre Identitaet traegt Verhalten +
+  // die neuen Telegraphen (Sturmkorridor/Zuendring/Reichweitenring/
+  // Ziellinie), kein eigenes Sprite.
+  t_rusher: 't_brown',
+  t_dud: 't_black',
+  t_shotgun: 't_pink',
+  t_lance: 't_teal',
   // UMBAUPLAN-LP Phase 9: die zehn Klassen teilen sich das Spieler-Sprite --
   // ihre Identitaet traegt (vorerst) die Elementfarbe/der Wert, kein eigenes
   // Asset. 'player' selbst ist die Standard-Klasse und braucht keinen Alias.

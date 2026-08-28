@@ -394,6 +394,92 @@ export function drawMortars(ctx, state) {
   }
 }
 
+// Rammler-Sturmkorridor (G2, t_rusher): waehrend des Windups (Richtung
+// bereits eingefroren, ai_drives.js: ramDrive()) zeigt drawCorridorTelegraph
+// (Baustein C) den Sturmweg -- IMMER sichtbar, dieselbe Fairness-Regel wie
+// Moerser/Amboss. Waehrend des eigentlichen Sturms selbst kein Korridor mehr
+// (der Panzer bewegt sich ja schon sichtbar sehr schnell) -- nur die
+// Vorwarnung braucht die Flaeche.
+export function drawRamTelegraphs(ctx, state) {
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.ram) continue;
+    const ram = t.ai?.ram;
+    if (!ram || ram.mode !== 'windup') continue;
+    drawCorridorTelegraph(ctx, state, t.x, t.y, ram.dir, t.cfg.radius, {
+      fillStyle: 'rgba(200,160,40,0.22)',
+      edgeStyle: 'rgba(255,220,120,0.65)',
+      maxLen: t.cfg.ram.triggerPx + 40,
+    });
+  }
+}
+
+// Blindgaenger-Zuendschnur (G2, t_dud): wachsender Ring an der Sterbeposition
+// -- giftgruen statt des Moerser-Orange, damit ein Spieler die beiden
+// Gefahrenflaechen auf einen Blick unterscheidet. IMMER sichtbar (kein
+// Schalter), dieselbe Fairness-Regel wie beim Moerser.
+export function drawDeathFuses(ctx, state) {
+  for (const f of state.deathFuses) {
+    if (f.dead) continue;
+    const frac = Math.min(1, f.age / f.fuseS);
+    drawGrowingRingTelegraph(ctx, f.x, f.y, f.radiusPx, frac, {
+      ringColor: [200, 220, 60],
+      fillColor: [170, 200, 50],
+    });
+  }
+}
+
+// Streuer-Reichweitenring + Salven-Vorwarnung (G2, t_shotgun): dieselbe
+// Ring-Funktion wie oben, aber zweckentfremdet -- der gestrichelte Aussenring
+// zeigt die feste Reichweite (burstRangePx, s. bullet.js: burstDistance)
+// DAUERHAFT an, solange das Ziel nahe genug ist ("nur sichtbar, wenn der
+// Spieler in Reichweite ist"), die Fuellflaeche waechst mit dem
+// fireWindupS-Fortschritt (ai_turrets.js: roleTurret()) und ist damit
+// zugleich die "gleich feuert die Salve"-Ankuendigung.
+export function drawFireWindups(ctx, state) {
+  const p = state.player;
+  if (!p.alive) return;
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.fireWindupS || !t.cfg.burstRangePx) continue;
+    const d = Math.hypot(t.x - p.x, t.y - p.y);
+    if (d > t.cfg.burstRangePx * 1.4) continue;
+    const frac = Math.min(1, (t.ai?.windupTimer || 0) / t.cfg.fireWindupS);
+    drawGrowingRingTelegraph(ctx, t.x, t.y, t.cfg.burstRangePx, frac, {
+      ringColor: [255, 190, 60],
+      fillColor: [255, 170, 40],
+      fillMinA: 0,
+      fillRangeA: 0.3,
+    });
+  }
+}
+
+// Speertraeger-Ziellinie (G2, t_lance): IMMER sichtbar (nicht ueber
+// data/options.json: aimLine abschaltbar) -- dieselbe Fairness-Regel wie der
+// Moerser-Telegraph, weil ein Fehlschuss hier eine erzwungene Pause kostet
+// (roleTurret(): chargeTurret()). Gestrichelt waehrend des Aufladens (Ziel
+// verfolgt noch), durchgezogen + kraeftiger sobald die Richtung eingefroren
+// ist ("locked" -- ai_turrets.js).
+export function drawLanceAim(ctx, state) {
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.charge) continue;
+    const lance = t.ai?.lance;
+    if (!lance || lance.mode === 'idle' || lance.mode === 'pause') continue;
+    const locked = lance.mode === 'locked';
+    const len = state.data.balance?.bullet?.maxDistance ?? 900;
+    const ex = t.x + Math.cos(t.turret) * len;
+    const ey = t.y + Math.sin(t.turret) * len;
+    ctx.save();
+    ctx.strokeStyle = locked ? 'rgba(255,60,40,0.85)' : 'rgba(255,150,60,0.5)';
+    ctx.lineWidth = locked ? 2 : 1.5;
+    if (!locked) ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(t.x, t.y);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+}
+
 // Vorhaltemarkierung (Grundsteinumbau Phase 2): auf jedem bewegten Gegner
 // ein kleiner Punkt an der Position, an der er beim Einschlag einer JETZT
 // abgefeuerten Kugel waere -- eine iterative Naeherung (2-3 Schritte ueber

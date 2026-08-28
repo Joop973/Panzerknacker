@@ -23,6 +23,10 @@ import {
   drawMortars,
   drawAnvilHazards,
   drawTankLinks,
+  drawDeathFuses,
+  drawFireWindups,
+  drawLanceAim,
+  drawRamTelegraphs,
 } from './effects.js';
 import { drawSpiderBossLegs, drawSpiderBossBody, drawSpiderMines, drawSpiderWebs } from './spiderrender.js';
 import { traceTrajectory } from '../game/bullet.js';
@@ -1449,6 +1453,10 @@ export function createRenderer(ctx) {
       drawMortars(ctx, state); // Phase 3: immer sichtbar, kein Schalter
       drawAnvilHazards(ctx, state); // Amboss-Auftrag: immer sichtbar, kein Schalter
       drawTankLinks(ctx, state); // Gegner-Umbau Baustein B (G1): leer, bis G2+ Eintraege pusht
+      drawRamTelegraphs(ctx, state); // G2: t_rusher-Sturmkorridor
+      drawDeathFuses(ctx, state); // G2: t_dud-Zuendschnur
+      drawFireWindups(ctx, state); // G2: t_shotgun-Reichweitenring + Salven-Vorwarnung
+      drawLanceAim(ctx, state); // G2: t_lance-Ziellinie (immer sichtbar)
       drawGhosts(ctx, state, alpha);
       drawSpiderBossLegs(ctx, state); // unter dem Koerper -- Gelenke sitzen am Panzerrand
       for (const t of state.tanks) drawTank(state, t, alpha);

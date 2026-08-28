@@ -13440,6 +13440,299 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 70. Gegner-Umbau Phase G2 (UMBAUPLAN-GEGNER.md): Welle 1 ----------
+// Vier Gegner ohne neue Architektur: t_rusher (Rammschaden aus anvil.js
+// verallgemeinert, ai_drives.js: ramDrive()), t_dud (neuer, eigenstaendiger
+// Todeszuender state.deathFuses), t_shotgun (bestehender N-Kugel-Faecher +
+// eine neue Salven-Vorwarnung fireWindupS), t_lance (Ladeschuss-Zustands-
+// automat in ai_turrets.js, bestehendes Bullet-Feld pierce). Jeder
+// Mechanismus wird mit EIGENEN, isolierten Testraeumen geprueft (Muster
+// Abschnitt 45/69: st.walls=[]/isSolid/blocksSight ueberschrieben), nicht
+// nur die aktuelle tanks.json-Datenlage.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createTank, fireBullet } = await import('../src/game/tank.js');
+  const { roleTurret } = await import('../src/game/ai_turrets.js');
+  const { ramDrive } = await import('../src/game/ai_drives.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  function g2Room() {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: [],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+    });
+    st.walls = []; // isoliert von generierten Waenden (Muster: Abschnitt 45/69)
+    st.isSolid = () => false;
+    st.blocksSight = () => false;
+    return st;
+  }
+
+  // ---- (a) Struktur: vier neue Typen + Akt-2-Freischaltung -----------------
+  {
+    const r = tanksData.types.t_rusher;
+    check(!!r?.ram && r.weapon === null, 'G2 (a): t_rusher fehlt oder traegt kein ram/weapon:null');
+    check(
+      typeof r.ram.triggerPx === 'number' && typeof r.ram.windupS === 'number' && typeof r.ram.chargeS === 'number',
+      'G2 (a): t_rusher.ram unvollstaendig',
+    );
+    const d = tanksData.types.t_dud;
+    check(!!d?.deathBlast && d.weapon === null, 'G2 (a): t_dud fehlt oder traegt kein deathBlast/weapon:null');
+    const s = tanksData.types.t_shotgun;
+    check(s?.spreadCount > 1 && s?.fireWindupS > 0 && s?.burstRangePx > 0, 'G2 (a): t_shotgun fehlt spreadCount/fireWindupS/burstRangePx');
+    const l = tanksData.types.t_lance;
+    check(!!l?.charge && l?.pierce > 0, 'G2 (a): t_lance fehlt charge/pierce');
+    for (const id of ['t_rusher', 't_shotgun', 't_dud', 't_lance']) {
+      check(diffData.danger[id]?.unlockAct === 2, `G2 (a): ${id} ist nicht ab Akt 2 freigeschaltet`);
+    }
+  }
+
+  // ---- (b) roleTurret(): weapon:null feuert nie -----------------------------
+  // Zwei Faelle: der zufaellig schwenkende Turm (acc<=0, t_rushers echter
+  // Wert) UND ein synthetischer weapon:null-Typ mit hoher accuracy (haette
+  // sonst den ANDEREN Rueckgabepfad ungeprueft gelassen).
+  {
+    const st = g2Room();
+    const rusher = createTank('t_rusher', resolveCfg(tanksData, 't_rusher'), 220, 220);
+    st.tanks.push(rusher);
+    let feuerteJe = false;
+    for (let i = 0; i < 300; i++) {
+      if (roleTurret(rusher, st, 1 / 60)) feuerteJe = true;
+    }
+    check(!feuerteJe, 'G2 (b): t_rusher (weapon:null, acc<=0) feuert trotz fehlender Waffe');
+
+    const synthType = 'zzz_g2_weaponless_precise';
+    const fakeData = {
+      ...tanksData,
+      types: { ...tanksData.types, [synthType]: { speed: 'normal', role: 'guardian', weapon: null, accuracy: 0.9, maxHp: 30, damage: 25 } },
+    };
+    const st2 = g2Room();
+    const scharf = createTank(synthType, resolveCfg(fakeData, synthType), 220, 220);
+    scharf.turret = 0;
+    st2.tanks.push(scharf);
+    let feuerteJe2 = false;
+    for (let i = 0; i < 300; i++) {
+      if (roleTurret(scharf, st2, 1 / 60)) feuerteJe2 = true;
+    }
+    check(!feuerteJe2, 'G2 (b): weapon:null mit accuracy>0 feuert trotz fehlender Waffe (finaler Gate-Zweig)');
+  }
+
+  // ---- (c) ramDrive() (t_rusher): Trigger, eingefrorene Richtung, Sturm, ---
+  //          hoechstens EIN Treffer, Wandkontakt, Erschoepfung ---------------
+  {
+    const st = g2Room();
+    const rusher = createTank('t_rusher', resolveCfg(tanksData, 't_rusher'), 400, 256);
+    rusher.heading = 0;
+    rusher.ai.target = st.player;
+    st.player.x = 460; // 60px entfernt -- unter triggerPx (90)
+    st.player.y = 256;
+    st.tanks.push(rusher);
+
+    // Windup: Panzer bewegt sich nicht, Richtung ist sofort eingefroren.
+    const move0 = ramDrive(rusher, st, 1 / 60);
+    check(rusher.ai.ram.mode === 'windup', `G2 (c): kein Windup ausgeloest (Modus ${rusher.ai.ram.mode})`);
+    check(Math.abs(rusher.ai.ram.dir) < 1e-9, `G2 (c): Sturmrichtung nicht auf den Spieler eingefroren (${rusher.ai.ram.dir})`);
+    check(move0.x === 0 && move0.y === 0, 'G2 (c): ramDrive() bewegt waehrend des Windups');
+    st.player.y = 320; // Ziel bewegt sich WAEHREND des Windups -- darf die eingefrorene Richtung nicht aendern
+    const windupS = rusher.cfg.ram.windupS;
+    for (let i = 0; i < Math.ceil(windupS * 60) + 2; i++) ramDrive(rusher, st, 1 / 60);
+    check(rusher.ai.ram.mode === 'charge', `G2 (c): kein Uebergang in Sturm nach Ablauf des Windups (Modus ${rusher.ai.ram.mode})`);
+    check(Math.abs(rusher.ai.ram.dir) < 1e-9, 'G2 (c): Sturmrichtung hat sich waehrend des Windups nachgefuehrt statt eingefroren zu bleiben');
+
+    // Sturm: der Spieler steht direkt im Weg -- mehrere Substeps ueberlappen
+    // ihn (Radius >> RAM_STEP_PX), trotzdem darf nur EIN Treffer zaehlen.
+    st.player.x = 460;
+    st.player.y = 256;
+    st.player.hp = 999;
+    const hpVorSturm = st.player.hp;
+    for (let i = 0; i < 40 && rusher.ai.ram.mode === 'charge'; i++) ramDrive(rusher, st, 1 / 60);
+    const verlust = hpVorSturm - st.player.hp;
+    check(verlust === rusher.cfg.damage, `G2 (c): Sturm richtet ${verlust} statt genau cfg.damage (${rusher.cfg.damage}) Schaden an -- Mehrfachtreffer oder gar keiner`);
+    check(rusher.ai.ram.mode === 'exhausted', `G2 (c): kein Uebergang in Erschoepfung nach Sturmende (Modus ${rusher.ai.ram.mode})`);
+
+    // Erschoepfung: kein zweiter Sturm vor Ablauf von exhaustS. Ziel WEIT weg
+    // gesetzt, sonst wuerde 'seek' den naechsten Sturm sofort wieder ausloesen
+    // (das Ziel ist ja immer noch nahe genug) -- die Stabilitaet von 'seek'
+    // selbst laesst sich sonst gar nicht beobachten.
+    const exhaustTicks = Math.ceil(rusher.cfg.ram.exhaustS * 60);
+    for (let i = 0; i < exhaustTicks - 3; i++) {
+      ramDrive(rusher, st, 1 / 60);
+      check(rusher.ai.ram.mode === 'exhausted', 'G2 (c): Erschoepfung endet zu frueh');
+    }
+    st.player.x = 1200;
+    st.player.y = 900;
+    for (let i = 0; i < 5; i++) ramDrive(rusher, st, 1 / 60);
+    check(rusher.ai.ram.mode === 'seek', `G2 (c): kehrt nach Ablauf der Erschoepfung nicht zu 'seek' zurueck (Modus ${rusher.ai.ram.mode})`);
+  }
+
+  // ---- (c2) ramDrive(): Wandkontakt beendet den Sturm sofort ---------------
+  {
+    const st = g2Room();
+    const rusher = createTank('t_rusher', resolveCfg(tanksData, 't_rusher'), 400, 256);
+    rusher.heading = 0;
+    st.player.x = 460;
+    st.player.y = 900; // weit weg -- der Sturm soll die Wand treffen, nicht den Spieler
+    st.tanks.push(rusher);
+    st.walls = [{ x: 440, y: 200, w: 32, h: 120, type: 'wall' }]; // direkt in Sturmrichtung
+    st.isSolid = (x, y) => x >= 440 && x <= 472 && y >= 200 && y <= 320;
+    rusher.ai.ram = { mode: 'charge', timer: rusher.cfg.ram.chargeS, dir: 0, hitTargets: new Set() };
+    let stops = false;
+    for (let i = 0; i < 60 && !stops; i++) {
+      ramDrive(rusher, st, 1 / 60);
+      if (rusher.ai.ram.mode === 'exhausted') stops = true;
+    }
+    check(stops, 'G2 (c2): Sturm haelt bei Wandkontakt nicht an');
+    check(rusher.x < 440, `G2 (c2): Panzer ist durch die Wand hindurchgefahren (x=${rusher.x})`);
+  }
+
+  // ---- (d) fireWindupS (t_shotgun): verzoegert das Feuersignal, resettet ---
+  //          bei unterbrochener Sichtlinie -----------------------------------
+  {
+    const st = g2Room();
+    const shotgun = createTank('t_shotgun', resolveCfg(tanksData, 't_shotgun'), 300, 256);
+    shotgun.turret = 0;
+    st.player.x = 340;
+    st.player.y = 256;
+    st.tanks.push(shotgun);
+    const windupS = shotgun.cfg.fireWindupS;
+    let feuerteBeiTick = -1;
+    for (let i = 0; i < Math.ceil(windupS * 60) + 5 && feuerteBeiTick < 0; i++) {
+      if (roleTurret(shotgun, st, 1 / 60)) feuerteBeiTick = i;
+    }
+    check(feuerteBeiTick >= 0, 'G2 (d): t_shotgun feuert nie, obwohl Ziel/Sicht/Kegel durchgehend erfuellt sind');
+    const erwarteteTicks = Math.round(windupS * 60);
+    check(
+      Math.abs(feuerteBeiTick + 1 - erwarteteTicks) <= 1,
+      `G2 (d): Feuersignal kam nach ${feuerteBeiTick + 1} Ticks statt den erwarteten ~${erwarteteTicks} (fireWindupS=${windupS}s)`,
+    );
+
+    // Sichtverlust waehrend des Aufladens setzt den Timer zurueck -- kein
+    // "aufgestauter" Schuss aus einer laengst verlassenen Ausrichtung.
+    const st2 = g2Room();
+    const shotgun2 = createTank('t_shotgun', resolveCfg(tanksData, 't_shotgun'), 300, 256);
+    shotgun2.turret = 0;
+    st2.player.x = 340;
+    st2.player.y = 256;
+    st2.tanks.push(shotgun2);
+    for (let i = 0; i < Math.round(windupS * 60) - 3; i++) roleTurret(shotgun2, st2, 1 / 60);
+    check(shotgun2.ai.windupTimer > 0, 'G2 (d): Testaufbau -- windupTimer sollte vor der Unterbrechung schon > 0 sein');
+    st2.blocksSight = () => true; // Sichtlinie faellt weg
+    roleTurret(shotgun2, st2, 1 / 60);
+    check(shotgun2.ai.windupTimer === 0, 'G2 (d): windupTimer wird bei Sichtverlust nicht zurueckgesetzt');
+  }
+
+  // ---- (e) chargeTurret() (t_lance): idle -> charging -> locked -> Schuss --
+  //          -> Pause, Abbruch NUR bei Sichtverlust --------------------------
+  {
+    const st = g2Room();
+    const lance = createTank('t_lance', resolveCfg(tanksData, 't_lance'), 300, 256);
+    lance.turret = 0;
+    st.player.x = 600; // ausserhalb des Kegels/weit weg -- noch kein Aufladen
+    st.player.y = 600;
+    st.tanks.push(lance);
+    check(roleTurret(lance, st, 1 / 60) === false, 'G2 (e): feuert ohne Ziel im Kegel');
+    check(lance.ai.lance.mode === 'idle', `G2 (e): startet faelschlich mit Aufladen (Modus ${lance.ai.lance.mode})`);
+
+    st.player.x = 340; // jetzt im Kegel + sichtbar -- Aufladen beginnt
+    st.player.y = 256;
+    roleTurret(lance, st, 1 / 60);
+    check(lance.ai.lance.mode === 'charging', `G2 (e): kein Uebergang in 'charging' (Modus ${lance.ai.lance.mode})`);
+
+    const lockAt = lance.cfg.charge.windupS - lance.cfg.charge.lockAtS;
+    for (let i = 0; i < Math.round(lockAt * 60); i++) roleTurret(lance, st, 1 / 60);
+    check(lance.ai.lance.mode === 'locked', `G2 (e): kein Uebergang in 'locked' nach windupS-lockAtS (Modus ${lance.ai.lance.mode})`);
+    const turretBeimEinfrieren = lance.turret;
+    st.player.y = 100; // Ziel bewegt sich waehrend 'locked' -- Turm darf nicht nachfuehren
+    roleTurret(lance, st, 1 / 60);
+    check(lance.turret === turretBeimEinfrieren, 'G2 (e): Turm dreht waehrend "locked" trotzdem nach');
+    st.player.y = 256; // zurueck in die Feuerlinie fuer den eigentlichen Schuss
+
+    let feuerte = false;
+    for (let i = 0; i < 60 && !feuerte; i++) {
+      if (roleTurret(lance, st, 1 / 60)) feuerte = true;
+    }
+    check(feuerte, 'G2 (e): feuert nach vollem Aufladen nie');
+    check(lance.ai.lance.mode === 'pause', `G2 (e): kein Uebergang in Pause nach dem Schuss (Modus ${lance.ai.lance.mode})`);
+    check(roleTurret(lance, st, 1 / 60) === false, 'G2 (e): feuert waehrend der Pause ein zweites Mal');
+    // Ziel WEIT weg, sonst wuerde 'idle' sofort wieder in 'charging' wechseln
+    // (dasselbe Muster wie G2 (c) bei der Erschoepfung) -- 'idle' selbst
+    // liesse sich sonst gar nicht beobachten.
+    st.player.x = 1200;
+    st.player.y = 900;
+    const pauseS = lance.cfg.charge.pauseS;
+    for (let i = 0; i < Math.round(pauseS * 60) + 2; i++) roleTurret(lance, st, 1 / 60);
+    check(lance.ai.lance.mode === 'idle', `G2 (e): kehrt nach Ablauf der Pause nicht zu 'idle' zurueck (Modus ${lance.ai.lance.mode})`);
+    st.player.x = 340; // zurueck in die Feuerlinie fuer den End-zu-End-Schusstest unten
+    st.player.y = 256;
+
+    // Der abgefeuerte Schuss traegt wirklich pierce/bulletSpeed aus cfg.
+    const b = fireBullet(lance, st);
+    check(b !== false, 'G2 (e): Testaufbau -- fireBullet() sollte nach der Pause wieder feuern koennen');
+    const kugel = st.bullets[st.bullets.length - 1];
+    check(kugel.pierce === lance.cfg.pierce, `G2 (e): Kugel traegt pierce=${kugel.pierce} statt cfg.pierce=${lance.cfg.pierce}`);
+    // Bullet-Objekte speichern kein rohes speed-Feld, sondern vx/vy (bullet.js:
+    // createBullet()) -- die Betragsgeschwindigkeit muss trotzdem cfg.bulletSpeed sein.
+    const kugelTempo = Math.hypot(kugel.vx, kugel.vy);
+    check(Math.abs(kugelTempo - lance.cfg.bulletSpeed) < 0.5, `G2 (e): Kugel fliegt mit ${kugelTempo} statt cfg.bulletSpeed=${lance.cfg.bulletSpeed}`);
+  }
+
+  // ---- (e2) chargeTurret(): Sichtverlust bricht in JEDER Ladephase ab, -----
+  //           OHNE zu feuern und OHNE Pause ----------------------------------
+  {
+    const st = g2Room();
+    const lance = createTank('t_lance', resolveCfg(tanksData, 't_lance'), 300, 256);
+    lance.turret = 0;
+    st.player.x = 340;
+    st.player.y = 256;
+    st.tanks.push(lance);
+    roleTurret(lance, st, 1 / 60);
+    check(lance.ai.lance.mode === 'charging', 'G2 (e2): Testaufbau -- sollte bereits laden');
+    st.blocksSight = () => true;
+    const feuerteTrotzSichtverlust = roleTurret(lance, st, 1 / 60);
+    check(!feuerteTrotzSichtverlust, 'G2 (e2): feuert trotz Sichtverlust waehrend des Aufladens');
+    check(lance.ai.lance.mode === 'idle', `G2 (e2): kein sofortiger Abbruch auf 'idle' bei Sichtverlust (Modus ${lance.ai.lance.mode})`);
+    check(lance.ai.lance.timer === 0, 'G2 (e2): Ladefortschritt bleibt nach Abbruch stehen statt auf 0 zu fallen');
+  }
+
+  // ---- (f) Todeszuender (t_dud): killTank()-Hook + verzoegerte Explosion, --
+  //          trifft ausdruecklich auch andere Gegner (spare:null) -----------
+  {
+    const st = g2Room();
+    const dud = createTank('t_dud', resolveCfg(tanksData, 't_dud'), 300, 256);
+    const nachbar = createTank('t_grey', resolveCfg(tanksData, 't_grey'), 340, 256); // im Explosionsradius
+    nachbar.protect = 0;
+    st.player.x = 300;
+    st.player.y = 340; // ebenfalls im Radius
+    st.player.protect = 0;
+    st.tanks.push(dud, nachbar);
+    check(st.deathFuses.length === 0, 'G2 (f): Testaufbau -- deathFuses sollte vor dem Tod leer sein');
+
+    st.killTank(dud, 'Testtod');
+    check(st.deathFuses.length === 1, `G2 (f): killTank() legt keinen deathFuses-Eintrag an (${st.deathFuses.length})`);
+    const fuse = st.deathFuses[0];
+    check(fuse.radiusPx === dud.cfg.deathBlast.radiusPx, 'G2 (f): Zuender-Radius stimmt nicht mit cfg.deathBlast.radiusPx ueberein');
+    check(fuse.damage === dud.cfg.deathBlast.damage, 'G2 (f): Zuender-Schaden stimmt nicht mit cfg.deathBlast.damage ueberein');
+
+    const hpNachbarVorher = nachbar.hp;
+    const hpSpielerVorher = st.player.hp;
+    const fuseS = dud.cfg.deathBlast.fuseS;
+    for (let i = 0; i < Math.round(fuseS * 60) - 3; i++) stepState(st, CMD0, 1 / 60);
+    check(nachbar.hp === hpNachbarVorher, 'G2 (f): Explosion zuendet zu frueh (vor Ablauf von fuseS)');
+    check(st.deathFuses.length === 1, 'G2 (f): Zuender verschwindet vor Ablauf von fuseS');
+
+    for (let i = 0; i < 10; i++) stepState(st, CMD0, 1 / 60);
+    check(st.deathFuses.length === 0, 'G2 (f): Zuender wird nach der Explosion nicht aufgeraeumt');
+    check(nachbar.hp < hpNachbarVorher, 'G2 (f): Explosion trifft KEINEN anderen Gegner (spare:null erwartet)');
+    check(st.player.hp < hpSpielerVorher, 'G2 (f): Explosion trifft den Spieler nicht');
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

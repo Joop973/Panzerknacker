@@ -20,6 +20,7 @@
     "spider": 48
   },
   "_comment_bulletSpeeds": "Grundsteinumbau Phase 2: rocket 300 -> 210 -- schneller als eine Gegnerkugel (130), aber langsamer als die neue Spielerkugel (450): ausweichbar, aber draengend (Entscheidung, s. AUFTRAG-GRUNDSTEINUMBAU.md Phase 2).",
+  "_comment_g2": "Gegner-Umbau G2 (UMBAUPLAN-GEGNER.md): t_rusher/t_dud/t_shotgun/t_lance ohne neue Architektur -- Rammschaden aus anvil.js in ai_drives.js: ramDrive() verallgemeinert (t_rusher), der bestehende N-Kugel-Faecher aus tank.js: fireBullet() (t_shotgun, spreadCount/spreadRad), das schon vorhandene Bullet-Feld pierce (t_lance) und ein neuer, eigenstaendiger Todeszuender state.deathFuses (t_dud). Absichtlich AUSSERHALB von 'types': ein Kommentarschluessel INNERHALB von types wuerde jede Struktur-Iteration ueber echte Typen mit einem Phantomtyp verfaelschen (dieselbe Falle wie beim Klassen-Kommentar, s. CLAUDE.md Phase 9).",
   "_comment_bulletSpeeds2": "JEDER in types[].weapon vorkommende Wert braucht hier einen Eintrag (oder einen typeigenen bulletSpeed-Override) -- sonst loest cfg.js: resolveCfg() ihn zu undefined auf und jede daraus abgeleitete Rechnung wird still NaN. 'mortar' (t_green, Grundsteinumbau Phase 3) liest dieses Feld selbst NIE (mortar.js: fireMortar() rechnet mit balance.mortar), der Eintrag ist trotzdem noetig: ein vom Nekromanten uebernommener t_green-Untertan feuert als NORMALER Schuetze (ghost.js: updateGhosts()) und liest dabei g.cfg.bulletSpeed. Ohne Eintrag entstand dort eine NaN-Kugel -> NaN-Position -> Absturz in isSolid() und im Renderer.",
   "bulletSpeeds": {
     "bullet": 130,
@@ -361,6 +362,85 @@
       "maxHp": 50,
       "damage": 25,
       "desc": "Dicke Frontpanzerung: Schüsse von vorn prallen an ihm ab. Er fährt auf dich zu — triff ihn von der Seite oder von hinten."
+    },
+    "t_rusher": {
+      "speed": "fast",
+      "magazine": 1,
+      "mines": 0,
+      "weapon": null,
+      "role": "hunter",
+      "aggression": 1.0,
+      "accuracy": 0,
+      "ram": {
+        "triggerPx": 90,
+        "windupS": 0.35,
+        "chargeS": 0.6,
+        "speedMult": 2.0,
+        "exhaustS": 2.0,
+        "pushPx": 60
+      },
+      "label": "Rammler",
+      "maxHp": 20,
+      "damage": 20,
+      "desc": "Rennt dich an, sobald du nah genug bist — kurzer Aufladeblitz, dann ein schneller Sturm in gerader Linie. Wandkontakt oder ein Treffer beendet den Sturm, danach eine Verschnaufpause."
+    },
+    "t_dud": {
+      "speed": "slow",
+      "magazine": 1,
+      "mines": 0,
+      "weapon": null,
+      "role": "sapper",
+      "aggression": 0.4,
+      "accuracy": 0,
+      "deathBlast": {
+        "fuseS": 1.2,
+        "radiusPx": 110,
+        "damage": 40
+      },
+      "label": "Blindgänger",
+      "maxHp": 20,
+      "damage": 0,
+      "desc": "Wehrt sich nicht. Stirbt er — egal wodurch —, zündet nach kurzer Verzögerung eine Explosion, die auch andere Gegner erwischt."
+    },
+    "t_shotgun": {
+      "speed": "normal",
+      "magazine": 5,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "hunter",
+      "aggression": 0.9,
+      "accuracy": 0.6,
+      "fireRate": 1.4,
+      "spreadCount": 5,
+      "spreadRad": 0.1484,
+      "burstRangePx": 210,
+      "fireWindupS": 0.35,
+      "label": "Streuer",
+      "maxHp": 30,
+      "damage": 8,
+      "desc": "Nähert sich und feuert nach kurzer Vorwarnung eine Fünferstreuung ab — jede Kugel verliert sich nach 210 px in der Luft. Auf Distanz nahezu harmlos."
+    },
+    "t_lance": {
+      "speed": "slow",
+      "magazine": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "sieger",
+      "preferredRange": 300,
+      "aggression": 0.4,
+      "accuracy": 0.95,
+      "fireRate": 2.4,
+      "bulletSpeed": 700,
+      "pierce": 2,
+      "charge": {
+        "windupS": 1.3,
+        "lockAtS": 0.4,
+        "pauseS": 2.4
+      },
+      "label": "Speerträger",
+      "maxHp": 30,
+      "damage": 35,
+      "desc": "Hält Abstand und lädt einen durchschlagenden Schuss auf — die letzten 0,4 s ist die Richtung eingefroren. Bricht die Sichtlinie ab, verpufft der Ladevorgang wirkungslos."
     },
     "t_black": {
       "speed": "veryfast",

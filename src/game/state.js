@@ -207,6 +207,24 @@ function applyAffixByIndex(t, index, eliteAffixes) {
   }
 }
 
+// Blindgaenger-Todeszuender (G2, t_dud): tickt state.deathFuses -- reine
+// Zeitverzoegerung, danach ein normaler explodeAt()-Aufruf mit spare:null
+// (trifft ausdruecklich auch andere Gegner, s. killTank()-Hook oben). Muster
+// wie updateMines/updateMortars, aber bewusst KEIN eigenes Modul -- das
+// ganze Feature ist ein Array-Tick von wenigen Zeilen.
+function updateDeathFuses(state, dt) {
+  if (!state.deathFuses.length) return;
+  for (const f of state.deathFuses) {
+    if (f.dead) continue;
+    f.age += dt;
+    if (f.age >= f.fuseS) {
+      f.dead = true;
+      explodeAt(state, f.x, f.y, f.radiusPx, null, { code: 'dud_blast', enemyType: 't_dud' }, f.damage);
+    }
+  }
+  state.deathFuses = state.deathFuses.filter((f) => !f.dead);
+}
+
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
@@ -514,6 +532,7 @@ export function createState(data, tiles, opts) {
     // effects.js: drawTankLinks() generisch gezeichnet. Aktuell leer -- kein
     // Gegner aus G2-G7 ist gebaut, die Population folgt phasenweise.
     tankLinks: [],
+    deathFuses: [], // G2: verzoegerte Todesexplosion (t_dud), s. killTank()/updateDeathFuses()
     traps: [],
     mortars: [], // Grundsteinumbau Phase 3: fliegende Moerser-Granaten (t_green)
     ghosts: [], // Phase 7: Geisterpanzer (kein Eintrag in tanks -- s. ghost.js)
@@ -1021,6 +1040,26 @@ export function createState(data, tiles, opts) {
         state.damageFlash = 0.5;
         state.respawnTimer = RESPAWN_DELAY;
       } else {
+        // Blindgaenger (G2, t_dud): jeder Tod -- egal wodurch -- startet
+        // eine verzoegerte Explosion an der Sterbeposition statt sofort zu
+        // zuenden (updateDeathFuses() zuendet nach fuseS ueber den normalen
+        // explodeAt()-Pfad, spare:null trifft dabei ausdruecklich auch
+        // andere Gegner). Laeuft VOR dem uebrigen Kill-Bonus-Block, damit
+        // ein Blindgaenger, der selbst als Kettenreaktion eines anderen
+        // Kills stirbt, seine Zuendung nicht verliert.
+        if (tank.cfg.deathBlast) {
+          const db = tank.cfg.deathBlast;
+          state.deathFuses.push({
+            x: tank.x,
+            y: tank.y,
+            radiusPx: db.radiusPx,
+            damage: db.damage,
+            age: 0,
+            fuseS: db.fuseS,
+            dead: false,
+          });
+          state.sounds.push({ name: 'mine_warn', x: tank.x });
+        }
         state.enemyKills++;
         state.killLog.push(tank.type);
         const pc = state.player.cfg;
@@ -2157,6 +2196,7 @@ export function stepState(state, cmd, dt) {
   updateMines(state, dt);
   updateTraps(state, dt);
   updateMortars(state, dt); // Grundsteinumbau Phase 3
+  updateDeathFuses(state, dt); // G2 (t_dud)
   updateGhosts(state, dt);
   // Spinnenboss-Auftrag: eigene, kleine Tick-Funktionen (Muster wie
   // updateMines/updateMortars oben) statt sie in bestehende Schleifen zu

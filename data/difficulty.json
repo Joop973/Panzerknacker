@@ -64,6 +64,26 @@
       "unlockAct": 2,
       "unlockRoomInAct": 1
     },
+    "t_rusher": {
+      "points": 3,
+      "unlockAct": 2,
+      "unlockRoomInAct": 1
+    },
+    "t_shotgun": {
+      "points": 4,
+      "unlockAct": 2,
+      "unlockRoomInAct": 2
+    },
+    "t_dud": {
+      "points": 3,
+      "unlockAct": 2,
+      "unlockRoomInAct": 3
+    },
+    "t_lance": {
+      "points": 6,
+      "unlockAct": 2,
+      "unlockRoomInAct": 4
+    },
     "t_green": {
       "points": 6,
       "unlockAct": 2,
