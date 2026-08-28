@@ -7583,7 +7583,8 @@ die Stelle, an der ein längst entstandenes NaN endlich aufflog.
   mitgezogen.
 
 ### Gegner-/Encounter-Design Akt 2 + Akt 3 (Designdokument, noch nicht gebaut)
-**Neu eingegangen: `AUFTRAG-GEGNERDESIGN.md`** — ein reines Designdokument
+**Neu eingegangen: `docs/AUFTRAG-GEGNERDESIGN.md`** (nach Nutzerwunsch aus
+dem Repo-Wurzelverzeichnis nach `docs/` verschoben) — ein reines Designdokument
 (kein Code, kein Bauauftrag) fuer **16 neue Gegner** (8 je Akt), 20
 Encounter, 8 Akt-3-Kompositionen, Einfuehrungskurve, Build-Interaktionen,
 Placeholder-Sprites, technische Einordnung und ein bewertetes Design-Audit.
@@ -7618,6 +7619,68 @@ nicht bricht; keiner braucht eine neue Architektur. Sechs weitere Entwuerfe
 wurden ausdruecklich **verworfen** (Begruendungen in Abschnitt 19.1 des
 Dokuments), damit sie in spaeteren Sitzungen nicht erneut auftauchen.
 **Kein `sw.js`-Bump** (reine Markdown-Datei, kein Spiel-Asset).
+
+**Umsetzungsauftrag eingegangen: `UMBAUPLAN-GEGNER.md`** (Repo-Wurzel) —
+der Nutzer hat einen Neun-Phasen-Bauplan (G0-G9) fuer das Designdokument
+geliefert, "eine Phase pro Session" nach dem `PLAN.md`-Muster. **Phase G0
+(Ist-Abgleich) ist gebaut** — reiner Analyse-Ist-Abgleich, kein Produktivcode,
+danach planmaessig angehalten und auf Freigabe gewartet. Kernergebnisse:
+- **Alle elf Pflichtlektuere-Zeilenangaben aus dem Bauplan stimmen exakt**
+  (`resolveCfg()` Z. 5, `applyDamage()` Z. 688, `killTank()` Z. 958,
+  `resolveTarget()` Z. 78, `coverDrive()` Z. 175, `roleTurret()` Z. 35,
+  `fireHook()`/`placeTrapWall()` Z. 772/792, `explodeAt()` Z. 45,
+  `SPRITE_ALIAS` Z. 130, `drawAnvilHazards()` Z. 407, `drawLightning()`
+  Z. 1080) — ein starkes Signal, dass das Designdokument tatsaechlich gegen
+  den Code geschrieben wurde. `resolveCfg()` hat **exakt 44 Felder**
+  (skriptausgezaehlt, deckt sich mit der Doku-Angabe).
+- **Drei technische Praezisierungen, alle Richtung "einfacher als
+  gedacht"**: `t_shotgun`s Kugelfaecher braucht **keinen** neuen Mechanismus
+  — `tank.js: fireBullet()` hat mit `cfg.spreadCount`/`cfg.spreadRad` (Z.
+  307-312) bereits einen generischen N-Kugel-Faecher, heute nur ueber die
+  Spielerkarte `streuschuss` erreichbar (`cfg.js: applyUpgrades()`, NICHT
+  `resolveCfg()`); seine kurze 210-px-Reichweite braucht ebenfalls kein
+  neues Feld — `bullet.js: burstDistance` (bisher nur ueber die Karte
+  `flak`) toetet ein Geschoss unexplosiv bei Erreichen der Distanz, exakt
+  das gesuchte Verhalten. `t_lance`s Durchschlag (`pierce`) ist **bereits**
+  in der `resolveCfg()`-Whitelist (Nekromant-V2 Phase 2) und braucht **gar
+  keine** Codeaenderung. Fuer alle drei reicht ein direkter Whitelist-
+  Durchgriff auf bestehende Feldnamen statt einer neuen verschachtelten
+  `spread`/`charge`-Struktur.
+- **Baustein C (Telegraph-Flaechen) war zu optimistisch als "null Aufwand"
+  eingestuft**: `effects.js: drawAnvilHazards()`/`drawMortars()` sind hart
+  an `state.anvilBoss`/`state.mortars` gebunden, keine parametrisierten
+  Helfer — die Ray-March-Technik ist eine bewaehrte Vorlage, muss aber zu
+  einer generischen Funktion generalisiert werden (kleiner bis mittlerer
+  Aufwand, nicht null).
+- **Baustein A (Aura-Flags) existiert nur als Einzelfall**
+  (`ghost.js: necroAuraWeakened`, fest fuer die Nekromant-Champion-Aura) —
+  ein generisches `tank.auraFlags`-Objekt fuer `t_anchor`/`t_marshal` muss
+  neu geschrieben werden, nach demselben bewaehrten Reset-pro-Tick-Muster.
+- **`t_mason`s Laufzeit-Erreichbarkeitspruefung**: `generator.js:
+  reachableCells()` ist eine fertige BFS, arbeitet aber auf dem statischen
+  Generierungs-Grid. `state.js` haelt ein eigenes, closure-lokales Grid
+  (synchron gehalten von `placeTrapWall()`/`destroyWall()`/`setWallSolid()`)
+  — der Algorithmus ist 1:1 uebertragbar, aber als neue `state`-Methode,
+  nicht als Aufruf der Generator-Funktion.
+- **Regressionsfolgen (O1)**: `tests/regression.mjs` hat **keine**
+  Assertion, die eine exakte Raum-Gegnerzusammensetzung erwartet (nur
+  Determinismus- und Sieg-Proben) — ein Datenschalter fuer neue Typen ist
+  damit unnoetig, jeder Gegner wird direkt in seiner Bauphase scharf
+  geschaltet.
+- **Sechs offene Entscheidungen (O1-O6) beantwortet** (als Vorschlag, nicht
+  Festlegung): O1 kein Schalter noetig, O2 Mindestpunktzahl nur ab Akt 2
+  (sonst waeren `t_brown`/`t_grey` schon in spaeten Akt-1-Raeumen
+  ausgeschlossen, wo sie den ganzen Bestand stellen), O3 optionales
+  `affixDeny`-Feld erst in G8, O4 Nekromant-Exekutions-Frage auf G3
+  verschoben (`killTank()`s Revive-Zweig haengt strukturell nicht an
+  `tank.executing`, aber ein gezielter Kartendurchsuch folgt erst beim
+  Bau von `t_anchor`), O5 Blindgaenger-Schrott zaehlt voll (konsistent zu
+  jeder bestehenden Mehrfachkill-Quelle, kein Ersatzdeckel), O6 G0-G4
+  (Akt 2 + Kompositionssystem) als sauberer erster Lieferumfang.
+Details, vollstaendige Pruefliste und der Whitelist-Diff in
+`UMBAUPLAN-GEGNER.md`. **Kein `sw.js`-Bump** (reine Analyse, kein
+Produktivcode). **Session endet hier planmaessig — wartet auf Freigabe
+fuer Phase G1.**
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
