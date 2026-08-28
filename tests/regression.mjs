@@ -14254,7 +14254,13 @@ for (const seed of SEEDS) {
     const far = freeze(createTank('t_grey', resolveCfg(tanksData, 't_grey'), 200, 260)); // 60px entfernt, LOS frei
     near.hp = near.cfg.maxHp - 5; // leicht beschaedigt
     far.hp = far.cfg.maxHp - 20; // STAERKER beschaedigt -- muss gewinnen
-    st.tanks = [medic, near, far];
+    // Reihenfolge bewusst [medic, far, near] -- NICHT [medic, near, far]:
+    // Testfund per Gegenprobe: eine erste Fassung mit near-vor-far liess
+    // eine entfernte Staerkevergleich-Bedingung unbemerkt, weil far (der
+    // korrekte Sieger) durch reinen Iterationszufall ohnehin zuletzt
+    // verarbeitet wurde. Mit far zuerst muss die Auswahl wirklich nach
+    // Schadensbetrag entscheiden, nicht nach Listenposition.
+    st.tanks = [medic, far, near];
     stepState(st, CMD0, 1 / 60);
     check(far.hp > far.cfg.maxHp - 20, 'G5 (b): der STAERKER beschaedigte Verbuendete wird nicht geheilt');
     check(near.hp === near.cfg.maxHp - 5, 'G5 (b): der leichter beschaedigte Verbuendete wird faelschlich MITgeheilt (Zehrer heilt nur EINEN)');
