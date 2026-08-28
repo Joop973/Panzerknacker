@@ -13179,6 +13179,267 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 69. Gegner-Umbau Phase G1 (UMBAUPLAN-GEGNER.md): Fundament ---------
+// Fuenf Bausteine, KEIN neuer Gegner -- die Abnahme ist ausdruecklich
+// "im Spiel nichts sichtbar anders" (Determinismusprobe oben unveraendert,
+// gleiche Raumzahlen wie vor dieser Phase). Dieser Abschnitt prueft nur die
+// neu gebaute Infrastruktur selbst, mit EIGENEN synthetischen Werten statt
+// der aktuellen tanks.json-Datenlage (die setzt noch keins der 16 neuen
+// Felder) -- sonst waere der Test bei einer vergessenen Whitelist-Zeile
+// trivial gruen (Falle 1 aus dem Bauplan).
+{
+  // (a) Baustein E/D (Whitelist): jedes der 16 neuen Gegnerfelder kommt aus
+  // einem synthetischen Typ unveraendert im aufgeloesten cfg an.
+  {
+    const synthType = 'zzz_g1_whitelist_test';
+    const neueFelder = {
+      spreadCount: 7,
+      spreadRad: 0.33,
+      burstRangePx: 210,
+      charge: { windupS: 1.3, lockAtS: 0.4 },
+      heal: { ratePerS: 6, rangePx: 220 },
+      ram: { triggerPx: 90, windupS: 0.35 },
+      suppressField: { radiusPx: 160, noFlank: true, noExecute: true },
+      sightRelay: { rangePx: 520, shareWithAllies: true },
+      deathBlast: { fuseS: 1.2, radiusPx: 110 },
+      rally: { fireRateMult: 0.7, maxTargets: 6 },
+      stalk: { cloakBeyondPx: 220, revealBeforeShotS: 0.6 },
+      tether: { splitPct: 0.5, breakDistPx: 260 },
+      harvest: { radiusPx: 200, hpPerStack: 8 },
+      metronome: { beatS: 2.0, holdWindowS: 1.6 },
+      grapple: { windupS: 0.7, pullS: 1.2 },
+      build: { everyS: 5.0, hits: 3 },
+    };
+    const fakeData = {
+      ...tanksData,
+      types: {
+        ...tanksData.types,
+        [synthType]: { speed: 'normal', role: 'guardian', weapon: 'bullet', maxHp: 30, damage: 25, ...neueFelder },
+      },
+    };
+    const cfg = resolveCfg(fakeData, synthType);
+    for (const [feld, wert] of Object.entries(neueFelder)) {
+      check(
+        JSON.stringify(cfg[feld]) === JSON.stringify(wert),
+        `G1 (a): Feld '${feld}' kommt nicht unveraendert im aufgeloesten cfg an (${JSON.stringify(cfg[feld])} statt ${JSON.stringify(wert)})`,
+      );
+    }
+    // Ohne die Felder im Typ bleiben die drei numerischen Vorgabewerte
+    // erhalten (spreadCount 1, spreadRad/burstRangePx 0), die 13 struktu-
+    // rierten Felder sind null -- kein Bestandstyp darf durch die neue
+    // Whitelist ploetzlich einen anderen Wert bekommen.
+    const cfgLeer = resolveCfg(tanksData, 't_brown');
+    check(cfgLeer.spreadCount === 1, `G1 (a): Vorgabewert spreadCount sollte 1 sein, ist ${cfgLeer.spreadCount}`);
+    check(cfgLeer.spreadRad === 0, `G1 (a): Vorgabewert spreadRad sollte 0 sein, ist ${cfgLeer.spreadRad}`);
+    check(cfgLeer.burstRangePx === 0, `G1 (a): Vorgabewert burstRangePx sollte 0 sein, ist ${cfgLeer.burstRangePx}`);
+    for (const feld of ['charge', 'heal', 'ram', 'suppressField', 'sightRelay', 'deathBlast', 'rally', 'stalk', 'tether', 'harvest', 'metronome', 'grapple', 'build']) {
+      check(cfgLeer[feld] === null, `G1 (a): Vorgabewert '${feld}' sollte null sein, ist ${JSON.stringify(cfgLeer[feld])}`);
+    }
+  }
+
+  // (b) Baustein A (Aura-Flags): Reset-Mechanismus ueber einen echten
+  // stepState()-Tick, PLUS die drei Lesepunkte (Flanke/Exekution in
+  // state.js, Feuerrate in tank.js) mit einem Proxy um t.auraFlags --
+  // die Schreibzugriffe des taeglichen Resets (state.js) landen normal im
+  // Backing-Objekt, ein READ von genau dem gerade getesteten Feld liefert
+  // stattdessen einen von aussen steuerbaren Wert. Das ist noetig, weil
+  // G1 bewusst KEINEN Erzeuger baut (der kommt erst mit t_anchor/t_marshal
+  // in G3/G6) -- ohne den Proxy koennte ein manuell gesetztes Flag nie den
+  // Reset am Tickanfang ueberleben, und der wahre Zweig der drei Lesepunkte
+  // liesse sich vor G3/G6 gar nicht beobachten.
+  {
+    const { createState, stepState } = await import('../src/game/state.js');
+    const { createTank, fireBullet } = await import('../src/game/tank.js');
+    const { createBullet } = await import('../src/game/bullet.js');
+    const { rngFor, hashSeed } = await import('../src/core/rng.js');
+
+    const auraRoom = () => {
+      const st = createState(tanksData, tilesData, {
+        genRng: rngFor(1, 1, 'rooms'),
+        enemyTypes: [],
+        aiSeed: hashSeed(1, 1, 'ai'),
+        playerUpgrades: {},
+        upgradesData,
+        equippedSecondary: 'mine',
+        transform: {},
+      });
+      st.walls = []; // isoliert von generierten Waenden (Muster: Abschnitt 45 legionRoom)
+      st.isSolid = () => false;
+      st.blocksSight = () => false;
+      return st;
+    };
+    const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+    // -- Reset-Mechanismus (echtes Verhalten, kein Proxy noetig) --
+    {
+      const st = auraRoom();
+      const gegner = createTank('t_grey', resolveCfg(tanksData, 't_grey'), 700, 256);
+      gegner.heading = 0;
+      st.tanks.push(gegner);
+      stepState(st, CMD, 1 / 60);
+      check(!!gegner.auraFlags, 'G1 (b): auraFlags wird nicht angelegt');
+      check(
+        gegner.auraFlags.noFlank === false && gegner.auraFlags.noExecute === false && gegner.auraFlags.fireRateMult === 1,
+        'G1 (b): auraFlags hat nicht die erwarteten Ruhewerte (noFlank/noExecute false, fireRateMult 1)',
+      );
+      gegner.auraFlags.noFlank = true;
+      gegner.auraFlags.fireRateMult = 0.42;
+      stepState(st, CMD, 1 / 60);
+      check(
+        gegner.auraFlags.noFlank === false && gegner.auraFlags.fireRateMult === 1,
+        'G1 (b): auraFlags wird nicht bei JEDEM Tick zurueckgesetzt',
+      );
+    }
+
+    // -- Lesepunkt 1: noFlank (Flankenzonen-Pruefung in state.js) --
+    {
+      const st = auraRoom();
+      const gegner = createTank('t_grey', { ...resolveCfg(tanksData, 't_grey'), maxHp: 100, armor: null }, 700, 256);
+      gegner.heading = 0; // Front zeigt entlang +x
+      st.tanks.push(gegner);
+      let forceNoFlank = false;
+      const backing = { noFlank: false, noExecute: false, fireRateMult: 1 };
+      gegner.auraFlags = new Proxy(backing, {
+        set(t, k, v) { t[k] = v; return true; }, // Reset-Schreibzugriffe landen normal
+        get(t, k) { return k === 'noFlank' ? forceNoFlank : t[k]; },
+      });
+      // Seitentreffer: Kugel trifft direkt oberhalb des Zentrums (90 Grad
+      // zur Front) -- garantiert 'side' bei intaktem flankZoneHit.
+      const seitlich = () =>
+        createBullet(gegner.x, gegner.y - gegner.cfg.radius, Math.PI / 2, { speed: 1, radius: 4, owner: st.player, damage: 10 });
+
+      forceNoFlank = true;
+      gegner.hp = 100;
+      st.bullets.push(seitlich());
+      stepState(st, CMD, 1 / 60);
+      check(
+        gegner.hp === 90,
+        `G1 (b): noFlank sollte den Seitentreffer als Front (×1, -10) werten, hp ist ${gegner.hp} statt 90`,
+      );
+
+      // Gegenprobe im selben Testlauf: OHNE noFlank muss derselbe
+      // Seitentreffer den echten Flankenfaktor anwenden (>10 Schaden) --
+      // sonst haette der Test oben auch bei kaputtem Lesepunkt bestanden.
+      forceNoFlank = false;
+      gegner.hp = 100;
+      st.bullets.push(seitlich());
+      stepState(st, CMD, 1 / 60);
+      check(
+        gegner.hp < 90,
+        `G1 (b) Gegenprobe: ohne noFlank sollte derselbe Seitentreffer mehr als 10 Schaden machen, hp ist ${gegner.hp}`,
+      );
+    }
+
+    // -- Lesepunkt 2: noExecute (Exekutionsschwelle in state.js) --
+    {
+      const st = auraRoom();
+      const gegner = createTank('t_grey', { ...resolveCfg(tanksData, 't_grey'), maxHp: 100 }, 700, 256);
+      st.tanks.push(gegner);
+      let forceNoExecute = false;
+      const backing = { noFlank: false, noExecute: false, fireRateMult: 1 };
+      gegner.auraFlags = new Proxy(backing, {
+        set(t, k, v) { t[k] = v; return true; },
+        get(t, k) { return k === 'noExecute' ? forceNoExecute : t[k]; },
+      });
+      gegner.hp = 1; // weit unter jeder plausiblen Exekutionsschwelle
+      forceNoExecute = true;
+      stepState(st, CMD, 1 / 60);
+      check(!gegner.executing, 'G1 (b): noExecute sollte t.executing unterdruecken, ist aber true');
+
+      forceNoExecute = false;
+      stepState(st, CMD, 1 / 60);
+      check(gegner.executing, 'G1 (b) Gegenprobe: ohne noExecute sollte ein Gegner bei 1 LP im Exekutionszustand sein');
+    }
+
+    // -- Lesepunkt 3: fireRateMult (tank.js: fireBullet()) --
+    {
+      const st = auraRoom();
+      const gegner = createTank('t_grey', resolveCfg(tanksData, 't_grey'), 700, 256);
+      st.tanks.push(gegner);
+      const backing = { noFlank: false, noExecute: false, fireRateMult: 1 };
+      gegner.auraFlags = new Proxy(backing, {
+        set(t, k, v) { t[k] = v; return true; },
+        get(t, k) { return k === 'fireRateMult' ? 0.4 : t[k]; },
+      });
+      fireBullet(gegner, st);
+      check(
+        Math.abs(gegner.cooldown - gegner.cfg.fireCooldown * 0.4) < 1e-9,
+        `G1 (b): fireRateMult 0.4 sollte den Cooldown auf ${gegner.cfg.fireCooldown * 0.4} setzen, ist ${gegner.cooldown}`,
+      );
+      // Gegenprobe: Vorgabewert 1 (kein Aurenquelle) laesst den Cooldown
+      // unveraendert bei fireCooldown selbst.
+      const st2 = auraRoom();
+      const gegner2 = createTank('t_grey', resolveCfg(tanksData, 't_grey'), 700, 256);
+      st2.tanks.push(gegner2);
+      fireBullet(gegner2, st2);
+      check(
+        Math.abs(gegner2.cooldown - gegner2.cfg.fireCooldown) < 1e-9,
+        `G1 (b) Gegenprobe: ohne fireRateMult-Quelle sollte der Cooldown ${gegner2.cfg.fireCooldown} sein, ist ${gegner2.cooldown}`,
+      );
+    }
+  }
+
+  // (c) Baustein B (Verbindungslinien): state.tankLinks existiert, ist beim
+  // Raumaufbau leer (kein G2+-Gegner gebaut) und drawTankLinks() zeichnet
+  // einen manuell eingefuegten Eintrag ohne Fehler.
+  {
+    const { createState } = await import('../src/game/state.js');
+    const { rngFor, hashSeed } = await import('../src/core/rng.js');
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: [],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+    });
+    check(Array.isArray(st.tankLinks) && st.tankLinks.length === 0, 'G1 (c): state.tankLinks fehlt oder ist beim Raumaufbau nicht leer');
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { drawTankLinks } = await import('../src/render/effects.js');
+      const ctx = document.createElement('canvas').getContext('2d');
+      st.tankLinks.push({ x0: 10, y0: 10, x1: 100, y1: 100, color: [120, 220, 140] });
+      let warf = false;
+      try {
+        drawTankLinks(ctx, st);
+      } catch {
+        warf = true;
+      }
+      check(!warf, 'G1 (c): drawTankLinks() wirft bei einem gueltigen Eintrag');
+    } finally {
+      restore();
+    }
+  }
+
+  // (d) Baustein C (Telegraph-Helfer): drawCorridorTelegraph()/
+  // drawGrowingRingTelegraph() existieren, sind eigenstaendig aufrufbar
+  // (nicht mehr an state.anvilBoss/state.mortars gebunden) und liefern die
+  // erwartete Korridorlaenge (freie Flaeche -> Laenge bleibt beim maxLen-
+  // Vorgabewert, exakt der Mechanismus, den drawAnvilHazards() jetzt nutzt).
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { drawCorridorTelegraph, drawGrowingRingTelegraph } = await import('../src/render/effects.js');
+      const ctx = document.createElement('canvas').getContext('2d');
+      const fakeState = { isSolid: () => false }; // frei, keine Wand im Weg
+      const len = drawCorridorTelegraph(ctx, fakeState, 100, 100, 0, 20, { maxLen: 321 });
+      check(len === 321, `G1 (d): drawCorridorTelegraph() ohne Wand sollte maxLen (321) zurueckgeben, gibt ${len}`);
+      let warf = false;
+      try {
+        drawGrowingRingTelegraph(ctx, 100, 100, 44, 0.5);
+      } catch {
+        warf = true;
+      }
+      check(!warf, 'G1 (d): drawGrowingRingTelegraph() wirft bei gueltigen Argumenten');
+    } finally {
+      restore();
+    }
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

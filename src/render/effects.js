@@ -300,27 +300,91 @@ export function drawAimLine(ctx, state, trace) {
 
 // Mörser-Granaten (Grundsteinumbau Phase 3, t_green): IMMER sichtbar, kein
 // Schalter -- die Fairness-Regel des Auftrags ist, dass der Spieler von
+// Gegner-Umbau Baustein C (Telegraph-Flaechen, G1, UMBAUPLAN-GEGNER.md
+// Abschnitt 3): der Ist-Abgleich fand die Ray-March-/Wachs-Technik der
+// bestehenden Moerser-/Amboss-Telegraphen bewaehrt, aber hart an ihre
+// jeweilige Datenstruktur gebunden ("null Aufwand" war zu optimistisch) --
+// hier zu zwei generischen Helfern extrahiert. drawMortars()/
+// drawAnvilHazards() rufen sie unten selbst auf (reiner Refactor, exakt
+// dieselben Farben/Breiten als Vorgabewerte -- PIXEL-IDENTISCHES Ergebnis,
+// keine Verhaltensaenderung). Fuer G2 gedacht: drawGrowingRingTelegraph()
+// fuer t_duds Zuendschnur-Ring, drawCorridorTelegraph() fuer t_rushers
+// Sturm-/t_grabbers Wurfkorridor.
+
+// Wachsender Ring: gestrichelter Aussenring beim vollen Radius (sofort
+// sichtbar), Fuellflaeche waechst mit frac (0..1, z. B. Flugzeit-Fortschritt).
+export function drawGrowingRingTelegraph(ctx, x, y, radiusPx, frac, opts = {}) {
+  const [rr, rg, rb] = opts.ringColor ?? [255, 90, 50];
+  const ringAlpha = opts.ringAlpha ?? 0.5;
+  ctx.strokeStyle = `rgba(${rr},${rg},${rb},${ringAlpha})`;
+  ctx.lineWidth = opts.ringWidth ?? 1.5;
+  ctx.setLineDash(opts.dash ?? [5, 5]);
+  ctx.beginPath();
+  ctx.arc(x, y, radiusPx, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const [fr, fg, fb] = opts.fillColor ?? [255, 60, 40];
+  const fillMinA = opts.fillMinA ?? 0.15;
+  const fillRangeA = opts.fillRangeA ?? 0.35;
+  ctx.fillStyle = `rgba(${fr},${fg},${fb},${(fillMinA + fillRangeA * frac).toFixed(3)})`;
+  ctx.beginPath();
+  ctx.arc(x, y, radiusPx * frac, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Warnkorridor: Rechteckflaeche von (x,y) in Richtung dir, Breite
+// 2*halfWidth, Laenge bis zur ersten Wand (Ray-March, gedeckelt bei maxLen)
+// -- plus eine deutlich abgesetzte Endkante, die zeigt, wie weit der
+// Korridor reicht. Gibt die tatsaechliche Laenge zurueck (ein G2-Erzeuger
+// kann sie fuer eigene Trefferlogik brauchen, ohne den Ray-March zu wiederholen).
+export function drawCorridorTelegraph(ctx, state, x, y, dir, halfWidth, opts = {}) {
+  const maxLen = opts.maxLen ?? 900;
+  const step = opts.step ?? 8;
+  const perp = dir + Math.PI / 2;
+  let len = maxLen;
+  for (let d = step; d < len; d += step) {
+    if (state.isSolid(x + Math.cos(dir) * d, y + Math.sin(dir) * d)) {
+      len = d;
+      break;
+    }
+  }
+  const px = Math.cos(perp) * halfWidth;
+  const py = Math.sin(perp) * halfWidth;
+  const ex = x + Math.cos(dir) * len;
+  const ey = y + Math.sin(dir) * len;
+  ctx.save();
+  ctx.fillStyle = opts.fillStyle ?? 'rgba(255,90,50,0.22)';
+  ctx.beginPath();
+  ctx.moveTo(x + px, y + py);
+  ctx.lineTo(x - px, y - py);
+  ctx.lineTo(ex - px, ey - py);
+  ctx.lineTo(ex + px, ey + py);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = opts.edgeStyle ?? 'rgba(255,150,100,0.65)';
+  ctx.lineWidth = opts.edgeWidth ?? 2;
+  ctx.beginPath();
+  ctx.moveTo(ex - px, ey - py);
+  ctx.lineTo(ex + px, ey + py);
+  ctx.stroke();
+  ctx.restore();
+  return len;
+}
+
 // Abschuss an sieht, wohin es fällt, und herauslaufen kann. Gestrichelter
 // Umriss zeigt sofort den vollen Explosionsradius, die gefüllte Fläche
 // wächst mit der verstreichenden Flugzeit (bei Einschlag komplett gefüllt);
 // ein kleiner dunkler Schatten deutet die Granate selbst im Flug an
 // (linear vom Abschussort zum Ziel interpoliert -- kein physischer Bogen,
 // die Granate fliegt ohnehin "über" jede Wand).
+// G1: nutzt jetzt drawGrowingRingTelegraph() (Baustein C) statt eigener
+// Ring-/Fuell-Zeichnung -- pixelidentisch, Vorgabewerte = die alten
+// hartkodierten Farben (s. o.).
 export function drawMortars(ctx, state) {
   for (const m of state.mortars) {
     if (m.exploded) continue;
     const frac = Math.min(1, m.age / m.flightTimeS);
-    ctx.strokeStyle = 'rgba(255,90,50,0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.arc(m.tx, m.ty, m.radiusPx, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = `rgba(255,60,40,${(0.15 + 0.35 * frac).toFixed(3)})`;
-    ctx.beginPath();
-    ctx.arc(m.tx, m.ty, m.radiusPx * frac, 0, Math.PI * 2);
-    ctx.fill();
+    drawGrowingRingTelegraph(ctx, m.tx, m.ty, m.radiusPx, frac);
     const sx = m.x0 + (m.tx - m.x0) * frac;
     const sy = m.y0 + (m.ty - m.y0) * frac;
     ctx.fillStyle = 'rgba(20,20,24,0.55)';
@@ -397,6 +461,43 @@ export function drawTexts(ctx, state) {
   ctx.textAlign = 'left';
 }
 
+// Gegner-Umbau Baustein B (Verbindungslinien, G1, UMBAUPLAN-GEGNER.md
+// Abschnitt 3): EINE generische Funktion fuer alle fuenf Linienarten
+// (Heilstrahl/Lichtfaden/Fahnenlinie/Kette/Leine, G2-G6) statt fuenf fast
+// gleicher Zeichenbloecke. Naher Verwandter ist drawThreatLines() oben --
+// dieselbe simple Linie, hier aber parametrisiert statt fest verdrahtet
+// (Farbe/Dicke/Strich/Puls/Endpunkte), weil fuenf unterschiedliche Gegner
+// fuenf unterschiedlich aussehende Verbindungen brauchen. Reine Anzeige:
+// jede Erzeuger-Stepfunktion (t_medic/t_relay/t_marshal/t_tether/t_grabber,
+// G2-G6) entscheidet selbst pro Tick, OB ein Eintrag in state.tankLinks
+// steht -- drawTankLinks() zeichnet nur, was schon da ist, ohne eigene
+// Sichtlinien-/Distanzpruefung (Prinzip wie bei drawMines/drawTraps: die
+// Zeichenfunktion bewertet nie selbst, sie zeigt nur den Spielzustand).
+//
+// link = { x0, y0, x1, y1, color: [r,g,b], width, baseAlpha, pulseAlpha,
+//          pulseHz, dash }. Nur x0/y0/x1/y1/color sind Pflicht, der Rest
+// hat Vorgabewerte -- ein Erzeuger kann also einen Eintrag mit nur den
+// Endpunkten + Farbe pushen und bekommt trotzdem einen ruhigen Standardstrich.
+export function drawTankLinks(ctx, state) {
+  if (!state.tankLinks?.length) return;
+  for (const link of state.tankLinks) {
+    const [r, g, b] = link.color;
+    const baseAlpha = link.baseAlpha ?? 0.55;
+    const pulseAlpha = link.pulseAlpha ?? 0.15;
+    const pulseHz = link.pulseHz ?? 3;
+    const alpha = baseAlpha + pulseAlpha * (0.5 + 0.5 * Math.sin(state.time * pulseHz));
+    ctx.save();
+    ctx.strokeStyle = `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+    ctx.lineWidth = link.width ?? 2;
+    if (link.dash) ctx.setLineDash(link.dash);
+    ctx.beginPath();
+    ctx.moveTo(link.x0, link.y0);
+    ctx.lineTo(link.x1, link.y1);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 // Amboss-Auftrag (Abschnitt 17, Darstellung): Rammwarnkorridor, Schockwellen
 // mit deutlich erkennbaren Sicherheitsluecken und die verblassende
 // Schleifspur -- alle drei ueberdauern bzw. kuendigen sich unabhaengig vom
@@ -413,42 +514,12 @@ export function drawAnvilHazards(ctx, state) {
   // Windup UND die kurze Raserei-Zielphase), verschwindet GENAU wenn der
   // Sprint beginnt -- kein uebrig bleibendes unsichtbares Gefahrenfeld.
   // Breite = Amboss- + Spielerradius (die tatsaechliche Kollisionsbreite,
-  // keine duenne Linie), Laenge bis zur ersten Wand entlang der eingefrorenen
-  // Richtung (dieselbe Ray-March-Technik wie die kurze Ziellinien-Andeutung
-  // am Spielerrohr in drawTank()).
+  // keine duenne Linie). G1: nutzt jetzt drawCorridorTelegraph() (Baustein
+  // C) statt eigener Ray-March-/Fuell-Zeichnung -- pixelidentisch, alle
+  // Vorgabewerte (900/8/Farben) entsprechen exakt den alten Konstanten.
   if (boss && boss.alive && (boss.mode === 'charge_windup' || boss.mode === 'frenzy_aim')) {
-    const dir = boss.chargeDir;
-    const player = state.player;
-    const halfWidth = boss.cfg.radius + (player?.cfg?.radius || 14);
-    const perp = dir + Math.PI / 2;
-    let len = 900;
-    for (let d = 8; d < len; d += 8) {
-      if (state.isSolid(boss.x + Math.cos(dir) * d, boss.y + Math.sin(dir) * d)) {
-        len = d;
-        break;
-      }
-    }
-    const px = Math.cos(perp) * halfWidth;
-    const py = Math.sin(perp) * halfWidth;
-    const ex = boss.x + Math.cos(dir) * len;
-    const ey = boss.y + Math.sin(dir) * len;
-    ctx.save();
-    ctx.fillStyle = 'rgba(255,90,50,0.22)';
-    ctx.beginPath();
-    ctx.moveTo(boss.x + px, boss.y + py);
-    ctx.lineTo(boss.x - px, boss.y - py);
-    ctx.lineTo(ex - px, ey - py);
-    ctx.lineTo(ex + px, ey + py);
-    ctx.closePath();
-    ctx.fill();
-    // Klare Endkante -- zeigt, wie weit der Sprint reicht.
-    ctx.strokeStyle = 'rgba(255,150,100,0.65)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(ex - px, ey - py);
-    ctx.lineTo(ex + px, ey + py);
-    ctx.stroke();
-    ctx.restore();
+    const halfWidth = boss.cfg.radius + (state.player?.cfg?.radius || 14);
+    drawCorridorTelegraph(ctx, state, boss.x, boss.y, boss.chargeDir, halfWidth);
   }
 
   // Schockwellen (Hammerschlag): gefaehrlicher Ring rot, jede sichere Luecke

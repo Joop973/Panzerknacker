@@ -417,7 +417,17 @@ export function fireBullet(tank, state, pressed) {
   // Kehrwert (1/(1+pct)) statt der alten, bei pct>=0.9 gedeckelten Formel
   // Math.max(0.1, 1-pct). Division durch 0/negative Werte ist dadurch
   // strukturell ausgeschlossen, ohne eine neue Spielobergrenze einzufuehren.
-  tank.cooldown = tank.cfg.fireCooldown * (tank.berserkerFire || 1) * fireRateFactor(necroPctFireRate);
+  // Baustein A (Aura-Markierung, Gegner-Umbau G1): t_marshal setzt
+  // t.auraFlags.fireRateMult < 1 (z. B. 0.7 -> 30 % schnelleres Nachladen)
+  // auf jeden Verbuendeten mit Sichtlinie -- generischer Faktor NEBEN der
+  // bestehenden Nekromant-Feuerraten-Formel, wirkt multiplikativ wie
+  // berserkerFire/fireRateFactor. Default 1 (Reset in state.js), also ohne
+  // Aurenquelle wirkungslos.
+  tank.cooldown =
+    tank.cfg.fireCooldown *
+    (tank.berserkerFire || 1) *
+    fireRateFactor(necroPctFireRate) *
+    (tank.auraFlags?.fireRateMult ?? 1);
   // Einmal-Ladungen verbrauchen (ghost_017/018/019): EIN Abzug zaehlt fuer
   // JEDE aktive Ladung als ein Schuss, unabhaengig davon, wie viele Kugeln
   // dieser Abzug erzeugt hat (Streuschuss/Doppelrohr).

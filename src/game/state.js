@@ -507,6 +507,13 @@ export function createState(data, tiles, opts) {
     anvilBoss: tanks.find((t) => t.cfg.anvilBoss) || null,
     anvilShockwaves: [],
     anvilTrails: [],
+    // Gegner-Umbau Baustein B (Verbindungslinien, G1): EIN geteiltes Array
+    // fuer alle fuenf Linienarten (Heilstrahl/Lichtfaden/Fahnenlinie/Kette/
+    // Leine), von der jeweiligen Gegner-Stepfunktion jeden Tick neu befuellt
+    // (Muster wie anvilShockwaves/anvilTrails oben) und von
+    // effects.js: drawTankLinks() generisch gezeichnet. Aktuell leer -- kein
+    // Gegner aus G2-G7 ist gebaut, die Population folgt phasenweise.
+    tankLinks: [],
     traps: [],
     mortars: [], // Grundsteinumbau Phase 3: fliegende Moerser-Granaten (t_green)
     ghosts: [], // Phase 7: Geisterpanzer (kein Eintrag in tanks -- s. ghost.js)
@@ -1494,6 +1501,21 @@ export function stepState(state, cmd, dt) {
   const exCfg = state.data.balance.execute;
   for (const t of state.tanks) {
     if (!t.alive) continue;
+    // Gegner-Umbau Baustein A (Aura-Markierung, G1): EIN Reset pro Tick fuer
+    // JEDEN Panzer, nach dem Muster ghost.js: necroAuraWeakened -- generisch
+    // statt eines Einzelfelds, damit spaetere Auren-Gegner (t_anchor/
+    // t_marshal, G3/G6) nur noch einen SETZER ergaenzen muessen, keinen
+    // weiteren Lesepunkt. Aktuell erzeugt noch KEIN Gegner eine Aura, die
+    // drei Lesestellen (hier: noExecute; Flankenfaktor weiter unten;
+    // fireRateMult in tank.js: fireBullet()) bleiben deshalb bis dahin
+    // wirkungslose No-ops -- exakt die "nichts sichtbar anders"-Abnahme aus
+    // UMBAUPLAN-GEGNER.md Phase G1.
+    if (!t.auraFlags) t.auraFlags = { noFlank: false, noExecute: false, fireRateMult: 1 };
+    else {
+      t.auraFlags.noFlank = false;
+      t.auraFlags.noExecute = false;
+      t.auraFlags.fireRateMult = 1;
+    }
     // ghost_026 "Opferstoss" (Nekromant-V2 Phase 6): eine Druckwelle hebt die
     // Exekutionsschwelle fuer GETROFFENE Gegner zeitlich befristet auf einen
     // absoluten Wert an (necroExecThreshold, typisch 0,5 -- deutlich hoeher
@@ -1502,8 +1524,16 @@ export function stepState(state, cmd, dt) {
     // der Zukunft liegt.
     const execThreshold =
       t.necroExecUntil > state.time ? Math.max(exCfg?.thresholdPct ?? 0, t.necroExecThreshold || 0) : exCfg?.thresholdPct;
+    // t.auraFlags.noExecute (Baustein A): t_anchor hebt die Exekutionsgarantie
+    // im Aurafeld auf -- der Schaden wird trotzdem normal abgezogen (s.
+    // applyDamage()), nur der garantierte Tod/das Rauchen/die Verlangsamung
+    // entfallen.
     t.executing =
-      !!exCfg && t !== state.player && !isBossCfg(t.cfg) && t.hp / (t.cfg.maxHp || 1) <= execThreshold;
+      !!exCfg &&
+      t !== state.player &&
+      !isBossCfg(t.cfg) &&
+      !t.auraFlags.noExecute &&
+      t.hp / (t.cfg.maxHp || 1) <= execThreshold;
     if (t.executing) {
       // "raucht sichtbar (Partikel im Takt)" -- die Lesbarkeit ist der
       // eigentliche Nutzen der Schwelle (Entscheidung D).
@@ -1813,8 +1843,11 @@ export function stepState(state, cmd, dt) {
         // Fronttreffer schon vorher an), flankZone() klassifiziert sie dann
         // wie bei jedem normalen Gegner in Front/Seite/Heck.
         const flankCfg = state.data.balance.flank;
+        // Baustein A (Aura-Markierung, G1): t_anchor setzt t.auraFlags.noFlank
+        // -- ein Treffer zaehlt dann IMMER als Fronttreffer (kein Seiten-/
+        // Heckbonus), unabhaengig von der tatsaechlichen Einschlagsgeometrie.
         const flankZoneHit =
-          flankCfg && t !== state.player && (!isBossCfg(t.cfg) || t.cfg.flankable)
+          flankCfg && t !== state.player && (!isBossCfg(t.cfg) || t.cfg.flankable) && !t.auraFlags?.noFlank
             ? flankZone(t, b.x, b.y, flankCfg)
             : 'front';
         const baseFlankMult =
