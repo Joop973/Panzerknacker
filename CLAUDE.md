@@ -7582,7 +7582,7 @@ die Stelle, an der ein längst entstandenes NaN endlich aufflog.
   Bump ist für Offline-Nutzer nötig), `telemetry.js: GAME_VERSION`
   mitgezogen.
 
-### Gegner-/Encounter-Design Akt 2 + Akt 3 (Designdokument, noch nicht gebaut)
+### Gegner-/Encounter-Design Akt 2 + Akt 3 (Designdokument + laufende Umsetzung)
 **Neu eingegangen: `docs/AUFTRAG-GEGNERDESIGN.md`** (nach Nutzerwunsch aus
 dem Repo-Wurzelverzeichnis nach `docs/` verschoben) — ein reines Designdokument
 (kein Code, kein Bauauftrag) fuer **16 neue Gegner** (8 je Akt), 20
@@ -7756,8 +7756,159 @@ Regressions-Seeds raeumen exakt dieselbe Raumzahl wie vor der Phase
   6 ms) -- der Aura-Reset kostet eine zusaetzliche kleine Objektzuweisung je
   Panzer und Tick, `drawTankLinks()` iteriert ein leeres Array.
 Kein `sw.js`-Bump (reine Code-/Testaenderung, kein neues Asset, keine
-sichtbare Spielaenderung). **Naechste Sitzung: Phase G2** (Akt 2, Welle 1:
-`t_rusher`/`t_dud`/`t_shotgun`/`t_lance`).
+sichtbare Spielaenderung).
+
+**Phase G2 (Akt 2, Welle 1) ist gebaut.** Vier Gegner, alle vier ohne neue
+Architektur -- sie heben, verallgemeinern oder aktivieren nur, was G0/G1
+bereits gefunden bzw. gebaut hatten.
+- **`t_rusher`** (Rammler, 3 Punkte, Raum 1): `ai_drives.js: ramDrive()`
+  (neu, exportiert) verallgemeinert das Kontaktschaden-Muster aus `anvil.js`
+  (`pushFromRam`/`ramHitCheck`/`moveChargeSubsteps`) auf ein einfaches,
+  rage-freies Vier-Zustands-Modell (`seek`→`windup`→`charge`→`exhausted`).
+  Ausloeser: aufgeloestes Ziel (Upgradepool-v2 Phase 5: kann ein Geist sein)
+  innerhalb `triggerPx` (90) UND Sichtlinie. Windup (0,35 s) friert die
+  Richtung EINMALIG ein (`tank.heading` folgt ab da nicht mehr dem Ziel,
+  auch wenn es sich bewegt); der Sturm (0,6 s, `speedMult 2.0`) bewegt den
+  Panzer per eigener Substep-Schleife (`RAM_STEP_PX 4`, Muster
+  `CHARGE_STEP_PX` aus `anvil.js`) UNTER Umgehung von `moveTank()` (die
+  Dispatch-Funktion in `ai.js: updateEnemy()` bekommt dafuer `{x:0,y:0}`
+  zurueck) -- haelt an der ERSTEN beruehrten Wand sofort an. Hoechstens EIN
+  Treffer je Ziel PRO Sturm (`ram.hitTargets`-Set, geleert bei Sturmbeginn),
+  Rueckstoss ueber `ramPushback()` (Muster `pushFromRam`, probiert Seite →
+  Gegenseite → geradewegs zurueck). 2,0 s Erschoepfung danach, dann zurueck
+  zu `seek`. Dispatch-Vorrang in `ai.js: updateEnemy()`: `ramMove ||
+  (seekCover && coverDrive(...)) || DRIVES[role](...)` -- `ramDrive()` gibt
+  `null` zurueck, solange kein Sturm laeuft, die normale Rollen-Fahrfunktion
+  (hier: `hunter`) behaelt bis dahin die Kontrolle. Telegraph: der
+  Sturmkorridor waehrend des Windups ueber Baustein C
+  (`drawRamTelegraphs()`, `effects.js`).
+- **`t_dud`** (Blindgaenger, 3 Punkte, Raum 3): neues, eigenstaendiges
+  Zeitverzoegerungs-Array `state.deathFuses` (Muster `state.mortars`) statt
+  eines zweiten Explosionssystems. `state.js: killTank()`s Nicht-Spieler-
+  Zweig legt bei `tank.cfg.deathBlast` GANZ AM ANFANG (vor dem uebrigen
+  Kill-Bonus-Block, damit auch ein per Kettenreaktion sterbender Blindgaenger
+  seine Zuendung behaelt) einen `{x,y,radiusPx,damage,age,fuseS}`-Eintrag an.
+  Ein neuer, modulweiter `updateDeathFuses(state, dt)` (in `state.js`,
+  eingehaengt in `stepState()`s Tick-Kette neben `updateMines`/
+  `updateMortars`) zaehlt hoch und detoniert nach `fuseS` (1,2 s) ueber den
+  bestehenden `mine.js: explodeAt(..., spare: null, ...)` -- `spare: null`
+  ist bewusst gewaehlt: die Explosion trifft ausdruecklich AUCH andere
+  Gegner (kein Team-System in der Trefferschleife, s. UMBAUPLAN-GEGNER.md
+  Falle 2 -- hier gezielt genutzt, nicht umgangen). `weapon: null` +
+  `damage: 0` -- der Blindgaenger wehrt sich nicht, sein gesamter Schaden
+  kommt aus der Explosion. Telegraph: wachsender Ring an der Sterbeposition
+  (`drawDeathFuses()`, Baustein C, giftgruen statt Moerser-Orange zur
+  Unterscheidung).
+- **`t_shotgun`** (Streuer, 4 Punkte, Raum 2): Baustein D
+  (`spreadCount: 5`, `spreadRad: 0,1484` fuer einen 34°-Gesamtfaecher --
+  `(i-(n-1)/2)*spreadRad` ueber 5 Kugeln spannt `4×spreadRad`, nicht
+  `2×spreadRad`, eigener Rechenfehler beim Entwurf gefangen und korrigiert)
+  + `burstRangePx: 210` (bestehendes `bullet.js: burstDistance`-Feld, sonst
+  nur von der Spielerkarte `flak` genutzt) liefern Faecher und kurze
+  Reichweite ohne neuen Code. Neu ist nur **eine** Sekunde Salven-Vorwarnung:
+  `fireWindupS` (0,35 s), ein Feld, das im urspruenglichen 16-Felder-
+  Whitelist-Diff aus G1 NICHT vorgesehen war (dort gemeldete Abweichung,
+  nachtraeglich in `cfg.js: resolveCfg()` ergaenzt). `ai_turrets.js:
+  roleTurret()` haelt am Ende (nach Kegel/Sichtlinien-/Moerser-Gates) einen
+  `ai.windupTimer` an, der erst ab `fireWindupS` `true` zurueckgibt; JEDER
+  vorherige `return false`-Zweig (Kegel verfehlt, Muendung blockiert, keine
+  Sichtlinie, Moerser-Mindestreichweite) setzt ihn ueber einen neuen,
+  gemeinsamen `resetFireWindup()`-Helfer zurueck -- kein "aufgestauter"
+  Schuss aus einer laengst verlassenen Ausrichtung. Telegraph: derselbe
+  `drawGrowingRingTelegraph()` zweckentfremdet als Reichweitenring
+  (gestrichelter Aussenring bei `burstRangePx`, nur sichtbar wenn der
+  Spieler nahe genug ist) UND als Windup-Fuellung (`drawFireWindups()`).
+- **`t_lance`** (Speertraeger, 6 Punkte, Raum 4): eigener Zustandsautomat
+  `chargeTurret()` in `ai_turrets.js` (nicht `ai_drives.js` -- es ist ein
+  Feuerentscheidungs-Ersatz, keine Bewegung; Rolle bleibt `sieger`, haelt
+  `preferredRange: 300` normal), ersetzt bei `cfg.charge` die GESAMTE
+  generische Feuerlogik von `roleTurret()`. Vier Zustaende (`idle`→
+  `charging`→`locked`→`pause`): `idle` verfolgt normal, bis Kegel+Sichtlinie
+  passen; `charging` (die ersten `windupS-lockAtS` = 0,9 s) verfolgt
+  weiter; `locked` (letzte `lockAtS` = 0,4 s) friert die Richtung ein
+  (`tank.turret` wird nicht mehr aktualisiert -- Turmzeile explizit auf
+  `lance.mode !== 'locked'` bedingt). Einzige Abbruchbedingung in JEDER
+  Ladephase: Sichtlinienverlust (`!clearLine(...)`, wortgetreu laut Auftrag)
+  -- kein Kegel-Zwang mehr waehrend des Ladens, ein Abbruch setzt sofort auf
+  `idle`/`timer:0` zurueck (kein Teilfortschritt). Nach vollem Aufladen
+  feuert es GENAU EINMAL ueber den normalen `fireBullet()`-Pfad (`pierce: 2`
+  war schon seit Nekromant-V2 Phase 2 in der Whitelist, `bulletSpeed: 700`
+  ebenso bestehend -- **keine** neue Munitionslogik) und pausiert `pauseS`
+  (2,4 s). Telegraph: `drawLanceAim()` -- eine Linie in Turmrichtung, IMMER
+  sichtbar (nicht ueber `data/options.json: aimLine` abschaltbar, dieselbe
+  Regel wie der Moerser-Telegraph), gestrichelt waehrend `charging`,
+  durchgezogen+kraeftiger ab `locked`.
+- **Trap-1-Sicherheitsnetz `weapon: null`**: `t_rusher`/`t_dud` haben keine
+  Waffe, waeren aber ueber den bestehenden `acc<=0`-Zufallsschwenk-Zweig
+  (`targetInSight()` kennt kein Waffenfeld) trotzdem als "will feuern"
+  durchgekommen -- `roleTurret()` hat jetzt an BEIDEN Stellen, an denen es
+  `true` haette liefern koennen (der `acc<=0`-Zweig und der finale
+  Erfolgspfad), ein `if (!cfg.weapon) return false;`-Gate. Turmdrehung
+  bleibt in beiden Faellen kosmetisch erhalten, nur der Feuerwunsch wird
+  unterdrueckt.
+- **Ist-Abgleich-Korrektur waehrend des Baus**: der Plantext verlangt fuer
+  die Raumvorschau-Beschreibung `data/glossary.json` -- direkte Pruefung von
+  `src/ui/preview.js` zeigt, dass `label`/`desc` schon immer DIREKT aus
+  `tanksData.types[type]` gelesen werden; `glossary.json` ist ein
+  unabhaengiges, spaeteres Feature (Kartentext-Begriffs-Hervorhebung im
+  Upgrade-Screen). Fix: die vier neuen `label`/`desc`-Felder in
+  `data/tanks.json` reichen aus, kein `glossary.json`-Eintrag noetig
+  (Regel 1 aus dem Bauplan: technische Fakten des Codes gewinnen).
+- **Sprite-Aliase statt neuer Dateien** (Plan-Vorschlag uebernommen):
+  `t_rusher→t_brown`, `t_dud→t_black`, `t_shotgun→t_pink`, `t_lance→t_teal`
+  (`sprites.js: SPRITE_ALIAS`). Identitaet traegt vollstaendig Verhalten +
+  die vier neuen Telegraphen.
+- **Ein echter Mechanismus-Fund beim eigenen Testbau** (kein Code-Bug, aber
+  ohne den Fund waere `ramDrive()` einen Tick "hinter" der Anzeige
+  hergelaufen): der Ausloese-Tick (Uebergang `seek`→`windup`) fiel bei der
+  ersten Fassung durch einen unbedingten `return null;` am Blockende --
+  `ai.js` liess in genau diesem einen Tick noch die normale Rollen-
+  Fahrfunktion (einen winzigen Schritt Richtung Ziel) durchlaufen, bevor der
+  Windup-Stillstand erst ab dem naechsten Tick griff. Fix: der Trigger-Zweig
+  gibt jetzt sofort `{x:0,y:0}` zurueck, sobald er auf `windup` umschaltet.
+- **Zwei Gegenproben-Fallstricke im eigenen Testaufbau gefunden und
+  behoben** (nicht im Code): (1) "hoechstens ein Treffer pro Sturm" blieb
+  auch OHNE den `hitTargets`-Waechter gruen, weil der (unveraendert
+  bleibende) Rueckstoss (`pushPx: 60`) den Spieler schon nach dem ersten
+  Treffer aus dem Ueberlappungsradius schiebt -- der Test wurde blind
+  gefuehrt, nicht der Mechanismus. Fix: der isolierte Testfall setzt
+  `pushPx: 0` fuer diesen einen Fall, danach faengt die Gegenprobe den
+  entfernten Waechter zuverlaessig (300 statt 20 Schaden). (2) "kehrt nach
+  Erschoepfung/Pause zu seek/idle zurueck" schlug zunaechst fehl, weil der
+  Spieler in Trefferreichweite blieb und der Zustand sofort wieder in
+  `windup`/`charging` umschaltete -- kein Bug, sondern gewolltes Verhalten
+  (`seek`/`idle` re-triggern sofort, wenn das Ziel weiter in Reichweite
+  ist). Fix: der Testaufbau bewegt den Spieler fuer diesen Prüfschritt weit
+  weg, um den Zwischenzustand ueberhaupt beobachten zu koennen.
+- **Neuer Testabschnitt 70** (`tests/regression.mjs`, Gegenprobe fuer jeden
+  Kernpunkt einzeln bestanden -- je einzeln absichtlich rot gemacht und
+  zurueckgesetzt, Checkpoint-Commit VOR den Experimenten diesmal beachtet:
+  beide `weapon:null`-Gates einzeln entfernt, `hitTargets`-Verfolgung
+  entfernt, Wandkontakt-Abbruch in `moveRamSubsteps()` entfernt, Turm-
+  Einfrieren waehrend `locked` entfernt, Sichtverlust-Abbruch in
+  `chargeTurret()` entfernt, `fireWindupS`-Gate entfernt, `killTank()`s
+  `deathBlast`-Hook deaktiviert, `updateDeathFuses()`-Tick-Aufruf entfernt):
+  Struktur (alle vier Typen + Akt-2-Freischaltung), beide `weapon:null`-
+  Gates einzeln, `ramDrive()`s volle Zustandskette (Trigger, eingefrorene
+  Richtung trotz Zielbewegung, Einzeltreffer, Wandkontakt-Stop, Erschoepfung,
+  Rueckkehr zu `seek`), `fireWindupS` mit exakter Tickzahl + Reset bei
+  Sichtverlust, `chargeTurret()`s volle Zustandskette (Kegel-Start,
+  `charging`→`locked`-Uebergang, eingefrorene Richtung, Schuss, Pause,
+  Ruecksprung zu `idle`, LOS-Abbruch OHNE Kegel-Zwang) + End-zu-Ende-Beweis,
+  dass der abgefeuerte Schuss wirklich `pierce`/`bulletSpeed` aus `cfg`
+  traegt (`Math.hypot(vx,vy)`, Bullet-Objekte speichern kein rohes
+  `speed`-Feld), `t_dud`s vollstaendige Kette (killTank()-Hook →
+  `deathFuses`-Eintrag → Detonation exakt nach `fuseS` → Aufraeumen →
+  Schaden an Spieler UND einem unbeteiligten Nachbargegner).
+- **Schlechtester Frame** (Grundregel, G2 fuegt Entitaeten hinzu): Acht-
+  Gegner-Raum (2× je neuer Typ) vs. eine gleich grosse Baseline aus acht
+  Bestandstypen, 600 Ticks, drittgroesster Wert (Projektkonvention):
+  Baseline **2,070 ms**, G2-Raum **1,122 ms** (Budget 6 ms) -- die vier
+  neuen Verhalten sind nicht teurer als die ersetzten Bestandsverhalten.
+Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien --
+alle vier Typen aliasen auf vorhandene Sprites, alle vier Sounds sind
+Wiederverwendungen aus `data/sounds.json`). **Naechste Sitzung: Phase G3**
+(Akt 2, Welle 2: `t_relay`/`t_anchor`).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des

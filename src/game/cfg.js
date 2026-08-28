@@ -149,6 +149,11 @@ export function resolveCfg(data, type) {
     spreadCount: t.spreadCount ?? 1,
     spreadRad: t.spreadRad ?? 0,
     burstRangePx: t.burstRangePx ?? 0,
+    // G2-Nachtrag zur Phase-G1-Whitelist (nicht in den urspruenglichen 16
+    // Feldern vorgesehen, aber fuer t_shotguns Salven-Vorwarnung noetig):
+    // Sekunden Vorwarnung, bevor eine erfuellte Feuerbedingung wirklich
+    // feuert (ai_turrets.js: roleTurret()).
+    fireWindupS: t.fireWindupS ?? 0,
     // Die folgenden 13 Felder sind echte Neubauten -- je ein Gegner aus
     // Abschnitt 7/8 des Designdokuments, Struktur laut UMBAUPLAN-GEGNER.md
     // Abschnitt 2 (Whitelist-Diff). `null`, solange kein Typ sie setzt.
