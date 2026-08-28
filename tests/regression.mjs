@@ -13528,6 +13528,12 @@ for (const seed of SEEDS) {
   {
     const st = g2Room();
     const rusher = createTank('t_rusher', resolveCfg(tanksData, 't_rusher'), 400, 256);
+    // pushPx auf 0 -- sonst wuerde schon der ERSTE Treffer den Spieler aus dem
+    // Ueberlapp schieben und "hoechstens ein Treffer" waere allein durch den
+    // Rueckstoss erfuellt, unabhaengig vom hitTargets-Wächter selbst (echter
+    // Gegenprobe-Fund: mit pushPx=60 blieb dieser Test AUCH ohne den Waechter
+    // gruen).
+    rusher.cfg = { ...rusher.cfg, ram: { ...rusher.cfg.ram, pushPx: 0 } };
     rusher.heading = 0;
     rusher.ai.target = st.player;
     st.player.x = 460; // 60px entfernt -- unter triggerPx (90)
