@@ -213,6 +213,34 @@ export function installDom() {
   // (floorCanvas, fogCanvas) und zeichnet darauf. Der Kontext schluckt jeden
   // Aufruf, protokolliert ihn aber in ctx.calls -- damit laesst sich der
   // Renderpfad zum ersten Mal headless PRUEFEN statt nur "nicht crashen".
+  // Zeichenbefehle, deren Zahlenargumente ein echter Browser hart ablehnt.
+  // Safari meldet dabei "TypeError: The provided value is non-finite",
+  // Chrome "The provided double value is non-finite" -- in beiden Faellen
+  // ist der Frame ab dort tot. Bis zum Bugfix "non-finite ab Mitte Akt 2"
+  // hat dieser Stub JEDES Argument stillschweigend geschluckt: die Suite
+  // fuehrte den Renderpfad zwar aus, konnte ein NaN darin aber prinzipiell
+  // nicht sehen. Genau daran ist ein echter NaN-Fehler (t_green-Untertan mit
+  // undefined-Kugeltempo) monatelang vorbeigelaufen -- deshalb wirft der
+  // Stub jetzt wie der Browser.
+  const NUMERIC_CANVAS_FNS = new Set([
+    'arc', 'arcTo', 'ellipse', 'rect', 'roundRect',
+    'fillRect', 'strokeRect', 'clearRect',
+    'moveTo', 'lineTo', 'quadraticCurveTo', 'bezierCurveTo',
+    'translate', 'rotate', 'scale', 'transform', 'setTransform',
+    'drawImage', 'createRadialGradient', 'createLinearGradient',
+    'fillText', 'strokeText',
+  ]);
+  const assertFinite = (fn, args) => {
+    for (let i = 0; i < args.length; i++) {
+      const a = args[i];
+      if (typeof a === 'number' && !Number.isFinite(a)) {
+        throw new TypeError(
+          `Canvas ${fn}(): Argument ${i} ist ${a} -- ein echter Browser wirft hier `
+            + '"The provided value is non-finite" und bricht den Frame ab.',
+        );
+      }
+    }
+  };
   const makeCtx = () => {
     const calls = [];
     const state = { fillStyle: '#000', strokeStyle: '#000', lineWidth: 1, globalAlpha: 1 };
@@ -222,11 +250,15 @@ export function installDom() {
         if (k === 'canvas') return t.canvas;
         if (k in t) return t[k];
         if (k === 'createRadialGradient' || k === 'createLinearGradient') {
-          return () => ({ addColorStop() {} });
+          return (...args) => {
+            assertFinite(String(k), args);
+            return { addColorStop() {} };
+          };
         }
         if (k === 'measureText') return () => ({ width: 10 });
         if (k === 'getImageData') return () => ({ data: new Uint8ClampedArray(4) });
         return (...args) => {
+          if (NUMERIC_CANVAS_FNS.has(String(k))) assertFinite(String(k), args);
           calls.push({ fn: String(k), args, fillStyle: t.fillStyle, globalAlpha: t.globalAlpha });
         };
       },
