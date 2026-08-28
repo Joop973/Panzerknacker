@@ -47,6 +47,7 @@ tanksData.limits = load('limits');
 tanksData.sounds = load('sounds');
 tanksData.status = load('status'); // UMBAUPLAN-LP Phase 5
 tanksData.input = load('input'); // P9: Tastencodes fuer getMenuState()-Tests
+diffData.compositions = load('compositions').compositions; // G4: Kompositionsrezepte fuer buyEnemies()
 
 let failures = 0;
 function check(ok, msg) {
@@ -13934,6 +13935,202 @@ for (const seed of SEEDS) {
     st.blocksSight = () => true;
     stepState(st, CMD0, 1 / 60);
     check(st.tankLinks.length === 0, 'G3 (f): ein veralteter Lichtfaden-Eintrag ueberlebt einen Tick ohne Sichtlinie');
+  }
+}
+
+// ---- 72. Gegner-Umbau Phase G4 (UMBAUPLAN-GEGNER.md): Kompositionssystem -
+// "Das eine System, das das Projekt wirklich braucht" (Abschnitt 17.3):
+// buyEnemies() versucht zuerst eine benannte Komposition aus
+// data/compositions.json, faellt sonst auf die alte Zufallsschleife zurueck
+// -- jetzt mit Mindestpunktzahl (ab Akt 2) und optionaler minRole-Quote je
+// Akt. Alle Mechanismus-Pruefungen laufen mit EIGENEN synthetischen Daten
+// (nicht den echten difficulty.json/compositions.json-Werten) -- nur der
+// letzte Block (f) prueft die echte Verdrahtung ueber main.js-aequivalente
+// Daten.
+{
+  const { buyEnemies } = await import('../src/game/run.js');
+  const { mulberry32 } = await import('../src/core/rng.js');
+
+  // (a) Struktur: compositions.json wohlgeformt, die beiden im Text
+  //     genannten maxPerRoom-Eintraege UND die Akt-3-minRoleQuote existieren.
+  {
+    check(Array.isArray(diffData.compositions) && diffData.compositions.length >= 5, 'G4 (a): data/compositions.json hat keine (bzw. zu wenige) Kompositionen');
+    for (const c of diffData.compositions) {
+      check(typeof c.id === 'string' && c.id, `G4 (a): Komposition ohne id`);
+      check(typeof c.actIndex === 'number', `G4 (a): "${c.id}" hat kein actIndex`);
+      check(Array.isArray(c.enemies) && c.enemies.length > 0, `G4 (a): "${c.id}" hat keine enemies[]`);
+      for (const e of c.enemies) {
+        check(diffData.danger[e.type], `G4 (a): "${c.id}" nennt den unbekannten Typ "${e.type}"`);
+        check(Number.isInteger(e.count) && e.count > 0, `G4 (a): "${c.id}"/"${e.type}" hat keine gueltige count`);
+      }
+    }
+    check(diffData.danger.t_anchor.maxPerRoom === 1, 'G4 (a): t_anchor hat kein maxPerRoom:1');
+    check(diffData.danger.t_relay.maxPerRoom === 1, 'G4 (a): t_relay hat kein maxPerRoom:1');
+    check(diffData.acts[2].minRoleQuota && typeof diffData.acts[2].minRoleQuota.minBudget === 'number', 'G4 (a): acts[2] (Akt 3) hat keine minRoleQuota');
+  }
+
+  // (b) pickComposition()-MECHANISMUS mit synthetischen Daten: actIndex-
+  //     Gate, minRoom-Gate, Budget-Fenster (untere UND obere Grenze),
+  //     Freischaltungspruefung, maxEnemiesPerRoom-Deckel, RNG-Verbrauch.
+  {
+    const fakeDiff = {
+      maxEnemiesPerRoom: 4,
+      danger: {
+        cheap: { points: 2, unlockAct: 1, unlockRoomInAct: 1 },
+        mid: { points: 5, unlockAct: 2, unlockRoomInAct: 1 },
+        late: { points: 6, unlockAct: 2, unlockRoomInAct: 9 }, // erst spaet freigeschaltet
+      },
+    };
+    const comp = {
+      id: 'test_comp',
+      actIndex: 2,
+      minRoom: 3,
+      weight: 1,
+      enemies: [{ type: 'mid', count: 2 }], // Summe 10
+    };
+    const fires = (actIndex, room, budget) => {
+      const rng = mulberry32(7);
+      const out = buyEnemies(fakeDiff, rng, actIndex, room, budget, undefined, [comp]);
+      const sorted = [...out].sort();
+      return sorted.length === 2 && sorted[0] === 'mid' && sorted[1] === 'mid';
+    };
+    check(!fires(1, 5, 20), 'G4 (b): Komposition feuert in Akt 1, obwohl actIndex:2 verlangt ist');
+    check(!fires(2, 2, 20), 'G4 (b): Komposition feuert vor minRoom (Raum 2 statt >=3)');
+    check(fires(2, 3, 20), 'G4 (b): Komposition feuert NICHT, obwohl actIndex/minRoom/Budget/Freischaltung passen');
+    check(!fires(2, 3, 9), 'G4 (b): Komposition feuert trotz zu kleinem Budget (9 < Summe 10)');
+    check(!fires(2, 3, 21), 'G4 (b): Komposition feuert trotz zu GROSSEM Budget (21 > 2x Summe -- unter der 50%-Mindestausnutzung)');
+    check(fires(2, 9, 20), 'G4 (b): "eingefuehrt ab minRoom, bleibt danach verfuegbar" gilt nicht -- Komposition feuert in einem SPAETEREN Raum nicht mehr');
+    // Ein Rezept, das einen NOCH nicht freigeschalteten Typ nennt, darf nie
+    // feuern, selbst wenn Budget/Raum sonst passen.
+    const compLate = { id: 'late_comp', actIndex: 2, minRoom: 3, weight: 1, enemies: [{ type: 'late', count: 1 }] };
+    {
+      const rng = mulberry32(7);
+      const out = buyEnemies(fakeDiff, rng, 2, 3, 10, undefined, [compLate]);
+      check(!out.includes('late'), 'G4 (b): Komposition feuert mit einem an dieser Stelle noch gesperrten Typ');
+    }
+    // maxEnemiesPerRoom-Deckel: eine Komposition mit mehr Einheiten als der
+    // Raumdeckel darf nie feuern.
+    const compTooBig = { id: 'big_comp', actIndex: 2, minRoom: 1, weight: 1, enemies: [{ type: 'cheap', count: 10 }] };
+    {
+      const rng = mulberry32(7);
+      const out = buyEnemies(fakeDiff, rng, 2, 1, 100, undefined, [compTooBig]);
+      check(out.length <= fakeDiff.maxEnemiesPerRoom, `G4 (b): Komposition ueberschreitet maxEnemiesPerRoom (${out.length})`);
+      check(!out.includes('cheap') || out.filter((t) => t === 'cheap').length < 10, 'G4 (b): eine ueberdimensionierte Komposition wurde trotzdem vollstaendig gekauft');
+    }
+    // RNG-Verbrauch: OHNE passende Komposition exakt so viele Aufrufe wie
+    // die reine Zufallsschleife (kein Zusatzverbrauch); MIT passender
+    // Komposition genau EIN Aufruf mehr als ohne comps ueberhaupt.
+    {
+      let callsNoComp = 0;
+      const rngA = mulberry32(3);
+      buyEnemies(fakeDiff, () => { callsNoComp++; return rngA(); }, 1, 1, 20);
+      let callsWithUnmatched = 0;
+      const rngB = mulberry32(3);
+      buyEnemies(fakeDiff, () => { callsWithUnmatched++; return rngB(); }, 1, 1, 20, undefined, [comp]); // comp ist actIndex:2, feuert in Akt 1 nie
+      check(callsNoComp === callsWithUnmatched, `G4 (b): ein NICHT treffendes comps[] veraendert den RNG-Verbrauch (${callsNoComp} vs ${callsWithUnmatched})`);
+      let callsWithMatched = 0;
+      const rngC = mulberry32(3);
+      buyEnemies(fakeDiff, () => { callsWithMatched++; return rngC(); }, 2, 3, 20, undefined, [comp]);
+      check(callsWithMatched === 1, `G4 (b): eine treffende Komposition verbraucht nicht genau einen rng()-Aufruf (${callsWithMatched})`);
+    }
+  }
+
+  // (c) Mindestpunktzahl (O2): "points < budget/12" gilt NUR ab Akt 2, mit
+  //     EIGENEN Punktwerten (nicht 1/2 wie t_brown/t_grey).
+  {
+    const fakeDiff = {
+      maxEnemiesPerRoom: 8,
+      danger: {
+        billig: { points: 2, unlockAct: 1, unlockRoomInAct: 1 },
+        teuer: { points: 20, unlockAct: 1, unlockRoomInAct: 1 },
+      },
+    };
+    const seenIn = (actIndex, budget) => {
+      const seen = new Set();
+      const rng = mulberry32(11);
+      for (let i = 0; i < 300; i++) for (const t of buyEnemies(fakeDiff, rng, actIndex, 1, budget)) seen.add(t);
+      return seen;
+    };
+    // Budget 48 -> Schwelle 4 (48/12). "billig" (2 Punkte) liegt DARUNTER.
+    check(seenIn(1, 48).has('billig'), 'G4 (c): Akt 1 schliesst billige Typen trotz hohen Budgets aus (Mindestpunktzahl darf dort nicht gelten)');
+    check(!seenIn(2, 48).has('billig'), 'G4 (c): Akt 2 kauft "billig" trotz Budget 48 (Schwelle 4) -- Mindestpunktzahl greift nicht');
+    check(seenIn(2, 48).has('teuer'), 'G4 (c): Akt 2 schliesst faelschlich auch "teuer" aus');
+    // Kleines Budget in Akt 2 -> Schwelle klein genug, "billig" bleibt kaufbar.
+    check(seenIn(2, 6).has('billig'), 'G4 (c): Akt 2 schliesst "billig" auch bei kleinem Budget aus (Schwelle sollte hier winzig sein)');
+  }
+
+  // (d) minRole-Quote: mit EIGENEM Rollen-/Budget-Wert, nicht der echten
+  //     "hunter"/30-Kombination aus difficulty.json.
+  {
+    const typeDefs = { a: { role: 'sieger' }, b: { role: 'druck' } };
+    const fakeDiff = {
+      maxEnemiesPerRoom: 6,
+      acts: [{}, {}, { minRoleQuota: { role: 'druck', minBudget: 15 } }],
+      danger: {
+        a: { points: 4, unlockAct: 1, unlockRoomInAct: 1 },
+        b: { points: 4, unlockAct: 1, unlockRoomInAct: 1 },
+      },
+    };
+    const hasDruck = (budget) => {
+      for (let seed = 1; seed <= 40; seed++) {
+        const rng = mulberry32(seed);
+        if (buyEnemies(fakeDiff, rng, 3, 1, budget, typeDefs).includes('b')) return true;
+      }
+      return false;
+    };
+    check(hasDruck(20), 'G4 (d): ueber Budget >= minBudget taucht die Pflichtrolle "druck" nie auf');
+    // Ohne typeDefs (keine Rollenkenntnis) darf die Quote nicht greifen
+    // (kein Absturz, kein erzwungenes Ergebnis) -- reiner Sicherheits-Check.
+    {
+      const rng = mulberry32(1);
+      const out = buyEnemies(fakeDiff, rng, 3, 1, 20); // kein typeDefs-Argument
+      check(Array.isArray(out), 'G4 (d): buyEnemies() ohne typeDefs stuerzt an der Quote-Pruefung ab');
+    }
+  }
+
+  // (e) maxPerRoom: das Feld existierte schon vor G4 im Code, wurde aber
+  //     nie von einem Typ GESETZT -- erster echter Mechanismus-Beweis mit
+  //     einem synthetischen Deckel (nicht den echten t_anchor/t_relay-Werten).
+  {
+    const fakeDiff = {
+      maxEnemiesPerRoom: 8,
+      danger: {
+        einzeln: { points: 1, unlockAct: 1, unlockRoomInAct: 1, maxPerRoom: 1 },
+      },
+    };
+    let maxSeen = 0;
+    for (let seed = 1; seed <= 50; seed++) {
+      const rng = mulberry32(seed);
+      const out = buyEnemies(fakeDiff, rng, 1, 1, 100);
+      maxSeen = Math.max(maxSeen, out.filter((t) => t === 'einzeln').length);
+    }
+    check(maxSeen === 1, `G4 (e): maxPerRoom:1 haelt den Typ nicht auf hoechstens 1 Exemplar (gesehen: ${maxSeen})`);
+  }
+
+  // (f) Echte Verdrahtung: mit den ECHTEN data/compositions.json +
+  //     data/difficulty.json + data/tanks.json (main.js laedt/haengt sie
+  //     genauso an) muss an einem Akt-2-Raum mit ausreichendem Budget
+  //     tatsaechlich eine der fuenf echten Kompositionen feuern -- nicht
+  //     nur der isolierte Mechanismus aus (b).
+  {
+    const knownSorted = diffData.compositions
+      .filter((c) => c.actIndex === 2)
+      .map((c) => {
+        const out = [];
+        for (const e of c.enemies) for (let i = 0; i < e.count; i++) out.push(e.type);
+        return out.sort().join(',');
+      });
+    let hits = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const rng = mulberry32(seed);
+      // Raum 8, Akt 2: Budget 26.8 (acts[1].budget.base 6 + 8*2.6) -- an
+      // dieser Stelle sind alle fuenf G4-Kompositionen bereits freigeschaltet.
+      const budget = diffData.acts[1].budget.base + 8 * diffData.acts[1].budget.perRoom;
+      const out = buyEnemies(diffData, rng, 2, 8, budget, tanksData.types, diffData.compositions);
+      const sorted = [...out].sort().join(',');
+      if (knownSorted.includes(sorted)) hits++;
+    }
+    check(hits > 0, 'G4 (f): mit den ECHTEN Daten feuert an Akt 2/Raum 8 nie eine der fuenf gebauten Kompositionen -- main.js-aequivalente Verdrahtung (diffData.compositions) ist nicht korrekt');
   }
 }
 

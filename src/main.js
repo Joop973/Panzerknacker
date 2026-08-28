@@ -87,6 +87,10 @@ async function loadData() {
     'upgrades_necro',
     // Champion-/Nekromant-Nachschliff Abschnitt 13: zentrales Glossar.
     'glossary',
+    // G4 (UMBAUPLAN-GEGNER.md Abschnitt 17.3): benannte Kompositionsrezepte
+    // fuer run.js: buyEnemies() -- an diffData angehaengt, s. u. (gehoert
+    // inhaltlich zu danger/acts, nicht zu tanksData).
+    'compositions',
   ];
   const out = [];
   for (const n of names) {
@@ -129,6 +133,7 @@ async function init() {
     statusData,
     necroUpgradesData,
     glossaryData,
+    compositionsData,
   ] = await loadData();
   // Champion-/Nekromant-Nachschliff Abschnitt 13: Glossar-Begriffe EINMAL
   // laden, dann JEDER Kartentext/UI-Text kann highlightTerms() darauf
@@ -147,6 +152,10 @@ async function init() {
   // Balance-Werte (data/balance.json) an das Datenobjekt haengen, damit
   // sie ueber state.data.balance ueberall in der Spiellogik verfuegbar
   // sind (Geschoss-Lifetime/Cap/Immunitaet, Minen-Radius/Fuse/Kette).
+  // G4: Kompositionsrezepte gehoeren inhaltlich zu danger/acts (diffData),
+  // nicht zu tanksData -- run.js: buyEnemies() liest sie ueber `diff
+  // .compositions`.
+  diffData.compositions = compositionsData.compositions;
   tanksData.balance = balanceData;
   tanksData.events = eventsData; // Phase 4: Event-Raeume (run.data.events)
   tanksData.arenas = arenasData; // Phase 0b: feste Layouts (Arena-Weiche)
