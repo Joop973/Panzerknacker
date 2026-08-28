@@ -197,6 +197,16 @@ export function roleTurret(tank, state, dt) {
   // resetFireWindup()-Aufrufe oben den Timer zurueck -- kein "aufgestauter"
   // Schuss aus einer laengst verlassenen Ausrichtung.
   if (cfg.fireWindupS) {
+    // G6 (t_stalker): der Windup-START ist der Enttarnungs-Ausloeser -- am
+    // ERSTEN Tick eines frischen Windups (ai.windupTimer noch 0/undefined)
+    // wird tank.stalkRevealUntil auf einen state.time-Zeitstempel gesetzt,
+    // der die gesamte Windup-Dauer PLUS die Nachlaufzeit umfasst (revealBeforeShotS
+    // ist bewusst == fireWindupS, s. tanks.json: t_stalker). Renderer/state.js
+    // lesen nur noch stalkCloaked, kein zweiter Timer-Vergleich noetig.
+    if (cfg.stalk && !ai.windupTimer) {
+      tank.stalkRevealUntil = state.time + (cfg.stalk.revealBeforeShotS ?? 0) + (cfg.stalk.revealedS ?? 0);
+      state.sounds.push({ name: 'wave', x: tank.x });
+    }
     ai.windupTimer = (ai.windupTimer || 0) + dt;
     if (ai.windupTimer < cfg.fireWindupS) return false;
     ai.windupTimer = 0;

@@ -1777,6 +1777,19 @@ export function stepState(state, cmd, dt) {
       if (sf.noFlank) t.auraFlags.noFlank = true;
       if (sf.noExecute) t.auraFlags.noExecute = true;
     }
+    // G6 (t_stalker): Tarnung ausserhalb cloakBeyondPx vom eigenen aufgeloesten
+    // Ziel -- AUSSER waehrend eines laufenden Enttarnungsfensters
+    // (stalkRevealUntil, ein state.time-Zeitstempel, gesetzt in
+    // ai_turrets.js: roleTurret() beim Start des Feuer-Windups). t.stalkCloaked
+    // ist reine Vorberechnung (Muster wie relayAssisted) -- der Renderer liest
+    // nur noch das Feld, kein zweiter resolveTarget()-Aufruf dort noetig.
+    if (t.cfg.stalk) {
+      const stalkTarget = resolveTarget(t, state);
+      const stalkD = stalkTarget.alive ? Math.hypot(stalkTarget.x - t.x, stalkTarget.y - t.y) : Infinity;
+      t.stalkCloaked = stalkD > t.cfg.stalk.cloakBeyondPx && state.time >= (t.stalkRevealUntil || 0);
+    } else {
+      t.stalkCloaked = false;
+    }
     // ghost_026 "Opferstoss" (Nekromant-V2 Phase 6): eine Druckwelle hebt die
     // Exekutionsschwelle fuer GETROFFENE Gegner zeitlich befristet auf einen
     // absoluten Wert an (necroExecThreshold, typisch 0,5 -- deutlich hoeher
@@ -1847,6 +1860,40 @@ export function stepState(state, cmd, dt) {
     // fuellen shieldHp/shieldReady, nicht tank.shield).
     if (t.cfg.shieldRegenPerS && t.shield < t.cfg.shieldMax) {
       t.shield = Math.min(t.cfg.shieldMax, (t.shield || 0) + t.cfg.shieldRegenPerS * dt);
+    }
+  }
+
+  // G6 (t_marshal): Feuerraten-Aura ueber freie Sichtlinie, KEIN Radius.
+  // Eigener Durchlauf NACH dem obigen Reset (statt darin), weil der
+  // maxTargets-Deckel PRO FELDWEBEL zaehlt, nicht pro Ziel -- ein zweiter
+  // Feldwebel darf denselben Verbuendeten zusaetzlich verstaerken,
+  // unabhaengig vom ersten. t.auraFlags ist zu diesem Zeitpunkt fuer JEDEN
+  // Panzer bereits initialisiert (voriger Durchlauf). Mehrere Feldwebel auf
+  // dasselbe Ziel kombinieren sich ueber Math.min (der staerkste/kleinste
+  // Multiplikator gewinnt) -- gelesen in tank.js: fireBullet() (seit G1).
+  for (const m of state.tanks) {
+    if (!m.alive || !m.cfg.rally) continue;
+    let boosted = 0;
+    for (const t of state.tanks) {
+      if (boosted >= m.cfg.rally.maxTargets) break;
+      if (t === m || t === state.player || !t.alive) continue;
+      if (m.cfg.rally.needsLos && !clearLine(state, m.x, m.y, t.x, t.y)) continue;
+      boosted++;
+      t.auraFlags.fireRateMult = Math.min(t.auraFlags.fireRateMult, m.cfg.rally.fireRateMult);
+      // Fahnenlinien (Baustein B): kurz, orange, pulsierend -- Designauflage
+      // "sichtbare kurze Fahnenlinien zu jedem gerade verstaerkten Gegner".
+      state.tankLinks.push({
+        x0: m.x,
+        y0: m.y,
+        x1: t.x,
+        y1: t.y,
+        color: [255, 150, 40],
+        width: 1.5,
+        baseAlpha: 0.45,
+        pulseAlpha: 0.35,
+        pulseHz: 2.5,
+        dash: [3, 3],
+      });
     }
   }
 

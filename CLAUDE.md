@@ -8197,8 +8197,123 @@ Akt-2-Gegner -- damit ist Akt 2 vollstaendig.
   Baseline **1,596 ms**, G5-Raum **1,042 ms** (Budget 6 ms).
 - Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien).
 
-**Naechste Sitzung: Phase G6** (Akt 3, Welle 1 -- die vier konservativen
-Akt-3-Gegner `t_marshal`/`t_bulwark`/`t_stalker`/`t_arclight`).
+**Phase G6 (Akt 3, Welle 1) ist gebaut.** Die vier "konservativen"
+Akt-3-Gegner (Designdokument Abschnitt 8.1-8.4) -- keiner brauchte eine neue
+Kernarchitektur, drei der vier sind praktisch reine Datenuebernahme.
+- **`t_bulwark`** (Bollwerk, 8 Punkte, ab Raum 1): grosser Kollisionsradius
+  (`radius: 22`, seit dem Amboss-Auftrag als generisches `cfg.js`-Feld
+  moeglich) + eine nicht reflektierende 160°-Frontpanzerung
+  (`armor: { arc: 160, reflects: false }`). **Beides war schon VOR G6
+  vollstaendig implementiert** (`armor.js: armorBlocks()` +
+  `state.js: if (t.cfg.armor?.reflects) reflectBullet(...); else b.dead =
+  true;`, PLAN.md v2 Phase 4) -- nur kein einziger Bestandstyp hatte je
+  `reflects: false` gesetzt, der Pfad war seit jeher ungetestet. G6 aktiviert
+  ihn zum ersten Mal: ein Fronttreffer richtet keinen Schaden an UND die
+  Kugel stirbt, OHNE zurueckzuprallen; von hinten (200° ungeschuetzt) gilt
+  der normale Heckbonus (2,5x). **Null neuer Code** ausser dem `tanks.json`-
+  Eintrag + Sprite-Alias.
+- **`t_marshal`** (Feldwebel, 9 Punkte, ab Raum 3): Feuerraten-Aura --
+  jeder Verbuendete mit freier Sichtlinie zu ihm feuert 30 % schneller
+  (`rally: { fireRateMult: 0.7, needsLos: true, maxTargets: 6 }`). Aktiviert
+  **Baustein A** (`tank.auraFlags.fireRateMult`, seit G1 in
+  `tank.js: fireBullet()` verdrahtet, aber bis G6 ein wirkungsloser No-op
+  ohne Setzer) zum ersten Mal wirklich. Neuer, eigener Durchlauf in
+  `state.js` (NACH dem bestehenden Aura-Reset, nicht darin, weil der
+  `maxTargets`-Deckel PRO FELDWEBEL zaehlt statt pro Ziel): fuer jeden
+  lebenden Feldwebel werden bis zu `maxTargets` Verbuendete mit
+  `clearLine()`-Sichtlinie markiert (`t !== m`, `t !== state.player` --
+  weder Selbst- noch Spielerverstaerkung), mehrere Feldwebel kombinieren
+  sich ueber `Math.min()` (der staerkste Multiplikator gewinnt). Fahnenlinien
+  ueber **Baustein B** (`state.tankLinks`, orange, pulsierend). Renderer:
+  ein duenner pulsierender "orangener Saum" (Ring bei `r+4`) um jeden
+  verstaerkten Gegner.
+- **`t_stalker`** (Pirscher, 8 Punkte, ab Raum 5): distanzbasierte Tarnung
+  -- unsichtbar (~15-20 % Deckkraft mit leichtem Flimmern, NIE 0 % --
+  Designauflage "nie vollstaendig weg") ausserhalb `stalk.cloakBeyondPx`
+  (220 px) vom aufgeloesten Ziel, IMMER sichtbar darunter. Enttarnung
+  wiederverwendet den bestehenden `fireWindupS`-Mechanismus aus G2
+  (`t_shotgun`): `t_stalker.fireWindupS === stalk.revealBeforeShotS`
+  (0,6 s), und `ai_turrets.js: roleTurret()` setzt beim WINDUP-START (erster
+  Tick eines frischen Windups, `!ai.windupTimer`) `tank.stalkRevealUntil =
+  state.time + revealBeforeShotS + revealedS` (2,6 s Gesamtfenster). Die
+  eigentliche Sichtbarkeitsberechnung (`t.stalkCloaked`) ist eine neue,
+  reine Vorberechnung in `state.js`s bestehendem Pro-Tick-Reset-Durchlauf
+  (Muster wie `relayAssisted`) -- Distanz UND Reveal-Fenster kombiniert, der
+  Renderer liest nur noch das fertige Flag (kein zweiter `resolveTarget()`-
+  Aufruf dort). Kettenspuren im Boden (`tracks.js`, bereits generisch fuer
+  jeden Typ) sind der bestehende zweite Hinweiskanal, ohne neuen Code.
+- **`t_arclight`** (Lichtbogen, 9 Punkte, ab Raum 4): sein Geschoss traegt
+  `damageType: "lightning"` -- ein seit UMBAUPLAN-LP Phase 6 komplett
+  gebautes, bislang **ausschliesslich von Spielerklassen** genutztes System
+  (Kettensprung auf bis zu 2 weitere Ziele, 30 % Abfall je Sprung -- exakt
+  die vorhandenen `data/status.json`-Standardwerte `maxTargets: 3`/
+  `falloff: 0.7`, keine Datenaenderung noetig). **Null neuer Code**: die
+  einzige Zeile ist `"damageType": "lightning"` im `tanks.json`-Eintrag --
+  `tank.js: fireBullet()` schreibt `damageType: tank.cfg.damageType` bereits
+  fuer JEDEN Schuetzen, nicht nur den Spieler.
+- **Bewusst NICHT gebaut** (Designtext nennt sie unter "Zielauswahl"/
+  "Telegraph", nicht unter "Kernmechanik" -- dieselbe Kategorie von
+  Vereinfachung wie `t_relay`s fehlende aktive Sichtlinien-Suchfahrt aus G3):
+  `t_arclight`s weiche Praeferenz "feuert bevorzugt bei 2+ Zielen in
+  Sprungreichweite" (gegen einen Solo-Spieler ohne Geister waere ein HARTES
+  Gate strukturell nie erfuellbar -- ein Solo-Spieler-Gegner, der nie feuert,
+  waere ein Bug, kein Feature) und die "Vorschau-Bogen"-Telegraphie vor dem
+  Schuss (der Ketten-Blitzbogen selbst wird bereits NACH jedem Treffer
+  gezeichnet, `drawLightning`, unveraendert).
+- **Sprite-Aliase statt neuer Dateien**: `t_marshal→t_green` (olivgruen),
+  `t_bulwark→t_grey` (dunkles Stahlgrau, teilt sich die Farbe mit
+  `t_relay`/`t_mason`), `t_stalker→t_black` (dunkel/verborgen, teilt sich mit
+  `t_dud`), `t_arclight→t_teal` (naechstliegendes Blau, teilt sich mit
+  `t_lance`) -- Identitaet traegt vollstaendig Verhalten + die neuen
+  Telegraphen (Fahnenlinien/Frontbalken/Tarnalpha/Blitzbogen).
+- **Ein echter Testaufbau-Fund per Gegenprobe** (kein Code-Bug): der erste
+  Entwurf von `t_marshal`s "Spieler wird nie verstaerkt"-Pruefung platzierte
+  den Spieler bei `(9999,9999)` -- "ausserhalb jeder Reichweite". Die
+  Gegenprobe (expliziten Spieler-Ausschluss aus dem Code entfernt) blieb
+  **gruen**: der Test scheiterte schon an der LOS-Pflicht, unabhaengig vom
+  eigentlich zu pruefenden `t === state.player`-Filter. Fix: der Spieler
+  steht jetzt in echter Reichweite MIT freier Sicht (nur der explizite
+  Filter verhindert die Verstaerkung) -- danach faengt dieselbe Gegenprobe
+  den Fehler zuverlaessig.
+- **Ein zweiter Testaufbau-Fund, kein Code-Bug**: der erste Entwurf des
+  `t_arclight`-Kettentests platzierte beide Ziele auf `(200,200)` -- eine
+  Zelle, die im gewaehlten Seed zufaellig auf einer Wand liegt. Die Kugel
+  starb dort am Wandkontakt, bevor sie je ein Ziel erreichte (beide Pruefungen
+  schlugen fehl, aber aus dem falschen Grund). Fix: dieselbe bekannte offene
+  Zelle `(200,250)` wie im `flankTreffer()`-Helfer aus Abschnitt 47.
+- **Neuer Testabschnitt 74** (`tests/regression.mjs`, Gegenprobe fuer jeden
+  Kernpunkt einzeln bestanden -- je einzeln absichtlich rot gemacht und
+  zurueckgesetzt: `armor.reflects:false`-Pfad auf immer-reflektieren
+  umgestellt, die komplette Feldwebel-Schleife deaktiviert, nur den
+  `maxTargets`-Deckel entfernt, nur die LOS-Pflicht entfernt, nur den
+  Spieler-Ausschluss entfernt, `tank.auraFlags?.fireRateMult`-Multiplikation
+  in `fireBullet()` entfernt (roetet zusaetzlich einen BESTEHENDEN G1-Test --
+  Bestaetigung, dass beide Tests denselben Mechanismus aus unabhaengiger
+  Warte pruefen), die Tarnungs-Distanzbedingung UND das Reveal-Fenster je
+  einzeln neutralisiert, den Enttarnungs-Ausloeser in `roleTurret()`
+  deaktiviert, `damageType` von `t_arclight` entfernt bzw. auf `reflects:
+  true` zurueckgesetzt): Struktur (alle vier Typen, `rally`/`armor`/`stalk`+
+  `fireWindupS`-Konsistenz/`damageType`, Akt-3-Freischaltung), `t_bulwark`
+  Front- vs. Hecktreffer Ende-zu-Ende, `t_marshal`s komplette Aura-Kette
+  (Setzer, LOS-Pflicht ueber eine echte Wand, `maxTargets`-Deckel, Spieler-/
+  Selbstausschluss, Fahnenlinie, End-zu-Ende-Beweis ueber echtes
+  `tank.cooldown`), `t_stalker`s volle Zustandskette (getarnt/sichtbar an
+  beiden Distanzgrenzen, Windup-Ausloeser setzt `stalkRevealUntil`, Fenster
+  haelt die Tarnung offen, Rueckkehr nach Ablauf -- Bewegung/Feuern fuer die
+  Mehrfach-Tick-Zeitmessung eingefroren, Fehlerklasse aus G5), `t_arclight`s
+  Ende-zu-Ende-Kette von einem NICHT-spieler-eigenen Geschoss aus (kein
+  Team-System, s. o.).
+- **Schlechtester Frame** (Grundregel): Acht-Gegner-Raum (2x je neuer Typ)
+  vs. Baseline aus acht Bestandstypen, 600 Ticks, drittgroesster Wert:
+  Baseline **1,653 ms**, G6-Raum **1,358 ms** (Budget 6 ms).
+- Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien --
+  alle vier Typen aliasen auf vorhandene Sprites).
+
+**Damit sind alle acht in `docs/AUFTRAG-GEGNERDESIGN.md` als "konservativ"
+eingestuften Gegner gebaut (vier je Akt) -- `UMBAUPLAN-GEGNER.md` nennt fuer
+Akt 3 zusaetzlich fuenf "alternative" Mechaniken
+(`t_tether`/`t_harvester`/`t_metronom`/`t_grabber`/`t_mason` ist bereits Akt 2)
+als moegliche Folgephasen G7-G9, noch nicht beauftragt.**
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`t_relay` (Horcher) hat noch keine eigene Sichtlinien-Suchfahrt**
