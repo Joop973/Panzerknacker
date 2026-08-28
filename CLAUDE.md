@@ -8088,8 +8088,117 @@ zog. Vier Bausteine, alle in `src/game/run.js: buyEnemies()`:
   nicht pro Tick -- G4 aendert nichts an der Simulationsschleife.
 - `sw.js` auf `v123` gebumpt (`data/compositions.json` neu in `ASSETS`),
   `telemetry.js: GAME_VERSION` mitgezogen.
-**Naechste Sitzung: Phase G5** (Akt 2, Welle 3 -- `t_medic`/`t_mason`,
-komplettiert Akt 2).
+
+**Phase G5 (Akt 2, Welle 3) ist gebaut.** Die letzten zwei der acht
+Akt-2-Gegner -- damit ist Akt 2 vollstaendig.
+- **`t_medic`** ("Der Zehrer", 6 Punkte, ab Raum 6): repariert dauerhaft
+  GENAU EINEN Verbuendeten -- den am staerksten beschaedigten in
+  `heal.rangePx` (220) mit freier Sichtlinie, 6 LP/s, gedeckelt auf
+  `maxHp`. Kein neues System noetig: `heal` stand seit G1 bereits in der
+  `resolveCfg()`-Whitelist, der Heilstrahl laeuft ueber Baustein B (G1,
+  `state.tankLinks`, dasselbe generische `drawTankLinks()` wie beim
+  Horcher-Lichtfaden). Neue Funktion `state.js: updateMedics()` (Muster
+  `updateDeathFuses()` -- kein eigenes Modul, der ganze Mechanismus ist ein
+  Blick auf `state.tanks` je Tick), in `stepState()`s Tick-Kette verdrahtet.
+  "Heilt nur echte Panzer, keine Geister" ergibt sich strukturell (Geister
+  stehen nie in `state.tanks`).
+- **`t_mason`** ("Der Maurer", 6 Punkte, ab Raum 7, `maxPerRoom:1`): baut
+  alle `build.everyS` (5 s) eine zerstoerbare Wand (3 Treffer) auf eine
+  freie Bodenzelle ~120 px zwischen sich und seinem Ziel, 0,8 s sichtbarer
+  Geruest-Telegraph davor, hoechstens `maxAlive` (6) eigene Waende
+  gleichzeitig, jede verfaellt nach `decayS` (20 s) von selbst -- unabhaengig
+  von Treffern (eine INSTANTANE Entfernung, kein `destroyWall()`-Aufruf,
+  der zaehlt Treffer statt sofort zu entfernen). Wiederverwendet
+  `state.placeTrapWall()` (Phase 6, bisher nur vom Spieler-Gadget genutzt)
+  fuer die eigentliche Platzierung -- **dessen Rueckgabewert war bisher ein
+  reiner Boolean (`true`/`false`)**, musste aber auf die WAND-REFERENZ
+  selbst umgestellt werden (`return wall` statt `return true`), damit
+  `t_mason` sie mit `masonExpiresAt` markieren kann; der einzige
+  Bestandsaufrufer (`tank.js: placeTrapWall()`, reicht das Ergebnis nur als
+  `used`-Wahrheitswert weiter) funktioniert mit einem Objekt statt `true`
+  unveraendert, weil beide truthy sind.
+- **"Sicherung gegen Frust"**: neue Methode `state.wouldIsolateArea(col,
+  row)` -- eine kleine, freistehende BFS (`bfsReachable()`, Modul-Ebene,
+  dasselbe Solid-Kriterium wie `isSolid()`) vergleicht die vom Spieler aus
+  erreichbare Flaeche vor/nach einer hypothetischen Wand an `(col,row)`
+  (Grid-Zeichen kurz auf `'#'` gesetzt, sofort zurueckgesetzt) -- **genau
+  der in `UMBAUPLAN-GEGNER.md` Fund 15 vorhergesagte einzige echte Neubau**
+  dieser Welle: `generator.js: reachableCells()` arbeitet auf dem
+  STATISCHEN Generierungs-Grid, nicht auf `state.js`s Laufzeit-Grid. Dafuer
+  ist `grid` (bis dahin rein Closure-lokal) jetzt zusaetzlich als
+  `state.grid` exponiert (Muster wie `state.walls`) -- `t_mason`s
+  Zellenwahl braucht Lesezugriff auf das EXAKTE Zeichen (`'.'` = frei),
+  nicht nur einen Boolean.
+- Weitere Sicherungen in `updateMasons()`: `minPlayerDistCells` (2, per
+  Chebyshev-Distanz in Zellen) verhindert eine Wand zu nah am Spieler,
+  Tank-Ueberlappung an der Zielzelle verhindert eine Wand auf einem
+  besetzten Feld. Waehrend der 0,8-s-Bauzeit steht der Maurer still (neuer
+  `masonMove`-Zweig in `ai.js: updateEnemy()`, Muster wie G2s `ramMove` --
+  Vorrang vor Deckungssuche/Rollen-Fahrfunktion, Turm bleibt unangetastet).
+- **Renderer**: `effects.js: drawMasonScaffolds()` (neu, in `renderer.js`
+  nach `drawWalls()` eingehaengt) -- bewusst KEINE Wiederverwendung von
+  Baustein C (`drawGrowingRingTelegraph`/`drawCorridorTelegraph`, das sind
+  wachsende Kreis-/Korridor-Gefahrenflaechen): ein statisches, gestricheltes
+  Quadrat auf genau einer Zelle ist eine andere Aussage ("hier entsteht
+  bald eine feste Wand", keine Schadenszone).
+- **Kompositionen nachgetragen** (`data/compositions.json`, G4 baute den
+  Mechanismus bereits): vier weitere Rezepte (A4/A6/A9/A10 aus dem
+  Designdokument), A10 als flache Vereinigung beider Wellen statt einer
+  1:1-Nachbildung (der bestehende generische Wellen-Split greift von
+  selbst). **Zwei echte, bislang stille Fehler in den G4-Kompositionen
+  gefunden und behoben** (kein Test hatte das je geprueft -- der neue
+  Testabschnitt unten deckt jetzt genau diese Fehlerklasse ab): `a5_der_zeuge`
+  hatte 9 statt hoechstens 8 Einheiten (`maxEnemiesPerRoom`-Ueberschreitung,
+  `pickComposition()` haette sie NIE gezogen), `a2_freies_feld` nannte
+  `t_yellow` bei `minRoom:4`, obwohl der Typ dort erst ab Raum 5 freigeschaltet
+  ist -- beide waren dadurch faktisch tote Daten, ohne dass ein Test das
+  bemerkt haette.
+- **Neuer Testabschnitt 73** (`tests/regression.mjs`, Gegenprobe fuer jeden
+  Kernpunkt einzeln bestanden -- je absichtlich rot gemacht und
+  zurueckgesetzt: Staerkevergleich/Heildeckel/Reichweite/Sichtlinie/
+  Heilstrahl-Eintrag bei `t_medic`, `minPlayerDistCells`/die
+  `wouldIsolateArea()`-VERDRAHTUNG in `updateMasons()` (nicht nur die
+  freistehende Methode)/`maxAlive`/Verfall/Bewegungssperre/Wandhaltbarkeit
+  bei `t_mason`): Struktur, `t_medic`s Zielauswahl+Deckel+Reichweite+
+  Sichtlinie+Telegraph, `t_mason`s kompletter Baukreislauf (Geruest -> echte
+  Wand mit korrekter Haltbarkeit -> Bewegungssperre waehrenddessen),
+  `minPlayerDistCells`, die Engpass-Sicherung (isoliert UND end-to-end ueber
+  einen echten Baukreislauf), `maxAlive` + Verfall (in ZWEI GETRENNTEN
+  Szenarien, s. u.), und eine erweiterte G4-Struktur-Pruefung (s. u.).
+  **Fuenf echte Testaufbau-Fallstricke gefunden und behoben** (kein
+  Code-Bug, reine Testkonstruktion): (1) `t_medic`/`t_grey` sind Rolle
+  "sapper" und wandern -- ueber viele Ticks laufen sie aus `heal.rangePx`
+  heraus, der erste Testentwurf mass dadurch einen Heilstillstand, der
+  nichts mit dem Code zu tun hatte; (2) die Trefferschleife kennt kein
+  Teamsystem -- der Zehrer traf mit seiner EIGENEN Waffe (25 Schaden) einen
+  nur 10 px entfernten "Verbuendeten" fast sofort; beide behoben ueber einen
+  neuen `freeze()`-Testhelfer (`role:'guardian'`, `weapon:null`, laesst
+  `heal` unangetastet); (3) `updateEnemy()` liefert `{move:{x,y}, fire,
+  mine}`, nicht die Bewegung direkt -- ein erster Testentwurf griff auf
+  `move.x` statt `move.move.x` zu und haette JEDE Bewegung als "still"
+  gelesen; (4) die "am staerksten beschaedigt"-Auswahl-Pruefung blieb bei
+  einer entfernten Vergleichsbedingung unbemerkt gruen, weil die Testtanks
+  zufaellig in der richtigen Reihenfolge (`[medic, near, far]`) im Array
+  standen und der letzte Kandidat ohnehin gewann -- auf `[medic, far,
+  near]` umgestellt, damit die Auswahl wirklich nach Schadensbetrag
+  entscheidet, nicht nach Listenposition; (5) `maxAlive` und Verfall
+  (`decayS`) liessen sich im selben, mit kurzem `everyS` UND kurzem
+  `decayS` beschleunigten Szenario nicht unabhaengig pruefen -- die erste
+  Wand verfiel bereits von selbst, bevor der `maxAlive`-Check greifen
+  konnte, ein entfernter Deckel fiel dadurch nie auf; in zwei komplett
+  getrennte Szenarien aufgeteilt (g1: `decayS` unerreichbar gross, testet
+  nur den Deckel; g2: hohes `maxAlive`, testet nur den Verfall).
+  Die G4-Struktur-Pruefung (Abschnitt 72 (a)) ist um eine Nachrechnung der
+  ECHTEN `acts[1].budget`-Formel + jedes Typ-`unlockRoomInAct` fuer JEDE
+  Komposition erweitert -- genau der Mechanismus, der die beiden oben
+  genannten G4-Fehler beim Bau von G5 aufgedeckt hat.
+- **Schlechtester Frame** (Grundregel): Acht-Gegner-Raum (4x je neuer Typ)
+  vs. Baseline aus acht Bestandstypen, 600 Ticks, drittgroesster Wert:
+  Baseline **1,596 ms**, G5-Raum **1,042 ms** (Budget 6 ms).
+- Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien).
+
+**Naechste Sitzung: Phase G6** (Akt 3, Welle 1 -- die vier konservativen
+Akt-3-Gegner `t_marshal`/`t_bulwark`/`t_stalker`/`t_arclight`).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`t_relay` (Horcher) hat noch keine eigene Sichtlinien-Suchfahrt**
