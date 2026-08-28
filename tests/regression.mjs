@@ -14555,8 +14555,14 @@ for (const seed of SEEDS) {
     const st = openRoom();
     const marshal = createTank('t_marshal', mcfg, 100, 100);
     const seen = createTank('t_brown', allyCfg, 150, 100);
-    st.player.x = 9999;
-    st.player.y = 9999; // ausser jeder Reichweite -- darf nie verstaerkt werden
+    // BEWUSST in Reichweite MIT freier Sicht platziert (nicht "ausser
+    // Reichweite") -- eine Gegenprobe zeigte, dass der 9999,9999-Platzhalter
+    // den Spieler-Ausschluss NIE wirklich pruefte: er scheiterte schon an der
+    // LOS-Pflicht, unabhaengig vom expliziten "t === state.player"-Filter.
+    // Nur ein Spieler, der die Bedingungen sonst erfuellen WUERDE, kann den
+    // Ausschluss selbst beweisen.
+    st.player.x = 120;
+    st.player.y = 100;
     st.tanks = [st.player, marshal, seen];
     stepState(st, CMD0, 1 / 60);
     check(seen.auraFlags.fireRateMult === mcfg.rally.fireRateMult, `G6 (c): sichtbarer Verbuendeter bekommt fireRateMult nicht (${seen.auraFlags.fireRateMult})`);
