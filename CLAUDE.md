@@ -7679,8 +7679,85 @@ danach planmaessig angehalten und auf Freigabe gewartet. Kernergebnisse:
   (Akt 2 + Kompositionssystem) als sauberer erster Lieferumfang.
 Details, vollstaendige Pruefliste und der Whitelist-Diff in
 `UMBAUPLAN-GEGNER.md`. **Kein `sw.js`-Bump** (reine Analyse, kein
-Produktivcode). **Session endet hier planmaessig — wartet auf Freigabe
-fuer Phase G1.**
+Produktivcode). Nutzer hat O1-O6 wie vorgeschlagen freigegeben.
+
+**Phase G1 (Fundament) ist gebaut.** Fuenf Bausteine, **null neue Gegner** --
+die Abnahme ist woertlich "im Spiel nichts sichtbar anders": alle 5
+Regressions-Seeds raeumen exakt dieselbe Raumzahl wie vor der Phase
+(31/32/29/38/38), `node tests/regression.mjs` unveraendert gruen.
+- **Baustein A (Aura-Flags)**: `state.js` setzt jeden Tick
+  `tank.auraFlags = { noFlank, noExecute, fireRateMult }` fuer JEDEN Panzer
+  zurueck (Muster woertlich wie `ghost.js: necroAuraWeakened`), direkt in der
+  bestehenden Tick-Schleife, die ohnehin schon `t.executing`/`t.cooldown`
+  berechnet -- kein zweiter Durchlauf. Drei Lesepunkte: `noFlank` in der
+  Flankenzonen-Pruefung (`state.js`, erzwingt `'front'`), `noExecute` direkt
+  neben der `t.executing`-Berechnung (`state.js`), `fireRateMult` in
+  `tank.js: fireBullet()` (multiplikativ auf `tank.cooldown`, **nicht** wie
+  im Bauplan angenommen in `ai_turrets.js: roleTurret()` -- die Funktion
+  berechnet gar keinen Cooldown, nur die Feuerentscheidung; Abweichung im
+  Ist-Abgleich-Sinn dokumentiert). Aktuell erzeugt kein Gegner eine Aura
+  (kommt mit `t_anchor`/`t_marshal` in G3/G6) -- alle drei Lesepunkte sind
+  bis dahin wirkungslose No-ops.
+- **Baustein B (Verbindungslinien)**: `state.tankLinks` (neues, pro Raum
+  leeres Array, Muster wie `anvilShockwaves`/`anvilTrails`) +
+  `effects.js: drawTankLinks(ctx, state)` -- EINE generische Funktion fuer
+  alle fuenf Linienarten (Heilstrahl/Lichtfaden/Fahnenlinie/Kette/Leine,
+  G2-G6), parametrisiert ueber `{x0,y0,x1,y1,color,width,dash,pulseHz,...}`.
+  Aufruf in `renderer.js` neben `drawAnvilHazards()`. Aktuell leer, kein
+  Erzeuger gebaut.
+- **Baustein C (Telegraph-Flaechen)**: der G0-Fund "war zu optimistisch als
+  null Aufwand eingestuft" ist behoben -- zwei neue generische Helfer in
+  `effects.js`: `drawGrowingRingTelegraph()` (gestrichelter Aussenring +
+  wachsende Fuellung, aus `drawMortars()` extrahiert) und
+  `drawCorridorTelegraph()` (Ray-March-Warnkorridor mit Endkante, aus
+  `drawAnvilHazards()` extrahiert, gibt die tatsaechliche Laenge zurueck).
+  Beide bestehenden Aufrufstellen (Moerser, Amboss-Rammkorridor) sind auf die
+  neuen Helfer umgestellt -- **pixelidentisch** (alle Vorgabewerte = die
+  alten hartkodierten Farben/Breiten), reiner Refactor.
+- **Baustein D (Mehrfachschuss)**: kein neuer Code noetig (G0-Fund bestaetigt)
+  -- `spreadCount`/`spreadRad`/`burstRangePx` existierten in `tank.js:
+  fireBullet()` bereits generisch (Streuschuss-Faecher, Flak-Kurzreichweite),
+  nur ueber `applyUpgrades()` statt `resolveCfg()` erreichbar. Jetzt Teil der
+  Whitelist (Baustein E).
+- **Baustein E (Whitelist)**: `cfg.js: resolveCfg()` hat jetzt 16 neue
+  Felder (`spreadCount`/`spreadRad`/`burstRangePx` + 13 strukturierte
+  Neubauten `charge`/`heal`/`ram`/`suppressField`/`sightRelay`/`deathBlast`/
+  `rally`/`stalk`/`tether`/`harvest`/`metronome`/`grapple`/`build`, alle
+  `?? null`/`?? 0`/`?? 1`) -- reine Datenuebernahme wie `armor`/`miner`,
+  gelesen wird davon vor G2 nichts.
+- **Neuer Testabschnitt 69** (`tests/regression.mjs`, Gegenprobe fuer jeden
+  Kernpunkt einzeln bestanden -- je einzeln absichtlich rot gemacht und
+  zurueckgesetzt: ein Whitelist-Eintrag entfernt, der Aura-Reset-Block
+  ausgebaut, `noFlank`/`noExecute`/`fireRateMult` je einzeln aus ihrem
+  Lesepunkt entfernt, `tankLinks` aus `createState()` entfernt,
+  `drawCorridorTelegraph()`s Rueckgabewert entfernt): Whitelist-Durchgriff
+  mit EIGENEN synthetischen Werten (nicht der aktuellen `tanks.json`-
+  Datenlage, die noch keins der Felder setzt) + Vorgabewerte an einem
+  Bestandstyp, Aura-Reset-Mechanismus ueber einen echten `stepState()`-Tick,
+  die drei Lesepunkte einzeln ueber einen **Proxy** um `t.auraFlags`
+  (Schreibzugriffe des Tick-Resets landen normal im Backing-Objekt, ein
+  gezielter Lesezugriff liefert einen von aussen steuerbaren Wert -- noetig,
+  weil ohne echten Erzeuger ein manuell gesetztes Flag den Reset am
+  Tickanfang nie ueberleben wuerde, s. u.), `state.tankLinks`-Struktur +
+  `drawTankLinks()` crashfrei, die beiden neuen Telegraph-Helfer eigenstaendig
+  aufrufbar (nicht mehr an `state.anvilBoss`/`state.mortars` gebunden).
+- **Ein echter Fund beim Testbau, nicht im Code**: ein manuell auf einem
+  Testpanzer gesetztes `auraFlags.noFlank = true` **ueberlebt den naechsten
+  `stepState()`-Aufruf nicht** -- der Reset am Tickanfang setzt es noch
+  VOR dem Lesepunkt (Flanke/Exekution) im selben Tick zurueck, weil G1
+  bewusst keinen Erzeuger baut. Ein direkter End-to-End-Test ueber die
+  oeffentliche API ist deshalb erst ab G3 (`t_anchor`) moeglich; bis dahin
+  deckt ein Proxy um `t.auraFlags` (Schreibzugriffe normal, ein gezielter
+  Lesezugriff von aussen steuerbar) denselben Mechanismus ab, ohne
+  Produktivcode vorwegzunehmen.
+- **Schlechtester Frame vorher/nachher** (Grundregel): 8-Gegner-Raum, 500
+  Ticks, drittgroesster Wert je Lauf (Projektkonvention gegen GC-Ausreisser),
+  schlechtester von 3 Laeufen: **1,203 ms vorher → 1,587 ms nachher** (Budget
+  6 ms) -- der Aura-Reset kostet eine zusaetzliche kleine Objektzuweisung je
+  Panzer und Tick, `drawTankLinks()` iteriert ein leeres Array.
+Kein `sw.js`-Bump (reine Code-/Testaenderung, kein neues Asset, keine
+sichtbare Spielaenderung). **Naechste Sitzung: Phase G2** (Akt 2, Welle 1:
+`t_rusher`/`t_dud`/`t_shotgun`/`t_lance`).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des

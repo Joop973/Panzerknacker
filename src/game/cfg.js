@@ -136,6 +136,35 @@ export function resolveCfg(data, type) {
     // `!isBossCfg(t.cfg) || t.cfg.flankable`.
     anvilBoss: t.anvilBoss || false,
     flankable: t.flankable || false,
+    // Gegner-Umbau Phase G1 (UMBAUPLAN-GEGNER.md, Baustein E/D): Whitelist-
+    // Eintraege fuer die neuen Gegner aus docs/AUFTRAG-GEGNERDESIGN.md.
+    // Reine Datenuebernahme wie armor/miner -- Verhalten/Rendering lesen
+    // diese Felder erst ab G2 (Ist-Abgleich-Fund: keine dieser drei
+    // Nichtwaffe/Nichtstruktur-Felder wird VOR G1 von irgendeinem Code
+    // gelesen, also `?? null`/`?? 1`/`?? 0` bewusst gefahrlos).
+    // spreadCount/spreadRad/burstRangePx sind KEIN neues Effektsystem --
+    // tank.js: fireBullet() liest sie bereits generisch (Streuschuss-Faecher,
+    // Flak-Kurzreichweite), nur die Whitelist fehlte fuer Gegnertypen (waren
+    // bisher ausschliesslich ueber applyUpgrades()/Spielerkarten erreichbar).
+    spreadCount: t.spreadCount ?? 1,
+    spreadRad: t.spreadRad ?? 0,
+    burstRangePx: t.burstRangePx ?? 0,
+    // Die folgenden 13 Felder sind echte Neubauten -- je ein Gegner aus
+    // Abschnitt 7/8 des Designdokuments, Struktur laut UMBAUPLAN-GEGNER.md
+    // Abschnitt 2 (Whitelist-Diff). `null`, solange kein Typ sie setzt.
+    charge: t.charge || null, // t_lance (G2): Ladeschuss-Zustand
+    heal: t.heal || null, // t_medic (G2): Heilstrahl
+    ram: t.ram || null, // t_rusher (G2): Sturm/Kontaktschaden
+    suppressField: t.suppressField || null, // t_anchor (G3): Flanken-/Exekutions-Aura
+    sightRelay: t.sightRelay || null, // t_relay (G3): geteilte Sichtlinie
+    deathBlast: t.deathBlast || null, // t_dud (G2): Explosion beim Tod
+    rally: t.rally || null, // t_marshal (G6): Feuerraten-Aura
+    stalk: t.stalk || null, // t_stalker (G5): distanzbasierte Tarnung
+    tether: t.tether || null, // t_tether (G5): Schadensteilung ueber Kette
+    harvest: t.harvest || null, // t_harvester (G6): staerker durch Kills in Reichweite
+    metronome: t.metronome || null, // t_metronom (G7): Feuerfreigabe-Buendelung
+    grapple: t.grapple || null, // t_grabber (G6): Enterhaken auf das Ziel
+    build: t.build || null, // t_mason (G7): setzt Wandzellen zur Laufzeit
   };
 }
 
