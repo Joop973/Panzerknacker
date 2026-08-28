@@ -478,6 +478,49 @@
       "damage": 25,
       "desc": "Steht immer still. Alle Gegner in 160 px Umkreis (ihn eingeschlossen) verlieren Flankenbonus und Exekutionsschwelle — die einzige Regel, die er bricht, verändert jede andere Entscheidung im Raum."
     },
+    "t_medic": {
+      "speed": "normal",
+      "magazine": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "sapper",
+      "aggression": 0.1,
+      "accuracy": 0.2,
+      "fireRate": 3.0,
+      "heal": {
+        "ratePerS": 6,
+        "rangePx": 220,
+        "needsLos": true,
+        "targets": 1
+      },
+      "label": "Zehrer",
+      "maxHp": 30,
+      "damage": 25,
+      "desc": "Repariert dauerhaft den am stärksten beschädigten Verbündeten in Reichweite mit freier Sicht (6 LP/s) — der sichtbare Heilstrahl reißt sofort ab, sobald die Sicht bricht."
+    },
+    "t_mason": {
+      "speed": "slow",
+      "magazine": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "sapper",
+      "aggression": 0.2,
+      "accuracy": 0.3,
+      "fireRate": 2.4,
+      "build": {
+        "everyS": 5.0,
+        "buildS": 0.8,
+        "distancePx": 120,
+        "hits": 3,
+        "maxAlive": 6,
+        "decayS": 20,
+        "minPlayerDistCells": 2
+      },
+      "label": "Maurer",
+      "maxHp": 30,
+      "damage": 25,
+      "desc": "Errichtet alle 5 s eine zerstörbare Wand zwischen sich und seinem Ziel (0,8 s Bauzeit, danach 3 Treffer haltbar, verfällt nach 20 s von selbst) — verändert die Raumgeometrie zur Laufzeit, ohne den Spieler je einzumauern."
+    },
     "t_black": {
       "speed": "veryfast",
       "magazine": 2,

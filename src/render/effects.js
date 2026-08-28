@@ -503,6 +503,27 @@ export function drawLanceAim(ctx, state) {
   }
 }
 
+// Maurer-Geruest (G5, t_mason): 0,8-s-Telegraph VOR dem eigentlichen
+// Wandaufbau -- ein durchscheinendes, gestricheltes Quadrat, das mit dem
+// Baufortschritt sichtbar dichter wird. Bewusst KEINE Wiederverwendung von
+// Baustein C (drawGrowingRingTelegraph/drawCorridorTelegraph): das sind
+// wachsende KREIS-/KORRIDOR-Gefahrenflaechen, hier ist es ein statisches
+// Quadrat auf genau einer Zelle -- eine andere Form fuer eine andere
+// Aussage ("hier entsteht bald eine feste Wand", keine Schadenszone).
+export function drawMasonScaffolds(ctx, state) {
+  for (const s of state.masonScaffolds) {
+    const frac = Math.min(1, s.age / s.life);
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,210,90,${0.35 + 0.45 * frac})`;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.strokeRect(s.x + 2, s.y + 2, s.w - 4, s.h - 4);
+    ctx.fillStyle = `rgba(255,210,90,${0.08 + 0.18 * frac})`;
+    ctx.fillRect(s.x + 2, s.y + 2, s.w - 4, s.h - 4);
+    ctx.restore();
+  }
+}
+
 // Vorhaltemarkierung (Grundsteinumbau Phase 2): auf jedem bewegten Gegner
 // ein kleiner Punkt an der Position, an der er beim Einschlag einer JETZT
 // abgefeuerten Kugel waere -- eine iterative Naeherung (2-3 Schritte ueber

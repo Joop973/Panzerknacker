@@ -225,6 +225,145 @@ function updateDeathFuses(state, dt) {
   state.deathFuses = state.deathFuses.filter((f) => !f.dead);
 }
 
+// G5 (t_mason): reine BFS ueber das Laufzeit-Grid, dasselbe Solid-Kriterium
+// wie isSolid() ('#'/'b'/'d'/'g'). Modul-Ebene statt state-Methode, weil sie
+// zweimal (vorher/nachher) mit demselben `grid` aufgerufen wird -- eine
+// state-Methode wuerde dieselbe Logik nur duplizieren muessen.
+// UMBAUPLAN-GEGNER.md Fund 15: generator.js: reachableCells() arbeitet auf
+// dem STATISCHEN Generierungs-Grid, nicht auf diesem Laufzeit-Grid -- der
+// Algorithmus ist 1:1 uebertragbar, aber als eigene, kleine Kopie hier.
+function bfsReachable(grid, startCol, startRow) {
+  const seen = new Set();
+  const key = (c, r) => r * 1000 + c;
+  if (grid[startRow]?.[startCol] === undefined) return seen;
+  const stack = [[startCol, startRow]];
+  seen.add(key(startCol, startRow));
+  while (stack.length) {
+    const [c, r] = stack.pop();
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nc = c + dc;
+      const nr = r + dr;
+      if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
+      const k = key(nc, nr);
+      if (seen.has(k)) continue;
+      const cell = grid[nr][nc];
+      if (cell === '#' || cell === 'b' || cell === 'd' || cell === 'g') continue;
+      seen.add(k);
+      stack.push([nc, nr]);
+    }
+  }
+  return seen;
+}
+
+// G5 (t_medic, "Der Zehrer"): repariert dauerhaft GENAU EINEN Verbuendeten
+// -- den am staerksten beschaedigten in Reichweite mit freier Sichtlinie.
+// Bewusst KEIN eigenes Modul (Muster wie updateDeathFuses oben) -- der
+// gesamte Mechanismus ist ein einziger Blick auf state.tanks je Tick.
+// Telegraph laeuft ueber Baustein B (G1, state.tankLinks) -- kein neuer
+// Renderer noetig, drawTankLinks() zeichnet den Heilstrahl generisch mit.
+function updateMedics(state, dt) {
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.heal) continue;
+    const h = t.cfg.heal;
+    // "Heilt nur echte Panzer, KEINE Geister" -- state.tanks enthaelt
+    // ohnehin nie Geister (eigenes state.ghosts-Array), der Ausschluss
+    // ergibt sich also strukturell. Er selbst und der Spieler kommen nicht
+    // in Frage ("kann sich NICHT selbst heilen", der Spieler ist keine
+    // eigene Fraktion in diesem Team-losen Spiel).
+    let target = null;
+    let bestDeficit = 0;
+    for (const other of state.tanks) {
+      if (other === t || other === state.player || !other.alive) continue;
+      const deficit = other.cfg.maxHp - other.hp;
+      if (deficit <= 0 || deficit <= bestDeficit) continue;
+      const d = Math.hypot(other.x - t.x, other.y - t.y);
+      if (d > h.rangePx) continue;
+      if (h.needsLos && !clearLine(state, t.x, t.y, other.x, other.y)) continue;
+      target = other;
+      bestDeficit = deficit;
+    }
+    if (!target) continue;
+    target.hp = Math.min(target.cfg.maxHp, target.hp + h.ratePerS * dt);
+    state.tankLinks.push({
+      x0: t.x, y0: t.y, x1: target.x, y1: target.y,
+      color: [90, 214, 120], width: 2.5, baseAlpha: 0.55, pulseAlpha: 0.35, pulseHz: 2.5, dash: null,
+    });
+  }
+}
+
+// G5 (t_mason, "Der Maurer"): baut alle build.everyS Sekunden eine
+// zerstoerbare Wand (state.placeTrapWall(), Phase-6-Mechanismus, hier vom
+// ersten Mal von der GEGNER-KI statt vom Spieler-Sekundaerslot genutzt) auf
+// eine freie Bodenzelle zwischen sich und seinem Ziel. Ein 0,8-s-Geruest
+// (state.masonScaffolds, eigener kleiner Renderer in effects.js -- KEIN
+// Baustein-C-Wiederverwendung, das ist eine wachsende KREIS-Gefahrenflaeche,
+// hier ein statisches Quadrat) zeigt die Zielzelle, bevor sie solide wird.
+function updateMasons(state, dt) {
+  for (const s of state.masonScaffolds) s.age += dt; // fuer die Fuellfraktion in effects.js
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.build) continue;
+    const b = t.cfg.build;
+    // Verfall (build.decayS): jede eigene Wand verschwindet 20 s nach ihrer
+    // Fertigstellung, unabhaengig davon, ob sie schon Treffer genommen hat --
+    // eine INSTANTANE Entfernung (kein destroyWall()-Aufruf, das zaehlt
+    // Treffer statt sofort zu entfernen).
+    for (const w of t.masonWalls || []) {
+      if (w.masonExpiresAt != null && state.time >= w.masonExpiresAt) {
+        const i = state.walls.indexOf(w);
+        if (i >= 0) state.walls.splice(i, 1);
+        state.grid[w.row][w.col] = '.';
+        state.spawnParticles(w.x + w.w / 2, w.y + w.h / 2, '#c9a227', 6, 90);
+      }
+    }
+    // Eigene, bereits gebaute Waende, die inzwischen zerstoert wurden ODER
+    // gerade verfallen sind, faellen aus der Liste (Muster: staendig neu
+    // gegen state.walls abgleichen statt einen zweiten Entfernungs-Hook zu
+    // brauchen).
+    t.masonWalls = (t.masonWalls || []).filter((w) => state.walls.includes(w));
+    if (t.masonBuildState) {
+      if (state.time < t.masonBuildState.until) continue; // steht still, s. ai.js: updateEnemy()
+      const { x, y, col, row } = t.masonBuildState;
+      const wall = state.placeTrapWall(x, y, b.hits);
+      if (wall) {
+        wall.masonExpiresAt = state.time + b.decayS;
+        t.masonWalls.push(wall);
+      }
+      state.masonScaffolds = state.masonScaffolds.filter((s) => s.col !== col || s.row !== row);
+      t.masonBuildState = null;
+      t.masonTimer = b.everyS;
+      continue;
+    }
+    t.masonTimer = (t.masonTimer ?? b.everyS) - dt;
+    if (t.masonTimer > 0) continue;
+    t.masonTimer = b.everyS; // Takt haelt auch, wenn dieser Versuch scheitert
+    if (t.masonWalls.length >= b.maxAlive) continue;
+    const target = resolveTarget(t, state);
+    if (!target.alive) continue;
+    const dx = target.x - t.x;
+    const dy = target.y - t.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const cx = t.x + (dx / dist) * b.distancePx;
+    const cy = t.y + (dy / dist) * b.distancePx;
+    const col = Math.floor(cx / CELL);
+    const row = Math.floor(cy / CELL);
+    if (col < 0 || row < 0 || col >= COLS || row >= ROWS) continue;
+    if (state.grid[row][col] !== '.') continue; // besetzte Zelle
+    const px = state.player.x, py = state.player.y;
+    const pCol = Math.floor(px / CELL), pRow = Math.floor(py / CELL);
+    if (Math.max(Math.abs(col - pCol), Math.abs(row - pRow)) < b.minPlayerDistCells) continue;
+    let tankBlocked = false;
+    for (const other of state.tanks) {
+      if (other.alive && circlesOverlap(col * CELL + CELL / 2, row * CELL + CELL / 2, CELL / 2, other.x, other.y, other.cfg.radius)) {
+        tankBlocked = true;
+        break;
+      }
+    }
+    if (tankBlocked || state.wouldIsolateArea(col, row)) continue;
+    t.masonBuildState = { x: col * CELL + CELL / 2, y: row * CELL + CELL / 2, col, row, until: state.time + b.buildS };
+    state.masonScaffolds.push({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, col, row, age: 0, life: b.buildS });
+  }
+}
+
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
@@ -502,6 +641,12 @@ export function createState(data, tiles, opts) {
     conveyor, // {cells:Set<"col,row">, dir:{x,y}, pushPx} | null
     laserWalls, // NIE in `walls`: blockt nur Geschosse (bullet.js), keine Panzer
     walls,
+    // G5 (t_mason): das rohe Grid-Zeichen-Array. War bis dahin komplett
+    // Closure-lokal (nur ueber Methoden wie isSolid()/placeTrapWall()
+    // erreichbar) -- t_masons Zellenwahl braucht Lesezugriff auf EXAKT das
+    // aktuelle Zeichen ('.' = frei), nicht nur ein Boolean. Muster wie
+    // `walls` direkt oben: dieselbe Referenz, kein zweites Grid.
+    grid,
     tanks,
     player,
     bullets: [],
@@ -529,10 +674,14 @@ export function createState(data, tiles, opts) {
     // fuer alle fuenf Linienarten (Heilstrahl/Lichtfaden/Fahnenlinie/Kette/
     // Leine), von der jeweiligen Gegner-Stepfunktion jeden Tick neu befuellt
     // (Muster wie anvilShockwaves/anvilTrails oben) und von
-    // effects.js: drawTankLinks() generisch gezeichnet. Aktuell leer -- kein
-    // Gegner aus G2-G7 ist gebaut, die Population folgt phasenweise.
+    // effects.js: drawTankLinks() generisch gezeichnet. Populiert seit G3
+    // (t_relay: Lichtfaden) und G5 (t_medic: Heilstrahl).
     tankLinks: [],
     deathFuses: [], // G2: verzoegerte Todesexplosion (t_dud), s. killTank()/updateDeathFuses()
+    // G5 (t_mason): 0,8-s-Geruest-Telegraph pro Bauversuch, eigener kleiner
+    // Renderer (effects.js: drawMasonScaffolds) -- kein Baustein C (das ist
+    // eine wachsende Kreisflaeche, hier ein statisches Quadrat).
+    masonScaffolds: [],
     traps: [],
     mortars: [], // Grundsteinumbau Phase 3: fliegende Moerser-Granaten (t_green)
     ghosts: [], // Phase 7: Geisterpanzer (kein Eintrag in tanks -- s. ghost.js)
@@ -571,6 +720,12 @@ export function createState(data, tiles, opts) {
     },
     // Sekundärslot "Sperrmauer" (Phase 6): platziert eine haltbare Wand auf
     // der Zielzelle, sofern diese begehbar und frei von Panzern ist.
+    // Rueckgabe: die neu angelegte Wand (truthy, wie das alte `true`) oder
+    // `false` bei Fehlschlag. G5 (t_mason) braucht die Wand-REFERENZ selbst
+    // (um sie mit masonExpiresAt zu markieren) -- ein reiner Boolean genuegte
+    // bis dahin nur dem Spieler-Gadget (tank.js: placeTrapWall()), das das
+    // Ergebnis rein als "used"-Wahrheitswert weiterreicht und mit einem
+    // Objekt statt `true` unveraendert funktioniert.
     placeTrapWall(x, y, hits) {
       const col = Math.floor(x / CELL);
       const row = Math.floor(y / CELL);
@@ -581,10 +736,11 @@ export function createState(data, tiles, opts) {
       for (const t of state.tanks) {
         if (t.alive && circlesOverlap(cx, cy, CELL / 2, t.x, t.y, t.cfg.radius)) return false;
       }
-      state.walls.push({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'trap', col, row, customDurability: hits });
+      const wall = { x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'trap', col, row, customDurability: hits };
+      state.walls.push(wall);
       grid[row][col] = '#';
       state.sounds.push({ name: 'mine', x: cx });
-      return true;
+      return wall;
     },
     destroyWall(wall) {
       // Transformation "Baumeister" (Phase 5): Waende halten wallDurability
@@ -667,6 +823,25 @@ export function createState(data, tiles, opts) {
       }
       grid[row][col] = '.';
       return null;
+    },
+    // G5 (t_mason): "Sicherung gegen Frust" -- true, wenn eine Wand auf
+    // (col,row) irgendeine aktuell vom Spieler aus erreichbare Bodenzelle
+    // abschneiden wuerde (ausser der Zielzelle selbst). Rein hypothetisch:
+    // setzt das Grid-Zeichen kurz auf '#', vergleicht die Erreichbarkeits-
+    // menge davor/danach, macht die Aenderung sofort wieder rueckgaengig.
+    wouldIsolateArea(col, row) {
+      const pCol = Math.floor(state.player.x / CELL);
+      const pRow = Math.floor(state.player.y / CELL);
+      const before = bfsReachable(grid, pCol, pRow);
+      const prevCell = grid[row][col];
+      grid[row][col] = '#';
+      const after = bfsReachable(grid, pCol, pRow);
+      grid[row][col] = prevCell;
+      for (const k of before) {
+        if (k === row * 1000 + col) continue; // die Zielzelle selbst faellt erwartungsgemaess weg
+        if (!after.has(k)) return true;
+      }
+      return false;
     },
     // Bewegliche Wand (Phase 15): togglet alle `hazard.intervalS` Sekunden
     // zwischen solid und offen -- reiner add/remove eines 'solid'-Wand-
@@ -2263,6 +2438,8 @@ export function stepState(state, cmd, dt) {
   updateTraps(state, dt);
   updateMortars(state, dt); // Grundsteinumbau Phase 3
   updateDeathFuses(state, dt); // G2 (t_dud)
+  updateMedics(state, dt); // G5 (t_medic)
+  updateMasons(state, dt); // G5 (t_mason)
   updateGhosts(state, dt);
   // Spinnenboss-Auftrag: eigene, kleine Tick-Funktionen (Muster wie
   // updateMines/updateMortars oben) statt sie in bestehende Schleifen zu
