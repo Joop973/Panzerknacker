@@ -53,9 +53,18 @@ export function resolveCfg(data, type) {
     // data/tanks.json:bulletSpeeds-Wert ueberschreiben, ohne andere Typen
     // desselben Waffenwerts zu beeinflussen (vorher galt fuer Gegner
     // ausschliesslich der geteilte Wert).
+    // Sicherheitsnetz (Bugfix "non-finite ab Mitte Akt 2"): fehlt der
+    // weapon-Wert in der bulletSpeeds-Tabelle, lieferte diese Zeile still
+    // `undefined` -- jede Folgerechnung wurde damit NaN, ohne dass irgendwo
+    // ein Fehler auftrat (gefunden bei t_green/'mortar': ein vom Nekromanten
+    // uebernommener Untertan feuerte eine NaN-Kugel, die erst viel spaeter
+    // in isSolid()/im Renderer aufflog). Der Rueckfall auf das normale
+    // Kugeltempo haelt einen kuenftigen neuen Waffenwert spielbar, statt
+    // ihn lautlos zu vergiften; ein Strukturtest bewacht zusaetzlich, dass
+    // jeder Waffenwert einen echten Eintrag hat.
     bulletSpeed: isPlayerClass
-      ? (t.bulletSpeed ?? bbullet?.speed ?? data.bulletSpeeds[t.weapon])
-      : (t.bulletSpeed ?? data.bulletSpeeds[t.weapon]),
+      ? (t.bulletSpeed ?? bbullet?.speed ?? data.bulletSpeeds[t.weapon] ?? data.bulletSpeeds.bullet)
+      : (t.bulletSpeed ?? data.bulletSpeeds[t.weapon] ?? data.bulletSpeeds.bullet),
     // Gegner-Rolle statt Gegner-Typ (Phase 8): vier Rollen (guardian/
     // sapper/hunter/sieger), parametrisiert statt pro Typ eigener
     // Turm-/Fahrfunktion. Rolle und Panzerung bleiben frei kombinierbar.

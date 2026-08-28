@@ -20,9 +20,11 @@
     "spider": 48
   },
   "_comment_bulletSpeeds": "Grundsteinumbau Phase 2: rocket 300 -> 210 -- schneller als eine Gegnerkugel (130), aber langsamer als die neue Spielerkugel (450): ausweichbar, aber draengend (Entscheidung, s. AUFTRAG-GRUNDSTEINUMBAU.md Phase 2).",
+  "_comment_bulletSpeeds2": "JEDER in types[].weapon vorkommende Wert braucht hier einen Eintrag (oder einen typeigenen bulletSpeed-Override) -- sonst loest cfg.js: resolveCfg() ihn zu undefined auf und jede daraus abgeleitete Rechnung wird still NaN. 'mortar' (t_green, Grundsteinumbau Phase 3) liest dieses Feld selbst NIE (mortar.js: fireMortar() rechnet mit balance.mortar), der Eintrag ist trotzdem noetig: ein vom Nekromanten uebernommener t_green-Untertan feuert als NORMALER Schuetze (ghost.js: updateGhosts()) und liest dabei g.cfg.bulletSpeed. Ohne Eintrag entstand dort eine NaN-Kugel -> NaN-Position -> Absturz in isSolid() und im Renderer.",
   "bulletSpeeds": {
     "bullet": 130,
-    "rocket": 210
+    "rocket": 210,
+    "mortar": 130
   },
   "ai": {
     "raycastStepPx": 4,

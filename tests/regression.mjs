@@ -13004,6 +13004,181 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 68. Bugfix: "non-finite ab Mitte Akt 2" (NaN-Kugeltempo) ------------
+// Nutzermeldung: "TypeError: The provided value is non-finite" aus dem
+// Renderpfad, reproduzierbar ab Mitte Akt 2. Ursache war KEIN Renderfehler,
+// sondern eine Datenluecke: t_green traegt seit Grundsteinumbau Phase 3
+// weapon:"mortar", die Tabelle data/tanks.json: bulletSpeeds kannte aber nur
+// bullet/rocket. cfg.js: resolveCfg() loeste cfg.bulletSpeed damit still zu
+// `undefined` auf. Fuer t_green als GEGNER blieb das folgenlos (er feuert
+// ueber mortar.js: fireMortar() und liest das Feld nie) -- ein vom
+// Nekromanten uebernommener t_green-Untertan feuert dagegen als NORMALER
+// Schuetze (ghost.js: updateGhosts()) und rechnete damit `undefined * Faktor`
+// = NaN. Die NaN-Kugel wanderte durch die Physik, bis sie in isSolid()
+// (grid[NaN]) bzw. im Renderer (ctx.arc(NaN, ...)) aufflog. "Ab Mitte Akt 2"
+// ist exakt difficulty.json: danger.t_green.unlockAct 2 / unlockRoomInAct 4.
+//
+// Geprueft wird die ganze Kette mit EIGENEN Zahlen bzw. ueber alle Typen --
+// nicht nur der eine reparierte Wert -- damit ein kuenftiger neuer
+// Waffenwert dieselbe Falle nicht wiederholen kann. Zusaetzlich wirft der
+// Fake-Canvas (tests/domstub.mjs) seit diesem Fix bei non-finite Argumenten
+// wie ein echter Browser, wodurch JEDER bestehende Renderpfad-Test die
+// Fehlerklasse ab sofort mitbewacht.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createGhost, pushGhost } = await import('../src/game/ghost.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+
+  // (a) Struktur: JEDER in types[].weapon vorkommende Wert hat einen echten
+  //     Eintrag in bulletSpeeds (oder einen typeigenen bulletSpeed-Override).
+  //     Genau diese Zusicherung fehlte -- der cfg.js-Rueckfall haelt das Spiel
+  //     zwar spielbar, soll die Luecke aber nicht verstecken.
+  {
+    const bs = tanksData.bulletSpeeds;
+    for (const [id, t] of Object.entries(tanksData.types)) {
+      if (!t || typeof t !== 'object' || !t.weapon) continue;
+      check(
+        t.bulletSpeed !== undefined || typeof bs[t.weapon] === 'number',
+        `Abschnitt 68a: ${id} hat weapon "${t.weapon}", aber weder einen eigenen bulletSpeed noch einen bulletSpeeds-Eintrag`,
+      );
+    }
+  }
+
+  // (b) resolveCfg(): kein Typ loest zu einem nicht-finiten bulletSpeed auf.
+  {
+    for (const id of Object.keys(tanksData.types)) {
+      const t = tanksData.types[id];
+      if (!t || typeof t !== 'object' || !t.weapon) continue;
+      const cfg = resolveCfg(tanksData, id);
+      check(
+        Number.isFinite(cfg.bulletSpeed),
+        `Abschnitt 68b: resolveCfg("${id}").bulletSpeed ist ${cfg.bulletSpeed} statt einer endlichen Zahl`,
+      );
+    }
+  }
+
+  // (c) Der eigentliche Fehlerpfad: ein UEBERNOMMENER Untertan jedes
+  //     Gegnertyps muss durchweg endliche Werte haben. Ueber ALLE Typen, nicht
+  //     nur t_green -- ein neuer Gegnertyp mit exotischer Waffe faellt damit
+  //     sofort auf.
+  {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: ['t_pink'],
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+      actEnemyPool: ['t_pink'],
+    });
+    const FELDER = ['maxHp', 'damage', 'speed', 'fireCooldown', 'bulletSpeed', 'fireRangePx', 'radius'];
+    for (const id of Object.keys(tanksData.types)) {
+      const t = tanksData.types[id];
+      if (!t || typeof t !== 'object' || t.player || !t.weapon) continue;
+      const g = createGhost(st, 200, 200, 0, id);
+      for (const f of FELDER) {
+        check(
+          typeof g.cfg[f] !== 'number' || Number.isFinite(g.cfg[f]),
+          `Abschnitt 68c: Untertan vom Typ ${id} hat cfg.${f} = ${g.cfg[f]} (nicht endlich)`,
+        );
+      }
+    }
+  }
+
+  // (d) Mechanismus mit EIGENEN Zahlen: ein kuenstlicher, in bulletSpeeds
+  //     unbekannter Waffenwert darf NICHT mehr zu undefined/NaN aufloesen
+  //     (cfg.js-Rueckfall), sondern faellt auf das normale Kugeltempo zurueck.
+  {
+    const daten = {
+      ...tanksData,
+      bulletSpeeds: { bullet: 42, rocket: 99 },
+      types: { ...tanksData.types, t_testwaffe: { ...tanksData.types.t_brown, weapon: 'gibtsnicht' } },
+    };
+    const cfg = resolveCfg(daten, 't_testwaffe');
+    check(
+      cfg.bulletSpeed === 42,
+      `Abschnitt 68d: unbekannter Waffenwert loest zu ${cfg.bulletSpeed} auf statt auf den bullet-Rueckfall (42)`,
+    );
+  }
+
+  // (e) End-zu-Ende ueber den ECHTEN Weg: ein t_green-Untertan feuert, die
+  //     Kugel hat endliche Geschwindigkeit UND Position, und der Raum laesst
+  //     sich danach ohne Absturz weitersimulieren (vor dem Fix starb
+  //     stepState() an isSolid(NaN) bzw. der Renderer an ctx.arc(NaN)).
+  {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: ['t_pink'],
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+      actEnemyPool: ['t_green'],
+    });
+    st.bullets.length = 0;
+    const ziel = st.tanks.find((t) => t !== st.player && t.alive);
+    check(!!ziel, 'Abschnitt 68e: Testaufbau -- kein Gegner im Raum');
+    // Untertan vom Mörsertyp direkt neben dem Ziel, damit er zuverlaessig feuert.
+    const g = createGhost(st, ziel.x - 40, ziel.y, 0, 't_green');
+    pushGhost(st, g);
+    check(
+      Number.isFinite(g.cfg.bulletSpeed),
+      `Abschnitt 68e: t_green-Untertan hat cfg.bulletSpeed ${g.cfg.bulletSpeed} (nicht endlich)`,
+    );
+    const CMD = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+    let geistKugeln = 0;
+    for (let i = 0; i < 240; i++) {
+      stepState(st, CMD, 1 / 60);
+      for (const b of st.bullets) {
+        if (b.owner !== g) continue;
+        geistKugeln++;
+        check(
+          Number.isFinite(b.x) && Number.isFinite(b.y) && Number.isFinite(b.vx) && Number.isFinite(b.vy),
+          `Abschnitt 68e: Geisterkugel hat nicht-endliche Werte (x=${b.x} y=${b.y} vx=${b.vx} vy=${b.vy})`,
+        );
+      }
+      for (const t of st.tanks) {
+        check(
+          Number.isFinite(t.x) && Number.isFinite(t.y),
+          `Abschnitt 68e: Panzer ${t.type} hat nicht-endliche Position (${t.x}/${t.y})`,
+        );
+      }
+    }
+    check(geistKugeln > 0, 'Abschnitt 68e: Testaufbau -- der t_green-Untertan hat in 4 s keine einzige Kugel abgefeuert');
+  }
+
+  // (f) Der strengere Fake-Canvas (domstub.mjs) fangt non-finite Argumente
+  //     jetzt wirklich -- ohne diese Zusicherung koennte der Stub spaeter
+  //     unbemerkt wieder alles schlucken und die ganze Renderpfad-Abdeckung
+  //     der Suite waere still wertlos (genau der blinde Fleck, an dem dieser
+  //     Bug vorbeigelaufen ist).
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    let warf = false;
+    try {
+      const c = document.createElement('canvas').getContext('2d');
+      c.arc(NaN, 10, 5, 0, Math.PI * 2);
+    } catch {
+      warf = true;
+    }
+    let warfNichtBeiOk = false;
+    try {
+      const c = document.createElement('canvas').getContext('2d');
+      c.arc(10, 10, 5, 0, Math.PI * 2);
+    } catch {
+      warfNichtBeiOk = true;
+    }
+    restore();
+    check(warf, 'Abschnitt 68f: der Fake-Canvas schluckt ctx.arc(NaN, ...) still -- der Renderpfad-Schutz ist wirkungslos');
+    check(!warfNichtBeiOk, 'Abschnitt 68f: der Fake-Canvas wirft bei GUELTIGEN Argumenten (Fehlalarm)');
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

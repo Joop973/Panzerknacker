@@ -350,6 +350,15 @@ eine Raserei bei 100 Zorn und ein Zusammenbruch mit offener Panzerung
 danach. Details, Balancewerte, gefundene Bugs (u. a. ein echter
 1050→2646-LP-Doppelscaling-Fund, verhindert über `isBossCfg()`) und die
 Testabdeckung im eigenen Abschnitt weiter unten „Amboss (Akt 2)".
+**Zuletzt gemergt: Bugfix „non-finite ab Mitte Akt 2"** — eine
+Nutzermeldung (Absturz im Renderpfad, „immer ab Mitte Akt 2") führte auf
+eine Datenlücke: `t_green` hat seit Grundsteinumbau Phase 3 die Waffe
+`mortar`, für die `data/tanks.json: bulletSpeeds` keinen Eintrag hatte —
+ein vom Nekromanten übernommener Untertan dieses Typs feuerte dadurch mit
+`NaN`-Kugeltempo. Behoben auf Daten- UND Code-Ebene; zusätzlich wirft der
+Fake-Canvas der Testsuite jetzt bei non-finite Werten wie ein echter
+Browser (der blinde Fleck, an dem der Fehler vorbeilief). Details im
+eigenen Abschnitt weiter unten „Bugfix: „non-finite ab Mitte Akt 2"".
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -7496,6 +7505,82 @@ daraus sind fünf spielbare Sprite-Dateien entstanden:
   erkennbares Spinnennetz-Icon), keine Konsolenfehler.
 - `sw.js` auf `v121` gebumpt (5 neue Dateien in `ASSETS`),
   `telemetry.js: GAME_VERSION` mitgezogen.
+### Bugfix: „non-finite ab Mitte Akt 2" (NaN-Kugeltempo) — gemergt
+**Nutzermeldung (iPhone/Safari):** „TypeError: The provided value is
+non-finite" aus `src/render/r…`, „passiert immer ab Mitte Akt 2".
+**Es war kein Renderfehler, sondern eine Datenlücke** — der Renderer war nur
+die Stelle, an der ein längst entstandenes NaN endlich aufflog.
+- **Ursachenkette** (jeder Schritt reproduziert, nicht hergeleitet):
+  `t_green` trägt seit Grundsteinumbau Phase 3 `weapon: "mortar"`, die
+  Tabelle `data/tanks.json: bulletSpeeds` kannte aber nur `bullet`/`rocket`.
+  `cfg.js: resolveCfg()` löste `cfg.bulletSpeed` damit still zu `undefined`
+  auf. Für `t_green` als **Gegner** blieb das folgenlos (er feuert über
+  `mortar.js: fireMortar()` und liest das Feld nie — deshalb fiel es nie
+  auf). Ein vom **Nekromanten übernommener** `t_green`-Untertan feuert
+  dagegen als NORMALER Schütze (`ghost.js: updateGhosts()`) und rechnete
+  `undefined * Faktor` = **NaN** → NaN-Kugel → NaN-Position → Absturz in
+  `state.js: isSolid()` (`grid[NaN]`) bzw. im Renderer
+  (`drawSpriteRot()` → `ctx.drawImage(img, NaN, …)`).
+- **„Ab Mitte Akt 2" ist exakt** `difficulty.json: danger.t_green`
+  (`unlockAct: 2`, `unlockRoomInAct: 4`) — vorher kann der Typ gar nicht
+  vorkommen. Messung über 9 Seeds × beide Klassen: **Nekromant 9/9 bricht in
+  Akt 2 ab** (Räume 4/4/5/7/7/9/10/14/17), **Standardklasse 9/9 sauber bis
+  Akt 3** — der Fehler war also nekromantenspezifisch.
+- **Fix auf zwei Ebenen** (bewusste Arbeitsteilung, per Gegenprobe getrennt
+  nachgewiesen): (1) **Datenlücke geschlossen** — `bulletSpeeds.mortar: 130`
+  in `data/tanks.json`, mit Kommentar, warum der Eintrag existiert, obwohl
+  der Mörser selbst ihn nie liest. (2) **Sicherheitsnetz im Code** —
+  `resolveCfg()` fällt bei einem in der Tabelle unbekannten Waffenwert auf
+  `bulletSpeeds.bullet` zurück, statt lautlos `undefined` zu liefern; ein
+  künftiger neuer Waffenwert bleibt damit spielbar, statt still vergiftet zu
+  werden. Der Strukturtest (a) deckt die Lücke trotzdem auf, damit der
+  Rückfall sie nicht versteckt.
+- **Der eigentliche blinde Fleck war die Testinfrastruktur**: der
+  Fake-Canvas in `tests/domstub.mjs` schluckte **jedes** Argument
+  stillschweigend. Die Suite führte den Renderpfad seit UMBAUPLAN-LP Phase 2
+  zwar aus, konnte ein NaN darin aber **prinzipiell nicht sehen** — genau
+  daran ist dieser Fehler vorbeigelaufen. Der Stub **wirft jetzt wie ein
+  echter Browser** (`assertFinite()` über 20 zahlenverarbeitende
+  Canvas-Funktionen, inkl. `drawImage`/`createRadialGradient`). Damit
+  bewacht **jeder bestehende Renderpfad-Test** diese Fehlerklasse ab sofort
+  automatisch mit, nicht nur der neue Abschnitt.
+- **Browserverhalten (ehrlich abgegrenzt)**: **Chromium schluckt** sowohl
+  `ctx.arc(NaN, …)` als auch `ctx.drawImage(img, NaN, …)` **still** — im
+  Playwright-Browser ließ sich der Wurf deshalb NICHT nachstellen (mit
+  geladenen Sprites geprüft, kein Fehler). **WebKit/Safari ist strenger** und
+  meldet dort „TypeError: The provided value is non-finite" — der Wortlaut
+  der Nutzermeldung. Der Safari-Wurf selbst ist hier also **nicht** direkt
+  reproduziert worden; belegt sind die NaN-Kugel, ihr Weg in `renderer.js`
+  und die exakte Übereinstimmung von Zeitpunkt („ab Mitte Akt 2"), Datei
+  (`renderer.js`) und Fehlerklasse.
+- **Neuer Testabschnitt 68** (`tests/regression.mjs`, drei Gegenproben am
+  echten Quellcode einzeln bestanden und zurückgesetzt): (a) jeder
+  `weapon`-Wert hat einen echten `bulletSpeeds`-Eintrag oder einen
+  typeigenen Override; (b) `resolveCfg()` liefert für JEDEN Typ ein
+  endliches `bulletSpeed`; (c) ein übernommener Untertan **jedes**
+  Gegnertyps hat durchweg endliche cfg-Werte (nicht nur `t_green` — ein
+  neuer Typ mit exotischer Waffe fällt sofort auf); (d) der cfg.js-Rückfall
+  mit EIGENEN Zahlen (synthetischer Waffenwert, Tabelle 42/99); (e)
+  End-zu-Ende über den echten Weg — ein `t_green`-Untertan feuert, alle
+  Kugel- und Panzerwerte bleiben über 4 s endlich; (f) der Fake-Canvas
+  wirft bei `arc(NaN)` und **nicht** bei gültigen Argumenten (sonst wäre
+  der neue Schutz später unbemerkt wieder wirkungslos).
+  **Gegenproben**: nur den `mortar`-Eintrag entfernt → genau (a) rot (Rest
+  grün — der Code-Rückfall hält das Spiel spielbar, wie gewollt); **beide**
+  Fixes entfernt → (a)–(e) rot mit der vollständigen Kette
+  `undefined` → `NaN` → NaN-Kugelposition; strengen Canvas zurückgebaut →
+  (f) rot.
+- **Verifikation**: volle Suite grün; `gamepad`/`music`/`championsprite`
+  grün; ein eigener NaN-Scanner über **18 vollständige Runs** (2 Klassen ×
+  9 Seeds, Spieler unsterblich, damit Akt 3 wirklich erreicht wird) findet
+  **kein einziges** nicht-endliches Feld mehr in Panzern, Untertanen,
+  Kugeln, Minen, Mörsergranaten, Schockwellen und Schleifspuren — derselbe
+  Scanner meldete gegen den ungefixten Stand 9/9 Nekromanten-Runs als
+  fehlerhaft. Im echten Browser feuert ein `t_green`-Untertan jetzt mit
+  Tempo 130 statt `NaN`, 300 gerenderte Frames ohne Konsolenfehler.
+- `sw.js` auf `v122` gebumpt (`data/tanks.json` liegt im Offline-Cache, ein
+  Bump ist für Offline-Nutzer nötig), `telemetry.js: GAME_VERSION`
+  mitgezogen.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
@@ -7850,6 +7935,13 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   beide werden ausschließlich über `bossai.js` re-exportiert (Auftrags-
   vorgabe: „Implementiere stepAnvilBoss() in src/game/bossai.js"). Kennt
   kein `fireBullet()`/`roleTurret()` — der Amboss feuert nie.
+- **`data/tanks.json: bulletSpeeds`** — Kugeltempo je `weapon`-Wert. **Jeder
+  in `types[].weapon` vorkommende Wert braucht hier einen Eintrag** (oder
+  einen typeigenen `bulletSpeed`-Override), sonst löst `resolveCfg()` ihn zu
+  `undefined` auf und jede Folgerechnung wird still `NaN` (Bugfix
+  „non-finite ab Mitte Akt 2"). `resolveCfg()` hat dafür seit dem Fix einen
+  Rückfall auf `bulletSpeeds.bullet`, ein Strukturtest (Abschnitt 68a)
+  bewacht die Lücke trotzdem.
 - `src/game/cfg.js` — Panzer-cfg + alle Upgrade-Effekte. Der Kern ist seit
   UMBAUPLAN-LP Phase 10 EINE generische `core`-Schleife (eine neue Karte
   braucht keine Codezeile, nur ihren `core`-Eintrag in `upgrades.json`);
@@ -8050,7 +8142,10 @@ Regressions-Standard: `tests/regression.mjs` muss grün sein (~7 s). Enthält:
 5 Seeds über 16 Räume deterministisch bis zum Sieg, Ziellinien-Trace
 crashfrei, Wellen-Freigabe-Guard, Determinismus-Probe, Sound-Namen gegen
 `sounds.json`, jede Karte ziehbar, Effekt-Renderpfad mit Fake-Canvas,
-**Overlay- und Touch-Verhalten mit `tests/domstub.mjs`** (inkl.
+**Overlay- und Touch-Verhalten mit `tests/domstub.mjs`** (dessen Fake-Canvas
+**wirft seit dem Bugfix „non-finite ab Mitte Akt 2" bei nicht-endlichen
+Zahlenargumenten wie ein echter Browser** — dadurch bewacht jeder
+Renderpfad-Test diese Fehlerklasse automatisch mit; inkl.
 Wurfstick/`pointercancel`, P3), die LP-Umbau-Abschnitte 9–17 (Schadensmodell,
 LP, Statuseffekte, Schadenstypen, Krit, Phase-8-Prisma/Schild,
 Phase-9-Klassen — reine Engine-Mechanismen mit synthetischen Werten, keine
