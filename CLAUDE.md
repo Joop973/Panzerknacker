@@ -7582,6 +7582,43 @@ die Stelle, an der ein längst entstandenes NaN endlich aufflog.
   Bump ist für Offline-Nutzer nötig), `telemetry.js: GAME_VERSION`
   mitgezogen.
 
+### Gegner-/Encounter-Design Akt 2 + Akt 3 (Designdokument, noch nicht gebaut)
+**Neu eingegangen: `AUFTRAG-GEGNERDESIGN.md`** — ein reines Designdokument
+(kein Code, kein Bauauftrag) fuer **16 neue Gegner** (8 je Akt), 20
+Encounter, 8 Akt-3-Kompositionen, Einfuehrungskurve, Build-Interaktionen,
+Placeholder-Sprites, technische Einordnung und ein bewertetes Design-Audit.
+Erstellt nach einem vollstaendigen Ist-Abgleich gegen den echten Repo-Stand
+(nicht aus dem Gedaechtnis) — die dabei gefundenen Befunde sind wichtiger
+als die Gegner selbst:
+- **`run.js: buyEnemies()` ist eine rein zufaellige Einkaufsschleife.** Es
+  gibt keine Rollenquote, keine Paarbildung, keinen Ausschluss; `maxPerRoom`
+  existiert im Schema und wird ausgewertet, ist aber bei **keinem** Typ
+  gesetzt. **Ohne Kompositionsregeln sind geplante Aufstellungen prinzipiell
+  nicht erzeugbar** — das ist der wichtigste Einzelbefund des Dokuments
+  (Vorschlag in dessen Abschnitt 17.3: `maxPerRoom` belegen, Mindestpunkt-
+  zahl je Gegner, Rollenquote, `data/compositions.json` mit Rueckfall auf
+  die heutige Zufallsschleife).
+- **Sechs von zehn Gegnern haben dieselbe Funktion** (direkter Schussdruck);
+  es gibt **keinen** Unterstuetzer, keinen Nahkaempfer, keinen Beschwoerer
+  und keinen Gegner, dessen Wert von einem anderen Gegner abhaengt. Damit
+  existiert im Spiel aktuell **keine Toetungsreihenfolge** als Entscheidung.
+- **`t_brown` (1 Punkt) und `t_grey` (2) verstopfen Akt 3**: bei 61 Punkten
+  Budget und `maxEnemiesPerRoom: 8` verbrauchen sie Gegner*plaetze*, nicht
+  Budget.
+- **Die Trefferschleife kennt kein Teamsystem** (`state.js`: nur
+  `b.owner === t` wird uebersprungen) — Gegnergeschosse treffen Gegner. Das
+  ist gelebter Ist-Stand (der Moerser nutzt ihn mit `spare: null`) und im
+  Dokument bewusst als Designwerkzeug genutzt, nicht als Mangel behandelt.
+- **`cfg.js: resolveCfg()` ist eine 44-Feld-Whitelist** — jedes neue
+  Gegnerfeld muss dort eingetragen werden, sonst kommt es lautlos nie an
+  (dieselbe Falle wie in Phase 14/15).
+Alle 16 vorgeschlagenen Gegner bleiben im bestehenden **2-5-Treffer-Band**
+(20-50 LP), sodass der Bestandstest in `tests/regression.mjs` Abschnitt 10a
+nicht bricht; keiner braucht eine neue Architektur. Sechs weitere Entwuerfe
+wurden ausdruecklich **verworfen** (Begruendungen in Abschnitt 19.1 des
+Dokuments), damit sie in spaeteren Sitzungen nicht erneut auftauchen.
+**Kein `sw.js`-Bump** (reine Markdown-Datei, kein Spiel-Asset).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Bosse neu ausarbeiten** (eigene künftige Aufgabe, kein Teil des
       laufenden Grundsteinumbaus): Reaktor/Spiegel/Phalanx durch `t_black`
