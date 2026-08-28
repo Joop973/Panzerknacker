@@ -1,0 +1,67 @@
+{
+  "_comment": "G4 (UMBAUPLAN-GEGNER.md Abschnitt 17.3 -- 'das eine System, das das Projekt wirklich braucht'). Benannte Rezepte statt reinem Zufall: src/game/run.js: buyEnemies() versucht zuerst, eine bezahlbare, treffende Komposition aus dieser Liste zu ziehen (actIndex+minRoom passt, alle Gegnertypen sind an dieser Stelle freigeschaltet, Punktsumme liegt zwischen der Haelfte des Raumbudgets und dem Raumbudget) -- gelingt das nicht, faellt es auf die alte Zufallsschleife zurueck ('der Rueckfall ist wichtig', Designdokument). id/name sind reine Dokumentation (kein Code liest sie), enemies[] ist {type, count}. Jede Komposition ist einem A#/B#-Encounter aus docs/AUFTRAG-GEGNERDESIGN.md Abschnitt 12/13 nachgebildet (Raumcharakter/Spawnreihenfolge/Wellen sind dort beschrieben, aber NICHT Teil dieser Datei -- die bestehenden Systeme dafuer, Raumcharaktere und Wellen-Split, bleiben unangetastet und generisch, s. CLAUDE.md).",
+  "_comment_akt2": "Erste Population (G4): nur Kompositionen, die ausschliesslich bereits gebaute Akt-2-Gegner (t_rusher/t_dud/t_shotgun/t_lance/t_relay/t_anchor, G2/G3) plus den Akt-1-Bestand nutzen. A4/A6/A9/A10 (brauchen t_medic/t_mason) folgen mit G5 -- s. dortiger CLAUDE.md-Abschnitt fuer die Nachtraege.",
+  "compositions": [
+    {
+      "id": "a1_erste_beruehrung",
+      "name": "Erste Beruehrung",
+      "actIndex": 2,
+      "minRoom": 2,
+      "weight": 1,
+      "enemies": [
+        { "type": "t_rusher", "count": 2 },
+        { "type": "t_shotgun", "count": 1 }
+      ]
+    },
+    {
+      "id": "a2_freies_feld",
+      "name": "Freies Feld / Enge Gasse",
+      "actIndex": 2,
+      "minRoom": 4,
+      "weight": 1,
+      "enemies": [
+        { "type": "t_lance", "count": 1 },
+        { "type": "t_brown", "count": 3 },
+        { "type": "t_grey", "count": 2 },
+        { "type": "t_yellow", "count": 1 }
+      ]
+    },
+    {
+      "id": "a5_der_zeuge",
+      "name": "Der Zeuge",
+      "actIndex": 2,
+      "minRoom": 5,
+      "weight": 1,
+      "enemies": [
+        { "type": "t_relay", "count": 1 },
+        { "type": "t_brown", "count": 4 },
+        { "type": "t_grey", "count": 2 },
+        { "type": "t_rusher", "count": 2 }
+      ]
+    },
+    {
+      "id": "a7_fundmunition",
+      "name": "Fundmunition",
+      "actIndex": 2,
+      "minRoom": 4,
+      "weight": 1,
+      "enemies": [
+        { "type": "t_dud", "count": 2 },
+        { "type": "t_pink", "count": 2 }
+      ]
+    },
+    {
+      "id": "a8_standhaft",
+      "name": "Standhaft",
+      "actIndex": 2,
+      "minRoom": 8,
+      "weight": 1,
+      "enemies": [
+        { "type": "t_anchor", "count": 1 },
+        { "type": "t_dud", "count": 2 },
+        { "type": "t_pink", "count": 2 },
+        { "type": "t_yellow", "count": 1 }
+      ]
+    }
+  ]
+}

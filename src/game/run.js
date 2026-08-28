@@ -97,6 +97,66 @@ export function unlockedEnemyTypes(diff, actIndex, roomIndexInAct) {
   });
 }
 
+// G4 (UMBAUPLAN-GEGNER.md Abschnitt 17.3): Struktur-Konstante, keine
+// Balance-Zahl -- eine Komposition darf nicht wirkungslos viel Budget liegen
+// lassen (sonst wuerde ein fruehes Niedrigbudget-Rezept auch in einem
+// spaeten, hochbudgetierten Raum feuern und den Raum spuerbar leerer machen
+// als beabsichtigt). Muster wie EARLY_LAYERS weiter unten: eine harte
+// Auftragsvorgabe, nicht am Spielgefuehl zu justieren.
+const COMPOSITION_MIN_BUDGET_FRACTION = 0.5;
+
+function compositionPoints(comp, danger) {
+  return comp.enemies.reduce((sum, e) => sum + (danger[e.type]?.points ?? 0) * e.count, 0);
+}
+function compositionCount(comp) {
+  return comp.enemies.reduce((sum, e) => sum + e.count, 0);
+}
+// Gewichtete Ziehung wie weightedType() oben, aber ueber eine Objektliste
+// statt eines flachen Namens-Arrays (Kompositionen sind Objekte mit
+// eigenem `weight`, kein Lookup in einer separaten Gewichtstabelle noetig).
+function pickWeighted(list, rng) {
+  let total = 0;
+  for (const c of list) total += c.weight ?? 1;
+  let r = rng() * total;
+  for (const c of list) {
+    r -= c.weight ?? 1;
+    if (r < 0) return c;
+  }
+  return list[list.length - 1];
+}
+
+// Kompositionssystem (G4, UMBAUPLAN-GEGNER.md Abschnitt 17.3 -- "das eine
+// System, das das Projekt wirklich braucht"): benannte Rezepte aus
+// data/compositions.json statt reinem Zufall. Eine Komposition passt, wenn
+// sie fuer den aktuellen Akt/die aktuelle Raumnummer freigegeben ist, alle
+// genannten Typen an dieser Stelle bereits freigeschaltet sind, ihre
+// Punktsumme ins Budget passt UND mindestens die Haelfte davon ausnutzt
+// (COMPOSITION_MIN_BUDGET_FRACTION -- sonst wuerde ein fruehes Rezept auch
+// in einem spaeten, viel groesseren Raum feuern und ihn spuerbar leerer
+// wirken lassen). Gelingt keine bezahlbare Komposition, liefert die
+// Funktion null -- buyEnemies() faellt dann auf die alte Zufallsschleife
+// zurueck ("der Rueckfall ist wichtig", Designdokument). Genau EIN
+// rng()-Aufruf, NUR wenn wirklich eine Komposition feuert -- ein Aufruf
+// ohne `comps` (aeltere Testaufrufe, der Boss-Unterstuetzungskauf) verbraucht
+// dadurch keinen zusaetzlichen Zufallswert und bleibt bit-identisch zum
+// Vor-G4-Stand.
+function pickComposition(diff, comps, genRng, actIndex, roomIndexInAct, budget) {
+  if (!comps || !comps.length) return null;
+  const unlocked = new Set(unlockedEnemyTypes(diff, actIndex, roomIndexInAct));
+  const candidates = comps.filter((c) => {
+    if (c.actIndex !== actIndex || roomIndexInAct < (c.minRoom ?? 1)) return false;
+    if (compositionCount(c) > diff.maxEnemiesPerRoom) return false;
+    if (!c.enemies.every((e) => unlocked.has(e.type))) return false;
+    const pts = compositionPoints(c, diff.danger);
+    return pts <= budget && pts >= budget * COMPOSITION_MIN_BUDGET_FRACTION;
+  });
+  if (!candidates.length) return null;
+  const picked = pickWeighted(candidates, genRng);
+  const out = [];
+  for (const e of picked.enemies) for (let i = 0; i < e.count; i++) out.push(e.type);
+  return out;
+}
+
 // Kauft Gegner vom Gefahrenbudget (nur freigeschaltete Typen, max. 8).
 // `maxPerRoom` in difficulty.json deckelt einzelne Typen zusaetzlich
 // (Phase 4: hoechstens ein Prisma pro Raum).
@@ -104,24 +164,56 @@ export function unlockedEnemyTypes(diff, actIndex, roomIndexInAct) {
 // Grundsteinumbau Phase 6: Freischaltung laeuft jetzt ueber unlockAct +
 // unlockRoomInAct statt eines einzigen unlockRoom ueber den ganzen Run --
 // "eingefuehrt in Akt X, bleibt danach verfuegbar".
+// G4: zwei neue, OPTIONALE Parameter -- `typeDefs` (tanksData.types, fuer
+// die minRoleQuota-Rollenpruefung) und `comps` (data/compositions.json:
+// compositions). Beide default auf "aus" (undefined), damit bestehende
+// Aufrufe mit 5 Argumenten (der Boss-Unterstuetzungskauf, alte Tests)
+// unveraendert bleiben.
 // Exportiert (wie upgradepool.js: weightedPick) fuer direkte
 // Mechanismus-Tests -- buyEnemies() ist eine reine Funktion ohne Run-Objekt.
-export function buyEnemies(diff, genRng, actIndex, roomIndexInAct, budget) {
-  const unlocked = unlockedEnemyTypes(diff, actIndex, roomIndexInAct).map((ty) => [ty, diff.danger[ty]]);
-  const types = [];
+export function buyEnemies(diff, genRng, actIndex, roomIndexInAct, budget, typeDefs, comps) {
+  const compTypes = pickComposition(diff, comps, genRng, actIndex, roomIndexInAct, budget);
+  if (compTypes) return compTypes;
+
+  // Mindestpunktzahl (G4, UMBAUPLAN-GEGNER.md O2): entfernt die
+  // t_brown/t_grey-Verstopfung bei grossen Budgets, OHNE die Typen zu
+  // loeschen -- sie bleiben fuer Akt 1 (wo sie den ganzen Bestand stellen)
+  // und fuer Kompositionen, die sie ausdruecklich nennen. Gilt bewusst erst
+  // AB AKT 2 (O2-Befund: bei Akt 1s Budget wuerde dieselbe Formel auch dort
+  // t_brown/t_grey ausschliessen, obwohl sie dort das einzige Fuellmaterial
+  // sind).
+  const minPoints = actIndex >= 2 ? budget / 12 : 0;
+  const unlocked = unlockedEnemyTypes(diff, actIndex, roomIndexInAct)
+    .map((ty) => [ty, diff.danger[ty]])
+    .filter(([, d]) => d.points >= minPoints);
+
+  // minRole-Quote (G4, Abschnitt 17.3 Punkt 2): "mindestens 1 Gegner mit
+  // Rolle X, wenn Budget >= N", optional je Akt (acts[i].minRoleQuota).
+  // Wirkt nur auf DIESEN Zufalls-Rueckfall -- Kompositionen oben sind
+  // bereits handkuratiert und brauchen keine zusaetzliche Rollenpruefung.
+  const actCfg = diff.acts?.[(actIndex || 1) - 1];
+  const quota = actCfg?.minRoleQuota;
+  let quotaMet = !quota || !typeDefs || budget < quota.minBudget;
+
+  const chosen = [];
   const taken = {};
   let rest = budget;
-  while (types.length < diff.maxEnemiesPerRoom) {
-    const affordable = unlocked.filter(
+  while (chosen.length < diff.maxEnemiesPerRoom) {
+    let affordable = unlocked.filter(
       ([ty, d]) => d.points <= rest && (d.maxPerRoom == null || (taken[ty] || 0) < d.maxPerRoom),
     );
+    if (!quotaMet) {
+      const roleAffordable = affordable.filter(([ty]) => typeDefs[ty]?.role === quota.role);
+      if (roleAffordable.length) affordable = roleAffordable;
+    }
     if (!affordable.length) break;
     const [type, d] = affordable[Math.floor(genRng() * affordable.length)];
-    types.push(type);
+    chosen.push(type);
     taken[type] = (taken[type] || 0) + 1;
     rest -= d.points;
+    if (!quotaMet && typeDefs[type]?.role === quota.role) quotaMet = true;
   }
-  return types;
+  return chosen;
 }
 
 // Raeume je Akt (inkl. Bossraum) -- fuer die HUD-/Vorschau-Anzeige "Raum
@@ -510,7 +602,11 @@ function buildCombatRoom(run, type, isFinal) {
     // startet wieder bei budget.base, statt einer einzigen 51-Raum-Kurve.
     const budget =
       (actCfg.budget.base + run.roomIndex * actCfg.budget.perRoom) * run.budgetMult * eliteMult * crowdedMult;
-    enemyTypes = buyEnemies(diff, run.rng.enemies, run.actIndex, run.roomIndex, budget);
+    // G4: Kompositionen NUR fuer echte Kampf-/Elite-/Verflucht-Raeume --
+    // der Boss-Unterstuetzungskauf oben (isFinal-Zweig) bleibt bewusst bei
+    // der 5-Argument-Form, der handgebaute Bosskampf soll nicht durch ein
+    // zufaellig treffendes Rezept veraendert werden.
+    enemyTypes = buyEnemies(diff, run.rng.enemies, run.actIndex, run.roomIndex, budget, run.data.types, diff.compositions);
     // Raumcharakter: Kachelgewichte alternieren (Spec Abschnitt 7B).
     const chars = diff.roomCharacters;
     if (chars && chars.length) {
