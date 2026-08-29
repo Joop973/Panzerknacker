@@ -14861,9 +14861,9 @@ for (const seed of SEEDS) {
     const tc = { standoffMinPx: 100, standoffMaxPx: 200 };
     const tank = { x: 0, y: 0 };
     const near = tetherStandoffDrive(tank, { x: 50, y: 0 }, tc);
-    check(near.x < 0, `G7 (g): zu nah bewegt sich nicht WEG vom Partner (x=${near?.x})`);
+    check(near?.x < 0, `G7 (g): zu nah bewegt sich nicht WEG vom Partner (x=${near?.x})`);
     const far = tetherStandoffDrive(tank, { x: 300, y: 0 }, tc);
-    check(far.x > 0, `G7 (g): zu weit bewegt sich nicht ZUM Partner (x=${far?.x})`);
+    check(far?.x > 0, `G7 (g): zu weit bewegt sich nicht ZUM Partner (x=${far?.x})`);
     const mid = tetherStandoffDrive(tank, { x: 150, y: 0 }, tc);
     check(mid === null, 'G7 (g): im Zielband (100-200px) wird trotzdem ein Vorrang zurueckgegeben');
   }
