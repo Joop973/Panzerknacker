@@ -3227,7 +3227,7 @@ die Auflösung des in Phase 0 gefundenen Blockers.
   weiterhin den ganzen Tag `signature` für die Ersatzkarte, statt nur die
   gebannte id. Kleine Inkonsistenz zum neuen Verhalten der Erstauswahl, aber
   kein Blocker (Ersatzkarte kommt einfach aus einer anderen Kategorie) —
-  bei Bedarf in einer späteren Aufräumrunde beheben.
+  **behoben im „drawOne()-Signaturkarten-Fix" weiter unten.**
 
 ### Upgrade-/Klassenpool-System v2 + Nekromant — Phase 3 (Synergiegewichtung) — gemergt
 Angebote erkennen jetzt den begonnenen Build, ohne ihn zu erzwingen — die
@@ -8803,6 +8803,57 @@ Designdokument-**Wortlaut** selbst prueft.
 -- alle 16 Gegner (8 je Akt), das Kompositionssystem und die Difficulty
 Curve stehen und sind gegen den Designdokument-Wortlaut abgenommen.**
 
+### Bugfix: drawOne()-Signaturkarten-Inkonsistenz (Upgradepool-v2 Phase 2) — gemergt
+Behebt die seit Upgradepool-v2 Phase 2 dokumentierte, als To-do zurückgestellte
+Inkonsistenz: `run.js: banOffer()`/`buyFourthCard()` bauten ihre
+Vermeidungsmenge für den Ersatzzug bisher aus dem rohen `o.tag` der
+verbleibenden Angebote — für Signaturkarten ist das immer der gemeinsame Tag
+`signature`, egal welche Klasse/id. Das Verbannen EINER von mehreren
+gleichzeitig angebotenen Signaturkarten sperrte dadurch den **ganzen** Tag
+für die Ersatzkarte, obwohl die Erstauswahl (`rollOffers()`) seit
+Upgradepool-v2 Phase 2 (`dedupeKey()`, dedupt Signaturkarten auf `"sig:"+id`
+statt auf den Tag) ausdrücklich mehrere Signaturkarten derselben Klasse
+gleichzeitig erlaubt — eine echte Verhaltensabweichung zwischen Erst- und
+Ersatzauswahl, kein bloßer Stilbruch.
+- **`upgradepool.js: dedupeKey()` ist jetzt exportiert** (vorher modulintern)
+  — die eine Quelle für „wonach dedupt/vermeidet man diese Karte" bleibt
+  erhalten, statt eine zweite Kopie der Regel in `run.js` zu pflegen.
+- **`drawOne()` filtert jetzt über `dedupeKey(d)` statt über `d.tag`** — der
+  Parameter heißt entsprechend `avoidKeys` statt `avoidTags` (rein interne
+  Umbenennung, beide Aufrufer übergeben weiterhin positional). Für
+  Kernpool-Karten (kein `signatureClass`) ist `dedupeKey(d) === d.tag` —
+  ihr Verhalten ist dadurch **unverändert** tag-basiert (per Test 80(d)
+  gegengeprüft).
+- **`run.js: banOffer()`/`buyFourthCard()`** bauen ihre Vermeidungsmenge jetzt
+  über `dedupeKey(o)` statt `o.tag` — ein Ersatzzug blockiert dadurch nur
+  noch genau die gebannte/bereits angebotene Signaturkarte (ihre eigene id),
+  nicht mehr die ganze Kategorie. Der dritte `drawOne()`-Aufrufer (die
+  garantierte 4. Elite-Bonuskarte in `rollReward()`) ist unverändert
+  geblieben — er zieht ausschließlich aus Tag `elite`, den aktuell keine
+  Signaturkarte trägt, ist also von der Inkonsistenz nie betroffen gewesen.
+- **Neuer Testabschnitt 80** (`tests/regression.mjs`): (a) der Mechanismus
+  direkt in `drawOne()` mit drei synthetischen Signaturkarten derselben
+  Klasse — nach dem Verbannen einer von zwei angebotenen liefert der Aufruf
+  die dritte statt keiner; (b)/(c) End-to-End über die echten
+  `banOffer()`/`buyFourthCard()`-Funktionen mit einem minimalen, direkt
+  konstruierten `run`-Objekt (kein `createRun()` nötig — nur die von
+  `poolOpts()` gelesenen Felder); (d) Kontrolle, dass zwei Kernpool-Karten
+  mit demselben Tag (kein `signatureClass`) sich weiterhin gegenseitig
+  blockieren, das Verhalten für Nicht-Signaturkarten also unverändert bleibt.
+  **Gegenprobe in zwei Stufen bestanden**: nur `drawOne()`s Filter auf
+  `d.tag` zurückgesetzt (bei sonst `dedupeKey()`-basierten Aufrufern) zeigt
+  einen anderen, aber ebenfalls echten Fehler (liefert die bereits
+  angebotene `sigB` statt der neuen `sigC` — der Mechanismus selbst greift
+  nicht mehr); **beide** Dateien gemeinsam auf den alten Tag-basierten Stand
+  zurückgesetzt reproduziert exakt den ursprünglich dokumentierten Fehler
+  (`banOffer()` liefert ebenfalls `sigB` statt `sigC`, `buyFourthCard()`
+  scheitert komplett, weil `avoidTags` dann den ganzen Tag `signature`
+  enthält und keine einzige Signaturkarte mehr eligible ist) — beide
+  Gegenproben danach zurückgesetzt.
+- Kein `sw.js`-Bump (reine Code-Änderung, kein neues/geändertes Asset).
+  Volle Suite + alle vier Nebensuiten (`gamepad`/`music`/`championsprite`/
+  `spidersprites`) grün.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
@@ -8831,12 +8882,6 @@ Curve stehen und sind gegen den Designdokument-Wortlaut abgenommen.**
       Generatoren brauchen aktuell einen Bankshot statt eines Direkttreffers;
       `t_mirror` hängt an `requiresRicochet`, das Grundsteinumbau-Phase 1
       entfernt).
-- [ ] **`drawOne()`-Signaturkarten-Inkonsistenz (Upgradepool-v2 Phase 2)**:
-      „Verbannen"/„Vierte Karte" (`run.js`) sperren beim Ersatzziehen weiterhin
-      den ganzen Tag `signature` statt nur die gebannte id — banning einer von
-      mehreren angebotenen Signaturkarten kann daher keine andere
-      Signaturkarte als Ersatz ziehen. Kein Blocker, nur eine kleine
-      Inkonsistenz zur Erstauswahl (die jetzt mehrere gleichzeitig erlaubt).
 - [ ] **Controller-Feinschliff (optional)**: Der A-Knopf legt im Spiel
       weiterhin eine Bombe sofort ohne Zielen ab (`secondaryAlt`), obwohl die
       Doktrin dafür LT vorsieht — bei Bedarf entkoppeln. Kein Blocker mehr, der
