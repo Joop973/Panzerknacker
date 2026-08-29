@@ -8908,6 +8908,44 @@ keine neuen Assets** -- die Kinderzimmer-Bilder selbst bleiben unangetastet.
   kein neues/geaendertes Asset — dieselbe Konvention wie bei jeder anderen
   reinen Rendering-/Logikaenderung in diesem Projekt).
 
+### HUD-Kopfzeile: zwei Zeilen statt einer ueberladenen — gemergt
+Nutzerwunsch als direkte Folgerunde zur Arena-Politur oben: "auch die HUD-
+Zeile selbst" ueberarbeiten. Die alte Kopfzeile presste Raumnummer, Munition
+(variable Laenge -- Kugeln/Minen ODER bei Nekromant Kugeln/Geisterbombe/
+Untertanen, dazu optional ein Gadget mit Abklingzeit), Schrott, Gegnerzahl,
+Timer und Leben in EINE 22px-Zeile ohne jede Reserve fuer die laengeren
+Faelle. Reine Rendering-Politur, **kein Feld entfernt oder umbenannt**.
+- **Zwei klar getrennte Zeilen** (`hud.js: drawBar()`, neue Konstante
+  `HUD_H = 50` als einzige Quelle fuer die Gesamthoehe): Zeile 1 die
+  Vitalwerte (Raum links, Gegnerzahl mittig, Timer+Leben rechts, unveraendert
+  in Bedeutung/Farbe/Pulsieren), Zeile 2 Ausruestung/Ressourcen (Munitions-
+  zeile links jetzt mit der VOLLEN Zeilenbreite statt eines 178px schmalen
+  Korridors zwischen zwei anderen Werten, Schrott rechtsbuendig und auf
+  dieselbe Schriftgroesse/-staerke wie die Vitalwerte gehoben). Eine duenne
+  Trennlinie zwischen beiden Zeilen macht daraus sichtbar EIN Panel statt
+  zweier zufaellig uebereinanderliegender Texte.
+- **`HUD_H` ist der einzige Ort, an dem "wie hoch ist die Kopfzeile" steht**
+  — `drawAnvilBoss()` (Boss-HUD, nur waehrend des Amboss-Kampfes sichtbar),
+  der Combo-Text, `drawToast()` (Tutorial-Einblendung) und `drawStats()`s
+  Werte-Panel (Tab-Taste/Pause) haengen ihre Y-Position relativ dazu auf
+  (`HUD_H + 6/10/14`) — ein spaeterer Hoehenwechsel muss dadurch nur an
+  einer Stelle geaendert werden, nicht an fuenfen. `drawStats()`s Panel sass
+  vorher fest bei `y=30` und haette sich mit der neuen Zeile 2 (Schrott
+  rechtsbuendig bei y=39) ueberlappt — mitgezogen.
+- **Mit eigenen Zahlen gegengeprueft statt nur "sieht gut aus"**: ein
+  Fake-Canvas-Skript (Muster wie die bestehenden `fakeCtx`-Mocks in
+  `tests/regression.mjs`) rendert die Kopfzeile MIT aktivem Amboss-Boss und
+  bestaetigt, dass "DER AMBOSS" bei y=64 und "ZORN" bei y=93 landen — beide
+  klar unterhalb von `HUD_H`, keine `NaN`/negativen Werte, monoton
+  absteigende Reihenfolge.
+- Volle Suite + alle vier Nebensuiten + `tests/uilayout.mjs` (Playwright,
+  prueft ueber vier Viewports, dass kein Overlay-Bedienelement aus dem
+  Fenster ragt) gruen. Per Playwright-Screenshot verifiziert: Standardklasse
+  (kurze Munitionszeile) UND Nekromant (laengste realistische Zeile —
+  "Kugeln 5/5  Geisterbombe ✓  Untertanen 0/3") bleiben beide innerhalb der
+  Zeile, keine Ueberlappung mit Zeile 1.
+- Kein `sw.js`-Bump (reine Code-Aenderung, kein neues/geaendertes Asset).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
