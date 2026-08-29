@@ -15482,6 +15482,75 @@ for (const seed of SEEDS) {
       for (const a of t.affixDeny || []) check(known.has(a), `G8 (d): ${id}.affixDeny nennt unbekannten Affix '${a}'`);
     }
   }
+
+  // ---- (e) compositionChance-MECHANISMUS mit EIGENEN Werten (0 / 1, nicht
+  //          den echten 0,6): steuert, ob ein passender Raum kuratiert wird
+  //          oder auf den Zufalls-Rueckfall faellt. Vorher feuerte eine
+  //          Komposition IMMER, sobald eine ins Budgetfenster passte. ----
+  {
+    const { mulberry32 } = await import('../src/core/rng.js');
+    // Kuratiert und Rueckfall muessen am ERGEBNIS unterscheidbar sein, sonst
+    // prueft der Test nichts (ein erster Entwurf mit nur einem 5-Punkte-Typ
+    // bei Budget 10 lieferte in BEIDEN Faellen 'a,a' und blieb auch mit
+    // ausgebautem Mechanismus gruen). Deshalb ein zweiter Typ 'c', den nur
+    // die Komposition kaufen kann: der Zufalls-Rueckfall prueft maxPerRoom,
+    // pickComposition() bewusst nicht.
+    const comp = { id: 'c', actIndex: 1, minRoom: 1, weight: 1, enemies: [{ type: 'c', count: 1 }] };
+    const mk = (chance) => ({
+      maxEnemiesPerRoom: 8,
+      danger: {
+        a: { points: 5, unlockAct: 1, unlockRoomInAct: 1 },
+        c: { points: 10, maxPerRoom: 0, unlockAct: 1, unlockRoomInAct: 1 },
+      },
+      acts: [{ rooms: 16, budget: { base: 0, perRoom: 10 }, ...(chance === undefined ? {} : { compositionChance: chance }) }],
+    });
+    const draw = (chance, seed) => {
+      const rng = mulberry32(seed);
+      return buyEnemies(mk(chance), rng, 1, 1, 10, undefined, [comp]).join(',');
+    };
+    // Vorbedingung: die beiden Wege sind wirklich unterscheidbar.
+    check(draw(1, 1) === 'c', `G8 (e): Testaufbau kaputt -- kuratiert liefert '${draw(1, 1)}' statt 'c'`);
+    check(draw(0, 1) === 'a,a', `G8 (e): Testaufbau kaputt -- der Rueckfall liefert '${draw(0, 1)}' statt 'a,a'`);
+    const isComp = (out) => out === 'c';
+    // chance 1 (und der Vorgabewert ohne Feld): immer kuratiert.
+    for (const ch of [1, undefined]) {
+      let n = 0;
+      for (let s = 1; s <= 40; s++) if (isComp(draw(ch, s))) n++;
+      check(n === 40, `G8 (e): bei compositionChance ${ch} feuert die Komposition nur ${n}/40 mal`);
+    }
+    // chance 0: nie kuratiert -- der Zufalls-Rueckfall uebernimmt.
+    {
+      let n = 0;
+      for (let s = 1; s <= 40; s++) if (isComp(draw(0, s))) n++;
+      check(n === 0, `G8 (e): bei compositionChance 0 feuert die Komposition trotzdem ${n}/40 mal`);
+    }
+    // Zwischenwerte streuen wirklich (weder immer noch nie).
+    {
+      let n = 0;
+      for (let s = 1; s <= 200; s++) if (isComp(draw(0.5, s))) n++;
+      check(n > 60 && n < 140, `G8 (e): compositionChance 0.5 kuratiert ${n}/200 Raeume -- keine echte Streuung`);
+    }
+    // RNG-Vertrag: die Wuerfelprobe kostet genau EINEN zusaetzlichen Aufruf.
+    // Gemessen wird bewusst mit einer Probe, die GELINGT (rng liefert immer
+    // 0) -- sonst laeuft im Vergleichsfall der Rueckfall und verbraucht seine
+    // eigenen Aufrufe, der Vergleich waere dann kein Gleiches-mit-Gleichem.
+    {
+      const count = (chance, comps) => {
+        let n = 0;
+        buyEnemies(mk(chance), () => { n++; return 0; }, 1, 1, 10, undefined, comps);
+        return n;
+      };
+      const ohne = count(1, [comp]);
+      const mit = count(0.5, [comp]);
+      check(ohne + 1 === mit,
+        `G8 (e): die Chance-Probe kostet nicht genau einen zusaetzlichen rng()-Aufruf (${ohne} -> ${mit})`);
+      // Ohne passende Kandidaten (Komposition zu teuer) darf die Probe gar
+      // nicht laufen -- der Determinismus-Vertrag aus G4 bleibt unberuehrt.
+      const teuer = { ...comp, enemies: [{ type: 'c', count: 8 }] };
+      check(count(0.5, [teuer]) === count(1, [teuer]),
+        'G8 (e): ohne passende Komposition veraendert compositionChance den RNG-Verbrauch');
+    }
+  }
 }
 
 if (failures) {
