@@ -169,6 +169,34 @@ export function createRenderer(ctx) {
     f.stroke();
   }
 
+  // Politur nach Nutzer-Feedback: eine dezente, IMMER aktive Vignette (nicht
+  // zu verwechseln mit der gameplay-gesteuerten Nebel-/Dunkelheit-Blende aus
+  // P11 weiter unten, die nur bei einem passenden Raum-Modifikator greift).
+  // Zieht den Blick zur Mitte, wo das Geschehen ist, statt zur lauten
+  // Wandreihe am Rand -- derselbe Trick, den praktisch jedes polierte
+  // Top-Down-Spiel benutzt, um flach nebeneinanderliegende Sprites als EINE
+  // Szene statt als Tabelle einzelner Bilder wirken zu lassen. Einmalig
+  // gebacken (fixe Geometrie, kein Grund, das je Frame neu zu rechnen) und
+  // nur einmal pro Frame geblittet -- Kosten wie floorCanvas: quasi null.
+  const vignetteCanvas = document.createElement('canvas');
+  vignetteCanvas.width = WIDTH;
+  vignetteCanvas.height = HEIGHT;
+  {
+    const v = vignetteCanvas.getContext('2d');
+    const cx = WIDTH / 2;
+    const cy = HEIGHT / 2;
+    const inner = Math.min(WIDTH, HEIGHT) * 0.32;
+    const outer = Math.hypot(cx, cy);
+    const g = v.createRadialGradient(cx, cy, inner, cx, cy, outer);
+    g.addColorStop(0, 'rgba(8,6,4,0)');
+    g.addColorStop(1, 'rgba(8,6,4,0.5)');
+    v.fillStyle = g;
+    v.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+  function drawVignette() {
+    ctx.drawImage(vignetteCanvas, 0, 0);
+  }
+
   // P11: Offscreen-Canvas fuer die additive Lichtmaske (Nebel/Dunkelheit).
   // Anders als floorCanvas wird dieses JEDEN Frame neu gefuellt -- die
   // Lichtquellen (Spieler, Gegner, Minen, Geschosse) bewegen sich. Ein
@@ -258,11 +286,22 @@ export function createRenderer(ctx) {
   const WALL_SHEET_CELL = 64; // Quellgroesse je Variante im Sprite-Sheet
   const WALL_VARIANT_COUNT = 20;
   const BREAKABLE_VARIANT_COUNT = 7;
+  // Politur nach Nutzer-Feedback ("Arena sieht ueberladen aus"): die 20
+  // Bauklotz-Varianten sind einzeln bunt und hoch gesaettigt, gemeinsam auf
+  // JEDER Wandzelle wirken sie als eine Wand aus Aufklebern, die staerker um
+  // Aufmerksamkeit konkurriert als Panzer/Kugeln/HUD. Ein duenner, warmer
+  // Farbueberzug ("Color Grading") zieht sie naeher an den Holzboden heran
+  // und laesst sie als Hintergrund gelten statt als gleichrangige
+  // Blickfaenger -- die Kinderzimmer-Idee (bunte Klotz-Silhouetten) bleibt
+  // vollstaendig erhalten, nur die Lautstaerke sinkt.
+  const WALL_TINT = 'rgba(46,30,16,0.34)';
   // Schneidet EIN 64x64-Sprite aus einem horizontalen Variantensheet aus und
   // zeichnet es auf die normale 32x32-Zellgroesse (CELL) -- die Quellgroesse
   // aendert sich dadurch nie, nur die Zielgroesse bleibt wie bisher CELL.
   function drawWallVariant(sheet, variantIndex, x, y) {
     ctx.drawImage(sheet, variantIndex * WALL_SHEET_CELL, 0, WALL_SHEET_CELL, WALL_SHEET_CELL, x, y, CELL, CELL);
+    ctx.fillStyle = WALL_TINT;
+    ctx.fillRect(x, y, CELL, CELL);
   }
 
   function drawWalls(walls, time) {
@@ -1554,6 +1593,7 @@ export function createRenderer(ctx) {
       drawLightning(ctx, state);
 
       drawTexts(ctx, state);
+      drawVignette(); // immer aktiv, unabhaengig vom P11-Nebel direkt danach
       drawFog(ctx, state, alpha);
       ctx.restore();
 

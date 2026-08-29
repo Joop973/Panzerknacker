@@ -920,6 +920,7 @@ function passBossReward(run) {
       get: (t, k) => {
         if (k in t) return t[k];
         if (k === 'fillText') return (s) => texts.push(String(s));
+        if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop() {} });
         return () => {};
       },
       set: () => true,
@@ -5542,6 +5543,7 @@ for (const seed of SEEDS) {
         get: (t, k) => {
           if (k in t) return t[k];
           if (k === 'fillText') return (s) => texts.push(String(s));
+          if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop() {} });
           return () => {};
         },
         set: () => true,
@@ -10669,6 +10671,7 @@ for (const seed of SEEDS) {
         get: (t, k) => {
           if (k in t) return t[k];
           if (k === 'fillText') return (s) => texts.push(String(s));
+          if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop() {} });
           return () => {};
         },
         set: () => true,

@@ -20,8 +20,18 @@ export function createHud(ctx) {
     const { alive, total } = enemyCount(run);
     const st = run.state;
     const p = st.player;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(0, 0, WIDTH, 22);
+    // Politur nach Nutzer-Feedback ("Arena wirkt ueberladen"): ein hart
+    // abgeschnittenes Rechteck (vorher exakt bis y=22) liess darunter die
+    // volle, ungedaempfte Wandreihe abrupt hervorblitzen -- eine sichtbare
+    // Kante mitten im Bild. Ein Verlauf, der erst bei y=28 ganz ausklingt,
+    // wirkt wie eine echte HUD-Blende statt eines abgeschnittenen Balkens
+    // (und bleibt klar unter drawAnvilBoss()s Inhalten ab y=32).
+    const barGrad = ctx.createLinearGradient(0, 0, 0, 28);
+    barGrad.addColorStop(0, 'rgba(0,0,0,0.72)');
+    barGrad.addColorStop(0.7, 'rgba(0,0,0,0.6)');
+    barGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = barGrad;
+    ctx.fillRect(0, 0, WIDTH, 28);
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#e8e4d8';
