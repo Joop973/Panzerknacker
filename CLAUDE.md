@@ -8854,6 +8854,60 @@ Ersatzauswahl, kein bloßer Stilbruch.
   Volle Suite + alle vier Nebensuiten (`gamepad`/`music`/`championsprite`/
   `spidersprites`) grün.
 
+### Arena-Politur nach Nutzer-Feedback ("sieht ueberladen aus") — gemergt
+Der Nutzer meldete, die Arena wirke "unprofessionell und ueberladen", wollte
+aber die Kinderzimmer-Design-Idee (Kinderzimmer-Reskin, s. o.) behalten. Statt
+blind loszubauen erst der Ist-Stand per Playwright-Screenshot in einem echten
+laufenden Raum geprueft (nicht nur die Vorschau) -- das war der eigentliche
+Befund: die 20 Bauklotz-Wandvarianten sind einzeln bunt und hoch gesaettigt,
+gemeinsam auf JEDER Wandzelle wirken sie als eine geschlossene Reizwand, die
+staerker um Aufmerksamkeit konkurriert als Panzer/Kugeln/HUD -- und die
+HUD-Kopfzeile brach als hart abgeschnittenes Rechteck (`fillRect(0,0,WIDTH,
+22)`) genau 10 px vor dem Ende der ersten Wandreihe (32 px hoch) ab, sodass
+darunter ein Streifen ungedaempfter, greller Wand als sichtbare Kante
+hervorblitzte. Reine Rendering-Politur, **keine Gameplay-/Logikaenderung,
+keine neuen Assets** -- die Kinderzimmer-Bilder selbst bleiben unangetastet.
+- **Wandton-Ueberzug** (`renderer.js: drawWallVariant()`): nach jedem
+  gezeichneten Bauklotz-Sprite legt sich ein duenner, warmer Farbueberzug
+  (`WALL_TINT = 'rgba(46,30,16,0.34)'`, an EINER Stelle fuer alle 20+7
+  Varianten gleichzeitig) darueber -- zieht die Waende naeher an den
+  Holzboden-Farbton heran und laesst sie als Hintergrund gelten statt als
+  gleichrangigen Blickfang. Die Bauklotz-Silhouetten/Farben bleiben klar
+  erkennbar, nur die Lautstaerke sinkt.
+- **Permanente Vignette** (`renderer.js`, neuer `vignetteCanvas`, Muster wie
+  `floorCanvas`: einmalig gebacken, danach frame-kostenlos geblittet): ein
+  Radialgradient dunkelt die Ecken/Raender sanft ab (Innenradius 32 % der
+  kuerzeren Kante, Aussenradius bis in die Ecke, `rgba(8,6,4,0)` bis
+  `rgba(8,6,4,0.5)`). Zieht den Blick zur Mitte, wo das Geschehen ist, statt
+  zur Wandreihe am Rand -- derselbe Trick, den praktisch jedes polierte
+  Top-Down-Spiel benutzt, um flach nebeneinanderliegende Sprites als EINE
+  Szene statt als Tabelle einzelner Bilder wirken zu lassen. Bewusst
+  **getrennt von** der P11-Nebel-/Dunkelheit-Lichtmaske (`drawFog()`, gilt
+  nur bei passendem Raum-Modifikator) -- die Vignette ist IMMER aktiv und
+  wird direkt davor gezeichnet, sodass sich beide Effekte addieren statt zu
+  kollidieren.
+- **HUD-Kopfzeile ohne harte Kante** (`hud.js: drawBar()`): das feste
+  `fillRect(0,0,WIDTH,22)` ist durch einen linearen Verlauf ersetzt
+  (`rgba(0,0,0,0.72)` oben, ausklingend auf 0 bei y=28) -- eine echte
+  HUD-Blende statt eines abgeschnittenen Balkens, klar unterhalb von
+  `drawAnvilBoss()`s Inhalten (ab y=32, unangetastet).
+- **Zwei echte Testkonstruktionsluecken beim eigenen Testlauf gefunden und
+  behoben** (kein Code-Bug): drei identische, aeltere Ad-hoc-`fakeCtx`-Mocks
+  in `tests/regression.mjs` (P7-Werte-Anzeige + zwei Nekromant-HUD-Tests)
+  kannten `createLinearGradient`/`createRadialGradient` nicht (im Unterschied
+  zu `tests/domstub.mjs`s vollstaendigerem Stub) und lieferten `undefined`
+  statt eines Gradient-Objekts — `drawBar()` stuerzte dadurch beim Aufruf von
+  `.addColorStop()` ab. Alle drei um denselben `{addColorStop(){}}`-Rueckgabe-
+  zweig ergaenzt, den `domstub.mjs` bereits nutzt — kein zweites Stub-Muster
+  eingefuehrt.
+- Volle Suite + alle vier Nebensuiten (`gamepad`/`music`/`championsprite`/
+  `spidersprites`) gruen. Vorher/Nachher per Playwright-Screenshot in einem
+  echten laufenden Raum verglichen (nicht nur die Vorschau) — sichtbar
+  ruhigere Wandreihe, kein harter HUD-Schnitt mehr, Blick zieht zur Mitte.
+- Kein `sw.js`-Bump (reine Code-Aenderung an bestehenden `src/*.js`-Dateien,
+  kein neues/geaendertes Asset — dieselbe Konvention wie bei jeder anderen
+  reinen Rendering-/Logikaenderung in diesem Projekt).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
