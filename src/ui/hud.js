@@ -15,23 +15,34 @@ function fmtTime(s) {
   return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
+// Politur nach Nutzer-Feedback ("Arena wirkt ueberladen"): die Kopfzeile
+// presste vorher Raumnummer/Munition/Schrott/Gegnerzahl/Timer/Leben in EINE
+// 22px-Zeile -- bei variabler Ammo-Laenge (Nekromant + Gadget: "Kugeln X/Y
+// Geisterbombe X.Xs Untertanen X/Y GADGET X.Xs") ohne jede Reserve. Jetzt
+// zwei klar getrennte Zeilen: oben die Vitalwerte (Raum/Gegner/Leben), unten
+// Ausruestung/Ressourcen (Munition/Gadget/Schrott) mit eigener, breiter Zeile
+// statt eines schmalen Korridors zwischen zwei anderen Werten. HUD_H ist die
+// einzige Quelle fuer "wie hoch ist die Kopfzeile" -- Combo-Text, Toast und
+// drawAnvilBoss() haengen ihre Position relativ daran, damit ein spaeterer
+// Hoehenwechsel nicht an vier Stellen einzeln nachgezogen werden muss.
+const HUD_H = 50;
+
 export function createHud(ctx) {
   function drawBar(run) {
     const { alive, total } = enemyCount(run);
     const st = run.state;
     const p = st.player;
-    // Politur nach Nutzer-Feedback ("Arena wirkt ueberladen"): ein hart
-    // abgeschnittenes Rechteck (vorher exakt bis y=22) liess darunter die
-    // volle, ungedaempfte Wandreihe abrupt hervorblitzen -- eine sichtbare
-    // Kante mitten im Bild. Ein Verlauf, der erst bei y=28 ganz ausklingt,
-    // wirkt wie eine echte HUD-Blende statt eines abgeschnittenen Balkens
-    // (und bleibt klar unter drawAnvilBoss()s Inhalten ab y=32).
-    const barGrad = ctx.createLinearGradient(0, 0, 0, 28);
-    barGrad.addColorStop(0, 'rgba(0,0,0,0.72)');
-    barGrad.addColorStop(0.7, 'rgba(0,0,0,0.6)');
+    // Verlauf statt hartem Rechteck (bleibt vom fruehen Arena-Politur-Fund):
+    // eine scharfe Kante liess die ungedaempfte Wandreihe darunter abrupt
+    // hervorblitzen. Klingt jetzt bis HUD_H komplett aus.
+    const barGrad = ctx.createLinearGradient(0, 0, 0, HUD_H);
+    barGrad.addColorStop(0, 'rgba(0,0,0,0.74)');
+    barGrad.addColorStop(0.8, 'rgba(0,0,0,0.6)');
     barGrad.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = barGrad;
-    ctx.fillRect(0, 0, WIDTH, 28);
+    ctx.fillRect(0, 0, WIDTH, HUD_H);
+
+    // Zeile 1 (Vitalwerte): Raum links, Gegnerzahl mittig, Leben rechts.
     ctx.font = 'bold 13px monospace';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#e8e4d8';
@@ -39,13 +50,45 @@ export function createHud(ctx) {
       run.endless
         ? `Endlos ${run.roomIndex}`
         : `Akt ${run.actIndex}/3 · Raum ${run.roomIndex}/${totalRooms(run.difficulty, run.actIndex)}`,
-      8,
+      10,
       16,
     );
-    // Munition: verbleibende Kugeln (Magazin) und Minen.
+    ctx.textAlign = 'center';
+    // Letzter Gegner: Zaehler pulsiert (wichtig, wenn er unsichtbar ist).
+    ctx.fillStyle = alive === 1
+      ? `rgba(255,210,90,${0.55 + 0.45 * Math.sin(run.playTime * 6)})`
+      : '#e8e4d8';
+    ctx.fillText(`Gegner ${alive}/${total}`, WIDTH / 2, 16);
+    ctx.textAlign = 'right';
+    // Run-Timer (Speedrun-Motivation, Bestzeit wird gespeichert) -- direkt
+    // links neben den Lebenspunkten, beide rechtsbuendig am selben Rand.
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#9aa0a8';
+    ctx.fillText(fmtTime(run.playTime), WIDTH - 56, 15);
+    ctx.font = 'bold 13px monospace';
+    // Letztes Leben: Herz pulsiert als Warnung.
+    ctx.fillStyle = run.lives === 1
+      ? `rgba(255,80,60,${0.55 + 0.45 * Math.sin(run.playTime * 7)})`
+      : '#ff6a5e';
+    ctx.fillText(`♥ ${run.lives}`, WIDTH - 10, 16);
+    ctx.textAlign = 'left';
+
+    // Duenne Trennlinie zwischen den beiden Zeilen -- reine Struktur, kein
+    // zusaetzlicher Text, macht aus zwei Zeilen sichtbar EIN Panel.
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(10, 27.5);
+    ctx.lineTo(WIDTH - 10, 27.5);
+    ctx.stroke();
+
+    // Zeile 2 (Ausruestung/Ressourcen): Munition links mit voller Zeilen-
+    // breite (vorher ein 178px schmaler Korridor zwischen zwei anderen
+    // Werten), Schrott rechtsbuendig.
     const liveBullets = st.bullets.filter((b) => b.owner === p && !b.dead).length;
     const liveMines = st.mines.filter((m) => m.owner === p && !m.dead).length;
-    ctx.font = '11px monospace';
+    ctx.font = '12px monospace';
+    ctx.textAlign = 'left';
     ctx.fillStyle = '#9aa0a8';
     let ammoLine = `Kugeln ${p.cfg.magazine - liveBullets}/${p.cfg.magazine}`;
     // Nekromant: der Bombenslot ist keine Mine mehr, sondern die Geisterbombe
@@ -71,28 +114,13 @@ export function createHud(ctx) {
       const cd = p.gadgetCooldown || 0;
       ammoLine += cd > 0 ? `  ${gl} ${cd.toFixed(1)}s` : `  ${gl} ✓`;
     }
-    ctx.fillText(ammoLine, 118, 15);
-    // Schrottstand permanent (Phase 3) -- Gold, zwischen Munition und Mitte.
-    ctx.fillStyle = '#e0c860';
-    ctx.fillText(`⚙ ${run.scrap || 0}`, 296, 15);
-    ctx.font = 'bold 13px monospace';
-    ctx.textAlign = 'center';
-    // Letzter Gegner: Zaehler pulsiert (wichtig, wenn er unsichtbar ist).
-    ctx.fillStyle = alive === 1
-      ? `rgba(255,210,90,${0.55 + 0.45 * Math.sin(run.playTime * 6)})`
-      : '#e8e4d8';
-    ctx.fillText(`Gegner ${alive}/${total}`, WIDTH / 2, 16);
+    ctx.fillText(ammoLine, 10, 39);
+    // Schrottstand permanent (Phase 3) -- Gold, jetzt genauso prominent wie
+    // die Vitalwerte oben (vorher 11px, dieselbe Groesse wie die Munition).
     ctx.textAlign = 'right';
-    // Run-Timer (Speedrun-Motivation, Bestzeit wird gespeichert).
-    ctx.font = '11px monospace';
-    ctx.fillStyle = '#9aa0a8';
-    ctx.fillText(fmtTime(run.playTime), WIDTH - 62, 15);
     ctx.font = 'bold 13px monospace';
-    // Letztes Leben: Herz pulsiert als Warnung.
-    ctx.fillStyle = run.lives === 1
-      ? `rgba(255,80,60,${0.55 + 0.45 * Math.sin(run.playTime * 7)})`
-      : '#ff6a5e';
-    ctx.fillText(`♥ ${run.lives}`, WIDTH - 8, 16);
+    ctx.fillStyle = '#e0c860';
+    ctx.fillText(`⚙ ${run.scrap || 0}`, WIDTH - 10, 39);
     ctx.textAlign = 'left';
 
     // Aktive Combo gross unter der Leiste.
@@ -100,7 +128,7 @@ export function createHud(ctx) {
       ctx.textAlign = 'center';
       ctx.font = 'bold 20px monospace';
       ctx.fillStyle = `rgba(255,210,60,${Math.min(1, run.comboTimer)})`;
-      ctx.fillText(`COMBO ×${run.combo}`, WIDTH / 2, 44);
+      ctx.fillText(`COMBO ×${run.combo}`, WIDTH / 2, HUD_H + 10);
       ctx.textAlign = 'left';
     }
 
@@ -109,7 +137,7 @@ export function createHud(ctx) {
 
   // Amboss-Auftrag (Abschnitt 17, Darstellung): Boss-Lebensleiste + eine
   // Zehner-Zornleiste ("ZORN") direkt darunter -- fest im HUD-Bereich unter
-  // der Kopfzeile (y 24..48), damit sie NIE die Touch-Sticks/-Knoepfe an den
+  // der Kopfzeile (ab HUD_H), damit sie NIE die Touch-Sticks/-Knoepfe an den
   // Bildschirmraendern verdeckt. Nur sichtbar, solange der Amboss lebt.
   function drawAnvilBoss(run) {
     const st = run.state;
@@ -117,17 +145,18 @@ export function createHud(ctx) {
     if (!boss || !boss.alive) return;
     const bx = 20;
     const bw = WIDTH - 40;
+    const top = HUD_H + 14;
 
     // Boss-Lebensleiste.
     ctx.font = 'bold 10px monospace';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#e8e4d8';
-    ctx.fillText('DER AMBOSS', bx, 32);
+    ctx.fillText('DER AMBOSS', bx, top);
     const hpFrac = Math.max(0, Math.min(1, boss.hp / boss.cfg.maxHp));
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(bx - 1, 34, bw + 2, 7);
+    ctx.fillRect(bx - 1, top + 2, bw + 2, 7);
     ctx.fillStyle = '#c9a03c';
-    ctx.fillRect(bx, 35, Math.max(1, Math.round(bw * hpFrac)), 5);
+    ctx.fillRect(bx, top + 3, Math.max(1, Math.round(bw * hpFrac)), 5);
 
     // Zornleiste: zehn Segmente zu je zehn Zorn (Abschnitt 17). Segmentfarbe
     // folgt dem Zornband -- dieselbe Bandeinteilung wie das Koerper-Overlay
@@ -135,7 +164,7 @@ export function createHud(ctx) {
     const rage = boss.rage || 0;
     const segGap = 2;
     const segW = (bw - segGap * 9) / 10;
-    const segY = 45;
+    const segY = top + 13;
     const bandColor = rage >= 100 ? '#ffffff' : rage >= 70 ? '#ff5a3c' : rage >= 40 ? '#ff9a4a' : '#c9a03c';
     for (let i = 0; i < 10; i++) {
       const sx = bx + i * (segW + segGap);
@@ -236,13 +265,17 @@ export function createHud(ctx) {
 
   // Tutorial-Toast: halbtransparent am oberen Rand (Spec Abschnitt 9).
   function drawToast(text) {
+    // Sitzt seit der HUD-Politur unterhalb der jetzt zweizeiligen Kopfzeile
+    // (HUD_H), sonst wuerde der Tutorial-Toast beim allerersten Run direkt
+    // ueber der Ausruestungszeile kleben.
+    const top = HUD_H + 6;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     const w = ctx.measureText(text).width + 40;
-    ctx.fillRect((WIDTH - w) / 2, 28, w, 26);
+    ctx.fillRect((WIDTH - w) / 2, top, w, 26);
     ctx.font = '13px monospace';
     ctx.fillStyle = '#e8e4d8';
     ctx.textAlign = 'center';
-    ctx.fillText(text, WIDTH / 2, 45);
+    ctx.fillText(text, WIDTH / 2, top + 17);
     ctx.textAlign = 'left';
   }
 
@@ -335,7 +368,9 @@ export function createHud(ctx) {
     const lineH = 14;
     const h = 22 + rows.length * lineH;
     const x = WIDTH - w - 8;
-    const y = 30;
+    // Seit der HUD-Politur unterhalb der zweizeiligen Kopfzeile (HUD_H) --
+    // vorher ueberlappte die Box das Schrott-Feld der neuen Zeile 2.
+    const y = HUD_H + 6;
     ctx.fillStyle = 'rgba(10,10,14,0.82)';
     ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = 'rgba(200,178,74,0.5)';
