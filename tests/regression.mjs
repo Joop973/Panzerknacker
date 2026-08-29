@@ -15163,7 +15163,11 @@ for (const seed of SEEDS) {
   {
     const st = openRoom();
     const shooter = createTank('t_grabber', { ...resolveCfg(tanksData, 't_grabber'), grapple: { pullSpeedPxS: 90 } }, 300, 100);
-    st.tanks = [st.player, shooter]; // KEIN weiterer Gegner -- der Geist hat kein Kampfziel
+    // `shooter` bewusst NICHT in st.tanks -- sonst waere er selbst ueber
+    // nearestEnemy() ein gueltiges Kampfziel und der Test wuerde die
+    // Ausnahme (kein Ziel im Raum) gar nicht pruefen. updateGhosts() wird
+    // hier direkt aufgerufen, der Greifer muss dafuer nicht mitlaufen.
+    st.tanks = [st.player];
     const g = createGhost(st, 100, 100, 0, 't_pink');
     st.ghosts.push(g);
     g.grappledBy = shooter;

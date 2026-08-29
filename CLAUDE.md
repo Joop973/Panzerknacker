@@ -8432,12 +8432,142 @@ alle bisherigen Typen.
   Baseline **1,600 ms**, G7-Raum **0,693 ms** (Budget 6 ms).
 - Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien).
 
-**Naechste Sitzung (falls beauftragt): Phase G8** (`t_metronom`/
-`t_grabber`, die letzten beiden "alternativen" Mechaniken -- beide
-architektonisch invasiver als G7: `t_metronom` synchronisiert die
-Feuerfreigabe ALLER Verbuendeten mit Sichtlinie zu ihm ueber
-`ai_turrets.js: roleTurret()`, `t_grabber` kehrt den bestehenden
-Enterhaken-Mechanismus um (zieht das ZIEL statt den Schuetzen)).
+**Phase G8 (Akt 3, die letzten zwei "alternativen" Mechaniken) ist gebaut.**
+`t_metronom` (Taktgeber) und `t_grabber` (Greifer) -- damit sind alle 16 in
+`docs/AUFTRAG-GEGNERDESIGN.md` entworfenen Gegner gebaut (8 je Akt).
+`t_metronom` ist der erste Gegner, der NICHT selbst kaempft, sondern das
+Verhalten ALLER anderen Gegner im Raum veraendert; `t_grabber` der erste,
+der dem Spieler Boden statt LP nimmt und dafuer eine Kugel als Gegenwehr
+verlangt.
+- **`t_metronom`** (11 Punkte, ab Raum 10, `role:"guardian"`, `weapon:null`,
+  steht still, feuert nie selbst): schlaegt einen Takt
+  (`metronome:{beatS:2.0, holdWindowS:1.6, needsLos:true}`). Neue Funktion
+  `state.js: updateMetronomes(state, dt)` tickt pro Metronom einen
+  zyklischen `t.metronomeState.elapsed` (0..beatS, simples Delta-Increment
+  -- bewusst KEIN floor-division-basiertes Tick-Zaehlen wie `status.js`s
+  Schadenstakt: die Halte-/Frei-Grenze ist ein reines Feuer-Gate, kein
+  bilanzkritischer Schadenswert). Laeuft VOR der Gegner-Schleife (Muster
+  `updateTargeting`/`updateCoverPerception`), damit `metronomeHolds(state,
+  tank)` (neu, live pro Verbuendetem geprueft, kein Cache wie
+  `state.relaySight`) mit dem frischen Beat-Zustand entscheidet: haelt
+  MINDESTENS ein sichtbarer (`needsLos`, `clearLine()`) Taktgeber noch seine
+  Haltephase (`elapsed < holdWindowS`), wird der Feuerwunsch unterdrueckt.
+  **Der eigentliche Trick braucht keine Cooldown-Manipulation**: `tank
+  .cooldown` tickt (Haupt-Panzer-Tick-Schleife) UNABHAENGIG von der
+  Unterdrueckung weiter -- ein schnell feuernder Verbuendeter ist beim
+  Schlag also laengst "bereit" und feuert sofort, statt einzeln ueber die
+  Haltezeit verteilt zu sein (genau die im Design geforderte Buendelung).
+  Gate sitzt an EINER Stelle im Haupt-Enemy-Loop
+  (`t.metronomeHeld = fire && metronomeHolds(state, t); if (fire &&
+  !t.metronomeHeld) { fireBullet/fireMortar }`) -- deckt Kugel- UND
+  Moerserschuetzen gleichermassen ab, ohne `roleTurret()`/`fireMortar()`
+  selbst anzufassen. `ms.justBeat` (Uebergang gehalten->frei) loest Ton +
+  Blitz aus. Telegraph: `effects.js: drawMetronomeRings()` (NEU, bewusst
+  KEINE Baustein-C-Wiederverwendung -- die bietet einen FESTEN Aussenring +
+  wachsende FUELLFLAECHE, hier ist es das Gegenteil: ein Ring, der SELBST
+  schrumpft und beim Schlag am vollen Radius aufblitzt), plus ein duenner
+  pulsierender gelber Saum (`renderer.js`, eigener Radius r+7) um jeden
+  gerade gehaltenen Verbuendeten ("verstaerkte Gegner pulsieren im selben
+  Takt").
+- **`t_grabber`** (8 Punkte, ab Raum 6, normaler `weapon:"bullet"`-Schuetze
+  UND zusaetzlich ein eigener, komplett unabhaengiger Greif-Mechanismus mit
+  eigenem 4,0-s-Cooldown): neue Funktion `state.js: updateGrapples(state,
+  dt)`, Zustandsautomat `idle -> windup -> cooldown` (Muster `ramDrive()`
+  aus G2, aber als reine state.js-Tick-Funktion statt einer
+  `ai_drives.js`-Fahrfunktion, da der Greifer seine normale Bewegung/sein
+  normales Feuern unveraendert behaelt). `idle` prueft Reichweite+Sichtlinie
+  zum aufgeloesten Ziel (`resolveTarget()`, kann ein Geist sein) und friert
+  bei Erfolg die Richtung EINMALIG ein (`gs.dir`); nach `windupS` (0,7 s)
+  entscheidet eine ERNEUTE Zielaufloesung ueber Treffer/Fehlschlag --
+  bleibt das Ziel innerhalb des gefrorenen Korridors
+  (`angleDelta(gs.dir, ...) < aimToleranceRad`, `armor.js: angleDelta` aus
+  G1/G2 wiederverwendet) UND weiterhin in Reichweite+Sichtlinie, ist es ein
+  TREFFER (`target.grappledBy/grappleUntil/grappleRopeHp` gesetzt), sonst
+  ein Fehlschlag ("Ausweichen kostet nur Bewegung", Ton+Blitz-Rueckmeldung
+  wie `fireHook()`s Fehlschuss) -- BEIDES fuehrt in dieselbe `cooldown`-
+  Phase.
+  - **Additive Zug-Physik statt Ersetzung** (der Kernanforderung "volle
+    Steuerung senkrecht zur Leine bleibt"): `tank.js: moveTank()` bekommt
+    einen neuen Block NACH der normalen Bewegung/Kollision (Muster
+    Foerderband, Phase 15) -- ein gegriffenes Ziel wird ADDITIV Richtung
+    Schuetze genudged (`tank.x += ...`), NICHT wie der eigene `hookTimer`
+    (ersetzt die Eingabe komplett). `ghost.js: updateGhosts()` bekommt
+    denselben Block ("zieht auch Geister") -- bewusst VOR der
+    Zielaufloesung/dem "kein Ziel -> continue"-Zweig platziert, sonst waere
+    ein gegriffener Untertan OHNE eigenes Kampfziel im Raum unbemerkt
+    wirkungslos (echter Entwurfs-Fallstrick, per Gegenprobe bestaetigt, s.
+    u.).
+  - **Die Leine ist beschiessbar** (`state.js: updateGrappleRopes(state)`,
+    neu, laeuft NACH der Bullet-Bewegung): fuer jeden aktiven Griff (Panzer
+    ODER Geist) eine Punkt-Strecke-Distanzpruefung (`pointSegmentDistSq()`,
+    neu) gegen ALLE lebenden Kugeln, unabhaengig vom Besitzer (dasselbe
+    teamlose Prinzip wie `t_dud`s Explosion/`t_arclight`s Kette) --
+    innerhalb `ropeHitRadiusPx` sinkt `grappleRopeHp`, bei 0 loest sich das
+    Ziel, die treffende Kugel wird VERBRAUCHT ("eine Kugel fuer die Leine
+    ausgeben"). Dieselbe Funktion pusht auch die IMMER sichtbare, leicht
+    flackernde Leine ueber Baustein B (`state.tankLinks`).
+  - Telegraph: `effects.js: drawGrapples()` (NEU, Wiederverwendung von
+    `drawCorridorTelegraph()`, Muster `t_rusher`/`t_lance`/Amboss) zeigt
+    waehrend des Windups den Wurfkorridor.
+- **Sprite-Aliase statt neuer Dateien**: `t_metronom→t_yellow`,
+  `t_grabber→t_yellow` (beide Design-Placeholderfarben -- "Messinggelb"/
+  "Industriegelb" -- liegen naeher an `t_yellow` als an jeder anderen
+  bisher unbenutzten Bestandsfarbe in der Alias-Liste). Identitaet traegt
+  vollstaendig Verhalten + die neuen Telegraphen (Taktring/Wurfkorridor+
+  Leine).
+- **Zwei echte Testkonstruktionsfehler beim eigenen Testbau gefunden und
+  behoben** (kein Code-Bug): (1) die erste Fassung von Test (j) ("ein
+  gegriffener Geist OHNE eigenes Kampfziel wird trotzdem gezogen") hatte den
+  Greifer selbst in `st.tanks` -- `ghost.js: nearestEnemy()` schliesst nur
+  den SPIELER aus, nicht andere Panzer, der Greifer zaehlte also faelschlich
+  als "Kampfziel" fuer den Geist und der Test pruefte gar nicht die
+  behauptete Ausnahme (blieb selbst mit einer bewusst kaputten Gegenprobe
+  gruen). Fix: der Greifer ist im Testaufbau NICHT Teil von `st.tanks`
+  (wird direkt referenziert, muss dafuer nicht mitlaufen) -- danach faengt
+  dieselbe Gegenprobe (die urspruengliche, fehlerhafte Codeplatzierung
+  innerhalb des zielabhaengigen Bewegungsblocks simuliert) den Fehler
+  zuverlaessig. (2) `createBullet(x, y, angle, opts)` nimmt positionale
+  Argumente, kein einzelnes Optionsobjekt -- ein erster Testentwurf fuer die
+  beschiessbare Leine rief die falsche Signatur auf.
+- **Perf-Messung fand einen dritten, reinen Testaufbau-Fallstrick** (kein
+  Code-Bug): ein Wegwerf-Messskript liess `st.player` ueber 1800
+  zusammenhaengende Ticks (3 Laeufe auf demselben Raum) ohne echten
+  Respawn-Fluss (kein `run.js` involviert) sterben, was NaN-Positionen
+  erzeugte -- reproduzierbar auch mit den acht BESTANDS-Gegnertypen, also
+  unabhaengig von G8. Fix im Messskript: pro Lauf eine frische Arena UND ein
+  unsterblicher Spieler (`maxHp/hp = 1e9`) fuer die reine Zeitmessung.
+- **Neuer Testabschnitt 76** (`tests/regression.mjs`, elf gezielte
+  Gegenproben am echten Quellcode einzeln bestanden und zurueckgesetzt --
+  `justBeat`-Zuweisung deaktiviert, Zyklus-Wrap entfernt, `needsLos`-Gate in
+  `metronomeHolds()` entfernt, das `!t.metronomeHeld`-Gate im Enemy-Loop
+  entfernt, der Greif-Trigger deaktiviert, die Kegel-Pruefung beim
+  Windup-Ausgang entfernt, der Cooldown-Uebergang nach Windup-Ausgang
+  entfernt, die additive Zug-Nudge in `moveTank()` entfernt, die
+  Geist-Zug-Nudge probeweise in die urspruenglich fehlerhafte
+  zielabhaengige Position zurueckversetzt, der `tankLinks`-Push fuer die
+  Leine entfernt, die Beschuss-Pruefung der Leine entfernt): Struktur (beide
+  Typen + Akt-3-Freischaltung), Beat-Zyklus mit EIGENEN Zahlen (1,0s/0,6s
+  statt der echten 2,0s/1,6s) inkl. exakter erster Schlag-Tick,
+  `needsLos`-Gate ueber eine echte Wand zwischen Verbuendetem und Taktgeber,
+  Ende-zu-Ende-Feuerbuendelung (kein Schuss waehrend der Haltephase, Schuss
+  sofort nach dem Schlag, ueber echte `st.bullets`-Zaehlung), Griff-Trigger
+  + eingefrorene Richtung, Treffer- und Fehlschlag-Ausgang des Windups
+  (inkl. der Design-Auflage "Ausweichen kostet nur Bewegung"),
+  Cooldown-Mindestdauer, additive Zug-Physik ueber `moveTank()` (SENKRECHTE
+  Eingabe bleibt wirksam WAEHREND der Zug gleichzeitig wirkt -- das ist der
+  Kernbeweis fuer "additiv, nicht ersetzend"), dieselbe Physik fuer Geister
+  (inkl. der Ausnahme ohne eigenes Kampfziel), sichtbare Leine
+  (`state.tankLinks`), beschiessbare Leine (Kugel wird verbraucht, Ziel
+  loest sich bei `ropeHp` 0).
+- **Schlechtester Frame** (Grundregel): Acht-Gegner-Raum (4x je neuer Typ)
+  vs. Baseline aus acht Bestandstypen, 600 Ticks, drittgroesster Wert,
+  schlechtester von 3 Laeufen: Baseline **4,329 ms**, G8-Raum **1,984 ms**
+  (Budget 6 ms).
+- Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien).
+
+**Damit ist der komplette `UMBAUPLAN-GEGNER.md` (Phasen G0-G8) abgearbeitet
+-- alle 16 in `docs/AUFTRAG-GEGNERDESIGN.md` entworfenen Gegner (8 je Akt)
+sind gebaut, samt Kompositionssystem (G4) fuer kuratierte Begegnungen.**
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`t_relay` (Horcher) hat noch keine eigene Sichtlinien-Suchfahrt**
