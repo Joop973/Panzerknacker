@@ -275,6 +275,7 @@ export function createGhost(state, x, y, heading = 0, sourceType, overrides) {
     // createTank()), hier ausgewertet in der Bewegungsschleife unten.
     grappledBy: null,
     grappleUntil: 0,
+    grappleRopeHp: 0, // wie bei echten Panzern (tank.js) -- updateGrapples() setzt ihn beim Treffer
   };
   // ghost_080 "Kronenerbe" (UEBERARBEITET, Abschnitt 10): die Erbschaft wird
   // seit dem Champion-Nachschliff nicht mehr hier beim Erscheinen eines
