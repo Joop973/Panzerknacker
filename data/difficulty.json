@@ -158,6 +158,16 @@
       "points": 10,
       "unlockAct": 3,
       "unlockRoomInAct": 8
+    },
+    "t_metronom": {
+      "points": 11,
+      "unlockAct": 3,
+      "unlockRoomInAct": 10
+    },
+    "t_grabber": {
+      "points": 8,
+      "unlockAct": 3,
+      "unlockRoomInAct": 6
     }
   },
   "_comment_hpScaling": "UMBAUPLAN-LP Phase 2: Gegner-LP wachsen pro Raum, Gegnerschaden bewusst NICHT (die Raeume werden zaeher, nicht toedlicher). gegnerLP = maxHp * (1 + perRoom * (raum - 1)), Raum 15 liegt damit bei 1,7x. Bosse sind ausgenommen: ihre 500 LP sind bereits der Endwert fuer die letzte Raumreihe (Plan: 50 Treffer) -- mitskaliert waeren es rund 87 Treffer.",

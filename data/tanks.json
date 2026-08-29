@@ -639,6 +639,49 @@
       "damage": 25,
       "desc": "Stirbt ein Panzer oder Geist in 200 px Umkreis, wächst er dauerhaft: +8 maximale LP und +3 Schaden je Stapel — der Zuwachs heilt ihn nicht, macht ihn nur zäher für später."
     },
+    "t_metronom": {
+      "speed": "fix",
+      "magazine": 0,
+      "mines": 0,
+      "weapon": null,
+      "role": "guardian",
+      "aggression": 0,
+      "accuracy": 0,
+      "metronome": {
+        "beatS": 2.0,
+        "holdWindowS": 1.6,
+        "needsLos": true
+      },
+      "label": "Taktgeber",
+      "maxHp": 40,
+      "damage": 0,
+      "desc": "Steht still, feuert nie selbst. Verbündete mit Sichtlinie zu ihm halten das Feuer 1,6 s zurück und geben es geschlossen auf dem Schlag frei — töten oder lieber leben lassen?"
+    },
+    "t_grabber": {
+      "speed": "normal",
+      "magazine": 1,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "sieger",
+      "preferredRange": 240,
+      "aggression": 0.45,
+      "accuracy": 0.6,
+      "fireRate": 2.0,
+      "grapple": {
+        "windupS": 0.7,
+        "pullSpeedPxS": 90,
+        "pullS": 1.2,
+        "cooldownS": 4.0,
+        "ropeHp": 1,
+        "maxRangePx": 300,
+        "aimToleranceRad": 0.35,
+        "ropeHitRadiusPx": 14
+      },
+      "label": "Greifer",
+      "maxHp": 30,
+      "damage": 25,
+      "desc": "Feuert nach kurzer Vorwarnung einen Enterhaken — trifft er, wird das Ziel 1,2 s lang zu ihm gezogen (volle Steuerung senkrecht zur Leine bleibt). Ein Treffer auf die gespannte Leine trennt sie sofort."
+    },
     "t_black": {
       "speed": "veryfast",
       "magazine": 2,

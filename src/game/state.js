@@ -41,7 +41,7 @@ import { updateSpiderMines } from './spidermine.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
 import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, applyNecroRunScaling, isBossCfg } from './cfg.js';
-import { armorBlocks, reflectBullet, reflectFromAim, isLive, flankZone } from './armor.js';
+import { armorBlocks, reflectBullet, reflectFromAim, isLive, flankZone, angleDelta } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
 // 'destructible' (Phase 11): physisch wie 'solid', bis sie durch
@@ -446,6 +446,160 @@ function updateMasons(state, dt) {
     if (tankBlocked || state.wouldIsolateArea(col, row)) continue;
     t.masonBuildState = { x: col * CELL + CELL / 2, y: row * CELL + CELL / 2, col, row, until: state.time + b.buildS };
     state.masonScaffolds.push({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, col, row, age: 0, life: b.buildS });
+  }
+}
+
+// G8 (t_metronom, "Der Taktgeber"): tickt den eigenen Beat-Zyklus
+// (t.metronomeState.elapsed, 0..beatS, zyklisch, dasselbe simple Delta-
+// Increment-Muster wie t_masons masonTimer/t_rushers ram.timer -- KEIN
+// floor-division-basiertes Tick-Zaehlen wie status.js: die Halte-/Frei-
+// Grenze ist ein reiner Anzeige-/Feuer-Gate, kein bilanzkritischer
+// Schadenswert). Muss VOR der Gegner-Schleife laufen (metronomeHolds()
+// wird dort pro Verbuendetem abgefragt) -- Aufruf zusammen mit
+// updateTargeting()/updateCoverPerception(), nicht im spaeteren Tick-Block
+// bei updateMasons() & Co.
+function updateMetronomes(state, dt) {
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.metronome) continue;
+    const mc = t.cfg.metronome;
+    if (!t.metronomeState) t.metronomeState = { elapsed: 0, justBeat: false };
+    const ms = t.metronomeState;
+    const wasHeld = ms.elapsed < (mc.holdWindowS ?? 0);
+    ms.elapsed += dt;
+    if (ms.elapsed >= mc.beatS) ms.elapsed -= mc.beatS; // Zyklus-Wrap
+    const nowHeld = ms.elapsed < (mc.holdWindowS ?? 0);
+    // "auf dem Schlag" (Auftrag Abschnitt 8.7): der Uebergang gehalten -> frei.
+    ms.justBeat = wasHeld && !nowHeld;
+    if (ms.justBeat) {
+      state.sounds.push({ name: 'wave', x: t.x });
+      state.flashes.push({ x: t.x, y: t.y, age: 0, dim: false });
+    }
+  }
+}
+
+// G8: haelt `tank` fest, solange mindestens EIN sichtbarer (needsLos)
+// Taktgeber sich noch in seiner Halte-Phase befindet. Live pro Aufruf
+// geprueft (kein Cache wie state.relaySight) -- Taktgeber sind selten
+// (Danger Cost 11), eine zusaetzliche clearLine()-Pruefung je Verbuendetem
+// und Tick faellt nicht ins Frame-Budget.
+function metronomeHolds(state, tank) {
+  for (const m of state.tanks) {
+    if (!m.alive || !m.cfg.metronome || m === tank) continue;
+    const ms = m.metronomeState;
+    if (!ms || ms.elapsed >= (m.cfg.metronome.holdWindowS ?? 0)) continue;
+    if (m.cfg.metronome.needsLos && !clearLine(state, tank.x, tank.y, m.x, m.y)) continue;
+    return true;
+  }
+  return false;
+}
+
+// G8 (t_grabber, "Der Greifer"): eigener, von der normalen Feuerentscheidung
+// (roleTurret()) UNABHAENGIGER Zustandsautomat mit eigenem Cooldown --
+// der Greifer schiesst parallel dazu ganz normal auch echte Kugeln
+// (Muster: t_rusher rammt UND kann normal schiessen, hier umgekehrt: der
+// Greifer schiesst normal UND greift zusaetzlich). idle -> windup (Richtung
+// EINMALIG eingefroren, Muster ramDrive()) -> Treffer-/Fehlschlagpruefung
+// am Ende des Windups (Zielaufloesung erneut, "ausweichen kostet nur
+// Bewegung": weicht das Ziel aus dem gefrorenen Korridor, verpufft der
+// Griff) -> cooldown.
+function updateGrapples(state, dt) {
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.grapple) continue;
+    const gc = t.cfg.grapple;
+    if (!t.grappleState) t.grappleState = { mode: 'idle', timer: 0, dir: 0 };
+    const gs = t.grappleState;
+    if (gs.mode === 'cooldown') {
+      gs.timer -= dt;
+      if (gs.timer <= 0) gs.mode = 'idle';
+      continue;
+    }
+    if (gs.mode === 'idle') {
+      const target = resolveTarget(t, state);
+      if (!target.alive) continue;
+      const d = Math.hypot(target.x - t.x, target.y - t.y);
+      if (d <= gc.maxRangePx && clearLine(state, t.x, t.y, target.x, target.y)) {
+        gs.mode = 'windup';
+        gs.timer = gc.windupS;
+        gs.dir = Math.atan2(target.y - t.y, target.x - t.x);
+        state.sounds.push({ name: 'wave', x: t.x });
+      }
+      continue;
+    }
+    // windup
+    gs.timer -= dt;
+    if (gs.timer > 0) continue;
+    const target = resolveTarget(t, state);
+    const withinRange = target.alive && Math.hypot(target.x - t.x, target.y - t.y) <= gc.maxRangePx;
+    const withinCone =
+      withinRange && Math.abs(angleDelta(gs.dir, Math.atan2(target.y - t.y, target.x - t.x))) < (gc.aimToleranceRad ?? 0.35);
+    const sighted = withinCone && clearLine(state, t.x, t.y, target.x, target.y);
+    if (sighted) {
+      target.grappledBy = t;
+      target.grappleUntil = state.time + gc.pullS;
+      target.grappleRopeHp = gc.ropeHp ?? 1;
+      state.sounds.push({ name: 'dash', x: t.x });
+    } else {
+      // "Dem Korridor ausweichen kostet nur Bewegung" (Auftrag Abschnitt
+      // 8.8) -- ein Fehlschlag ist trotzdem hoer-/sichtbar quittiert
+      // (Muster: fireHook()s Fehlschuss-Rueckmeldung), sonst wirkt die
+      // verbrauchte Abklingzeit wie ein Defekt.
+      state.sounds.push({ name: 'empty', x: t.x });
+      state.flashes.push({ x: t.x, y: t.y, age: 0, dim: true });
+    }
+    gs.mode = 'cooldown';
+    gs.timer = gc.cooldownS;
+  }
+}
+
+// Kuerzester Abstand eines Punktes zu einer Strecke (fuer den beschiessbaren
+// Leinen-Check unten) -- reine Geometrie, kein RNG/State-Zugriff.
+function pointSegmentDistSq(px, py, x0, y0, x1, y1) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const lenSq = dx * dx + dy * dy;
+  let tt = lenSq > 1e-9 ? ((px - x0) * dx + (py - y0) * dy) / lenSq : 0;
+  tt = Math.max(0, Math.min(1, tt));
+  const cx = x0 + dx * tt;
+  const cy = y0 + dy * tt;
+  return (px - cx) ** 2 + (py - cy) ** 2;
+}
+
+// G8 (t_grabber): "Ein einziger Treffer auf die gespannte Leine trennt sie
+// sofort" -- prueft jede aktive Leine (jeder Panzer/Geist mit gesetztem
+// grappledBy) gegen ALLE lebenden Geschosse, unabhaengig vom Besitzer
+// (dasselbe teamlose Prinzip wie t_duds Explosion/t_arclights Kette).
+// Trifft eine Kugel die Strecke Schuetze<->Ziel (beide LEBEND aktuell
+// positioniert, nicht die Position beim Auftreffen), sinkt grappleRopeHp;
+// bei 0 loest sich das Ziel -- die Kugel wird dabei verbraucht ("eine Kugel
+// fuer die Leine ausgeben", Auftrag Abschnitt 8.8).
+function updateGrappleRopes(state) {
+  const carriers = [...state.tanks, ...state.ghosts];
+  for (const target of carriers) {
+    if (!target.alive || !target.grappledBy?.alive || state.time >= target.grappleUntil) continue;
+    const shooter = target.grappledBy;
+    const gc = shooter.cfg.grapple;
+    // Baustein B (G1): "die gespannte Leine ist danach dick und deutlich
+    // gezeichnet und flackert" (Auftrag Abschnitt 8.8) -- drawTankLinks()
+    // zeichnet sie generisch mit, wie Heilstrahl/Lichtfaden/Fahnenlinie/Kette.
+    const flick = 0.5 + 0.5 * Math.sin(state.time * 14);
+    state.tankLinks.push({
+      x0: shooter.x, y0: shooter.y, x1: target.x, y1: target.y,
+      color: [220, 190, 40], width: 4 + flick * 2, baseAlpha: 0.75, pulseAlpha: 0, pulseHz: 0, dash: null,
+    });
+    const rr = (gc?.ropeHitRadiusPx ?? 14) ** 2;
+    for (const b of state.bullets) {
+      if (b.dead) continue;
+      if (pointSegmentDistSq(b.x, b.y, shooter.x, shooter.y, target.x, target.y) > rr) continue;
+      b.dead = true;
+      target.grappleRopeHp = (target.grappleRopeHp ?? 1) - 1;
+      state.sounds.push({ name: 'bounce', x: b.x });
+      state.spawnParticles?.(b.x, b.y, '#c9a227', 6, 90);
+      if (target.grappleRopeHp <= 0) {
+        target.grappledBy = null;
+        target.grappleUntil = 0;
+      }
+      break; // eine Kugel pro Tick reicht -- die Leine ist entweder noch da oder schon weg
+    }
   }
 }
 
@@ -2105,6 +2259,10 @@ export function stepState(state, cmd, dt) {
   // tank.ai.threatened dieses Ticks entscheidet. Bleibt bewusst
   // spielerbezogen (Phase 5 aendert daran nichts).
   updateCoverPerception(state, dt);
+  // G8 (t_metronom): tickt VOR der Gegner-Schleife, damit metronomeHolds()
+  // dort bereits mit dem frischen Beat-Zustand dieses Ticks entscheidet
+  // (Muster wie updateTargeting/updateCoverPerception oben).
+  updateMetronomes(state, dt);
 
   // Gegner: getrennte Turm-/Fahr-KI liefert Bewegung, Schuss- und
   // Minenwunsch. Zwei Boss-Sonderfaelle (Phase 14) haben KEINE physik-
@@ -2146,7 +2304,14 @@ export function stepState(state, cmd, dt) {
     // pfad statt fireBullet() -- die Granate landet nie in state.bullets,
     // deshalb greifen Deflektor/Frontpanzerung (nur gerade Geschosse)
     // automatisch nicht.
-    if (fire) {
+    // G8 (t_metronom): ein gehaltener Feuerwunsch wird UNTERDRUECKT, bis der
+    // naechste Schlag ihn freigibt. t.cooldown tickt (Zeile oben, Haupt-
+    // Panzer-Tick-Schleife) UNABHAENGIG davon weiter -- ein schnell
+    // feuernder Verbuendeter ist beim Schlag also laengst "bereit" und
+    // feuert dann sofort, statt einzeln ueber die Haltezeit verteilt zu
+    // sein. t.metronomeHeld ist reine Anzeige (Renderer: Pulsieren im Takt).
+    t.metronomeHeld = fire && metronomeHolds(state, t);
+    if (fire && !t.metronomeHeld) {
       if (t.cfg.weapon === 'mortar') fireMortar(t, state);
       else fireBullet(t, state);
     }
@@ -2637,6 +2802,8 @@ export function stepState(state, cmd, dt) {
   updateDeathFuses(state, dt); // G2 (t_dud)
   updateMedics(state, dt); // G5 (t_medic)
   updateMasons(state, dt); // G5 (t_mason)
+  updateGrapples(state, dt); // G8 (t_grabber): Windup/Ausloesung, eigener Cooldown
+  updateGrappleRopes(state); // G8: beschiessbare Leine (nach der Bullet-Bewegung oben)
   updateGhosts(state, dt);
   // Spinnenboss-Auftrag: eigene, kleine Tick-Funktionen (Muster wie
   // updateMines/updateMortars oben) statt sie in bestehende Schleifen zu
