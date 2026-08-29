@@ -28,6 +28,7 @@ import {
   drawLanceAim,
   drawRamTelegraphs,
   drawAnchorFields,
+  drawHarvestFields,
   drawMasonScaffolds,
 } from './effects.js';
 import { drawSpiderBossLegs, drawSpiderBossBody, drawSpiderMines, drawSpiderWebs } from './spiderrender.js';
@@ -873,6 +874,23 @@ export function createRenderer(ctx) {
       ctx.arc(x, y, r + 4, 0, Math.PI * 2);
       ctx.stroke();
     }
+    // G7 (t_harvester): Stapelzahl als kleine dunkelrote Marke mit Zahl --
+    // EINE Marke mit Text statt eines Punkts je Stapel (waere bei hohen
+    // Stapelzahlen unlesbar). Position spiegelbildlich zum Horcher-Marker
+    // (links statt rechts von relayAssisted), damit beide nie kollidieren.
+    if (t.cfg.harvest && t.harvestStacks > 0) {
+      const mx = x - r - 10;
+      const my = y - r - 10;
+      ctx.fillStyle = 'rgba(160,20,20,0.85)';
+      ctx.beginPath();
+      ctx.arc(mx, my, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffe8e0';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(t.harvestStacks), mx, my + 1);
+    }
 
     // Lebensleiste. Bei GEGNERN (Phase 2) nur, wenn sie angeschlagen sind:
     // auf einem Telefondisplay mit acht Gegnern waere ein Dauerbalken ueber
@@ -1482,6 +1500,7 @@ export function createRenderer(ctx) {
       drawFloor();
       tracks.draw(ctx);
       drawAnchorFields(ctx, state); // G3: permanente Bodenmarkierung, unter allem
+      drawHarvestFields(ctx, state); // G7: dito, dunkelrot statt violett
       drawMines(ctx, state);
       drawSpiderMines(ctx, state);
       drawSpiderWebs(ctx, state);

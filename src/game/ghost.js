@@ -734,6 +734,9 @@ export function killGhost(state, g, cause = 'damage') {
     if (tryReviveGhost(state, g)) return;
   }
   g.alive = false;
+  // Verwerter (G7, t_harvester): "stirbt ein Panzer ODER Geist" -- gilt fuer
+  // jede Todesart (Schaden/Ablauf/Opfer), keine Einschraenkung im Auftrag.
+  state.applyHarvestGrowth(g.x, g.y, null);
   if (cause === 'damage') spawnDeathZone(state, g);
   // ghost_065 "Seelenheilung" (Nekromant-V2 Phase 8): der Champion heilt sich,
   // wenn ein ANDERER Untertan hier ueber Schaden/Ablauf stirbt (der dritte

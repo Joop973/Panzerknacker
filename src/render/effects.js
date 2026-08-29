@@ -417,6 +417,28 @@ export function drawAnchorFields(ctx, state) {
   }
 }
 
+// Fressradius (G7, t_harvester): "deutlich gezeichneter Fressradius auf dem
+// Boden (dunkelrot, halbtransparent)" -- reiner statischer Bodenring wie
+// drawAnchorFields() (dieselbe Begruendung: die Zone selbst aendert sich
+// nie, nur die Stapelzahl am Panzer waechst -- s. drawTank()).
+export function drawHarvestFields(ctx, state) {
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.harvest) continue;
+    const r = t.cfg.harvest.radiusPx;
+    ctx.save();
+    ctx.fillStyle = 'rgba(140,20,20,0.10)';
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(200,60,50,0.5)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 // Rammler-Sturmkorridor (G2, t_rusher): waehrend des Windups (Richtung
 // bereits eingefroren, ai_drives.js: ramDrive()) zeigt drawCorridorTelegraph
 // (Baustein C) den Sturmweg -- IMMER sichtbar, dieselbe Fairness-Regel wie

@@ -323,6 +323,24 @@ export function ramDrive(tank, state, dt) {
   return { x: 0, y: 0 };
 }
 
+// Kettenhund-Abstand (G7, t_tether): haelt aktiv 100-200 px Abstand zum
+// gebundenen Partner -- zu nah -> weg, zu weit -> hin, dazwischen `null`
+// (kein Vorrang, normales Rollenverhalten laeuft weiter). Reine Geometrie
+// ohne eigenen Zustandsautomaten: der Zustand IST die aktuelle Distanz,
+// kein Timer/Modus muss gemerkt werden (anders als ramDrive/chargeTurret).
+// moveTank() normiert die Achse selbst, ein unnormierter Richtungsvektor
+// reicht (Muster: masonMove/ramDrive geben ebenfalls rohe {x,y} zurueck).
+export function tetherStandoffDrive(tank, partner, tc) {
+  const dx = partner.x - tank.x;
+  const dy = partner.y - tank.y;
+  const dist = Math.hypot(dx, dy);
+  const near = tc.standoffMinPx ?? 100;
+  const far = tc.standoffMaxPx ?? 200;
+  if (dist < near) return { x: -dx, y: -dy }; // zu nah -> weg vom Partner
+  if (dist > far) return { x: dx, y: dy }; // zu weit -> zum Partner
+  return null;
+}
+
 export const DRIVES = {
   guardian: guardianDrive,
   sapper: sapperDrive,

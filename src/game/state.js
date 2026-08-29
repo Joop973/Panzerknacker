@@ -255,6 +255,91 @@ function bfsReachable(grid, startCol, startRow) {
   return seen;
 }
 
+// G7 (t_tether, "Der Kettenhund"): einmalige Bindung beim Raumaufbau (und
+// erneut nach einem Wellen-2-Spawn, s. updateWave()) -- jeder noch
+// ungebundene Kettenhund sucht den naechstgelegenen noch ungebundenen
+// Verbuendeten, bevorzugt einen anderen Kettenhund (preferSameType). Die
+// Bindung ist immer MUTUAL (beide Panzer zeigen aufeinander), rein
+// geometrisch/deterministisch (kein RNG-Verbrauch). Nimmt den vollen
+// Panzerbestand entgegen (nicht nur die neu gespawnten), damit ein bereits
+// ueberlebender, unverbundener Welle-1-Kettenhund sich auch mit einem neu
+// erschienenen Welle-2-Kettenhund binden kann.
+export function bondTethers(tanks) {
+  // Wer BRAUCHT eine Bindung: nur ungebundene Kettenhunde.
+  const seekers = tanks.filter((t) => t.alive && t.cfg.tether && !t.tetherPartner);
+  for (const t of seekers) {
+    if (t.tetherPartner) continue; // wurde inzwischen von einem anderen Kandidaten gebunden
+    let best = null;
+    let bestD = Infinity;
+    let bestSame = null;
+    let bestSameD = Infinity;
+    // Wer als PARTNER infrage kommt: JEDER lebende, noch ungebundene
+    // Panzer -- nicht nur andere Kettenhunde. Ein Kettenhund ohne
+    // gleichartigen Partner muss sich sonst an gar niemanden binden koennen
+    // ("bevorzugt einen anderen Kettenhund" ist eine Praeferenz, kein
+    // Zwang -- s. Designdokument Abschnitt 8.5).
+    for (const o of tanks) {
+      if (o === t || !o.alive || o.tetherPartner) continue;
+      const d = (o.x - t.x) ** 2 + (o.y - t.y) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = o;
+      }
+      if (o.type === t.type && d < bestSameD) {
+        bestSameD = d;
+        bestSame = o;
+      }
+    }
+    const partner = (t.cfg.tether.preferSameType && bestSame) || best;
+    if (partner) {
+      t.tetherPartner = partner;
+      partner.tetherPartner = t;
+    }
+  }
+}
+
+// G7 (t_tether): Bindungspruefung (bricht DAUERHAFT bei Wandkontakt oder zu
+// grossem Abstand -- kein Wiederverbinden) + die immer sichtbare Kette
+// (Baustein B, G1). Eigene Funktion nach dem Muster updateMedics()/
+// updateMasons() (G5) statt eines weiteren Sonderfalls im gemeinsamen
+// G6-Aura-Reset-Durchlauf -- die Bindung ist ein reines Paarkonzept, kein
+// Aura-/Ziel-bezogener Wert.
+function updateTethers(state) {
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.tether || !t.tetherPartner) continue;
+    const partner = t.tetherPartner;
+    if (!partner.alive) {
+      t.tetherPartner = null;
+      continue;
+    }
+    const tc = t.cfg.tether;
+    const dist = Math.hypot(partner.x - t.x, partner.y - t.y);
+    const broken = dist > (tc.breakDistPx ?? 260) || (tc.breakOnWall && !clearLine(state, t.x, t.y, partner.x, partner.y));
+    if (broken) {
+      t.tetherPartner = null;
+      partner.tetherPartner = null;
+      continue;
+    }
+    // Nur EINMAL pro Paar pushen (nicht von beiden Seiten) -- feste
+    // id-Ordnung statt eines zweiten "schon gezeichnet"-Sets.
+    if (t.id < partner.id) {
+      const flashing = state.time < (t.tetherFlashUntil || 0) || state.time < (partner.tetherFlashUntil || 0);
+      state.tankLinks.push({
+        x0: t.x,
+        y0: t.y,
+        x1: partner.x,
+        y1: partner.y,
+        color: flashing ? [230, 140, 70] : [140, 80, 40],
+        width: flashing ? 5 : 3,
+        baseAlpha: 0.8,
+        pulseAlpha: 0.15,
+        pulseHz: 1,
+        dash: null,
+      });
+    }
+  }
+}
+
 // G5 (t_medic, "Der Zehrer"): repariert dauerhaft GENAU EINEN Verbuendeten
 // -- den am staerksten beschaedigten in Reichweite mit freier Sichtlinie.
 // Bewusst KEIN eigenes Modul (Muster wie updateDeathFuses oben) -- der
@@ -469,6 +554,11 @@ export function createState(data, tiles, opts) {
     applyAffixByIndex(t, i, eliteAffixes);
     tanks.push(t);
   });
+  // G7 (t_tether): einmalige Bindung, sobald alle Welle-1-Gegner stehen
+  // (braucht den vollen Bestand, um "den naechstgelegenen" zu finden -- kann
+  // nicht in der Spawn-Schleife selbst passieren). updateWave() ruft
+  // bondTethers() nach dem Wellen-2-Spawn erneut auf.
+  bondTethers(tanks);
   const pendingWave =
     waveSplit != null
       ? {
@@ -918,6 +1008,27 @@ export function createState(data, tiles, opts) {
         state.spawnParticles(tank.x, tank.y, '#8a6ad8', 5, 70);
         return;
       }
+      // Kettenhund (G7, t_tether): JEDER Schaden an einem gebundenen Panzer
+      // wird 50/50 zwischen ihm und seinem Partner geteilt -- GANZ AM ANFANG,
+      // bevor irgendeine der beiden Seiten ihre EIGENE Abwehr (Resistenz/
+      // Schild/Exekution) darauf anwendet (jede Seite rechnet unabhaengig,
+      // ein Gepanzerter in der Kette blockt seinen Anteil normal). Zwei
+      // getrennte, rekursive applyDamage()-Aufrufe statt einer einzigen
+      // Ableitung -- meta.tetherSplit verhindert die Ping-Pong-Rekursion
+      // (der Partner hat selbst wieder einen tetherPartner, der auf DIESEN
+      // Panzer zeigt). "Split, nicht verdoppelt": der GESAMTSCHADEN bleibt
+      // gleich, nur auf zwei LP-Pools verteilt (6 Treffer a 10 Schaden = 60
+      // gesamt = 30/30 bei maxHp 30 -- beide sterben gleichzeitig, exakt wie
+      // im Designdokument vorgerechnet).
+      if (tank.cfg.tether && tank.tetherPartner?.alive && !meta?.tetherSplit) {
+        const half = (amount ?? 1) * (tank.cfg.tether.splitPct ?? 0.5);
+        const partner = tank.tetherPartner;
+        tank.tetherFlashUntil = state.time + 0.2;
+        partner.tetherFlashUntil = state.time + 0.2;
+        state.applyDamage(tank, half, cause, { ...meta, tetherSplit: true });
+        if (partner.alive) state.applyDamage(partner, half, cause, { ...meta, tetherSplit: true });
+        return;
+      }
       // Schadensresistenz (Nekromant-V2 Phase 2): wirkt GENERISCH auf JEDEN
       // Schaden, der diesen Panzer ueberhaupt erreicht -- auch auf Schaden
       // ueber Zeit (ein resistenter Panzer soll auch gegen Brand/Gift zaeher
@@ -1055,6 +1166,30 @@ export function createState(data, tiles, opts) {
       // durchkommt, ist garantiert toedlich.
       if (tank.hp > 0 && !tank.executing) return;
       state.killTank(tank, cause, meta);
+    },
+    // Verwerter (G7, t_harvester): "stirbt ein Panzer ODER Geist in
+    // radiusPx Umkreis, waechst er dauerhaft" -- als state-Methode statt
+    // Modulfunktion, damit sowohl killTank() (state.js) als auch killGhost()
+    // (ghost.js) sie ueber das bereits vorhandene state-Argument aufrufen
+    // koennen (Muster wie damageGhostsInRadius/registerAnvilRage). excludeTank
+    // schliesst den gerade sterbenden Panzer selbst aus (relevant, falls ein
+    // Verwerter sich selbst als "in Reichweite" faende -- praktisch nie, da
+    // er zu diesem Zeitpunkt schon !alive ist, aber ausdruecklich statt
+    // implizit ausgeschlossen). Der maxHp-Zuwachs heilt NICHT (healOnStack:
+    // false in den Daten) -- er macht nur zaeher fuer KUENFTIGE Treffer.
+    applyHarvestGrowth(x, y, excludeTank) {
+      for (const h of state.tanks) {
+        if (h === excludeTank || !h.alive || !h.cfg.harvest) continue;
+        const hc = h.cfg.harvest;
+        const d2 = (h.x - x) ** 2 + (h.y - y) ** 2;
+        if (d2 > hc.radiusPx * hc.radiusPx) continue;
+        h.harvestStacks = (h.harvestStacks || 0) + 1;
+        h.cfg.maxHp += hc.hpPerStack;
+        h.cfg.damage += hc.damagePerStack;
+        if (hc.healOnStack) h.hp += hc.hpPerStack;
+        state.spawnParticles?.(x, y, '#ff3030', 5, 80);
+        state.sounds.push({ name: 'combo', x: h.x });
+      }
     },
     // Spinnenboss (Abschnitt 16): explodeAt() (mine.js) iteriert nur
     // state.tanks -- Geister/Champion leben getrennt in state.ghosts und
@@ -1237,6 +1372,13 @@ export function createState(data, tiles, opts) {
         }
         state.enemyKills++;
         state.killLog.push(tank.type);
+        // Verwerter (G7, t_harvester): "meine Gegner sterben" -- der
+        // Spieler toetet ein Enemy, das feeded jeden lebenden Verwerter in
+        // Reichweite. Bewusst NUR im Nicht-Spieler-Zweig (die Frage, "wo
+        // sterben meine Gegner", meint eindeutig Feindtode, nicht den
+        // eigenen Tod -- derselbe Zweig-Entscheid wie beim deathBlast-Hook
+        // oben, t_dud).
+        state.applyHarvestGrowth(tank.x, tank.y, tank);
         const pc = state.player.cfg;
         // Beutejagd-Upgrade (Phase 18): der ERSTE Kill in jedem Raum gibt
         // sofort Bonus-Schrott -- eigener Raum-Zaehler (Muster wie
@@ -1680,6 +1822,10 @@ function updateWave(state, dt) {
     state.tanks.push(t);
   });
   state.pendingWave = null;
+  // G7 (t_tether): erneuter Bindungslauf ueber den VOLLEN Bestand (nicht nur
+  // die neu gespawnten) -- ein ueberlebender, unverbundener Welle-1-
+  // Kettenhund kann sich so noch mit einem neuen Welle-2-Kettenhund binden.
+  bondTethers(state.tanks);
 }
 
 // Ein fester Physikschritt.
@@ -1896,6 +2042,10 @@ export function stepState(state, cmd, dt) {
       });
     }
   }
+
+  // G7 (t_tether): Bindungspruefung (dauerhafter Bruch) + die immer
+  // sichtbare Kette.
+  updateTethers(state);
 
   // Statuseffekte ueber Zeit (Phase 5): eigener Durchlauf NACH der
   // Timer-Schleife, weil ein Tick toeten kann und die Schleife oben sonst

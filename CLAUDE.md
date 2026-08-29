@@ -8309,11 +8309,135 @@ Kernarchitektur, drei der vier sind praktisch reine Datenuebernahme.
 - Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien --
   alle vier Typen aliasen auf vorhandene Sprites).
 
-**Damit sind alle acht in `docs/AUFTRAG-GEGNERDESIGN.md` als "konservativ"
-eingestuften Gegner gebaut (vier je Akt) -- `UMBAUPLAN-GEGNER.md` nennt fuer
-Akt 3 zusaetzlich fuenf "alternative" Mechaniken
-(`t_tether`/`t_harvester`/`t_metronom`/`t_grabber`/`t_mason` ist bereits Akt 2)
-als moegliche Folgephasen G7-G9, noch nicht beauftragt.**
+Damit sind alle acht in `docs/AUFTRAG-GEGNERDESIGN.md` als "konservativ"
+eingestuften Gegner gebaut (vier je Akt). Fuenf "alternative" Mechaniken
+bleiben fuer Akt 3 (`t_tether`/`t_harvester`/`t_metronom`/`t_grabber`/
+`t_mason` ist bereits Akt 2 aus G5) -- die ersten zwei davon sind mit
+**Phase G7** gebaut.
+
+**Phase G7 (Akt 3, die ersten zwei "alternativen" Mechaniken) ist gebaut.**
+`t_tether` (Kettenhund) und `t_harvester` (Verwerter) sind die ersten
+Gegner im Spiel, deren Wert von einem ANDEREN Ereignis abhaengt (ein
+Partner-Panzer bzw. ein Tod in der Naehe), nicht nur von sich selbst wie
+alle bisherigen Typen.
+- **`t_tether`** (Kettenhund, 5 Punkte je Stueck, ab Raum 2): bindet sich
+  beim Raumaufbau an den naechstgelegenen noch ungebundenen Verbuendeten
+  (bevorzugt einen zweiten Kettenhund, `preferSameType`) -- **immer
+  MUTUAL** (beide zeigen aufeinander). Neue Funktion `state.js:
+  bondTethers(tanks)` (exportiert, fuer direkte Tests), aufgerufen einmalig
+  am Ende der Welle-1-Spawnschleife UND erneut nach einem Welle-2-Spawn
+  (`updateWave()`), jeweils ueber den VOLLEN Bestand (nicht nur die neu
+  gespawnten) -- ein ueberlebender unverbundener Welle-1-Kettenhund kann
+  sich so noch mit einem neuen Welle-2-Kettenhund binden.
+  - **Schadensteilung 50/50**: `state.js: applyDamage()` bekommt einen neuen
+    Zweig GANZ AM ANFANG (nach den Boss-/Spider-Unverwundbarkeitsgattern,
+    vor Resistenz/Schild) -- bei einem gebundenen Ziel wird der Betrag
+    HALBIERT und ZWEIMAL rekursiv ueber `state.applyDamage()` angewandt
+    (einmal auf das Ziel selbst, einmal auf den Partner), sodass jede Seite
+    ihre EIGENE Abwehr (Resistenz/Schild/Panzerung des Partners) unabhaengig
+    darauf anwendet. `meta.tetherSplit` verhindert die Ping-Pong-Rekursion
+    (der Partner hat selbst wieder einen `tetherPartner`, der auf DIESEN
+    Panzer zeigt) -- eine Gegenprobe ohne das Flag endet folgerichtig in
+    `RangeError: Maximum call stack size exceeded`. "Split, nicht
+    verdoppelt": der GESAMTSCHADEN bleibt gleich, nur auf zwei LP-Pools
+    verteilt (6 Treffer a 10 Schaden = 60 gesamt = 30/30 bei maxHp 30 --
+    beide sterben gleichzeitig, exakt die Designdokument-Rechnung).
+  - **Bindung bricht DAUERHAFT** (kein Wiederverbinden) bei Wandkontakt oder
+    ueber `breakDistPx` (260) -- neue Funktion `updateTethers(state)`
+    (Muster `updateMedics()`/`updateMasons()` aus G5, eigener Aufruf in
+    `stepState()`), prueft das JEDEN Tick unabhaengig von Schaden (eine
+    reine Bewegungstrennung ohne jeden Treffer muss die Bindung genauso
+    brechen koennen).
+  - **Immer sichtbare Kette** ueber Baustein B (`state.tankLinks`, dick,
+    rostbraun, kurzzeitig heller/dicker bei einem echten Split-Ereignis ueber
+    `tank.tetherFlashUntil`) -- nur EINMAL pro Paar gepusht (`t.id <
+    partner.id`), nicht von beiden Seiten.
+  - **Standoff-Bewegung** (100-200 px Zielband, `t_tether.tether.
+    standoffMinPx/standoffMaxPx` -- zwei Datenfelder ueber die im
+    Designdokument genannten vier hinaus, gleiches Muster wie `t_mason.
+    build`s zusaetzliche Felder in G5): neue `ai_drives.js:
+    tetherStandoffDrive(tank, partner, tc)`, geometrisch ohne eigenen
+    Zustandsautomaten (der Zustand IST die aktuelle Distanz) -- zu nah
+    bewegt weg, zu weit bewegt hin, dazwischen `null` (kein Vorrang, normales
+    Rollenverhalten laeuft weiter). Dispatch-Vorrang in `ai.js:
+    updateEnemy()` VOR Deckungssuche/Rolle (Muster `ramMove`/`masonMove`).
+  - **Echter Bugfund beim eigenen Testbau**: die erste Fassung von
+    `bondTethers()` filterte den Kandidatenpool auf `t.cfg.tether` VOR der
+    Suche -- ein Kettenhund ohne gleichartigen Partner in der Naehe konnte
+    sich dadurch NIE an einen normalen Verbuendeten binden (der "faellt
+    zurueck auf den naechsten Verbuendeten"-Pfad war komplett tot, seit dem
+    allerersten Entwurf). Gefunden durch den regulaeren Testlauf (nicht erst
+    per Gegenprobe), gefixt: der Kandidatenpool ist jetzt der VOLLE
+    Panzerbestand, nur die "wer braucht eine Bindung"-Liste bleibt auf
+    Kettenhunde beschraenkt.
+- **`t_harvester`** (Verwerter, 10 Punkte, ab Raum 8): "stirbt ein Panzer
+  ODER Geist in `radiusPx` (200) Umkreis, waechst er dauerhaft" -- neue
+  state-Methode `applyHarvestGrowth(x, y, excludeTank)` (Muster
+  `damageGhostsInRadius`/`registerAnvilRage`: als state-Methode, damit
+  sowohl `state.js: killTank()` als auch `ghost.js: killGhost()` sie ueber
+  das ohnehin vorhandene `state`-Argument aufrufen koennen), erhoeht
+  `tank.cfg.maxHp`/`tank.cfg.damage` DIREKT (jeder gespawnte Panzer hat sein
+  EIGENES, frisches `resolveCfg()`-Objekt -- verifiziert vor dem Bau, keine
+  Gefahr von geteilten cfg-Referenzen zwischen zwei Verwerter-Instanzen) --
+  `healOnStack:false` in den Daten heisst: der Zuwachs auf `maxHp` heilt
+  NICHT, er macht nur zaeher fuer KUENFTIGE Treffer. Zwei Aufrufstellen:
+  `killTank()`s Nicht-Spieler-Zweig (bewusst NICHT der Spieler-Zweig -- "wo
+  sterben MEINE GEGNER" meint Feindtode, nicht den eigenen Tod, derselbe
+  Zweig-Entscheid wie beim `t_dud`-`deathBlast`-Hook aus G2) und
+  `killGhost()` (jede Todesart -- Schaden/Ablauf/Opfer, keine Einschraenkung
+  im Designtext). Telegraph: statischer dunkelroter Bodenring
+  (`effects.js: drawHarvestFields()`, Muster `drawAnchorFields()` aus G3)
+  + eine kleine Zahlen-Marke ueber dem Panzer (`t.harvestStacks`, EINE Marke
+  mit Zahl statt eines Punkts je Stapel -- waere bei hohen Stapelzahlen
+  unlesbar).
+- **Bewusst NICHT gebaut** (Designtext-Kategorie "Telegraph", nicht
+  "Kernmechanik", dieselbe Vereinfachungsklasse wie bei G3/G6): der
+  "Saugeffekt vom Sterbeort zum Verwerter" -- `state.tankLinks` wird JEDEN
+  Tick komplett neu aufgebaut, ein mehrere Frames sichtbarer Effekt braeuchte
+  ein eigenes, separates Array; ein kurzer Partikelstoss am Sterbeort steht
+  stattdessen (bereits vorhanden ueber `spawnParticles`).
+- **Sprite-Aliase statt neuer Dateien**: `t_tether→t_brown` (rostbraun,
+  geteilt mit `t_rusher`), `t_harvester→t_pink` (naechstliegender roter
+  Bestandston) -- Identitaet traegt vollstaendig Verhalten + die sichtbare
+  Kette bzw. den Fressradius-Bodenkreis.
+- **Neuer Testabschnitt 75** (`tests/regression.mjs`, Gegenprobe fuer jeden
+  Kernpunkt einzeln bestanden -- je einzeln absichtlich rot gemacht und
+  zurueckgesetzt: `preferSameType`-Praeferenz entfernt, der Kandidatenpool
+  probeweise wieder auf den urspruenglichen Fehler zurueckgesetzt (bestaetigt
+  den Bugfund), der ganze Split-Hook deaktiviert, der `tetherSplit`-
+  Rekursionsschutz entfernt (endet in einem `RangeError` -- gilt als
+  bestandene Gegenprobe, Muster aus fruehreren Sessions), Abstands- bzw.
+  Wand-Bruchbedingung je einzeln entfernt, der Ketten-Link-Push deaktiviert,
+  beide `tetherStandoffDrive()`-Zweige je einzeln entfernt, das gesamte
+  Verwerter-Wachstum deaktiviert, nur der Radius-Ausschluss entfernt, nur
+  die `healOnStack`-Bedingung entfernt (heilt dann immer), der
+  `killTank()`-Hook entfernt, der Hook probeweise auch in den
+  Spieler-Zweig kopiert (bestaetigt die Zweig-Entscheidung), der
+  `killGhost()`-Hook entfernt): Struktur (beide Typen + Akt-3-Freischaltung),
+  `bondTethers()`-Mechanismus (Praeferenz + Fallback, inkl. der Gegenprobe
+  fuer den echten Bugfund), Schadensteilung (50/50, Gesamtschaden bleibt
+  gleich), die exakte 6-Treffer-Designrechnung, Bindungsbruch (Abstand UND
+  Wand, DAUERHAFT -- kein Wiederverbinden nach Rueckkehr in Reichweite),
+  die sichtbare Kette (genau ein Link je Paar, verschwindet nach dem Bruch),
+  `tetherStandoffDrive()` isoliert mit eigenen Zahlen, Verwerter-Wachstum
+  (maxHp/damage/Stapelzaehler, kein Heilen, Radius-Ausschluss), ein
+  Geistertod waechst denselben Verwerter, der Spielertod NICHT.
+  **Ein Fund beim eigenen Testbau (kein Code-Bug)**: die urspruengliche
+  `check(near.x < 0, ...)`-Assertion in (g) crashte hart (statt einen
+  Check zu roeten), wenn `tetherStandoffDrive()` `null` zurueckgibt -- auf
+  `near?.x`/`far?.x` umgestellt, damit ein gebrochener Mechanismus als
+  normale FEHLER-Zeile erscheint statt die ganze Suite abzubrechen.
+- **Schlechtester Frame** (Grundregel): Acht-Gegner-Raum (4x je neuer Typ)
+  vs. Baseline aus acht Bestandstypen, 600 Ticks, drittgroesster Wert:
+  Baseline **1,600 ms**, G7-Raum **0,693 ms** (Budget 6 ms).
+- Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien).
+
+**Naechste Sitzung (falls beauftragt): Phase G8** (`t_metronom`/
+`t_grabber`, die letzten beiden "alternativen" Mechaniken -- beide
+architektonisch invasiver als G7: `t_metronom` synchronisiert die
+Feuerfreigabe ALLER Verbuendeten mit Sichtlinie zu ihm ueber
+`ai_turrets.js: roleTurret()`, `t_grabber` kehrt den bestehenden
+Enterhaken-Mechanismus um (zieht das ZIEL statt den Schuetzen)).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **`t_relay` (Horcher) hat noch keine eigene Sichtlinien-Suchfahrt**
