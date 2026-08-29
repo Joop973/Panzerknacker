@@ -167,6 +167,7 @@ export function resolveCfg(data, type) {
     stalk: t.stalk || null, // t_stalker (G5): distanzbasierte Tarnung
     tether: t.tether || null, // t_tether (G5): Schadensteilung ueber Kette
     harvest: t.harvest || null, // t_harvester (G6): staerker durch Kills in Reichweite
+    affixDeny: t.affixDeny || null, // G8 (O3): optionale Elite-Affix-Sperrliste je Typ
     metronome: t.metronome || null, // t_metronom (G7): Feuerfreigabe-Buendelung
     grapple: t.grapple || null, // t_grabber (G6): Enterhaken auf das Ziel
     build: t.build || null, // t_mason (G7): setzt Wandzellen zur Laufzeit

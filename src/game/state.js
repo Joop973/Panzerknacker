@@ -184,7 +184,16 @@ function applyAffixByIndex(t, index, eliteAffixes) {
   // (Bugfix: vorher stand hier pauschal die volle Rezeptur, wodurch jeder
   // andere Gegner im Raum einen Schild-Punkt zeigte, den er gar nicht hatte).
   t.affixes = [];
+  // G8 (UMBAUPLAN-GEGNER.md O3): optionale Sperrliste je Gegnertyp
+  // (data/tanks.json: affixDeny). Nur ausgewertet, wenn gesetzt -- ohne das
+  // Feld bleibt jeder Affix erlaubt wie bisher. Ein gesperrter Affix wird
+  // auch NICHT in t.affixes eingetragen, sonst zeigte der Panzer einen
+  // Farbpunkt fuer eine Wirkung, die er gar nicht hat (dieselbe Fehlerklasse
+  // wie der Regenerierschild-Bugfix, der diesen Block ueberhaupt erst
+  // eingefuehrt hat).
+  const deny = t.cfg.affixDeny;
   for (const affix of eliteAffixes.chosen) {
+    if (deny && deny.includes(affix.id)) continue;
     if (affix.regenerating) {
       if (index === eliteAffixes.cheapestIdx || index === eliteAffixes.priciestIdx) {
         t.shieldReady = true;

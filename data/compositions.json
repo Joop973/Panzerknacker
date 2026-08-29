@@ -9,8 +9,14 @@
       "minRoom": 2,
       "weight": 1,
       "enemies": [
-        { "type": "t_rusher", "count": 2 },
-        { "type": "t_shotgun", "count": 1 }
+        {
+          "type": "t_rusher",
+          "count": 2
+        },
+        {
+          "type": "t_shotgun",
+          "count": 1
+        }
       ]
     },
     {
@@ -21,10 +27,22 @@
       "_comment": "minRoom auf 5 statt 4 -- t_yellow (Bestandteil) schaltet in Akt 2 erst ab Raum 5 frei (data/difficulty.json: danger.t_yellow.unlockRoomInAct); pickComposition() haette die Komposition vorher ohnehin nie gefeuert (Freischaltungs-Gate), minRoom nur nachgezogen.",
       "weight": 1,
       "enemies": [
-        { "type": "t_lance", "count": 1 },
-        { "type": "t_brown", "count": 3 },
-        { "type": "t_grey", "count": 2 },
-        { "type": "t_yellow", "count": 1 }
+        {
+          "type": "t_lance",
+          "count": 1
+        },
+        {
+          "type": "t_brown",
+          "count": 3
+        },
+        {
+          "type": "t_grey",
+          "count": 2
+        },
+        {
+          "type": "t_yellow",
+          "count": 1
+        }
       ]
     },
     {
@@ -35,10 +53,22 @@
       "_comment": "Designtext nennt 4x t_brown (Summe 9 Einheiten) -- ueberschreitet maxEnemiesPerRoom:8 und wuerde von pickComposition() nie gezogen. Auf 3x t_brown gekuerzt (8 Einheiten).",
       "weight": 1,
       "enemies": [
-        { "type": "t_relay", "count": 1 },
-        { "type": "t_brown", "count": 3 },
-        { "type": "t_grey", "count": 2 },
-        { "type": "t_rusher", "count": 2 }
+        {
+          "type": "t_relay",
+          "count": 1
+        },
+        {
+          "type": "t_brown",
+          "count": 3
+        },
+        {
+          "type": "t_grey",
+          "count": 2
+        },
+        {
+          "type": "t_rusher",
+          "count": 2
+        }
       ]
     },
     {
@@ -48,8 +78,14 @@
       "minRoom": 4,
       "weight": 1,
       "enemies": [
-        { "type": "t_dud", "count": 2 },
-        { "type": "t_pink", "count": 2 }
+        {
+          "type": "t_dud",
+          "count": 2
+        },
+        {
+          "type": "t_pink",
+          "count": 2
+        }
       ]
     },
     {
@@ -59,10 +95,22 @@
       "minRoom": 8,
       "weight": 1,
       "enemies": [
-        { "type": "t_anchor", "count": 1 },
-        { "type": "t_dud", "count": 2 },
-        { "type": "t_pink", "count": 2 },
-        { "type": "t_yellow", "count": 1 }
+        {
+          "type": "t_anchor",
+          "count": 1
+        },
+        {
+          "type": "t_dud",
+          "count": 2
+        },
+        {
+          "type": "t_pink",
+          "count": 2
+        },
+        {
+          "type": "t_yellow",
+          "count": 1
+        }
       ]
     },
     {
@@ -73,11 +121,26 @@
       "_comment": "Designtext nennt Raum 6/22 Punkte (Summe hier 23) -- an der echten acts[1].budget-Formel (base 6/perRoom 2.6) reicht Raum 6 (21,6) nicht, Raum 7 (24,2) schon.",
       "weight": 1,
       "enemies": [
-        { "type": "t_medic", "count": 1 },
-        { "type": "t_armored", "count": 1 },
-        { "type": "t_teal", "count": 1 },
-        { "type": "t_pink", "count": 1 },
-        { "type": "t_yellow", "count": 1 }
+        {
+          "type": "t_medic",
+          "count": 1
+        },
+        {
+          "type": "t_armored",
+          "count": 1
+        },
+        {
+          "type": "t_teal",
+          "count": 1
+        },
+        {
+          "type": "t_pink",
+          "count": 1
+        },
+        {
+          "type": "t_yellow",
+          "count": 1
+        }
       ]
     },
     {
@@ -87,11 +150,26 @@
       "minRoom": 7,
       "weight": 1,
       "enemies": [
-        { "type": "t_mason", "count": 1 },
-        { "type": "t_teal", "count": 2 },
-        { "type": "t_yellow", "count": 2 },
-        { "type": "t_grey", "count": 1 },
-        { "type": "t_brown", "count": 1 }
+        {
+          "type": "t_mason",
+          "count": 1
+        },
+        {
+          "type": "t_teal",
+          "count": 2
+        },
+        {
+          "type": "t_yellow",
+          "count": 2
+        },
+        {
+          "type": "t_grey",
+          "count": 1
+        },
+        {
+          "type": "t_brown",
+          "count": 1
+        }
       ]
     },
     {
@@ -101,12 +179,30 @@
       "minRoom": 11,
       "weight": 1,
       "enemies": [
-        { "type": "t_anchor", "count": 1 },
-        { "type": "t_medic", "count": 1 },
-        { "type": "t_armored", "count": 1 },
-        { "type": "t_shotgun", "count": 2 },
-        { "type": "t_green", "count": 1 },
-        { "type": "t_grey", "count": 1 }
+        {
+          "type": "t_anchor",
+          "count": 1
+        },
+        {
+          "type": "t_medic",
+          "count": 1
+        },
+        {
+          "type": "t_armored",
+          "count": 1
+        },
+        {
+          "type": "t_shotgun",
+          "count": 2
+        },
+        {
+          "type": "t_green",
+          "count": 1
+        },
+        {
+          "type": "t_grey",
+          "count": 1
+        }
       ]
     },
     {
@@ -117,15 +213,248 @@
       "_comment": "Designtext nennt Raum 15/8 Einheiten mit 2x t_pink -- die volle Vereinigung (46 Punkte) passt in keinen erreichbaren Kampfraum (Raum 16 ist immer der erzwungene Rastplatz vor dem Boss, hoechstbudget also Raum 15 = 45). Auf 1x t_pink gekuerzt (41 Punkte), dafuer Raum 14 statt 15.",
       "weight": 1,
       "enemies": [
-        { "type": "t_relay", "count": 1 },
-        { "type": "t_lance", "count": 1 },
-        { "type": "t_pink", "count": 1 },
-        { "type": "t_rusher", "count": 1 },
-        { "type": "t_mason", "count": 1 },
-        { "type": "t_medic", "count": 1 },
-        { "type": "t_green", "count": 1 },
-        { "type": "t_shotgun", "count": 1 }
+        {
+          "type": "t_relay",
+          "count": 1
+        },
+        {
+          "type": "t_lance",
+          "count": 1
+        },
+        {
+          "type": "t_pink",
+          "count": 1
+        },
+        {
+          "type": "t_rusher",
+          "count": 1
+        },
+        {
+          "type": "t_mason",
+          "count": 1
+        },
+        {
+          "type": "t_medic",
+          "count": 1
+        },
+        {
+          "type": "t_green",
+          "count": 1
+        },
+        {
+          "type": "t_shotgun",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "k1_der_chor",
+      "name": "Der Chor",
+      "actIndex": 3,
+      "minRoom": 12,
+      "weight": 1,
+      "enemies": [
+        {
+          "type": "t_metronom",
+          "count": 1
+        },
+        {
+          "type": "t_purple",
+          "count": 3
+        },
+        {
+          "type": "t_bulwark",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "k2_der_blutzoll",
+      "name": "Der Blutzoll",
+      "actIndex": 3,
+      "minRoom": 8,
+      "weight": 1,
+      "enemies": [
+        {
+          "type": "t_harvester",
+          "count": 1
+        },
+        {
+          "type": "t_brown",
+          "count": 4
+        },
+        {
+          "type": "t_dud",
+          "count": 1
+        },
+        {
+          "type": "t_green",
+          "count": 1
+        },
+        {
+          "type": "t_pink",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "k3_die_kette",
+      "name": "Die Kette",
+      "actIndex": 3,
+      "minRoom": 5,
+      "weight": 1,
+      "enemies": [
+        {
+          "type": "t_tether",
+          "count": 2
+        },
+        {
+          "type": "t_medic",
+          "count": 1
+        },
+        {
+          "type": "t_armored",
+          "count": 1
+        },
+        {
+          "type": "t_teal",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "k4_der_trichter",
+      "name": "Der Trichter",
+      "actIndex": 3,
+      "minRoom": 7,
+      "weight": 1,
+      "enemies": [
+        {
+          "type": "t_bulwark",
+          "count": 1
+        },
+        {
+          "type": "t_grabber",
+          "count": 1
+        },
+        {
+          "type": "t_shotgun",
+          "count": 2
+        },
+        {
+          "type": "t_green",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "k5_die_blende",
+      "name": "Die Blende",
+      "actIndex": 3,
+      "minRoom": 5,
+      "weight": 1,
+      "enemies": [
+        {
+          "type": "t_relay",
+          "count": 1
+        },
+        {
+          "type": "t_marshal",
+          "count": 1
+        },
+        {
+          "type": "t_brown",
+          "count": 3
+        },
+        {
+          "type": "t_lance",
+          "count": 1
+        },
+        {
+          "type": "t_grey",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "k6_das_rudel",
+      "name": "Das Rudel",
+      "actIndex": 3,
+      "minRoom": 12,
+      "weight": 1,
+      "enemies": [
+        {
+          "type": "t_marshal",
+          "count": 1
+        },
+        {
+          "type": "t_purple",
+          "count": 3
+        },
+        {
+          "type": "t_stalker",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "k7_der_kaefig",
+      "name": "Der Kaefig",
+      "actIndex": 3,
+      "minRoom": 8,
+      "weight": 1,
+      "enemies": [
+        {
+          "type": "t_mason",
+          "count": 1
+        },
+        {
+          "type": "t_grabber",
+          "count": 1
+        },
+        {
+          "type": "t_arclight",
+          "count": 1
+        },
+        {
+          "type": "t_yellow",
+          "count": 2
+        },
+        {
+          "type": "t_dud",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "id": "k8_der_ankerhof",
+      "name": "Der Ankerhof",
+      "actIndex": 3,
+      "minRoom": 8,
+      "weight": 1,
+      "enemies": [
+        {
+          "type": "t_anchor",
+          "count": 1
+        },
+        {
+          "type": "t_bulwark",
+          "count": 1
+        },
+        {
+          "type": "t_medic",
+          "count": 1
+        },
+        {
+          "type": "t_armored",
+          "count": 1
+        },
+        {
+          "type": "t_stalker",
+          "count": 1
+        }
       ]
     }
-  ]
+  ],
+  "_comment_akt3": "Gegner-Umbau G8 (Difficulty Curve): die acht Akt-3-Kompositionen K1-K8 aus docs/AUFTRAG-GEGNERDESIGN.md Abschnitt 11. Vor dem Eintragen gegen die ECHTEN danger-Punkte, die acts[2].budget-Formel (10 + 3,0/Raum, Fenster 50-100 %), maxEnemiesPerRoom und jedes unlockRoomInAct nachgerechnet -- eine Abweichung gefunden: K2 'Der Blutzoll' nennt im Dokument 'ab Raum 6' (nur das Budget gerechnet), t_harvester ist aber selbst erst ab Raum 8 frei; minRoom steht deshalb auf 8. Ohne diese Eintraege lief Akt 3 ausschliesslich ueber den Zufalls-Rueckfall in buyEnemies(), keine der entworfenen Synergien war verlaesslich erreichbar."
 }
