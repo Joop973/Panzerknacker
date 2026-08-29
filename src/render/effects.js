@@ -525,6 +525,59 @@ export function drawLanceAim(ctx, state) {
   }
 }
 
+// Greifer-Wurfkorridor (G8, t_grabber): waehrend des Windups (Richtung
+// bereits eingefroren, state.js: updateGrapples()) zeigt drawCorridorTelegraph
+// (Baustein C) die Wurfrichtung -- IMMER sichtbar, dieselbe Fairness-Regel
+// wie Moerser/Rammler/Amboss. Die gespannte, beschiessbare Leine selbst
+// laeuft NICHT hier, sondern ueber Baustein B (state.tankLinks, gepusht in
+// state.js: updateGrappleRopes()) -- drawTankLinks() zeichnet sie generisch
+// mit, wie Heilstrahl/Lichtfaden/Fahnenlinie/Kette.
+export function drawGrapples(ctx, state) {
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.grapple) continue;
+    const gs = t.grappleState;
+    if (!gs || gs.mode !== 'windup') continue;
+    drawCorridorTelegraph(ctx, state, t.x, t.y, gs.dir, 10, {
+      fillStyle: 'rgba(220,190,40,0.22)',
+      edgeStyle: 'rgba(255,230,120,0.7)',
+      maxLen: t.cfg.grapple.maxRangePx + 40,
+    });
+  }
+}
+
+// Taktgeber-Ring (G8, t_metronom): ein Ring, der ueber holdWindowS sichtbar
+// zusammenzieht (radius max -> 0) und "auf dem Schlag" (state.js:
+// updateMetronomes()s justBeat-Uebergang) kurz am vollen Radius aufblitzt --
+// Auftrag Abschnitt 8.7: "zwei unabhaengige Sinneskanaele" (der Ton ist der
+// zweite, s. state.js). Bewusst KEIN Baustein-C-Wiederverwendung: die dort
+// gebotene Form ("fester Aussenring + wachsende FUELLFLAECHE") ist das
+// Gegenteil von "ein Ring, der selbst schrumpft".
+export function drawMetronomeRings(ctx, state) {
+  const maxR = 46;
+  for (const t of state.tanks) {
+    if (!t.alive || !t.cfg.metronome) continue;
+    const ms = t.metronomeState;
+    if (!ms) continue;
+    const holdW = t.cfg.metronome.holdWindowS ?? 0;
+    const held = ms.elapsed < holdW;
+    const radius = held && holdW > 0 ? maxR * (1 - ms.elapsed / holdW) : 0;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(210,180,60,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, Math.max(4, radius), 0, Math.PI * 2);
+    ctx.stroke();
+    if (ms.justBeat) {
+      ctx.strokeStyle = 'rgba(255,250,200,0.9)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, maxR, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 // Maurer-Geruest (G5, t_mason): 0,8-s-Telegraph VOR dem eigentlichen
 // Wandaufbau -- ein durchscheinendes, gestricheltes Quadrat, das mit dem
 // Baufortschritt sichtbar dichter wird. Bewusst KEINE Wiederverwendung von

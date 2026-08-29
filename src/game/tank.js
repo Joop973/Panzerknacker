@@ -74,6 +74,13 @@ export function createTank(type, cfg, x, y) {
     deflectorTimer: 0, // Restzeit des aktiven Deflektor-Fensters
     deflectorCharges: 0, // > 0: naechster Treffer wird reflektiert
     turretStunTimer: 0, // > 0: EMP-Mine -- Turm dreht sich nicht (stunTimer bleibt fuer Bewegung)
+    // G8 (t_grabber): dieser Panzer ist gerade das Ziel eines Enterhakens.
+    // Anders als der eigene hookTimer oben (ersetzt die Bewegung komplett)
+    // ist das eine ADDITIVE Zug-Nudge -- s. moveTank() unten -- die volle
+    // Steuerung senkrecht zur Leine bleibt erhalten (Auftrag Abschnitt 8.8).
+    grappledBy: null, // > null: der Panzer, der zieht
+    grappleUntil: 0, // state.time-Deadline, bis wann gezogen wird
+    grappleRopeHp: 0, // verbleibende Treffer, bis die Leine reisst
     alive: true,
     ai: {}, // Zustandsspeicher der KI-Verhalten (leer beim Spieler)
   };
@@ -201,6 +208,23 @@ export function moveTank(tank, axis, state, dt) {
     tank.x += state.conveyor.dir.x * state.conveyor.pushPx * dt;
     tank.y += state.conveyor.dir.y * state.conveyor.pushPx * dt;
     resolveCircleWalls(tank, tank.cfg.radius, state.walls);
+  }
+
+  // G8 (t_grabber): additive Zug-Nudge zum Schuetzen -- GENAU dasselbe Muster
+  // wie das Foerderband oben (ADDITIV nach der normalen Bewegung/Kollision,
+  // danach nochmal an Waenden aufloesen). Behaelt dadurch die "volle
+  // Steuerung senkrecht zur Leine" (Auftrag Abschnitt 8.8) -- anders als der
+  // eigene hookTimer weiter oben, der die Eingabe komplett ersetzt.
+  if (tank.grappledBy?.alive && state.time < tank.grappleUntil) {
+    const gx = tank.grappledBy.x - tank.x;
+    const gy = tank.grappledBy.y - tank.y;
+    const gd = Math.hypot(gx, gy);
+    if (gd > 1) {
+      const pull = (tank.grappledBy.cfg.grapple?.pullSpeedPxS ?? 90) * dt;
+      tank.x += (gx / gd) * pull;
+      tank.y += (gy / gd) * pull;
+      resolveCircleWalls(tank, tank.cfg.radius, state.walls);
+    }
   }
 
   // Tatsaechliche Geschwindigkeit nach allen Kollisionen.

@@ -385,6 +385,14 @@ function passBossReward(run) {
     x0: st.player.x, y0: st.player.y, tx: st.player.x + 80, ty: st.player.y,
     age: 0.4, flightTimeS: 1.1, radiusPx: 44, damage: 25, owner: enemy || st.player, exploded: false,
   });
+  // G8 (Nachtrag): ein Greifer-Windup + ein Taktgeber-Zustand im Renderpfad,
+  // damit drawGrapples()/drawMetronomeRings() nicht ungetestet bleiben
+  // (derselbe blinde Fleck wie beim Ziellinien-Crash).
+  if (enemy) {
+    enemy.cfg = { ...enemy.cfg, grapple: { maxRangePx: 300 }, metronome: { holdWindowS: 1.6 } };
+    enemy.grappleState = { mode: 'windup', timer: 0.3, dir: 0 };
+    enemy.metronomeState = { elapsed: 0.5, justBeat: true };
+  }
   const { traceTrajectory: trace } = await import('../src/game/bullet.js');
   for (const [name, fn, args] of [
     ['drawMines', effects.drawMines, [fakeCtx, st]],
@@ -406,6 +414,9 @@ function passBossReward(run) {
     ['drawLeadMarkers', effects.drawLeadMarkers, [fakeCtx, st]],
     // Phase 3: Moerser-Telegraph.
     ['drawMortars', effects.drawMortars, [fakeCtx, st]],
+    // G8: Greifer-Wurfkorridor + Taktgeber-Ring.
+    ['drawGrapples', effects.drawGrapples, [fakeCtx, st]],
+    ['drawMetronomeRings', effects.drawMetronomeRings, [fakeCtx, st]],
   ]) {
     try {
       fn(...args);
@@ -14919,6 +14930,282 @@ for (const seed of SEEDS) {
     const baseMaxHp = harvester.cfg.maxHp;
     st.killTank(st.player, 'test', {});
     check(harvester.cfg.maxHp === baseMaxHp, 'G7 (j): der Spielertod laesst einen Verwerter faelschlich wachsen');
+  }
+}
+
+// ---- 76. Gegner-Umbau Phase G8 (UMBAUPLAN-GEGNER.md): Akt 3, die letzten
+// zwei "alternativen" Mechaniken -- t_metronom (Taktgeber) und t_grabber
+// (Greifer). Der Taktgeber ist der erste Gegner, der NICHT selbst kaempft,
+// sondern das Verhalten ALLER anderen Gegner im Raum veraendert (buendelt
+// ihr Feuer); der Greifer der erste, der dem Spieler Boden statt LP nimmt
+// und dafuer eine Kugel als Gegenwehr verlangt.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createTank, moveTank } = await import('../src/game/tank.js');
+  const { createGhost, updateGhosts } = await import('../src/game/ghost.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+  const { CELL, COLS, ROWS } = await import('../src/config.js');
+
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  function openRoom() {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: [],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+    });
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) st.grid[r][c] = r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1 ? '#' : '.';
+    st.walls = [];
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (st.grid[r][c] === '#') st.walls.push({ x: c * CELL, y: r * CELL, w: CELL, h: CELL, type: 'solid', col: c, row: r });
+    return st;
+  }
+
+  // ---- (a) Struktur ------------------------------------------------------
+  {
+    const M = tanksData.types.t_metronom;
+    check(!!M?.metronome && M.weapon === null, 'G8 (a): t_metronom fehlt oder traegt kein metronome/weapon:null');
+    check(
+      typeof M.metronome.beatS === 'number' && typeof M.metronome.holdWindowS === 'number' && M.metronome.needsLos === true,
+      'G8 (a): t_metronom.metronome unvollstaendig',
+    );
+    const G = tanksData.types.t_grabber;
+    check(!!G?.grapple && G.weapon === 'bullet', 'G8 (a): t_grabber fehlt oder traegt kein grapple/weapon:bullet');
+    check(
+      typeof G.grapple.windupS === 'number' &&
+        typeof G.grapple.pullSpeedPxS === 'number' &&
+        typeof G.grapple.pullS === 'number' &&
+        typeof G.grapple.cooldownS === 'number' &&
+        typeof G.grapple.ropeHp === 'number' &&
+        typeof G.grapple.maxRangePx === 'number',
+      'G8 (a): t_grabber.grapple unvollstaendig',
+    );
+    for (const id of ['t_metronom', 't_grabber']) {
+      check(diffData.danger[id]?.unlockAct === 3, `G8 (a): ${id} ist nicht in Akt 3 freigeschaltet`);
+    }
+  }
+
+  // ---- (b) Beat-Zyklus mit EIGENEN Zahlen (nicht 2,0/1,6): elapsed laeuft
+  //          zyklisch 0..beatS, "gehalten" gilt nur unter holdWindowS,
+  //          justBeat feuert NUR beim Uebergang gehalten->frei, genau
+  //          einmal je vollem Zyklus. -----------------------------------
+  {
+    const st = openRoom();
+    const mcfg = { ...resolveCfg(tanksData, 't_metronom'), metronome: { beatS: 1.0, holdWindowS: 0.6, needsLos: false } };
+    const m = createTank('t_metronom', mcfg, 100, 100);
+    st.tanks = [st.player, m];
+    const dt = 1 / 60;
+    let beats = 0;
+    let firstBeatTick = -1;
+    for (let i = 1; i <= 120; i++) {
+      // 2 volle 1,0s-Zyklen
+      stepState(st, CMD0, dt);
+      if (m.metronomeState.justBeat) {
+        beats++;
+        if (firstBeatTick < 0) firstBeatTick = i;
+      }
+    }
+    check(beats === 2, `G8 (b): in zwei vollen 1,0s-Zyklen sollten genau 2 Schlaege auftreten (${beats})`);
+    const expectedTick = Math.round(0.6 / dt);
+    check(
+      Math.abs(firstBeatTick - expectedTick) <= 1,
+      `G8 (b): der erste Schlag kommt nicht bei holdWindowS (Tick ${firstBeatTick}, erwartet ~${expectedTick})`,
+    );
+  }
+
+  // ---- (c) needsLos: ein durch eine Wand vom Taktgeber getrennter
+  //          Verbuendeter wird trotz laufender Haltephase NICHT gehalten
+  //          (metronomeHolds() wird live pro Verbuendetem geprueft). ------
+  {
+    const st = openRoom();
+    st.player.x = 400;
+    st.player.y = 100;
+    const allyCfg = { ...resolveCfg(tanksData, 't_brown'), accuracy: 1.0, fireRate: 0.02, magazine: 20 };
+    // Ally bei (400,200): Richtung zum Spieler ist exakt -PI/2 -- deckt sich
+    // mit createTank()s Standard-Turmwinkel, kein Ausrichtungs-Delay im Test.
+    const ally = createTank('t_brown', allyCfg, 400, 200);
+    // Sehr langer Zyklus (fast nur Haltephase) -- OHNE die Wand waere der
+    // Ally die gesamten 10 Testticks ueber gehalten.
+    const mcfg = { ...resolveCfg(tanksData, 't_metronom'), metronome: { beatS: 5.0, holdWindowS: 4.9, needsLos: true } };
+    const metro = createTank('t_metronom', mcfg, 460, 200);
+    const wallCol = Math.floor(430 / CELL);
+    const wallRow = Math.floor(200 / CELL);
+    st.grid[wallRow][wallCol] = '#';
+    st.walls.push({ x: wallCol * CELL, y: wallRow * CELL, w: CELL, h: CELL, type: 'solid', col: wallCol, row: wallRow });
+    st.tanks = [st.player, ally, metro];
+    const dt = 1 / 60;
+    let fired = false;
+    for (let i = 0; i < 10; i++) {
+      const before = st.bullets.filter((b) => b.owner === ally).length;
+      stepState(st, CMD0, dt);
+      if (st.bullets.filter((b) => b.owner === ally).length > before) fired = true;
+    }
+    check(fired, 'G8 (c): eine Wand zwischen Verbuendetem und Taktgeber haelt den Verbuendeten trotzdem (needsLos wird nicht beachtet)');
+  }
+
+  // ---- (d) Ende-zu-Ende Feuerbuendelung: ein sichtbarer Verbuendeter
+  //          feuert WAEHREND der Haltephase nicht, aber NACH dem Schlag --
+  //          tank.cooldown tickt waehrenddessen unabhaengig weiter, der
+  //          Schuss kommt beim Freigeben also sofort, nicht erst spaeter. --
+  {
+    const st = openRoom();
+    st.player.x = 400;
+    st.player.y = 100;
+    const allyCfg = { ...resolveCfg(tanksData, 't_brown'), accuracy: 1.0, fireRate: 0.02, magazine: 20 };
+    const ally = createTank('t_brown', allyCfg, 400, 200);
+    const mcfg = { ...resolveCfg(tanksData, 't_metronom'), metronome: { beatS: 1.0, holdWindowS: 0.6, needsLos: true } };
+    const metro = createTank('t_metronom', mcfg, 450, 200);
+    st.tanks = [st.player, ally, metro];
+    const dt = 1 / 60;
+    let shotsWhileHeld = 0;
+    let shotsAfterBeat = 0;
+    let sawBeat = false;
+    for (let i = 0; i < 60; i++) {
+      // 1,0s = ein voller Zyklus
+      const before = st.bullets.filter((b) => b.owner === ally).length;
+      stepState(st, CMD0, dt);
+      const fired = st.bullets.filter((b) => b.owner === ally).length > before;
+      if (metro.metronomeState.justBeat) sawBeat = true;
+      if (!sawBeat && fired) shotsWhileHeld++;
+      if (sawBeat && fired) shotsAfterBeat++;
+    }
+    check(shotsWhileHeld === 0, `G8 (d): waehrend der Haltephase feuert ein sichtbarer Verbuendeter trotzdem (${shotsWhileHeld} Schuesse)`);
+    check(shotsAfterBeat > 0, 'G8 (d): nach dem Schlag feuert der gehaltene Verbuendete nicht');
+  }
+
+  // ---- (e)+(f) Griff-Trigger: Windup startet bei Reichweite+Sicht,
+  //          Richtung wird EINMALIG eingefroren; bleibt das Ziel im
+  //          gefrorenen Korridor, ist der Windup-Ausgang ein TREFFER
+  //          (grappledBy/grappleUntil/grappleRopeHp gesetzt, Cooldown
+  //          startet). ------------------------------------------------------
+  {
+    const st = openRoom();
+    const gcfg = {
+      ...resolveCfg(tanksData, 't_grabber'),
+      grapple: { windupS: 0.3, pullSpeedPxS: 90, pullS: 1.2, cooldownS: 1.0, ropeHp: 1, maxRangePx: 300, aimToleranceRad: 0.2 },
+    };
+    const grabber = createTank('t_grabber', gcfg, 100, 100);
+    st.player.x = 250;
+    st.player.y = 100; // genau rechts vom Greifer -> gefrorene Richtung 0
+    st.tanks = [st.player, grabber];
+    const dt = 1 / 60;
+    stepState(st, CMD0, dt);
+    check(grabber.grappleState?.mode === 'windup', `G8 (e): der Greifer startet kein Windup trotz Sichtlinie+Reichweite (mode=${grabber.grappleState?.mode})`);
+    check(Math.abs(grabber.grappleState.dir) < 0.01, `G8 (e): die eingefrorene Richtung zeigt nicht auf den Spieler (${grabber.grappleState.dir})`);
+    for (let i = 0; i < 20; i++) stepState(st, CMD0, dt); // windupS (0,3s) + Reserve
+    check(st.player.grappledBy === grabber, 'G8 (f): ein Ziel im gefrorenen Korridor wird nicht erfolgreich geangelt');
+    check(st.player.grappleUntil > st.time, 'G8 (f): grappleUntil ist nicht in der Zukunft gesetzt');
+    check(st.player.grappleRopeHp === gcfg.grapple.ropeHp, 'G8 (f): grappleRopeHp ist nicht auf ropeHp gesetzt');
+    check(grabber.grappleState.mode === 'cooldown', 'G8 (f): nach einem Treffer ist der Greifer nicht in Abklingzeit');
+  }
+
+  // ---- (g)+(h) Ausweichen aus dem gefrorenen Korridor KOSTET NUR BEWEGUNG
+  //          (kein Griff), die Abklingzeit haelt trotzdem mindestens
+  //          cooldownS an, bevor ein neuer Windup starten kann. ------------
+  {
+    const st = openRoom();
+    const gcfg = {
+      ...resolveCfg(tanksData, 't_grabber'),
+      grapple: { windupS: 0.3, pullSpeedPxS: 90, pullS: 1.2, cooldownS: 1.0, ropeHp: 1, maxRangePx: 300, aimToleranceRad: 0.2 },
+    };
+    const grabber = createTank('t_grabber', gcfg, 100, 100);
+    st.player.x = 250;
+    st.player.y = 100;
+    st.tanks = [st.player, grabber];
+    const dt = 1 / 60;
+    stepState(st, CMD0, dt);
+    check(grabber.grappleState?.mode === 'windup', 'G8 (g) Vorbedingung: kein Windup gestartet');
+    // Ziel weicht seitlich aus dem gefrorenen Korridor aus, BEVOR der
+    // Windupablaeuft -- der gefrorene Winkel (0, nach rechts) trifft es
+    // danach nicht mehr.
+    st.player.y = 100 + 200;
+    for (let i = 0; i < 20; i++) stepState(st, CMD0, dt);
+    check(!st.player.grappledBy, 'G8 (g): ein ausgewichenes Ziel wird trotzdem geangelt');
+    check(grabber.grappleState.mode === 'cooldown', 'G8 (g): nach einem Fehlschlag ist der Greifer nicht in Abklingzeit');
+    // Abklingzeit haelt mindestens cooldownS (1,0s) an.
+    for (let i = 0; i < 30; i++) stepState(st, CMD0, dt); // 0,5s -- noch nicht abgelaufen
+    check(grabber.grappleState.mode === 'cooldown', 'G8 (h): die Abklingzeit endet zu frueh (vor cooldownS)');
+    for (let i = 0; i < 40; i++) stepState(st, CMD0, dt); // weitere ~0,67s -- insgesamt > 1,0s
+    check(grabber.grappleState.mode !== 'cooldown', 'G8 (h): die Abklingzeit endet nicht nach cooldownS');
+  }
+
+  // ---- (i) Additive Zug-Physik (tank.js: moveTank): "volle Steuerung
+  //          senkrecht zur Leine bleibt" -- eine Eingabe QUER zur Leine hat
+  //          weiterhin volle Wirkung, WAEHREND gleichzeitig der Zug zum
+  //          Schuetzen wirkt (additiv, NICHT wie der eigene hookTimer, der
+  //          die Eingabe komplett ersetzt). ---------------------------------
+  {
+    const st = openRoom();
+    const shooter = createTank('t_grabber', { ...resolveCfg(tanksData, 't_grabber'), grapple: { pullSpeedPxS: 90 } }, 300, 100);
+    const target = createTank('player', resolveCfg(tanksData, 'player'), 100, 100); // links vom Schuetzen -> Zug zeigt nach +x
+    target.grappledBy = shooter;
+    target.grappleUntil = st.time + 10;
+    st.tanks = [target, shooter];
+    const dt = 1 / 60;
+    const axis = { x: 0, y: 1 }; // Eingabe SENKRECHT zur Leine (die auf der X-Achse liegt)
+    const yBefore = target.y;
+    const xBefore = target.x;
+    moveTank(target, axis, st, dt);
+    check(target.y > yBefore, `G8 (i): die eigene Eingabe senkrecht zur Leine hat keine Wirkung mehr (dy=${(target.y - yBefore).toFixed(3)})`);
+    check(target.x > xBefore, `G8 (i): der Zug zum Schuetzen bewegt das Ziel nicht (dx=${(target.x - xBefore).toFixed(3)})`);
+  }
+
+  // ---- (j) Dieselbe additive Zug-Physik gilt auch fuer GEISTER -- "zieht
+  //          auch Geister" (Auftrag Abschnitt 8.8), sogar OHNE eigenes
+  //          Kampfziel im Raum (die Bewegung liegt bewusst VOR der
+  //          Zielaufloesung in ghost.js: updateGhosts()). ------------------
+  {
+    const st = openRoom();
+    const shooter = createTank('t_grabber', { ...resolveCfg(tanksData, 't_grabber'), grapple: { pullSpeedPxS: 90 } }, 300, 100);
+    st.tanks = [st.player, shooter]; // KEIN weiterer Gegner -- der Geist hat kein Kampfziel
+    const g = createGhost(st, 100, 100, 0, 't_pink');
+    st.ghosts.push(g);
+    g.grappledBy = shooter;
+    g.grappleUntil = st.time + 10;
+    updateGhosts(st, 1 / 60);
+    check(g.x > 100, `G8 (j): ein gegriffener Geist ohne eigenes Kampfziel wird nicht Richtung Schuetze gezogen (x=${g.x})`);
+  }
+
+  // ---- (k) Die gespannte Leine ist immer sichtbar (Baustein B, state.
+  //          tankLinks) waehrend eines aktiven Griffs. ----------------------
+  {
+    const st = openRoom();
+    const shooter = createTank('t_grabber', { ...resolveCfg(tanksData, 't_grabber'), grapple: { pullSpeedPxS: 90, ropeHitRadiusPx: 14 } }, 100, 100);
+    st.player.x = 200;
+    st.player.y = 100;
+    st.player.grappledBy = shooter;
+    st.player.grappleUntil = 1000;
+    st.tanks = [st.player, shooter];
+    stepState(st, CMD0, 1 / 60);
+    const links = st.tankLinks.filter((l) => l.color?.[0] === 220 && l.color?.[1] === 190);
+    check(links.length === 1, `G8 (k): keine sichtbare Leine waehrend eines aktiven Griffs (${links.length} Eintraege)`);
+  }
+
+  // ---- (l) Die Leine ist beschiessbar: eine Kugel auf der Strecke senkt
+  //          grappleRopeHp und wird dabei VERBRAUCHT ("eine Kugel fuer die
+  //          Leine ausgeben"); bei 0 loest sich das Ziel. ------------------
+  {
+    const { createBullet } = await import('../src/game/bullet.js');
+    const st = openRoom();
+    const shooter = createTank('t_grabber', { ...resolveCfg(tanksData, 't_grabber'), grapple: { pullSpeedPxS: 90, ropeHitRadiusPx: 14, ropeHp: 1 } }, 100, 100);
+    st.player.x = 200;
+    st.player.y = 100;
+    st.player.grappledBy = shooter;
+    st.player.grappleUntil = 1000;
+    st.player.grappleRopeHp = 1;
+    st.tanks = [st.player, shooter];
+    // Eine Kugel MITTEN auf der Strecke (100,100)-(200,100).
+    const b = createBullet(150, 100, 0, { speed: 0, owner: shooter, damage: 1, radius: 4, kind: 'bullet' });
+    st.bullets = [b];
+    stepState(st, CMD0, 1 / 60);
+    check(b.dead === true, 'G8 (l): eine Kugel auf der Leine wird nicht verbraucht');
+    check(!st.player.grappledBy, 'G8 (l): bei ropeHp 1 loest sich das Ziel nach einem Treffer nicht');
   }
 }
 

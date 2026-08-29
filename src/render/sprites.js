@@ -171,6 +171,13 @@ const SPRITE_ALIAS = {
   // Fressradius-Bodenkreis, kein eigenes Sprite.
   t_tether: 't_brown',
   t_harvester: 't_pink',
+  // G8: "Messinggelb" (t_metronom) und "Industriegelb/schwarz" (t_grabber)
+  // -- beide liegen naeher an t_yellow als an jeder anderen Bestandsfarbe
+  // (bisher unbenutzt in dieser Alias-Liste). Identitaet traegt vollstaendig
+  // Verhalten + die neuen Telegraphen (zusammenziehender Ring/Ziehkorridor +
+  // Leine), kein eigenes Sprite.
+  t_metronom: 't_yellow',
+  t_grabber: 't_yellow',
   // UMBAUPLAN-LP Phase 9: die zehn Klassen teilen sich das Spieler-Sprite --
   // ihre Identitaet traegt (vorerst) die Elementfarbe/der Wert, kein eigenes
   // Asset. 'player' selbst ist die Standard-Klasse und braucht keinen Alias.

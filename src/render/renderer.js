@@ -30,6 +30,8 @@ import {
   drawAnchorFields,
   drawHarvestFields,
   drawMasonScaffolds,
+  drawGrapples,
+  drawMetronomeRings,
 } from './effects.js';
 import { drawSpiderBossLegs, drawSpiderBossBody, drawSpiderMines, drawSpiderWebs } from './spiderrender.js';
 import { traceTrajectory } from '../game/bullet.js';
@@ -874,6 +876,18 @@ export function createRenderer(ctx) {
       ctx.arc(x, y, r + 4, 0, Math.PI * 2);
       ctx.stroke();
     }
+    // G8 (t_metronom): "Verstaerkte Gegner pulsieren im selben Takt" --
+    // ein sehr duenner gelber Ring auf einem eigenen Radius (r+7, zwischen
+    // dem Feldwebel-Saum r+4 und den Affix-Punkten r+26), damit ein Gegner,
+    // der gleichzeitig verstaerkt (Feldwebel) UND im Takt gehalten wird
+    // (Taktgeber), beide Ringe getrennt zeigt.
+    if (t.metronomeHeld) {
+      ctx.strokeStyle = 'rgba(220,190,60,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, r + 7, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     // G7 (t_harvester): Stapelzahl als kleine dunkelrote Marke mit Zahl --
     // EINE Marke mit Text statt eines Punkts je Stapel (waere bei hohen
     // Stapelzahlen unlesbar). Position spiegelbildlich zum Horcher-Marker
@@ -1523,6 +1537,8 @@ export function createRenderer(ctx) {
       drawDeathFuses(ctx, state); // G2: t_dud-Zuendschnur
       drawFireWindups(ctx, state); // G2: t_shotgun-Reichweitenring + Salven-Vorwarnung
       drawLanceAim(ctx, state); // G2: t_lance-Ziellinie (immer sichtbar)
+      drawGrapples(ctx, state); // G8: t_grabber-Wurfkorridor (immer sichtbar)
+      drawMetronomeRings(ctx, state); // G8: t_metronom-Taktring, blitzt auf dem Schlag
       drawGhosts(ctx, state, alpha);
       drawSpiderBossLegs(ctx, state); // unter dem Koerper -- Gelenke sitzen am Panzerrand
       for (const t of state.tanks) drawTank(state, t, alpha);

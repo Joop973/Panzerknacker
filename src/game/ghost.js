@@ -270,6 +270,11 @@ export function createGhost(state, x, y, heading = 0, sourceType, overrides) {
     isAncestor: false, // ghost_105: nur DIESER Untertan loest den Tod-/Fusionsbuff aus
     championKills: 0, // ghost_093: Abschuesse NUR waehrend dieser Geist Champion war
     crownMassHpBonus: 0, // ghost_103: live nachgefuehrter, delta-basierter Bonus
+    // G8 (t_grabber): "zieht auch Geister" (Auftrag Abschnitt 8.8) --
+    // dieselben beiden Felder wie bei einem echten Panzer (tank.js:
+    // createTank()), hier ausgewertet in der Bewegungsschleife unten.
+    grappledBy: null,
+    grappleUntil: 0,
   };
   // ghost_080 "Kronenerbe" (UEBERARBEITET, Abschnitt 10): die Erbschaft wird
   // seit dem Champion-Nachschliff nicht mehr hier beim Erscheinen eines
@@ -1113,6 +1118,24 @@ export function updateGhosts(state, dt) {
     }
     g.prevX = g.x;
     g.prevY = g.y;
+
+    // G8 (t_grabber): "zieht auch Geister" -- dieselbe additive Zug-Nudge wie
+    // tank.js: moveTank() (Muster Foerderband), ADDITIV auf die normale
+    // Bewegung. Bewusst VOR der Zielaufloesung/dem "kein Ziel -> continue"-
+    // Zweig unten: ein gegriffener Geist ohne Kampfziel im Raum wird trotzdem
+    // gezogen -- sonst waere die Mechanik unbemerkt wirkungslos, sobald der
+    // Nekromant der letzte lebende "Gegner" fuer den Geist ist.
+    if (g.grappledBy?.alive && state.time < g.grappleUntil) {
+      const gx = g.grappledBy.x - g.x;
+      const gy = g.grappledBy.y - g.y;
+      const gd = Math.hypot(gx, gy);
+      if (gd > 1) {
+        const pull = (g.grappledBy.cfg.grapple?.pullSpeedPxS ?? 90) * dt;
+        g.x += (gx / gd) * pull;
+        g.y += (gy / gd) * pull;
+        resolveCircleWalls(g, g.cfg.radius, state.walls);
+      }
+    }
 
     // ghost_041 "Geteiltes Ziel" (Nekromant-V2 Phase 7) / ghost_066 "Vorrang
     // des Staerkeren" (Nekromant-V2 Phase 8, nur der Champion): alle
