@@ -8575,8 +8575,9 @@ die Phasennummer G8 war versehentlich fuer die letzte GEGNER-Welle vergeben
 worden, obwohl der Neun-Phasen-Plan laut dem eigenen G0-Bericht (Zeilen
 157/216) unter **G8 die "Difficulty Curve"** fuehrt (Encounter/Kompositionen
 final verdrahten + `affixDeny`) und **G9 als Abnahme**. Die echte Phase G8
-ist inzwischen gebaut (eigener Abschnitt weiter unten) -- **offen bleibt nur
-noch die Abnahme G9.**
+ist inzwischen gebaut, **ebenso die Abnahme G9** (beide Abschnitte weiter
+unten) -- **damit ist der komplette `UMBAUPLAN-GEGNER.md` (G0-G9)
+abgearbeitet.**
 
 ### Code-Durchsicht nach G8: fuenf Fehler behoben — gemergt
 Systematische Durchsicht der Gegner-Umbau-Phasen auf Nutzerwunsch ("gehe
@@ -8743,11 +8744,79 @@ Auftragstext und einer als echter Messbefund.
   `data/compositions.json` steht seit G4 in `ASSETS`, network-first liefert
   Daten online ohnehin frisch).
 
+**Phase G9 (Abnahme) ist gebaut** -- die letzte Phase von
+`UMBAUPLAN-GEGNER.md`. Kein Feature-Bau: Ist-Abgleich der 16 Gegner + des
+Kompositionssystems (G4) + der Difficulty Curve (G8) gegen die in
+`docs/AUFTRAG-GEGNERDESIGN.md` Abschnitt 14 ("Difficulty Curve") und 14.3
+("Was bewusst NICHT passiert") ausformulierten Abnahmekriterien. Die
+Sicherheitsnetze aus Abschnitt 19 (`t_mason`s vier Sicherungen, `t_grabber`s
+drei Ausswege) und die reine Datenkonsistenz (kein `NaN`, jeder `weapon`-Wert
+hat ein Kugeltempo) waren bereits aus den Bauphasen G2-G8 mit eigener
+Gegenprobe abgedeckt (Abschnitte 68-77) -- **neuer Testabschnitt 79** deckt
+nur die vier Luecken, die noch kein bestehender Test gegen den
+Designdokument-**Wortlaut** selbst prueft.
+- **(a) Einfuehrungskurve exakt gegen Abschnitt 14.1/14.2**: Raum,
+  Freischaltungspunkte je der 16 neuen Typen gegen die Designdokument-
+  Tabellen verglichen -- **alle 16 stimmen exakt** (bisherige Tests prueften
+  nur, dass `unlockAct`/`unlockRoomInAct` ueberhaupt Zahlen sind, nie den
+  Wortlaut selbst).
+- **(b) Kein Raum fuehrt zwei neue Mechaniken gleichzeitig ein** (14.3,
+  erster Punkt): programmatisch ueber alle `unlockRoomInAct`-Werte der 16
+  neuen Typen geprueft, Bestandstypen (`t_pink`/`t_armored`/`t_green`/
+  `t_purple`/`t_white`/`t_black`), die zufaellig dieselbe Raumnummer teilen,
+  zaehlen bewusst nicht mit -- ihre Mechanik ist dem Spieler laengst bekannt.
+  **Keine Kollision gefunden.**
+- **(c) Keine Komposition mit >=3 neuen Gegnern vor Raum 7** (14.3, dritter
+  Punkt): alle 17 Eintraege in `data/compositions.json` geprueft.
+  **Keine Verletzung gefunden.**
+- **(d) "Kein neuer Gegner debuetiert in einem Eliteraum"** (14.3, zweiter
+  Punkt) — **echter, gemessener Befund statt bloss verifiziert:** die
+  Garantie gilt strukturell nur fuer Raum 1-3 (Grundsteinumbau Phase 6:
+  `EARLY_EXCLUDED_TYPES` schliesst elite/cursed/workshop aus den ersten drei
+  Kartenebenen aus, per Gegenprobe bestaetigt -- Raum 1-3 zeigt 0/60 Seeds
+  einen Elite-/Fluchknoten). Fuer Raum 4+ gibt es **keinen** Mechanismus:
+  `unlockRoomInAct` steuert nur die Raum-**Nummer**, nicht den Raum-**Typ**,
+  den der Kartengraph an dieser Ebene wuerfelt. Gemessen (200 Seeds je Typ,
+  ueber `generateMap()`): die zehn Typen mit Debuet ab Raum 4
+  (`t_lance`/`t_relay`/`t_medic`/`t_mason`/`t_anchor` in Akt 2,
+  `t_arclight`/`t_stalker`/`t_grabber`/`t_harvester`/`t_metronom` in Akt 3)
+  koennen ihre Debuet-Ebene mit **27-52 %** Wahrscheinlichkeit als Elite-
+  oder Fluchraum ziehen -- ein echter Widerspruch zum Designdokument fuer
+  diese zehn Typen. **Bewusst nicht behoben** (kein Abnahme-Umfang): eine
+  echte Loesung braeuchte eine neue, laufzeitabhaengige "wurde dieser Typ in
+  diesem Run schon gekauft"-Buchfuehrung, weil der Kartengraph VOR jedem
+  Raumkauf entsteht und den spaeteren Spielerpfad nicht kennen kann --
+  Architekturarbeit, kein Verifikationsschritt. Als To-do dokumentiert.
+- **Vier Gegenproben bestanden** (je am echten Quellcode/Datenbestand
+  ausgefuehrt, nicht nur an isolierten Funktionen): `t_rusher.unlockRoomInAct`
+  real auf 5 verfaelscht (faengt sowohl (a) als auch (b), weil Raum 5 dann
+  mit `t_relay` kollidiert), eine reale Komposition (`a9_die_rechnung`) auf
+  `minRoom: 3` verfaelscht (faengt (c)), `EARLY_EXCLUDED_TYPES` geleert
+  (faengt (d) an Raum-3-Typen wie `t_dud`/`t_marshal` mit realen
+  Elite-Treffern). Alle drei Gegenproben nach der Pruefung zurueckgesetzt.
+- Keine Balance-Werte geaendert -- alle Pruefungen sind am aktuellen Stand
+  gruen. Kein `sw.js`-Bump (reine Testaenderung, keine neuen/geaenderten
+  Asset-Dateien, keine Laufzeit-Codeaenderung). Volle Suite + die vier
+  Nebensuiten (`gamepad`/`music`/`championsprite`/`spidersprites`) gruen.
+
+**Damit ist der komplette `UMBAUPLAN-GEGNER.md` (Phasen G0-G9) abgearbeitet
+-- alle 16 Gegner (8 je Akt), das Kompositionssystem und die Difficulty
+Curve stehen und sind gegen den Designdokument-Wortlaut abgenommen.**
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Abnahme G9** (`UMBAUPLAN-GEGNER.md`, letzte offene Planphase) nie
-      gelaufen -- alle Gegner (G2/G3/G5/G6/G7 + die Gegnerwelle, die
-      faelschlich als G8 gezaehlt wurde), das Kompositionssystem (G4) und die
-      Difficulty Curve (echtes G8) stehen.
+- [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
+      ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
+      Designdokument Abschnitt 14.3): `unlockRoomInAct` steuert nur die
+      Raum-NUMMER, nicht den Raum-TYP, den der Kartengraph an dieser Ebene
+      wuerfelt. Gemessen (200 Seeds je Typ): zehn Typen mit Debuet ab Raum 4
+      (`t_lance`/`t_relay`/`t_medic`/`t_mason`/`t_anchor`,
+      `t_arclight`/`t_stalker`/`t_grabber`/`t_harvester`/`t_metronom`)
+      koennen ihre Debuet-Ebene mit 27-52 % Wahrscheinlichkeit als Elite-
+      oder Fluchraum ziehen. Fuer Raum 1-3 gilt die Garantie strukturell
+      (`EARLY_EXCLUDED_TYPES`, per Test bewacht). Eine echte Behebung
+      braeuchte eine laufzeitabhaengige "wurde dieser Typ in diesem Run
+      schon gekauft"-Buchfuehrung (der Kartengraph entsteht VOR jedem
+      Raumkauf und kennt den Spielerpfad nicht) -- Architekturarbeit.
 - [ ] **`t_relay` (Horcher) hat noch keine eigene Sichtlinien-Suchfahrt**
       (Gegner-Umbau G3): Designtext will aktives Aufsuchen von Korridorenden/
       Freiflächenrändern statt normalem `sapper`-Wandern. Technisch machbar

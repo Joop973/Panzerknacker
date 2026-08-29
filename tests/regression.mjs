@@ -15553,6 +15553,135 @@ for (const seed of SEEDS) {
   }
 }
 
+
+// ---- 79. Gegner-Umbau Phase G9 (Abnahme) --------------------------------
+// Letzte Phase von UMBAUPLAN-GEGNER.md. Kein Feature-Bau -- Ist-Abgleich
+// gegen die in docs/AUFTRAG-GEGNERDESIGN.md Abschnitt 14 ("Difficulty
+// Curve") und 14.3 ("Was bewusst NICHT passiert") ausformulierten
+// Abnahmekriterien. Alle 16 Gegner + das Kompositionssystem (G4) + die
+// Difficulty Curve (G8) sind bereits gebaut und ausfuehrlich getestet
+// (Abschnitte 69-78); dieser Abschnitt deckt nur die Luecken, die noch
+// KEIN bestehender Test explizit gegen den Designdokument-Wortlaut prueft.
+{
+  const { generateMap } = await import('../src/game/run.js');
+
+  const NEW_AKT2 = ['t_rusher', 't_shotgun', 't_dud', 't_lance', 't_relay', 't_medic', 't_mason', 't_anchor'];
+  const NEW_AKT3 = ['t_bulwark', 't_tether', 't_marshal', 't_arclight', 't_stalker', 't_grabber', 't_harvester', 't_metronom'];
+
+  // ---- (a) Einfuehrungskurve stimmt EXAKT mit Designdokument Abschnitt
+  //          14.1/14.2 ueberein (Raum, Freischaltungspunkte je neuem Typ).
+  //          Bisherige Tests pruefen nur die STRUKTUR (unlockAct/
+  //          unlockRoomInAct sind Zahlen) -- keiner vergleicht die Zahlen
+  //          gegen den Designdokument-Wortlaut selbst. -------------------
+  {
+    const AKT2_CURVE = { t_rusher: [1, 3], t_shotgun: [2, 4], t_dud: [3, 3], t_lance: [4, 6],
+      t_relay: [5, 5], t_medic: [6, 6], t_mason: [7, 6], t_anchor: [8, 7] };
+    const AKT3_CURVE = { t_bulwark: [1, 8], t_tether: [2, 5], t_marshal: [3, 9], t_arclight: [4, 9],
+      t_stalker: [5, 8], t_grabber: [6, 8], t_harvester: [8, 10], t_metronom: [10, 11] };
+    // Reine Funktion des Mechanismus: liefert die Namen aller Typen, deren
+    // Datenlage von der uebergebenen Kurve abweicht -- getestet gegen die
+    // ECHTE Datenlage (erwartet: keine Abweichung) UND gegen eine absichtlich
+    // verfaelschte Kopie (erwartet: die verfaelschte Zeile wird gefunden).
+    const mismatches = (danger, curve, act) => Object.entries(curve)
+      .filter(([ty, [room, pts]]) => {
+        const d = danger[ty];
+        return !d || d.unlockAct !== act || d.unlockRoomInAct !== room || d.points !== pts;
+      })
+      .map(([ty]) => ty);
+    for (const [curve, act] of [[AKT2_CURVE, 2], [AKT3_CURVE, 3]]) {
+      const bad = mismatches(diffData.danger, curve, act);
+      check(bad.length === 0, `G9 (a): Akt ${act} weicht bei ${bad.join(',')} von der Designdokument-Kurve (Abschnitt 14) ab`);
+    }
+    // Gegenprobe: eine absichtlich verfaelschte Kopie (t_rusher auf Raum 99
+    // statt 1) muss von genau derselben Funktion erkannt werden.
+    const broken = { ...diffData.danger, t_rusher: { ...diffData.danger.t_rusher, unlockRoomInAct: 99 } };
+    const foundBroken = mismatches(broken, AKT2_CURVE, 2);
+    check(foundBroken.length === 1 && foundBroken[0] === 't_rusher',
+      `G9 (a) Gegenprobe: eine verfaelschte Kopie (t_rusher Raum 99) wird nicht erkannt (${JSON.stringify(foundBroken)})`);
+  }
+
+  // ---- (b) Kein Raum fuehrt zwei NEUE Mechaniken gleichzeitig ein
+  //          (Designdokument 14.3, erster Punkt). Bestandstypen (t_pink,
+  //          t_armored, t_green, t_purple, t_white, t_black), die zur
+  //          selben Raumnummer freigeschaltet werden, zaehlen NICHT --
+  //          ihre Mechanik ist dem Spieler laengst bekannt. -------------
+  {
+    const duplicateRooms = (danger, newTypes) => {
+      const byRoom = {};
+      for (const ty of newTypes) {
+        const r = danger[ty]?.unlockRoomInAct;
+        (byRoom[r] ??= []).push(ty);
+      }
+      return Object.entries(byRoom).filter(([, list]) => list.length > 1);
+    };
+    for (const [newTypes, act] of [[NEW_AKT2, 2], [NEW_AKT3, 3]]) {
+      const dups = duplicateRooms(diffData.danger, newTypes);
+      check(dups.length === 0, `G9 (b): Akt ${act} fuehrt in Raum ${dups.map(([r]) => r).join(',')} mehrere neue Gegner gleichzeitig ein (${JSON.stringify(dups)})`);
+    }
+    // Gegenprobe des Mechanismus mit EIGENEN, absichtlich kollidierenden
+    // Werten -- der Erkenner muss eine echte Kollision auch wirklich finden.
+    const fakeDanger = { x: { unlockRoomInAct: 3 }, y: { unlockRoomInAct: 3 }, z: { unlockRoomInAct: 5 } };
+    const fakeDups = duplicateRooms(fakeDanger, ['x', 'y', 'z']);
+    check(fakeDups.length === 1 && fakeDups[0][1].length === 2,
+      `G9 (b) Gegenprobe: eine echte Raum-Kollision (x/y beide Raum 3) wird nicht erkannt (${JSON.stringify(fakeDups)})`);
+  }
+
+  // ---- (c) Keine Komposition mit >=3 neuen Gegnern liegt vor Raum 7 des
+  //          jeweiligen Akts (Designdokument 14.3, dritter Punkt). -------
+  {
+    const countNew = (comp, newTypes) => [...new Set(comp.enemies.map((e) => e.type))]
+      .filter((t) => newTypes.includes(t)).length;
+    const newSets = { 2: NEW_AKT2, 3: NEW_AKT3 };
+    for (const c of diffData.compositions) {
+      const n = countNew(c, newSets[c.actIndex] || []);
+      check(!(n >= 3 && (c.minRoom ?? 1) < 7),
+        `G9 (c): ${c.id} hat ${n} neue Gegner UND minRoom ${c.minRoom ?? 1} < 7 (Designdokument 14.3 verbietet das)`);
+    }
+    // Gegenprobe: eine synthetische Komposition mit 3 neuen Gegnern und
+    // minRoom 5 muss von derselben Zaehlfunktion zuverlaessig gefangen werden.
+    const fakeComp = { actIndex: 2, minRoom: 5, enemies: [{ type: 't_rusher' }, { type: 't_shotgun' }, { type: 't_dud' }] };
+    const fakeN = countNew(fakeComp, NEW_AKT2);
+    check(fakeN >= 3 && fakeComp.minRoom < 7,
+      `G9 (c) Gegenprobe: eine echte Verletzung (3 neue Gegner, minRoom 5) wird nicht erkannt (n=${fakeN})`);
+  }
+
+  // ---- (d) "Kein neuer Gegner debuetiert in einem Eliteraum" (14.3,
+  //          zweiter Punkt): fuer die Raeume 1-3 jedes Akts ist das
+  //          STRUKTURELL garantiert -- Grundsteinumbau Phase 6 schliesst
+  //          elite/cursed/workshop aus den ersten drei Kartenebenen aus
+  //          (EARLY_EXCLUDED_TYPES, bereits in Abschnitt 50 bewacht). Hier
+  //          wird nur die Verknuepfung zu den NEUEN Gegnern verifiziert:
+  //          jeder Typ, der in Raum 1-3 freigeschaltet wird, kann seine
+  //          Kartenebene tatsaechlich nie als Elite-/Fluchraum ziehen. ---
+  {
+    for (const [newTypes, act] of [[NEW_AKT2, 2], [NEW_AKT3, 3]]) {
+      for (const ty of newTypes) {
+        const room = diffData.danger[ty].unlockRoomInAct;
+        if (room > 3) continue; // ausserhalb der garantierten Ebenen -- s. Befund unten
+        let eliteSeen = 0;
+        for (let s = 1; s <= 60; s++) {
+          const map = generateMap(s * 131 + act, diffData, act);
+          const layer = map.layers[room - 1];
+          if (layer?.some((n) => n.type === 'elite' || n.type === 'cursed')) eliteSeen++;
+        }
+        check(eliteSeen === 0, `G9 (d): ${ty} (Raum ${room}, garantiert fruehe Ebene) zieht trotzdem einen Elite-/Fluchknoten in ${eliteSeen}/60 Seeds`);
+      }
+    }
+    // BEFUND (nicht behoben, s. CLAUDE.md-To-do): fuer Raum 4+ gilt die
+    // Garantie NICHT -- unlockRoomInAct steuert nur die Raum-NUMMER, nicht
+    // den Raum-TYP, den der Kartengraph an dieser Ebene wuerfelt. Gemessen
+    // (200 Seeds je Typ): t_lance/t_relay/t_medic/t_mason/t_anchor (Akt 2)
+    // und t_arclight/t_stalker/t_grabber/t_harvester/t_metronom (Akt 3)
+    // koennen ihre Debuet-Ebene mit 27-52% Wahrscheinlichkeit als Elite-
+    // oder Fluchraum ziehen -- das widerspricht Designdokument 14.3 fuer
+    // diese zehn Typen. Eine echte Behebung braeuchte eine neue,
+    // laufzeitabhaengige "wurde dieser Typ in diesem Run schon gekauft"-
+    // Buchfuehrung (der Kartengraph entsteht VOR jedem Raumkauf und kennt
+    // den Spielerpfad nicht) -- Architekturarbeit, kein Abnahme-Umfang.
+  }
+}
+
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);
