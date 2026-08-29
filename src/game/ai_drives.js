@@ -305,7 +305,16 @@ export function ramDrive(tank, state, dt) {
     const speed = tank.cfg.speed * (rcfg.speedMult ?? 1);
     ram.timer -= dt;
     tank.heading = ram.dir;
-    const hitWall = moveRamSubsteps(state, tank, speed * dt, ram.dir, rcfg, ram.hitTargets);
+    // BUGFIX: Betaeubung (Krallenfalle, EMP-Mine, Frost-Erstarrung) muss auch
+    // hier greifen. Der Sturm bewegt den Panzer ueber eine EIGENE Substep-
+    // Schleife und umgeht damit tank.js: moveTank(), wo die stunTimer-Sperre
+    // fuer jeden anderen Panzer sitzt -- ein betaeubter Rammler stuermte
+    // vorher ungebremst weiter und richtete vollen Kontaktschaden an.
+    // Der Sturmtimer laeuft bewusst weiter: die Betaeubung laesst den Angriff
+    // ins Leere laufen, statt ihn nur aufzuschieben.
+    const hitWall = tank.stunTimer > 0
+      ? false
+      : moveRamSubsteps(state, tank, speed * dt, ram.dir, rcfg, ram.hitTargets);
     if (hitWall || ram.timer <= 0) {
       if (hitWall) {
         state.sounds.push({ name: 'bounce', x: tank.x });

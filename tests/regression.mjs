@@ -15204,12 +15204,186 @@ for (const seed of SEEDS) {
     st.player.grappleUntil = 1000;
     st.player.grappleRopeHp = 1;
     st.tanks = [st.player, shooter];
-    // Eine Kugel MITTEN auf der Strecke (100,100)-(200,100).
-    const b = createBullet(150, 100, 0, { speed: 0, owner: shooter, damage: 1, radius: 4, kind: 'bullet' });
+    // Eine FREMDE Kugel (hier: die des gezogenen Spielers) mitten auf der
+    // Strecke (100,100)-(200,100). Der Besitzer ist bewusst NICHT der
+    // Greifer: seine eigenen Geschosse duerfen seine Leine nicht trennen
+    // (s. (m) direkt darunter) -- "eine Kugel fuer die Leine ausgeben" ist
+    // die Gegenwehr des Ziels, nicht ein Eigentor des Greifers.
+    const b = createBullet(150, 100, Math.PI, { speed: 0, owner: st.player, damage: 1, radius: 4, kind: 'bullet' });
     st.bullets = [b];
     stepState(st, CMD0, 1 / 60);
     check(b.dead === true, 'G8 (l): eine Kugel auf der Leine wird nicht verbraucht');
     check(!st.player.grappledBy, 'G8 (l): bei ropeHp 1 loest sich das Ziel nach einem Treffer nicht');
+  }
+
+  // ---- (m) BUGFIX: die EIGENEN Geschosse des Greifers trennen seine Leine
+  //          NICHT. Er zielt mit seiner normalen Waffe auf genau das Ziel,
+  //          das er zieht -- seine Kugeln fliegen entlang der Leine und
+  //          wurden vorher ausnahmslos von ihr gefressen (ein Greifer konnte
+  //          ein gegriffenes Ziel nie beschiessen). --------------------------
+  {
+    const { createBullet } = await import('../src/game/bullet.js');
+    const st = openRoom();
+    const shooter = createTank('t_grabber', { ...resolveCfg(tanksData, 't_grabber'), grapple: { pullSpeedPxS: 90, ropeHitRadiusPx: 14, ropeHp: 1 } }, 100, 100);
+    st.player.x = 200;
+    st.player.y = 100;
+    st.player.grappledBy = shooter;
+    st.player.grappleUntil = 1000;
+    st.player.grappleRopeHp = 1;
+    st.tanks = [st.player, shooter];
+    const own = createBullet(150, 100, 0, { speed: 0, owner: shooter, damage: 25, radius: 4, kind: 'bullet' });
+    st.bullets = [own];
+    stepState(st, CMD0, 1 / 60);
+    check(own.dead !== true, 'G8 (m): eine EIGENE Kugel des Greifers wird von seiner eigenen Leine gefressen');
+    check(!!st.player.grappledBy, 'G8 (m): der Greifer trennt seine eigene Leine mit dem eigenen Schuss');
+    check(st.player.grappleRopeHp === 1, `G8 (m): die eigene Kugel senkt die Leinen-LP (${st.player.grappleRopeHp})`);
+  }
+
+  // ---- (n) BUGFIX: ein abgelaufener/toter Griff raeumt seinen Zeiger auf,
+  //          statt als haengender Verweis stehen zu bleiben. ---------------
+  {
+    const st = openRoom();
+    const shooter = createTank('t_grabber', { ...resolveCfg(tanksData, 't_grabber'), grapple: { pullSpeedPxS: 90 } }, 100, 100);
+    st.player.x = 200;
+    st.player.y = 100;
+    st.player.grappledBy = shooter;
+    st.player.grappleUntil = st.time + 0.02; // laeuft im naechsten Tick ab
+    st.tanks = [st.player, shooter];
+    stepState(st, CMD0, 1 / 60);
+    stepState(st, CMD0, 1 / 60);
+    check(st.player.grappledBy === null, 'G8 (n): ein abgelaufener Griff laesst grappledBy stehen');
+  }
+}
+
+// ---- 77. Code-Durchsicht: behobene Fehler ------------------------------
+// Vier Fehler, die eine systematische Durchsicht der Gegner-Umbau-Phasen
+// (G2/G5/G7) zutage gefoerdert hat. Alle vier haben gemeinsam, dass sie ein
+// Versprechen des Spiels an den Spieler gebrochen haben, ohne je zu
+// crashen -- deshalb ist keiner davon vorher aufgefallen.
+{
+  const { createState, stepState, bondTethers } = await import('../src/game/state.js');
+  const { createTank } = await import('../src/game/tank.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+  const { CELL, COLS, ROWS } = await import('../src/config.js');
+
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  function openRoom() {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: [],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+    });
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) st.grid[r][c] = r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1 ? '#' : '.';
+    st.walls = [];
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (st.grid[r][c] === '#') st.walls.push({ x: c * CELL, y: r * CELL, w: CELL, h: CELL, type: 'solid', col: c, row: r });
+    return st;
+  }
+
+  // ---- (a) t_mason (G5): die Waende eines TOTEN Maurers verfallen weiter.
+  //          Vorher machte sein Tod sie dauerhaft -- die richtige Antwort des
+  //          Spielers ("toete den Maurer") zementierte also ausgerechnet
+  //          seine Sperren. Mit synthetisch verkuerzten Zeiten geprueft
+  //          (Mechanismus statt Datenlage). ------------------------------
+  {
+    const st = openRoom();
+    const base = resolveCfg(tanksData, 't_mason');
+    const mcfg = { ...base, build: { ...base.build, everyS: 0.1, buildS: 0.1, decayS: 0.5, maxAlive: 6 } };
+    const mason = createTank('t_mason', mcfg, 300, 300);
+    st.tanks = [st.player, mason];
+    st.player.x = 500;
+    st.player.y = 300;
+    const before = st.walls.length;
+    for (let i = 0; i < 40; i++) stepState(st, CMD0, 1 / 60);
+    const built = st.walls.length - before;
+    check(built > 0, 'Bugfix (a): Vorbedingung -- der Maurer hat gar keine Wand gebaut');
+    mason.alive = false;
+    for (let i = 0; i < 120; i++) stepState(st, CMD0, 1 / 60); // 2 s, weit ueber decayS 0,5
+    check(st.walls.length === before, `Bugfix (a): die Waende eines toten Maurers verfallen nicht (${st.walls.length - before} bleiben stehen)`);
+  }
+
+  // ---- (b) t_mason: stirbt er MITTEN im Bau, verschwindet sein
+  //          Geruest-Telegraph mit ihm -- sonst warnt der Raum bis zum Ende
+  //          vor einer Wand, die nie kommt. ------------------------------
+  {
+    const st = openRoom();
+    const base = resolveCfg(tanksData, 't_mason');
+    const mcfg = { ...base, build: { ...base.build, everyS: 0.05, buildS: 5, decayS: 20, maxAlive: 6 } };
+    const mason = createTank('t_mason', mcfg, 300, 300);
+    st.tanks = [st.player, mason];
+    st.player.x = 500;
+    st.player.y = 300;
+    for (let i = 0; i < 20; i++) stepState(st, CMD0, 1 / 60);
+    check(st.masonScaffolds.length === 1 && !!mason.masonBuildState, 'Bugfix (b): Vorbedingung -- kein laufender Bau mit Geruest');
+    mason.alive = false;
+    stepState(st, CMD0, 1 / 60);
+    check(st.masonScaffolds.length === 0, `Bugfix (b): das Geruest eines mitten im Bau getoeteten Maurers bleibt stehen (${st.masonScaffolds.length})`);
+  }
+
+  // ---- (c) t_tether (G7): die Schadensteilung gilt von BEIDEN Seiten.
+  //          Ein Kettenhund bindet sich mangels zweitem Kettenhund auch an
+  //          einen normalen Verbuendeten -- der traegt selbst kein
+  //          cfg.tether. Vorher teilte nur ein Treffer AUF den Kettenhund,
+  //          die Kette liess sich also umgehen, indem man die andere Seite
+  //          erschoss. ------------------------------------------------------
+  {
+    const st = openRoom();
+    const A = createTank('t_tether', resolveCfg(tanksData, 't_tether'), 100, 100);
+    const B = createTank('t_brown', resolveCfg(tanksData, 't_brown'), 140, 100);
+    st.tanks = [st.player, A, B];
+    bondTethers(st.tanks);
+    check(A.tetherPartner === B && B.tetherPartner === A, 'Bugfix (c): Vorbedingung -- gemischtes Paar nicht gebunden');
+    const a0 = A.hp, b0 = B.hp;
+    st.applyDamage(B, 20, 'test', {}); // Treffer auf die NICHT-Kettenhund-Seite
+    check(a0 - A.hp === 10 && b0 - B.hp === 10, `Bugfix (c): ein Treffer auf den Partner teilt nicht (A -${a0 - A.hp}, B -${b0 - B.hp})`);
+  }
+
+  // ---- (d) t_tether: ein Partner, dessen Kettenhund gestorben ist, gilt
+  //          wieder als ungebunden. Vorher blieb sein Zeiger auf die Leiche
+  //          stehen und sperrte ihn dauerhaft fuer jeden spaeter
+  //          erscheinenden Welle-2-Kettenhund. --------------------------
+  {
+    const tc = resolveCfg(tanksData, 't_tether');
+    const A = createTank('t_tether', tc, 100, 100);
+    const B = createTank('t_brown', resolveCfg(tanksData, 't_brown'), 130, 100);
+    bondTethers([A, B]);
+    check(B.tetherPartner === A, 'Bugfix (d): Vorbedingung -- Welle 1 nicht gebunden');
+    A.alive = false;
+    A.tetherPartner = null; // updateTethers() raeumt nur die LEBENDE Seite
+    const C = createTank('t_tether', tc, 140, 100);
+    bondTethers([A, B, C]);
+    check(C.tetherPartner === B && B.tetherPartner === C, 'Bugfix (d): ein Welle-2-Kettenhund findet den verwaisten Partner nicht');
+  }
+
+  // ---- (e) t_rusher (G2): Betaeubung stoppt den Sturm. Er bewegt sich ueber
+  //          eine EIGENE Substep-Schleife und umging damit die stunTimer-
+  //          Sperre in tank.js: moveTank(), die fuer jeden anderen Panzer
+  //          gilt -- Krallenfalle/EMP/Frost waren gegen ihn wirkungslos. --
+  {
+    const st = openRoom();
+    const r = createTank('t_rusher', resolveCfg(tanksData, 't_rusher'), 300, 300);
+    st.tanks = [st.player, r];
+    st.player.x = 360;
+    st.player.y = 300;
+    st.player.cfg.maxHp = 1e9;
+    st.player.hp = 1e9;
+    for (let i = 0; i < 3; i++) stepState(st, CMD0, 1 / 60);
+    check(r.ai.ram?.mode === 'windup', `Bugfix (e): Vorbedingung -- kein Sturm ausgeloest (${r.ai.ram?.mode})`);
+    const x0 = r.x, y0 = r.y;
+    const hp0 = st.player.hp;
+    for (let i = 0; i < 80; i++) {
+      r.stunTimer = 5; // dauerhaft betaeubt (Krallenfalle-Muster)
+      stepState(st, CMD0, 1 / 60);
+    }
+    check(Math.hypot(r.x - x0, r.y - y0) < 1, `Bugfix (e): ein betaeubter Rammler stuermt trotzdem (${Math.hypot(r.x - x0, r.y - y0).toFixed(1)} px)`);
+    check(st.player.hp === hp0, 'Bugfix (e): ein betaeubter Rammler richtet trotzdem Kontaktschaden an');
   }
 }
 

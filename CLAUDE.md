@@ -8565,11 +8565,122 @@ verlangt.
   (Budget 6 ms).
 - Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien).
 
-**Damit ist der komplette `UMBAUPLAN-GEGNER.md` (Phasen G0-G8) abgearbeitet
--- alle 16 in `docs/AUFTRAG-GEGNERDESIGN.md` entworfenen Gegner (8 je Akt)
+**Alle 16 in `docs/AUFTRAG-GEGNERDESIGN.md` entworfenen Gegner (8 je Akt)
 sind gebaut, samt Kompositionssystem (G4) fuer kuratierte Begegnungen.**
 
+⚠️ **KORREKTUR eines frueheren Abschlussvermerks** (aufgefallen bei der
+Code-Durchsicht, s. eigener Abschnitt unten): hier stand zuvor, der
+komplette `UMBAUPLAN-GEGNER.md` (G0-G8) sei abgearbeitet. Das war falsch.
+Der Neun-Phasen-Plan sieht laut dem eigenen G0-Bericht (Abschnitt 4 und
+O3, Zeilen 157/216) fuer **G8 die "Difficulty Curve"** vor -- dort werden
+"die Encounter/Kompositionen final verdrahtet" und das optionale
+`affixDeny` gebaut -- und **G9 als Abnahme**. Gebaut sind bisher nur die
+GEGNER; die Phasennummer G8 wurde dabei versehentlich fuer die letzte
+Gegnerwelle vergeben. **Offen bleiben damit:**
+- **`data/compositions.json` enthaelt 9 Kompositionen, alle fuer Akt 2 --
+  kein einziger Akt-3-Eintrag.** Alle elf Akt-3-Typen (`t_marshal`,
+  `t_bulwark`, `t_stalker`, `t_arclight`, `t_tether`, `t_harvester`,
+  `t_metronom`, `t_grabber` sowie `t_purple`/`t_white`/`t_black`) laufen
+  deshalb ausschliesslich ueber den Zufalls-Rueckfall in `buyEnemies()`.
+  Die im Designdokument Abschnitt 11 ausformulierten **acht
+  Akt-3-Kompositionen** (und die zehn Encounter aus Abschnitt 13) sind nie
+  in Daten ueberfuehrt worden -- genau die Synergien, fuer die das
+  Kompositionssystem in G4 ueberhaupt gebaut wurde (Taktgeber+Feldwebel,
+  Greifer+Streuer, Verwerter+Blindgaenger ...), koennen im Spiel derzeit
+  nur zufaellig entstehen.
+- **`affixDeny`** (G0-Bericht O3) ist nie gebaut worden.
+- Die **Abnahme (G9)** hat nie stattgefunden.
+Beides ist kein Defekt am gebauten Code, sondern nicht geleistete
+Planarbeit -- hier notiert, damit der naechste Chat nicht von einem
+falschen "fertig" ausgeht.
+
+### Code-Durchsicht nach G8: fuenf Fehler behoben — gemergt
+Systematische Durchsicht der Gegner-Umbau-Phasen auf Nutzerwunsch ("gehe
+den Code durch und behebe Fehler"). Fuenf echte Fehler gefunden, jeder
+einzeln per Wegwerf-Sonde reproduziert, behoben und mit Dauertest +
+bestandener Gegenprobe abgesichert. **Allen fuenf ist gemeinsam, dass sie
+ein Versprechen des Spiels an den Spieler gebrochen haben, ohne je zu
+crashen** -- deshalb ist keiner davon in den Bauphasen aufgefallen.
+- **`t_mason` (G5): der Tod des Maurers machte seine Waende DAUERHAFT.**
+  `updateMasons()` sprang mit `if (!t.alive) continue;` aus der Schleife,
+  bevor der Verfallsblock lief -- der Timer sitzt zwar auf der Wand
+  (`masonExpiresAt`), ausgewertet wurde er aber nur ueber den lebenden
+  Erbauer. Ergebnis: ausgerechnet die richtige Antwort des Spielers ("toete
+  den Maurer") zementierte seine Sperren fuer den Rest des Raums, statt sie
+  aufzuloesen. Der `t.alive`-Gate sitzt jetzt erst vor der BAULOGIK; Verfall
+  und Listenabgleich laufen fuer jeden Maurer, auch fuer einen toten.
+- **`t_mason`: ein mitten im Bau getoeteter Maurer hinterliess einen
+  ewigen Geruest-Telegraphen.** `state.masonScaffolds` wurde nur im
+  Fertigstellungs-Zweig gefiltert, den ein toter Maurer nie erreicht -- der
+  Raum warnte danach bis zum Ende vor einer Wand, die nie kommt. Der neue
+  Tot-Zweig raeumt `masonBuildState` + Geruest auf.
+- **`t_grabber` (G8): der Greifer zerschoss seine eigene Leine mit dem
+  eigenen Schuss.** Er zielt mit seiner normalen Waffe auf genau das Ziel,
+  das er zieht -- seine Kugeln fliegen also praktisch ENTLANG der Leine und
+  wurden von `updateGrappleRopes()` ausnahmslos im Erzeugungstick gefressen
+  (per Sonde: eigene Kugel tot, Leine getrennt, `ropeHp` 0). Ein Greifer
+  konnte ein gegriffenes Ziel damit **nie** beschiessen. Fix: `b.owner ===
+  shooter` ueberspringen -- dieselbe Begruendung wie das `b.owner === t` der
+  Panzer-Trefferschleife (die Leine ist Teil des Schuetzen). Fremdes Feuer
+  trennt sie weiterhin: das ist die im Design gewollte Gegenwehr und
+  dasselbe teamlose Prinzip wie bei `t_dud`/`t_arclight`.
+  **Der bestehende Test 76(l) hatte das fehlerhafte Verhalten
+  festgeschrieben** -- er zerschoss die Leine mit einer Greifer-eigenen
+  Kugel und wurde beim Fix rot. Jetzt nutzt er die im Design gemeinte
+  Spielerkugel, ein neuer Test 76(m) bewacht den Ausschluss.
+- **`t_tether` (G7): die Schadensteilung galt nur von EINER Seite.** Ein
+  Kettenhund bindet sich mangels zweitem Kettenhund auch an einen ganz
+  normalen Verbuendeten -- der traegt dann selbst kein `cfg.tether`, und die
+  Bedingung `tank.cfg.tether && ...` liess einen Treffer auf ihn voll
+  durchgehen (gemessen: 10/10 auf den Kettenhund, aber 0/20 auf den
+  Partner). Die Kette liess sich damit umgehen, indem man einfach die andere
+  Seite erschoss -- entgegen dem eigenen Kartentext ("jeder Schaden an einem
+  der beiden wird 50/50 geteilt"). Die Rezeptur kommt jetzt von der Seite,
+  die sie hat (`tank.cfg.tether || tank.tetherPartner?.cfg?.tether`).
+- **`t_tether`: eine tote Bindung sperrte den Ueberlebenden dauerhaft.**
+  `updateTethers()` raeumt beim Tod nur die LEBENDE Seite auf; ein
+  ueberlebender Partner behielt seinen Zeiger auf die Leiche und galt in
+  `bondTethers()` fuer immer als "schon gebunden" -- fuer jeden spaeter
+  erscheinenden Welle-2-Kettenhund unerreichbar (per Sonde bestaetigt: C
+  findet keinen Partner). Beide Pruefungen gehen jetzt ueber `?.alive`.
+- **`t_rusher` (G2): Betaeubung war gegen den Rammsturm wirkungslos.** Der
+  Sturm bewegt den Panzer ueber eine EIGENE Substep-Schleife
+  (`moveRamSubsteps()`) und umgeht damit `tank.js: moveTank()`, wo die
+  `stunTimer`-Sperre fuer jeden anderen Panzer sitzt -- ein dauerhaft
+  betaeubter Rammler legte im Test trotzdem 120 px zurueck und richtete
+  vollen Kontaktschaden an, waehrend ein betaeubter `t_pink` bei 0 px bleibt.
+  Krallenfalle, EMP-Mine und Frost-Erstarrung waren gegen genau den Gegner
+  nutzlos, gegen den sie am meisten zaehlen. Der Sturmtimer laeuft bewusst
+  weiter (die Betaeubung laesst den Angriff INS LEERE laufen, statt ihn nur
+  aufzuschieben) -- nur Bewegung und Trefferpruefung entfallen.
+**Vier Verbesserungen ohne Verhaltensaenderung** dazu: ein abgelaufener oder
+verwaister Griff raeumt seinen `grappledBy`-Zeiger jetzt auf statt als
+haengender Verweis stehenzubleiben (neuer Test 76(n)); `updateGrappleRopes()`
+kopiert nicht mehr Tick fuer Tick zwei Arrays zusammen, wenn gar kein
+Greifer im Raum ist; `metronomeHolds()` liest die einmal pro Tick
+eingesammelte `state.metronomes` statt je feuerwilligem Verbuendeten neu
+ueber alle Panzer zu scannen; Geister bekommen `grappleRopeHp` als
+deklariertes Feld (wurde vorher implizit angelegt).
+- **Neuer Testabschnitt 77** (fuenf Bloecke, plus 76(m)/(n)); sieben
+  Gegenproben am echten Quellcode einzeln bestanden und zurueckgesetzt --
+  jede roetete exakt die benannten Pruefungen und sonst nichts.
+- **Zusaetzlich geprueft, ohne Befund**: NaN-/Invarianten-Lauf ueber fuenf
+  vollstaendige Runs (beide Klassen) auf Panzer-/Geister-/Kugelpositionen,
+  `hp <= maxHp`, verwaiste Zeiger und Array-Groessen; Datenkonsistenz aller
+  31 Gegnertypen (`label`/`desc`/`maxHp`/`bulletSpeeds`-Eintrag, keine
+  NaN-cfg-Felder); alle neun Kompositionen gegen Budgetformel und
+  Freischaltung; alle Divisionen durch Distanzen auf fehlende Null-Guards.
+- Kein `sw.js`-Bump (reine Code-Aenderung, keine neuen Asset-Dateien).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **Akt-3-Kompositionen fehlen komplett** (s. Korrekturvermerk oben):
+      `data/compositions.json` hat 9 Eintraege, alle Akt 2. Die acht im
+      Designdokument Abschnitt 11 ausformulierten Akt-3-Kompositionen (und
+      die zehn Encounter aus Abschnitt 13) sind nie in Daten ueberfuehrt
+      worden -- das ist der eigentliche Inhalt der noch offenen Planphase
+      G8 ("Difficulty Curve"). Mechanismus und Struktur-Test (Abschnitt 72)
+      stehen bereits, es ist reine Datenarbeit.
+- [ ] **`affixDeny`** (G0-Bericht O3) nie gebaut; **Abnahme G9** nie gelaufen.
 - [ ] **`t_relay` (Horcher) hat noch keine eigene Sichtlinien-Suchfahrt**
       (Gegner-Umbau G3): Designtext will aktives Aufsuchen von Korridorenden/
       Freiflächenrändern statt normalem `sapper`-Wandern. Technisch machbar

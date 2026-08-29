@@ -265,10 +265,15 @@ function bfsReachable(grid, startCol, startRow) {
 // ueberlebender, unverbundener Welle-1-Kettenhund sich auch mit einem neu
 // erschienenen Welle-2-Kettenhund binden kann.
 export function bondTethers(tanks) {
-  // Wer BRAUCHT eine Bindung: nur ungebundene Kettenhunde.
-  const seekers = tanks.filter((t) => t.alive && t.cfg.tether && !t.tetherPartner);
+  // Wer BRAUCHT eine Bindung: jeder Kettenhund ohne LEBENDEN Partner.
+  // BUGFIX: die Pruefung geht ueber `?.alive` statt ueber die blosse Existenz
+  // des Zeigers. updateTethers() raeumt beim Tod nur die LEBENDE Seite auf --
+  // ein ueberlebender Partner behielt seinen Zeiger auf den toten Kettenhund
+  // und galt damit fuer immer als "schon gebunden", war also fuer jeden
+  // spaeter erscheinenden Welle-2-Kettenhund unerreichbar.
+  const seekers = tanks.filter((t) => t.alive && t.cfg.tether && !t.tetherPartner?.alive);
   for (const t of seekers) {
-    if (t.tetherPartner) continue; // wurde inzwischen von einem anderen Kandidaten gebunden
+    if (t.tetherPartner?.alive) continue; // wurde inzwischen von einem anderen Kandidaten gebunden
     let best = null;
     let bestD = Infinity;
     let bestSame = null;
@@ -279,7 +284,7 @@ export function bondTethers(tanks) {
     // ("bevorzugt einen anderen Kettenhund" ist eine Praeferenz, kein
     // Zwang -- s. Designdokument Abschnitt 8.5).
     for (const o of tanks) {
-      if (o === t || !o.alive || o.tetherPartner) continue;
+      if (o === t || !o.alive || o.tetherPartner?.alive) continue;
       const d = (o.x - t.x) ** 2 + (o.y - t.y) ** 2;
       if (d < bestD) {
         bestD = d;
@@ -386,12 +391,17 @@ function updateMedics(state, dt) {
 function updateMasons(state, dt) {
   for (const s of state.masonScaffolds) s.age += dt; // fuer die Fuellfraktion in effects.js
   for (const t of state.tanks) {
-    if (!t.alive || !t.cfg.build) continue;
+    if (!t.cfg.build) continue;
     const b = t.cfg.build;
     // Verfall (build.decayS): jede eigene Wand verschwindet 20 s nach ihrer
     // Fertigstellung, unabhaengig davon, ob sie schon Treffer genommen hat --
     // eine INSTANTANE Entfernung (kein destroyWall()-Aufruf, das zaehlt
     // Treffer statt sofort zu entfernen).
+    // BUGFIX: Verfall und Aufraeumen laufen bewusst AUCH fuer einen bereits
+    // TOTEN Maurer (die t.alive-Pruefung sitzt erst weiter unten, vor der
+    // Baulogik). Vorher machte sein Tod jede seiner Waende dauerhaft --
+    // ausgerechnet die richtige Antwort des Spielers ("toete den Maurer")
+    // hat seine Sperren also fuer immer zementiert, statt sie aufzuloesen.
     for (const w of t.masonWalls || []) {
       if (w.masonExpiresAt != null && state.time >= w.masonExpiresAt) {
         const i = state.walls.indexOf(w);
@@ -405,6 +415,17 @@ function updateMasons(state, dt) {
     // gegen state.walls abgleichen statt einen zweiten Entfernungs-Hook zu
     // brauchen).
     t.masonWalls = (t.masonWalls || []).filter((w) => state.walls.includes(w));
+    if (!t.alive) {
+      // Stirbt der Maurer mitten im Bau, wird die Wand nie fertig -- sein
+      // Geruest-Telegraph muss mit ihm verschwinden, sonst zeigt der Raum bis
+      // zum Ende eine Warnung vor einer Wand, die nie kommt.
+      if (t.masonBuildState) {
+        const { col, row } = t.masonBuildState;
+        state.masonScaffolds = state.masonScaffolds.filter((s) => s.col !== col || s.row !== row);
+        t.masonBuildState = null;
+      }
+      continue;
+    }
     if (t.masonBuildState) {
       if (state.time < t.masonBuildState.until) continue; // steht still, s. ai.js: updateEnemy()
       const { x, y, col, row } = t.masonBuildState;
@@ -459,8 +480,12 @@ function updateMasons(state, dt) {
 // updateTargeting()/updateCoverPerception(), nicht im spaeteren Tick-Block
 // bei updateMasons() & Co.
 function updateMetronomes(state, dt) {
-  for (const t of state.tanks) {
-    if (!t.alive || !t.cfg.metronome) continue;
+  // Pro Tick EINMAL eingesammelt statt in metronomeHolds() je feuerwilligem
+  // Verbuendeten neu ueber alle Panzer zu scannen -- in einem Raum ohne
+  // Taktgeber (der Regelfall) ist die Haltepruefung damit ein einziger
+  // length-Vergleich.
+  state.metronomes = state.tanks.filter((t) => t.alive && t.cfg.metronome);
+  for (const t of state.metronomes) {
     const mc = t.cfg.metronome;
     if (!t.metronomeState) t.metronomeState = { elapsed: 0, justBeat: false };
     const ms = t.metronomeState;
@@ -483,8 +508,10 @@ function updateMetronomes(state, dt) {
 // (Danger Cost 11), eine zusaetzliche clearLine()-Pruefung je Verbuendetem
 // und Tick faellt nicht ins Frame-Budget.
 function metronomeHolds(state, tank) {
-  for (const m of state.tanks) {
-    if (!m.alive || !m.cfg.metronome || m === tank) continue;
+  const list = state.metronomes;
+  if (!list?.length) return false;
+  for (const m of list) {
+    if (m === tank || !m.alive) continue;
     const ms = m.metronomeState;
     if (!ms || ms.elapsed >= (m.cfg.metronome.holdWindowS ?? 0)) continue;
     if (m.cfg.metronome.needsLos && !clearLine(state, tank.x, tank.y, m.x, m.y)) continue;
@@ -573,9 +600,23 @@ function pointSegmentDistSq(px, py, x0, y0, x1, y1) {
 // bei 0 loest sich das Ziel -- die Kugel wird dabei verbraucht ("eine Kugel
 // fuer die Leine ausgeben", Auftrag Abschnitt 8.8).
 function updateGrappleRopes(state) {
+  // Ohne einen einzigen lebenden Greifer im Raum gibt es strukturell keine
+  // Leine -- dann auch nicht Tick fuer Tick zwei Arrays zusammenkopieren
+  // (der Normalfall: t_grabber erscheint erst in Akt 3 ab Raum 6).
+  if (!state.tanks.some((t) => t.alive && t.cfg.grapple)) return;
   const carriers = [...state.tanks, ...state.ghosts];
   for (const target of carriers) {
-    if (!target.alive || !target.grappledBy?.alive || state.time >= target.grappleUntil) continue;
+    if (!target.grappledBy) continue;
+    // Abgelaufener oder toter Griff: Zeiger aufraeumen statt ihn als Leiche
+    // stehen zu lassen. Alle Leser gaten zwar zusaetzlich auf grappleUntil,
+    // ein haengender Verweis auf einen toten Panzer ist aber genau die Art
+    // stiller Altlast, die spaeter jemanden in die Irre fuehrt.
+    if (!target.grappledBy.alive || state.time >= target.grappleUntil) {
+      target.grappledBy = null;
+      target.grappleUntil = 0;
+      continue;
+    }
+    if (!target.alive) continue;
     const shooter = target.grappledBy;
     const gc = shooter.cfg.grapple;
     // Baustein B (G1): "die gespannte Leine ist danach dick und deutlich
@@ -589,6 +630,17 @@ function updateGrappleRopes(state) {
     const rr = (gc?.ropeHitRadiusPx ?? 14) ** 2;
     for (const b of state.bullets) {
       if (b.dead) continue;
+      // BUGFIX: die EIGENEN Geschosse des Greifers duerfen seine Leine nicht
+      // trennen. Er zielt mit seiner normalen Waffe auf genau dasselbe Ziel,
+      // das er zieht -- seine Kugeln fliegen also praktisch ENTLANG der Leine
+      // und wurden vorher ausnahmslos im Erzeugungstick von ihr selbst
+      // gefressen: ein Greifer konnte ein gegriffenes Ziel nie beschiessen.
+      // Gleiche Begruendung wie das b.owner === t der Panzer-Trefferschleife:
+      // die Leine ist Teil des Schuetzen, nicht ein fremdes Hindernis.
+      // Fremdes Feuer (Spieler, Verbuendete) trennt sie weiterhin -- das ist
+      // die im Design gewollte Gegenwehr bzw. dasselbe teamlose Prinzip wie
+      // bei t_duds Explosion und t_arclights Kette.
+      if (b.owner === shooter) continue;
       if (pointSegmentDistSq(b.x, b.y, shooter.x, shooter.y, target.x, target.y) > rr) continue;
       b.dead = true;
       target.grappleRopeHp = (target.grappleRopeHp ?? 1) - 1;
@@ -921,6 +973,9 @@ export function createState(data, tiles, opts) {
     // effects.js: drawTankLinks() generisch gezeichnet. Populiert seit G3
     // (t_relay: Lichtfaden) und G5 (t_medic: Heilstrahl).
     tankLinks: [],
+    // G8 (t_metronom): die lebenden Taktgeber dieses Ticks, einmal pro Tick
+    // von updateMetronomes() gesetzt -- metronomeHolds() liest nur noch sie.
+    metronomes: [],
     deathFuses: [], // G2: verzoegerte Todesexplosion (t_dud), s. killTank()/updateDeathFuses()
     // G5 (t_mason): 0,8-s-Geruest-Telegraph pro Bauversuch, eigener kleiner
     // Renderer (effects.js: drawMasonScaffolds) -- kein Baustein C (das ist
@@ -1174,8 +1229,16 @@ export function createState(data, tiles, opts) {
       // gleich, nur auf zwei LP-Pools verteilt (6 Treffer a 10 Schaden = 60
       // gesamt = 30/30 bei maxHp 30 -- beide sterben gleichzeitig, exakt wie
       // im Designdokument vorgerechnet).
-      if (tank.cfg.tether && tank.tetherPartner?.alive && !meta?.tetherSplit) {
-        const half = (amount ?? 1) * (tank.cfg.tether.splitPct ?? 0.5);
+      // BUGFIX: die Regel gilt fuer BEIDE Seiten der Kette ("jeder Schaden an
+      // einem der beiden", Kartentext). Ein Kettenhund kann sich mangels
+      // zweitem Kettenhund auch an einen ganz normalen Verbuendeten binden --
+      // der traegt dann selbst kein cfg.tether. Vorher teilte nur ein Treffer
+      // AUF den Kettenhund; ein Treffer auf seinen Partner ging voll durch,
+      // sodass sich die Kette umgehen liess, indem man einfach die andere
+      // Seite erschoss. Die Rezeptur kommt jetzt von der Seite, die sie hat.
+      const tetherCfg = tank.cfg.tether || tank.tetherPartner?.cfg?.tether;
+      if (tetherCfg && tank.tetherPartner?.alive && !meta?.tetherSplit) {
+        const half = (amount ?? 1) * (tetherCfg.splitPct ?? 0.5);
         const partner = tank.tetherPartner;
         tank.tetherFlashUntil = state.time + 0.2;
         partner.tetherFlashUntil = state.time + 0.2;
