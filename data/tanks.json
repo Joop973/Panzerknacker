@@ -596,6 +596,49 @@
       "damage": 25,
       "desc": "Sein Geschoss springt beim Treffer auf bis zu zwei weitere nahe Ziele über (30 % Schadensabfall je Sprung) — trifft er einen Geist, springt der Blitz auch auf den Spieler und umgekehrt."
     },
+    "t_tether": {
+      "speed": "normal",
+      "magazine": 2,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "hunter",
+      "aggression": 0.6,
+      "accuracy": 0.6,
+      "fireRate": 1.6,
+      "tether": {
+        "splitPct": 0.5,
+        "breakDistPx": 260,
+        "breakOnWall": true,
+        "preferSameType": true,
+        "standoffMinPx": 100,
+        "standoffMaxPx": 200
+      },
+      "label": "Kettenhund",
+      "maxHp": 30,
+      "damage": 25,
+      "desc": "Bindet sich beim Raumaufbau an den nächsten Verbündeten (bevorzugt einen zweiten Kettenhund) — jeder Schaden an einem der beiden wird 50/50 geteilt. Die sichtbare Kette reißt dauerhaft an einer Wand oder über 260 px Abstand."
+    },
+    "t_harvester": {
+      "speed": "slow",
+      "magazine": 2,
+      "mines": 0,
+      "weapon": "bullet",
+      "role": "sieger",
+      "aggression": 0.3,
+      "preferredRange": 200,
+      "accuracy": 0.7,
+      "fireRate": 1.7,
+      "harvest": {
+        "radiusPx": 200,
+        "hpPerStack": 8,
+        "damagePerStack": 3,
+        "healOnStack": false
+      },
+      "label": "Verwerter",
+      "maxHp": 40,
+      "damage": 25,
+      "desc": "Stirbt ein Panzer oder Geist in 200 px Umkreis, wächst er dauerhaft: +8 maximale LP und +3 Schaden je Stapel — der Zuwachs heilt ihn nicht, macht ihn nur zäher für später."
+    },
     "t_black": {
       "speed": "veryfast",
       "magazine": 2,

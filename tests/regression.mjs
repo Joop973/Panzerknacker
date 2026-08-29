@@ -14694,6 +14694,234 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 75. Gegner-Umbau Phase G7 (UMBAUPLAN-GEGNER.md): Akt 3, die ersten
+// zwei "alternativen" Mechaniken -- t_tether (Kettenhund) und t_harvester
+// (Verwerter). Beide sind die ersten Gegner im Spiel, deren Wert von einem
+// ANDEREN Ereignis abhaengt (ein Partner-Panzer bzw. ein Tod in der Naehe),
+// nicht nur von sich selbst wie alle bisherigen Typen.
+{
+  const { createState, stepState, bondTethers } = await import('../src/game/state.js');
+  const { createTank } = await import('../src/game/tank.js');
+  const { killGhost } = await import('../src/game/ghost.js');
+  const { tetherStandoffDrive } = await import('../src/game/ai_drives.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+  const { CELL, COLS, ROWS } = await import('../src/config.js');
+
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  function openRoom() {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: [],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades: {},
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+    });
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) st.grid[r][c] = r === 0 || r === ROWS - 1 || c === 0 || c === COLS - 1 ? '#' : '.';
+    st.walls = [];
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++)
+        if (st.grid[r][c] === '#') st.walls.push({ x: c * CELL, y: r * CELL, w: CELL, h: CELL, type: 'solid', col: c, row: r });
+    return st;
+  }
+
+  // ---- (a) Struktur ----------------------------------------------------
+  {
+    const T = tanksData.types.t_tether;
+    check(!!T?.tether && T.weapon === 'bullet', 'G7 (a): t_tether fehlt oder traegt kein tether');
+    check(
+      typeof T.tether.splitPct === 'number' && typeof T.tether.breakDistPx === 'number' && T.tether.breakOnWall === true && T.tether.preferSameType === true,
+      'G7 (a): t_tether.tether unvollstaendig',
+    );
+    const H = tanksData.types.t_harvester;
+    check(!!H?.harvest && H.weapon === 'bullet', 'G7 (a): t_harvester fehlt oder traegt kein harvest');
+    check(
+      typeof H.harvest.radiusPx === 'number' && typeof H.harvest.hpPerStack === 'number' && typeof H.harvest.damagePerStack === 'number',
+      'G7 (a): t_harvester.harvest unvollstaendig',
+    );
+    for (const id of ['t_tether', 't_harvester']) {
+      check(diffData.danger[id]?.unlockAct === 3, `G7 (a): ${id} ist nicht in Akt 3 freigeschaltet`);
+    }
+  }
+
+  // ---- (b) bondTethers(): bevorzugt einen zweiten Kettenhund vor einem
+  //          naeheren Nicht-Kettenhund, ist immer MUTUAL, und ein einzelner
+  //          Kettenhund ohne gleichartigen Partner bindet sich an den
+  //          naechstgelegenen Verbuendeten. ------------------------------
+  {
+    const tcfg = resolveCfg(tanksData, 't_tether');
+    const allyCfg = resolveCfg(tanksData, 't_brown');
+    const a = createTank('t_tether', tcfg, 100, 100);
+    const bAlly = createTank('t_brown', allyCfg, 110, 100); // NAEHER an a als c
+    const c = createTank('t_tether', tcfg, 300, 100); // weiter weg, aber gleicher Typ
+    bondTethers([a, bAlly, c]);
+    check(a.tetherPartner === c && c.tetherPartner === a, 'G7 (b): preferSameType bindet nicht an den zweiten Kettenhund vor dem naeheren Nicht-Kettenhund');
+    check(!bAlly.tetherPartner, 'G7 (b): ein Nicht-Kettenhund bekommt faelschlich einen tetherPartner');
+
+    // Kein gleichartiger Partner vorhanden -> naechstgelegener Verbuendeter.
+    const d = createTank('t_tether', tcfg, 500, 500);
+    const e = createTank('t_brown', allyCfg, 520, 500);
+    const f = createTank('t_brown', allyCfg, 700, 500);
+    bondTethers([d, e, f]);
+    check(d.tetherPartner === e && e.tetherPartner === d, 'G7 (b): ohne gleichartigen Partner bindet sich der Kettenhund nicht an den naechstgelegenen Verbuendeten');
+    check(!f.tetherPartner, 'G7 (b): ein zu weit entfernter Verbuendeter wird faelschlich gebunden');
+  }
+
+  // ---- (c) Schadensteilung: 50/50, GESAMTSCHADEN bleibt gleich (nicht
+  //          verdoppelt). ------------------------------------------------
+  {
+    const st = openRoom();
+    const tcfg = resolveCfg(tanksData, 't_tether');
+    const a = createTank('t_tether', tcfg, 100, 100);
+    const b = createTank('t_tether', tcfg, 150, 100);
+    a.tetherPartner = b;
+    b.tetherPartner = a;
+    st.tanks = [st.player, a, b];
+    st.applyDamage(a, 20, 'test', {});
+    check(a.hp === a.cfg.maxHp - 10, `G7 (c): a nimmt nicht die Haelfte (${a.cfg.maxHp - a.hp} statt 10)`);
+    check(b.hp === b.cfg.maxHp - 10, `G7 (c): der Partner b nimmt nicht ebenfalls die Haelfte (${b.cfg.maxHp - b.hp} statt 10)`);
+    check(a.cfg.maxHp - a.hp + (b.cfg.maxHp - b.hp) === 20, 'G7 (c): der Gesamtschaden ist nicht mehr 20 (verdoppelt oder verloren)');
+  }
+
+  // ---- (d) 6 Treffer a 10 Schaden toeten ein gebundenes Paar (maxHp 30 je
+  //          Stueck) GLEICHZEITIG -- exakt die Designdokument-Rechnung. ---
+  {
+    const st = openRoom();
+    const tcfg = resolveCfg(tanksData, 't_tether');
+    const a = createTank('t_tether', tcfg, 100, 100);
+    const b = createTank('t_tether', tcfg, 150, 100);
+    a.tetherPartner = b;
+    b.tetherPartner = a;
+    st.tanks = [st.player, a, b];
+    for (let i = 0; i < 6; i++) st.applyDamage(a, 10, 'test', {});
+    check(!a.alive && !b.alive, `G7 (d): nach 6 Treffern a 10 Schaden sind nicht beide tot (a.alive=${a.alive}, b.alive=${b.alive})`);
+  }
+
+  // ---- (e) Bindung bricht DAUERHAFT an einer Wand bzw. ueber breakDistPx,
+  //          kein Wiederverbinden nach Rueckkehr in Reichweite. ----------
+  {
+    const st = openRoom();
+    const tcfg = resolveCfg(tanksData, 't_tether');
+    const a = createTank('t_tether', tcfg, 100, 100);
+    const b = createTank('t_tether', tcfg, 150, 100);
+    a.tetherPartner = b;
+    b.tetherPartner = a;
+    st.tanks = [st.player, a, b];
+    b.x = a.x + tcfg.tether.breakDistPx + 20; // ausserhalb
+    stepState(st, CMD0, 1 / 60);
+    check(!a.tetherPartner && !b.tetherPartner, 'G7 (e): die Bindung bricht nicht ueber breakDistPx');
+    b.x = a.x + 50; // wieder in Reichweite
+    stepState(st, CMD0, 1 / 60);
+    check(!a.tetherPartner && !b.tetherPartner, 'G7 (e): die Bindung verbindet sich faelschlich wieder (soll DAUERHAFT gebrochen bleiben)');
+
+    // Wand dazwischen.
+    const st2 = openRoom();
+    const c = createTank('t_tether', tcfg, 100, 100);
+    const d = createTank('t_tether', tcfg, 160, 100);
+    c.tetherPartner = d;
+    d.tetherPartner = c;
+    st2.tanks = [st2.player, c, d];
+    const wallCol = Math.floor(130 / CELL);
+    const wallRow = Math.floor(100 / CELL);
+    st2.grid[wallRow][wallCol] = '#';
+    stepState(st2, CMD0, 1 / 60);
+    check(!c.tetherPartner && !d.tetherPartner, 'G7 (e): eine Wand zwischen den Partnern bricht die Bindung nicht');
+  }
+
+  // ---- (f) Die Kette ist immer sichtbar (EIN tankLinks-Eintrag je Paar,
+  //          nicht zwei), verschwindet nach dem Bruch. -------------------
+  {
+    const st = openRoom();
+    const tcfg = resolveCfg(tanksData, 't_tether');
+    const a = createTank('t_tether', tcfg, 100, 100);
+    const b = createTank('t_tether', tcfg, 150, 100);
+    a.tetherPartner = b;
+    b.tetherPartner = a;
+    st.tanks = [st.player, a, b];
+    stepState(st, CMD0, 1 / 60);
+    // Gegen die literalen Startkoordinaten pruefen, nicht gegen a.x/b.x NACH
+    // dem Tick (G3/G6-Fund: updateTethers() pusht VOR der spaeteren Gegner-
+    // Bewegungsphase im selben Tick -- Rolle 'hunter' bewegt sich im selben
+    // Tick noch ein Stueck, ein exakter Positionsvergleich danach schlaegt
+    // deshalb fehl).
+    const links = st.tankLinks.filter((l) => (l.x0 === 100 && l.x1 === 150) || (l.x0 === 150 && l.x1 === 100));
+    check(links.length === 1, `G7 (f): nicht genau EIN Ketten-Link je Paar (${links.length})`);
+    b.x = a.x + tcfg.tether.breakDistPx + 20;
+    stepState(st, CMD0, 1 / 60);
+    const linksAfter = st.tankLinks.filter((l) => l.color?.[0] === 140 && l.color?.[1] === 80);
+    check(linksAfter.length === 0, 'G7 (f): die Kette bleibt sichtbar, obwohl die Bindung gebrochen ist');
+  }
+
+  // ---- (g) tetherStandoffDrive(): zu nah -> weg, zu weit -> hin,
+  //          dazwischen null (kein Vorrang). -----------------------------
+  {
+    const tc = { standoffMinPx: 100, standoffMaxPx: 200 };
+    const tank = { x: 0, y: 0 };
+    const near = tetherStandoffDrive(tank, { x: 50, y: 0 }, tc);
+    check(near.x < 0, `G7 (g): zu nah bewegt sich nicht WEG vom Partner (x=${near?.x})`);
+    const far = tetherStandoffDrive(tank, { x: 300, y: 0 }, tc);
+    check(far.x > 0, `G7 (g): zu weit bewegt sich nicht ZUM Partner (x=${far?.x})`);
+    const mid = tetherStandoffDrive(tank, { x: 150, y: 0 }, tc);
+    check(mid === null, 'G7 (g): im Zielband (100-200px) wird trotzdem ein Vorrang zurueckgegeben');
+  }
+
+  // ---- (h) t_harvester: waechst dauerhaft bei einem Tod in Reichweite
+  //          (maxHp/damage), OHNE zu heilen (healOnStack:false); ausserhalb
+  //          radiusPx bleibt er unveraendert. ----------------------------
+  {
+    const st = openRoom();
+    const hcfg = resolveCfg(tanksData, 't_harvester');
+    const harvester = createTank('t_harvester', hcfg, 100, 100);
+    harvester.hp = harvester.cfg.maxHp - 5; // leicht angeschlagen -- Heilung waere sichtbar
+    const victim = createTank('t_brown', resolveCfg(tanksData, 't_brown'), 150, 100); // 50px, INNERHALB radiusPx
+    const farVictim = createTank('t_brown', resolveCfg(tanksData, 't_brown'), 100 + hcfg.harvest.radiusPx + 50, 100); // AUSSERHALB
+    st.tanks = [st.player, harvester, victim, farVictim];
+    const baseMaxHp = harvester.cfg.maxHp;
+    const baseDamage = harvester.cfg.damage;
+    const hpBefore = harvester.hp;
+    st.killTank(victim, 'test', {});
+    check(harvester.cfg.maxHp === baseMaxHp + hcfg.harvest.hpPerStack, `G7 (h): maxHp waechst nicht um hpPerStack (${harvester.cfg.maxHp - baseMaxHp})`);
+    check(harvester.cfg.damage === baseDamage + hcfg.harvest.damagePerStack, `G7 (h): damage waechst nicht um damagePerStack (${harvester.cfg.damage - baseDamage})`);
+    check(harvester.hp === hpBefore, 'G7 (h): der Verwerter heilt sich (healOnStack:false wird nicht beachtet)');
+    check(harvester.harvestStacks === 1, `G7 (h): harvestStacks ist nicht 1 (${harvester.harvestStacks})`);
+    const maxHpAfterFirst = harvester.cfg.maxHp;
+    st.killTank(farVictim, 'test', {});
+    check(harvester.cfg.maxHp === maxHpAfterFirst, 'G7 (h): ein Tod AUSSERHALB radiusPx laesst den Verwerter trotzdem wachsen');
+  }
+
+  // ---- (i) Ein Geistertod (killGhost) waechst denselben Verwerter genauso
+  //          -- "Panzer ODER Geist". ---------------------------------------
+  {
+    const st = openRoom();
+    const hcfg = resolveCfg(tanksData, 't_harvester');
+    const harvester = createTank('t_harvester', hcfg, 100, 100);
+    st.tanks = [st.player, harvester];
+    st.ghosts = [];
+    const g = { id: 999, x: 130, y: 100, alive: true, hp: 10, cfg: { maxHp: 10 } };
+    st.ghosts.push(g);
+    const baseMaxHp = harvester.cfg.maxHp;
+    killGhost(st, g, 'expire');
+    check(harvester.cfg.maxHp === baseMaxHp + hcfg.harvest.hpPerStack, 'G7 (i): ein Geistertod laesst den Verwerter nicht wachsen');
+  }
+
+  // ---- (j) Der Spielertod feedet KEINEN Verwerter -- "meine Gegner",
+  //          nicht der eigene Tod. -----------------------------------------
+  {
+    const st = openRoom();
+    const hcfg = resolveCfg(tanksData, 't_harvester');
+    const harvester = createTank('t_harvester', hcfg, 100, 100);
+    st.tanks = [st.player, harvester];
+    st.player.x = 120;
+    st.player.y = 100;
+    const baseMaxHp = harvester.cfg.maxHp;
+    st.killTank(st.player, 'test', {});
+    check(harvester.cfg.maxHp === baseMaxHp, 'G7 (j): der Spielertod laesst einen Verwerter faelschlich wachsen');
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

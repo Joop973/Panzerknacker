@@ -11,7 +11,7 @@
 
 import { range } from '../core/rng.js';
 import { roleTurret } from './ai_turrets.js';
-import { DRIVES, coverDrive, ramDrive } from './ai_drives.js';
+import { DRIVES, coverDrive, ramDrive, tetherStandoffDrive } from './ai_drives.js';
 
 export function angleDiff(a, b) {
   // Kleinste Differenz b - a, gewrappt auf [-PI, PI].
@@ -356,7 +356,15 @@ export function updateEnemy(tank, state, dt) {
   // darf weiter zielen/feuern (roleTurret() unten liest masonBuildState
   // nicht, bleibt also unveraendert).
   const masonMove = tank.cfg.build && tank.masonBuildState ? { x: 0, y: 0 } : null;
-  const move = ramMove || masonMove || (seekCover && coverDrive(tank, state, dt)) || DRIVES[role](tank, state, dt);
+  // Kettenhund-Abstand (G7, t_tether): haelt 100-200 px Abstand zum
+  // gebundenen Partner, VOR Deckung/Rolle -- gibt `null` zurueck (kein
+  // Vorrang), solange der Abstand ohnehin im Zielband liegt.
+  const tetherMove =
+    tank.cfg.tether && tank.tetherPartner?.alive
+      ? tetherStandoffDrive(tank, tank.tetherPartner, tank.cfg.tether)
+      : null;
+  const move =
+    ramMove || masonMove || tetherMove || (seekCover && coverDrive(tank, state, dt)) || DRIVES[role](tank, state, dt);
   // EMP-Mine (Phase 6): betaeubte Gegner drehen den Turm nicht und feuern
   // nicht -- eigenes Feld turretStunTimer, damit die bestehende Krallenfalle
   // (stunTimer allein) den Turm weiter benutzbar laesst (siehe PLAN.md).

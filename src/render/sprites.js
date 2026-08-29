@@ -165,6 +165,12 @@ const SPRITE_ALIAS = {
   t_bulwark: 't_grey',
   t_stalker: 't_black',
   t_arclight: 't_teal',
+  // G7: "rostbraun" (t_tether) -> t_brown, "dunkelrot" (t_harvester) ->
+  // t_pink (naechstliegender roter Bestandston) -- Identitaet traegt
+  // vollstaendig Verhalten + die sichtbare Kette (state.tankLinks) bzw. den
+  // Fressradius-Bodenkreis, kein eigenes Sprite.
+  t_tether: 't_brown',
+  t_harvester: 't_pink',
   // UMBAUPLAN-LP Phase 9: die zehn Klassen teilen sich das Spieler-Sprite --
   // ihre Identitaet traegt (vorerst) die Elementfarbe/der Wert, kein eigenes
   // Asset. 'player' selbst ist die Standard-Klasse und braucht keinen Alias.
