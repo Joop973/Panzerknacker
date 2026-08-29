@@ -15387,6 +15387,172 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 78. Gegner-Umbau Phase G8 (Difficulty Curve) ----------------------
+// Die acht Akt-3-Kompositionen K1-K8 aus docs/AUFTRAG-GEGNERDESIGN.md
+// Abschnitt 11 plus die optionale Elite-Affix-Sperrliste je Gegnertyp
+// (UMBAUPLAN-GEGNER.md O3). Vorher hatte data/compositions.json AUSSCHLIESSLICH
+// Akt-2-Rezepte -- alle elf Akt-3-Typen liefen nur ueber den Zufalls-
+// Rueckfall, keine der entworfenen Synergien war verlaesslich erreichbar.
+{
+  const { buyEnemies } = await import('../src/game/run.js');
+  const { createState } = await import('../src/game/state.js');
+  const { rngFor, hashSeed } = await import('../src/core/rng.js');
+
+  const comps = diffData.compositions;
+
+  // ---- (a) Struktur: Akt 3 hat ueberhaupt Kompositionen, und zwar die acht
+  //          benannten. Bewacht genau die Luecke, die G8 geschlossen hat --
+  //          die Budget-/Freischaltungspruefung JEDER Komposition liegt
+  //          unveraendert in Abschnitt 72 (a) und gilt automatisch mit. ----
+  {
+    const akt3 = comps.filter((c) => c.actIndex === 3);
+    check(akt3.length === 8, `G8 (a): Akt 3 hat ${akt3.length} statt 8 Kompositionen`);
+    for (const id of ['k1_der_chor', 'k2_der_blutzoll', 'k3_die_kette', 'k4_der_trichter',
+                      'k5_die_blende', 'k6_das_rudel', 'k7_der_kaefig', 'k8_der_ankerhof']) {
+      check(akt3.some((c) => c.id === id), `G8 (a): Akt-3-Komposition ${id} fehlt`);
+    }
+    // K2 nennt im Designdokument "ab Raum 6" (dort wurde nur das Budget
+    // gerechnet) -- t_harvester ist aber selbst erst ab Raum 8 frei.
+    const k2 = akt3.find((c) => c.id === 'k2_der_blutzoll');
+    check(k2.minRoom >= diffData.danger.t_harvester.unlockRoomInAct,
+      `G8 (a): k2_der_blutzoll.minRoom (${k2.minRoom}) liegt vor der Freischaltung von t_harvester (${diffData.danger.t_harvester.unlockRoomInAct})`);
+  }
+
+  // ---- (b) JEDE Komposition feuert im echten buyEnemies()-Pfad auch
+  //          tatsaechlich. Eine Komposition, die rechnerisch gueltig ist,
+  //          aber nie gezogen wird, waere tote Datenlage -- genau der
+  //          Zustand, in dem Akt 3 vor dieser Phase war. -----------------
+  {
+    const hits = new Set();
+    for (let seed = 1; seed <= 120; seed++) {
+      for (let act = 1; act <= 3; act++) {
+        const a = diffData.acts[act - 1];
+        for (let room = 1; room <= a.rooms; room++) {
+          const budget = a.budget.base + a.budget.perRoom * room;
+          const types = buyEnemies(diffData, rngFor(seed, act * 100 + room, 'enemies'), act, room, budget, tanksData.types, comps);
+          const got = [...types].sort().join(',');
+          const m = comps.find((c) => c.actIndex === act &&
+            c.enemies.flatMap((e) => Array(e.count).fill(e.type)).sort().join(',') === got);
+          if (m) hits.add(m.id);
+        }
+      }
+    }
+    for (const c of comps) check(hits.has(c.id), `G8 (b): Komposition ${c.id} wird in 120 Seeds nie gezogen (tote Datenlage)`);
+  }
+
+  // ---- (c) affixDeny-MECHANISMUS mit EIGENEN Werten (nicht der aktuellen
+  //          Datenlage): ein Typ mit Sperrliste bekommt den gesperrten Affix
+  //          nicht, ein Typ ohne Sperrliste schon. -----------------------
+  {
+    const fakeAffix = { id: 'testaffix', speedMult: 2 };
+    const room = (typ, deny) => {
+      const data = { ...tanksData, types: { ...tanksData.types, [typ]: { ...tanksData.types[typ], affixDeny: deny } } };
+      const st = createState(data, tilesData, {
+        genRng: rngFor(1, 1, 'rooms'), enemyTypes: [typ], aiSeed: hashSeed(1, 1, 'ai'),
+        playerUpgrades: {}, upgradesData, equippedSecondary: 'mine', transform: {},
+        eliteAffixes: { chosen: [fakeAffix], cheapestIdx: 0, priciestIdx: 0 },
+      });
+      return st.tanks.find((t) => t !== st.player);
+    };
+    const base = tanksData.speeds[tanksData.types.t_pink.speed];
+    const denied = room('t_pink', ['testaffix']);
+    const allowed = room('t_pink', null);
+    check(denied.cfg.speed === base, `G8 (c): ein gesperrter Affix wirkt trotzdem (Tempo ${denied.cfg.speed} statt ${base})`);
+    check(allowed.cfg.speed === base * 2, `G8 (c): ohne Sperrliste wirkt der Affix nicht (Tempo ${allowed.cfg.speed})`);
+    // Kein irrefuehrender Farbpunkt fuer eine Wirkung, die es nicht gibt
+    // (dieselbe Fehlerklasse wie der Regenerierschild-Bugfix).
+    check(!denied.affixes.includes('testaffix'), 'G8 (c): ein gesperrter Affix erscheint trotzdem in t.affixes (irrefuehrender Marker)');
+    check(allowed.affixes.includes('testaffix'), 'G8 (c): ein erlaubter Affix fehlt in t.affixes');
+    // Eine Sperrliste, die den gezogenen Affix NICHT nennt, aendert nichts.
+    const other = room('t_pink', ['irgendwas_anderes']);
+    check(other.cfg.speed === base * 2, 'G8 (c): eine nicht passende Sperrliste blockt faelschlich');
+  }
+
+  // ---- (d) Die drei im Designdokument ausdruecklich begruendeten
+  //          Ausschluesse sind gesetzt. ---------------------------------
+  {
+    for (const [typ, affix] of [['t_shotgun', 'rasend'], ['t_dud', 'gepanzert'], ['t_harvester', 'rasend']]) {
+      check(tanksData.types[typ].affixDeny?.includes(affix),
+        `G8 (d): ${typ} sperrt '${affix}' nicht (Designdokument: ausdruecklich "Nicht ${affix}")`);
+    }
+    // Jeder gesperrte Affix muss es auch wirklich geben -- ein Tippfehler
+    // waere sonst eine stille Nulloperation.
+    const known = new Set(diffData.elite.affixes.map((a) => a.id));
+    for (const [id, t] of Object.entries(tanksData.types)) {
+      for (const a of t.affixDeny || []) check(known.has(a), `G8 (d): ${id}.affixDeny nennt unbekannten Affix '${a}'`);
+    }
+  }
+
+  // ---- (e) compositionChance-MECHANISMUS mit EIGENEN Werten (0 / 1, nicht
+  //          den echten 0,6): steuert, ob ein passender Raum kuratiert wird
+  //          oder auf den Zufalls-Rueckfall faellt. Vorher feuerte eine
+  //          Komposition IMMER, sobald eine ins Budgetfenster passte. ----
+  {
+    const { mulberry32 } = await import('../src/core/rng.js');
+    // Kuratiert und Rueckfall muessen am ERGEBNIS unterscheidbar sein, sonst
+    // prueft der Test nichts (ein erster Entwurf mit nur einem 5-Punkte-Typ
+    // bei Budget 10 lieferte in BEIDEN Faellen 'a,a' und blieb auch mit
+    // ausgebautem Mechanismus gruen). Deshalb ein zweiter Typ 'c', den nur
+    // die Komposition kaufen kann: der Zufalls-Rueckfall prueft maxPerRoom,
+    // pickComposition() bewusst nicht.
+    const comp = { id: 'c', actIndex: 1, minRoom: 1, weight: 1, enemies: [{ type: 'c', count: 1 }] };
+    const mk = (chance) => ({
+      maxEnemiesPerRoom: 8,
+      danger: {
+        a: { points: 5, unlockAct: 1, unlockRoomInAct: 1 },
+        c: { points: 10, maxPerRoom: 0, unlockAct: 1, unlockRoomInAct: 1 },
+      },
+      acts: [{ rooms: 16, budget: { base: 0, perRoom: 10 }, ...(chance === undefined ? {} : { compositionChance: chance }) }],
+    });
+    const draw = (chance, seed) => {
+      const rng = mulberry32(seed);
+      return buyEnemies(mk(chance), rng, 1, 1, 10, undefined, [comp]).join(',');
+    };
+    // Vorbedingung: die beiden Wege sind wirklich unterscheidbar.
+    check(draw(1, 1) === 'c', `G8 (e): Testaufbau kaputt -- kuratiert liefert '${draw(1, 1)}' statt 'c'`);
+    check(draw(0, 1) === 'a,a', `G8 (e): Testaufbau kaputt -- der Rueckfall liefert '${draw(0, 1)}' statt 'a,a'`);
+    const isComp = (out) => out === 'c';
+    // chance 1 (und der Vorgabewert ohne Feld): immer kuratiert.
+    for (const ch of [1, undefined]) {
+      let n = 0;
+      for (let s = 1; s <= 40; s++) if (isComp(draw(ch, s))) n++;
+      check(n === 40, `G8 (e): bei compositionChance ${ch} feuert die Komposition nur ${n}/40 mal`);
+    }
+    // chance 0: nie kuratiert -- der Zufalls-Rueckfall uebernimmt.
+    {
+      let n = 0;
+      for (let s = 1; s <= 40; s++) if (isComp(draw(0, s))) n++;
+      check(n === 0, `G8 (e): bei compositionChance 0 feuert die Komposition trotzdem ${n}/40 mal`);
+    }
+    // Zwischenwerte streuen wirklich (weder immer noch nie).
+    {
+      let n = 0;
+      for (let s = 1; s <= 200; s++) if (isComp(draw(0.5, s))) n++;
+      check(n > 60 && n < 140, `G8 (e): compositionChance 0.5 kuratiert ${n}/200 Raeume -- keine echte Streuung`);
+    }
+    // RNG-Vertrag: die Wuerfelprobe kostet genau EINEN zusaetzlichen Aufruf.
+    // Gemessen wird bewusst mit einer Probe, die GELINGT (rng liefert immer
+    // 0) -- sonst laeuft im Vergleichsfall der Rueckfall und verbraucht seine
+    // eigenen Aufrufe, der Vergleich waere dann kein Gleiches-mit-Gleichem.
+    {
+      const count = (chance, comps) => {
+        let n = 0;
+        buyEnemies(mk(chance), () => { n++; return 0; }, 1, 1, 10, undefined, comps);
+        return n;
+      };
+      const ohne = count(1, [comp]);
+      const mit = count(0.5, [comp]);
+      check(ohne + 1 === mit,
+        `G8 (e): die Chance-Probe kostet nicht genau einen zusaetzlichen rng()-Aufruf (${ohne} -> ${mit})`);
+      // Ohne passende Kandidaten (Komposition zu teuer) darf die Probe gar
+      // nicht laufen -- der Determinismus-Vertrag aus G4 bleibt unberuehrt.
+      const teuer = { ...comp, enemies: [{ type: 'c', count: 8 }] };
+      check(count(0.5, [teuer]) === count(1, [teuer]),
+        'G8 (e): ohne passende Komposition veraendert compositionChance den RNG-Verbrauch');
+    }
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

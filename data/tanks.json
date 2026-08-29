@@ -392,6 +392,7 @@
       "role": "sapper",
       "aggression": 0.4,
       "accuracy": 0,
+      "affixDeny": ["gepanzert"],
       "deathBlast": {
         "fuseS": 1.2,
         "radiusPx": 110,
@@ -414,6 +415,7 @@
       "spreadCount": 5,
       "spreadRad": 0.1484,
       "burstRangePx": 210,
+      "affixDeny": ["rasend"],
       "fireWindupS": 0.35,
       "label": "Streuer",
       "maxHp": 30,
@@ -628,6 +630,7 @@
       "preferredRange": 200,
       "accuracy": 0.7,
       "fireRate": 1.7,
+      "affixDeny": ["rasend"],
       "harvest": {
         "radiusPx": 200,
         "hpPerStack": 8,

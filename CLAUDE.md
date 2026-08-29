@@ -8570,29 +8570,13 @@ sind gebaut, samt Kompositionssystem (G4) fuer kuratierte Begegnungen.**
 
 ⚠️ **KORREKTUR eines frueheren Abschlussvermerks** (aufgefallen bei der
 Code-Durchsicht, s. eigener Abschnitt unten): hier stand zuvor, der
-komplette `UMBAUPLAN-GEGNER.md` (G0-G8) sei abgearbeitet. Das war falsch.
-Der Neun-Phasen-Plan sieht laut dem eigenen G0-Bericht (Abschnitt 4 und
-O3, Zeilen 157/216) fuer **G8 die "Difficulty Curve"** vor -- dort werden
-"die Encounter/Kompositionen final verdrahtet" und das optionale
-`affixDeny` gebaut -- und **G9 als Abnahme**. Gebaut sind bisher nur die
-GEGNER; die Phasennummer G8 wurde dabei versehentlich fuer die letzte
-Gegnerwelle vergeben. **Offen bleiben damit:**
-- **`data/compositions.json` enthaelt 9 Kompositionen, alle fuer Akt 2 --
-  kein einziger Akt-3-Eintrag.** Alle elf Akt-3-Typen (`t_marshal`,
-  `t_bulwark`, `t_stalker`, `t_arclight`, `t_tether`, `t_harvester`,
-  `t_metronom`, `t_grabber` sowie `t_purple`/`t_white`/`t_black`) laufen
-  deshalb ausschliesslich ueber den Zufalls-Rueckfall in `buyEnemies()`.
-  Die im Designdokument Abschnitt 11 ausformulierten **acht
-  Akt-3-Kompositionen** (und die zehn Encounter aus Abschnitt 13) sind nie
-  in Daten ueberfuehrt worden -- genau die Synergien, fuer die das
-  Kompositionssystem in G4 ueberhaupt gebaut wurde (Taktgeber+Feldwebel,
-  Greifer+Streuer, Verwerter+Blindgaenger ...), koennen im Spiel derzeit
-  nur zufaellig entstehen.
-- **`affixDeny`** (G0-Bericht O3) ist nie gebaut worden.
-- Die **Abnahme (G9)** hat nie stattgefunden.
-Beides ist kein Defekt am gebauten Code, sondern nicht geleistete
-Planarbeit -- hier notiert, damit der naechste Chat nicht von einem
-falschen "fertig" ausgeht.
+komplette `UMBAUPLAN-GEGNER.md` (G0-G8) sei abgearbeitet. Das war falsch --
+die Phasennummer G8 war versehentlich fuer die letzte GEGNER-Welle vergeben
+worden, obwohl der Neun-Phasen-Plan laut dem eigenen G0-Bericht (Zeilen
+157/216) unter **G8 die "Difficulty Curve"** fuehrt (Encounter/Kompositionen
+final verdrahten + `affixDeny`) und **G9 als Abnahme**. Die echte Phase G8
+ist inzwischen gebaut (eigener Abschnitt weiter unten) -- **offen bleibt nur
+noch die Abnahme G9.**
 
 ### Code-Durchsicht nach G8: fuenf Fehler behoben — gemergt
 Systematische Durchsicht der Gegner-Umbau-Phasen auf Nutzerwunsch ("gehe
@@ -8672,15 +8656,98 @@ deklariertes Feld (wurde vorher implizit angelegt).
   Freischaltung; alle Divisionen durch Distanzen auf fehlende Null-Guards.
 - Kein `sw.js`-Bump (reine Code-Aenderung, keine neuen Asset-Dateien).
 
+**Phase G8 (Difficulty Curve) ist gebaut** -- die eigentliche, im Plan so
+benannte Phase (nicht die Gegnerwelle, die frueher faelschlich diese Nummer
+trug, s. Korrekturvermerk oben). Drei Bausteine, davon zwei aus dem
+Auftragstext und einer als echter Messbefund.
+- **Acht Akt-3-Kompositionen** (`data/compositions.json`: 9 -> 17 Eintraege),
+  K1-K8 aus `docs/AUFTRAG-GEGNERDESIGN.md` Abschnitt 11: `k1_der_chor`
+  (Taktgeber + Rudel + Bollwerk), `k2_der_blutzoll` (Verwerter + viele
+  billige Tode + Blindgaenger), `k3_die_kette` (zwei Kettenhunde + Zehrer),
+  `k4_der_trichter` (Bollwerk + Greifer + zwei Streuer), `k5_die_blende`
+  (Horcher + Feldwebel hinter Deckung), `k6_das_rudel` (Feldwebel + Rudel +
+  Pirscher), `k7_der_kaefig` (Maurer + Greifer + Lichtbogen),
+  `k8_der_ankerhof` (Anker + Bollwerk + Zehrer + Pirscher). Vorher enthielt
+  die Datei **ausschliesslich Akt-2-Rezepte** -- alle elf Akt-3-Typen liefen
+  nur ueber den Zufalls-Rueckfall, keine der entworfenen Synergien war
+  verlaesslich erreichbar. Jede Komposition ist gegen die ECHTE
+  `acts[2].budget`-Formel, `maxEnemiesPerRoom` und jedes `unlockRoomInAct`
+  nachgerechnet (der Struktur-Test aus Abschnitt 72 (a) gilt automatisch
+  mit). **Ein Fehler im Designdokument dabei gefunden**: K2 nennt "ab Raum
+  6", dort wurde aber nur das Budget gerechnet -- `t_harvester` ist selbst
+  erst ab Raum 8 freigeschaltet, `minRoom: 8` statt 6 (Regel 1: der Code
+  gewinnt gegen den Prosatext). `k2_der_blutzoll` sitzt mit 8 Einheiten
+  exakt auf dem `maxEnemiesPerRoom`-Deckel.
+- **`affixDeny`** (`UMBAUPLAN-GEGNER.md` O3, dort als "optional, erst in G8"
+  eingeplant): eine optionale Negativliste je Gegnertyp, ausgewertet in
+  `state.js: applyAffixByIndex()` -- ein gesperrter Affix wird uebersprungen
+  UND landet nicht in `t.affixes` (sonst zeigte der Renderer einen
+  Farbpunkt fuer eine Wirkung, die es nicht gibt -- dieselbe Fehlerklasse
+  wie der Regenerierschild-Bugfix). Durchgriff ueber die
+  `cfg.js: resolveCfg()`-Whitelist. Gesetzt sind exakt die drei im
+  Designdokument ausdruecklich begruendeten Ausschluesse:
+  `t_shotgun: ["rasend"]`, `t_dud: ["gepanzert"]`, `t_harvester: ["rasend"]`.
+- **`compositionChance`** (NEU, nicht im Auftragstext -- ein Messbefund
+  beim Verdrahten): mit den acht neuen Rezepten feuerte ab Akt 2 Raum 2
+  **in 100 % der Raeume** eine Komposition, sobald ueberhaupt eine ins
+  Budgetfenster passte. Der Zufalls-Rueckfall, den das Designdokument in
+  Abschnitt 17.3 ausdruecklich als wichtig bezeichnet, lief danach nie
+  wieder. Zwei messbare Folgen: (1) Wiederholung -- fruehe Raeume lieferten
+  immer dasselbe Rezept; (2) die Kurve knickte nach hinten ab, weil
+  Kompositionen feste Punktkosten haben und nur im 50-100-%-Fenster gelten,
+  spaete Raeume also im Schnitt deutlich unter Budget blieben, waehrend der
+  Rueckfall es ausschoepft. `pickComposition()` (`run.js`) wuerfelt jetzt
+  einmal (`acts[].compositionChance`, 1/0,6/0,6) -- **genau EIN
+  zusaetzlicher `rng()`-Aufruf, und nur wenn ueberhaupt Kandidaten
+  existieren**, der Determinismus-Vertrag aus G4 bleibt unberuehrt.
+  Gemessen (200 Seeds je Raum, Punktschnitt gegen das Raumbudget):
+  Akt 3 Raum 16 **35,9 -> 43,8 von 55** Punkten, Akt 2 Raum 16
+  **29,7 -> 34,5 von 45**; kuratierter Anteil Akt 2 87,5 % -> 51,6 %,
+  Akt 3 68,8 % -> 41,3 % (in den Raeumen, in denen ueberhaupt eine
+  Komposition passt: rund 55-65 %).
+- **Neuer Testabschnitt 78** (`tests/regression.mjs`, Gegenprobe fuer jeden
+  Kernpunkt einzeln bestanden -- je absichtlich rot gemacht und
+  zurueckgesetzt: Akt-3-Rezepte entfernt, `affixDeny`-Auswertung in
+  `applyAffixByIndex()` entfernt, der `t.affixes`-Eintrag trotz Sperre
+  gesetzt, `affixDeny` aus der `resolveCfg()`-Whitelist entfernt, der
+  Chance-Wurf in `pickComposition()` entfernt, der Chance-WERT ignoriert
+  (fest 1)): Struktur (acht Akt-3-Rezepte, alle acht namentlich, K2s
+  Freischaltungs-Nachrechnung), **jede** der 17 Kompositionen feuert im
+  echten `buyEnemies()`-Pfad wirklich (tote Datenlage waere sonst
+  unsichtbar), `affixDeny`-Mechanismus mit EIGENEN Werten (synthetischer
+  Affix, nicht der aktuellen Datenlage) inkl. der drei begruendeten
+  Ausschluesse und einer Tippfehler-Pruefung gegen `diffData.elite.affixes`,
+  `compositionChance` (1/undefined immer, 0 nie, 0,5 streut wirklich, genau
+  ein zusaetzlicher `rng()`-Aufruf, kein Aufruf ohne Kandidaten).
+- **Ein Testkonstruktionsfehler beim eigenen Bau gefunden und behoben**
+  (kein Code-Bug, dieselbe Fehlerklasse wie schon zweimal in dieser
+  Auftragsreihe): der erste Entwurf des `compositionChance`-Tests nutzte
+  einen einzigen 5-Punkte-Typ bei Budget 10 -- der Zufalls-Rueckfall kaufte
+  dann exakt dieselben zwei Einheiten wie die Komposition, kuratiert und
+  Rueckfall waren am Ergebnis **nicht unterscheidbar** und der Test blieb
+  auch mit ausgebautem Mechanismus gruen. Fix: ein zweiter Typ mit
+  `maxPerRoom: 0`, den nur die Komposition kaufen kann (der Rueckfall prueft
+  `maxPerRoom`, `pickComposition()` bewusst nicht), plus zwei explizite
+  Vorbedingungs-Pruefungen, dass die beiden Wege wirklich verschiedene
+  Ergebnisse liefern. Zweiter Fund im selben Block: die RNG-Vertragspruefung
+  verglich `chance 1` gegen einen Lauf, dessen fehlgeschlagene Probe den
+  Rueckfall ausloeste und dessen Aufrufe mitzaehlte (1 -> 3 statt 1 -> 2) --
+  jetzt mit einer Probe gemessen, die GELINGT (`rng` liefert immer 0), also
+  Gleiches mit Gleichem.
+- **Schlechtester Frame** (Grundregel -- G8 kostet zwar keinen Tick, aendert
+  aber die Raumzusammensetzung): jede der acht Akt-3-Kompositionen gegen
+  eine Baseline aus acht Bestandstypen, 600 Ticks, drittgroesster Wert,
+  schlechtester von 3 Laeufen: Baseline **2,489 ms**, teuerste Komposition
+  (`k5_die_blende`) **1,788 ms**, alle uebrigen 0,57-1,17 ms (Budget 6 ms).
+- Kein `sw.js`-Bump (reine Code-/Datenaenderung, keine neuen Asset-Dateien --
+  `data/compositions.json` steht seit G4 in `ASSETS`, network-first liefert
+  Daten online ohnehin frisch).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Akt-3-Kompositionen fehlen komplett** (s. Korrekturvermerk oben):
-      `data/compositions.json` hat 9 Eintraege, alle Akt 2. Die acht im
-      Designdokument Abschnitt 11 ausformulierten Akt-3-Kompositionen (und
-      die zehn Encounter aus Abschnitt 13) sind nie in Daten ueberfuehrt
-      worden -- das ist der eigentliche Inhalt der noch offenen Planphase
-      G8 ("Difficulty Curve"). Mechanismus und Struktur-Test (Abschnitt 72)
-      stehen bereits, es ist reine Datenarbeit.
-- [ ] **`affixDeny`** (G0-Bericht O3) nie gebaut; **Abnahme G9** nie gelaufen.
+- [ ] **Abnahme G9** (`UMBAUPLAN-GEGNER.md`, letzte offene Planphase) nie
+      gelaufen -- alle Gegner (G2/G3/G5/G6/G7 + die Gegnerwelle, die
+      faelschlich als G8 gezaehlt wurde), das Kompositionssystem (G4) und die
+      Difficulty Curve (echtes G8) stehen.
 - [ ] **`t_relay` (Horcher) hat noch keine eigene Sichtlinien-Suchfahrt**
       (Gegner-Umbau G3): Designtext will aktives Aufsuchen von Korridorenden/
       Freiflächenrändern statt normalem `sapper`-Wandern. Technisch machbar

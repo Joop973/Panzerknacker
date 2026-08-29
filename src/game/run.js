@@ -151,6 +151,20 @@ function pickComposition(diff, comps, genRng, actIndex, roomIndexInAct, budget) 
     return pts <= budget && pts >= budget * COMPOSITION_MIN_BUDGET_FRACTION;
   });
   if (!candidates.length) return null;
+  // G8 (Difficulty Curve): NICHT jeder passende Raum wird auch kuratiert.
+  // Ohne diese Wuerfelprobe feuerte eine Komposition, sobald ueberhaupt eine
+  // ins Budgetfenster passte -- ab Akt 2 Raum 2 also in 100 % der Raeume, der
+  // im Designdokument ausdruecklich als wichtig bezeichnete Zufalls-Rueckfall
+  // lief nie wieder. Zwei messbare Folgen: (1) Wiederholung -- fruehe Raeume
+  // lieferten immer dasselbe Rezept; (2) die Kurve knickte nach hinten ab,
+  // weil Kompositionen feste Punktkosten haben und nur im 50-100-%-Fenster
+  // gelten, spaete Raeume also im Schnitt deutlich unter Budget blieben,
+  // waehrend der Rueckfall es ausschoepft.
+  // Genau EIN zusaetzlicher rng()-Aufruf, und nur wenn ueberhaupt Kandidaten
+  // existieren -- ein Raum ohne passende Komposition verbraucht weiterhin
+  // gar keinen (Determinismus-Vertrag aus G4 unveraendert).
+  const chance = diff.acts?.[(actIndex || 1) - 1]?.compositionChance ?? 1;
+  if (chance < 1 && genRng() >= chance) return null;
   const picked = pickWeighted(candidates, genRng);
   const out = [];
   for (const e of picked.enemies) for (let i = 0; i < e.count; i++) out.push(e.type);
