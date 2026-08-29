@@ -192,8 +192,11 @@ function makeOffer(def, chosen) {
 // dass in einem Angebot nur Signaturkarten EINER Klasse vorkommen koennen).
 // Signaturkarten dedupen deshalb auf ihre eigene id (blockieren sich also
 // nur gegen sich selbst -- was `pool = pool.filter(id !== pick.id)` schon
-// separat erledigt), Kernpool-Karten weiterhin auf den Tag.
-function dedupeKey(d) {
+// separat erledigt), Kernpool-Karten weiterhin auf den Tag. Exportiert (seit
+// dem drawOne()-Signaturkarten-Fix), damit run.js: banOffer()/buyFourthCard()
+// ihre Vermeidungsmenge nach genau derselben Regel bauen koennen wie die
+// Erstauswahl hier oben.
+export function dedupeKey(d) {
   return d.signatureClass ? `sig:${d.id}` : d.tag;
 }
 
@@ -328,17 +331,29 @@ export function rollOffers(upgradesData, opts) {
   return offers;
 }
 
-// Zieht EINE zusaetzliche/ersetzende Karte, deren Tag noch nicht in
-// avoidTags vorkommt und deren id nicht in avoidIds ist (Phase-3-Aktionen
+// Zieht EINE zusaetzliche/ersetzende Karte, deren dedupeKey() noch nicht in
+// avoidKeys vorkommt und deren id nicht in avoidIds ist (Phase-3-Aktionen
 // "Verbannen" und "Vierte Karte"). Kein Kandidat -> null (Grundsteinumbau
 // Phase 4: kein Fallback mehr, s. rollOffers()).
-export function drawOne(upgradesData, opts, avoidTags, avoidIds) {
+//
+// drawOne()-Signaturkarten-Fix: avoidKeys wird von den Aufrufern jetzt ueber
+// dedupeKey() gebaut, NICHT mehr ueber den rohen d.tag. Vorher sperrte ein
+// Ersatzzug (Verbannen einer von mehreren angebotenen Signaturkarten) den
+// GANZEN Tag "signature" -- alle Signaturkarten JEDER Klasse teilen sich
+// diesen Tag, ein Ersatz war also nie eine andere Signaturkarte moeglich,
+// obwohl die Erstauswahl (rollOffers() oben) seit Upgradepool-v2 Phase 2
+// mehrere Signaturkarten derselben Klasse gleichzeitig erlaubt. dedupeKey()
+// dedupt Signaturkarten stattdessen auf ihre eigene id -- ein Ersatzzug
+// blockiert nur noch GENAU die gebannte/bereits angebotene Signaturkarte,
+// nicht den ganzen Tag. Kernpool-Karten (kein signatureClass) verhalten sich
+// unveraendert wie vorher (weiterhin Tag-basiert).
+export function drawOne(upgradesData, opts, avoidKeys, avoidIds) {
   const { chosen = {}, rng, balance } = opts;
   const weights = opts.rarityWeights || balance.rarity;
-  const at = avoidTags || new Set();
+  const ak = avoidKeys || new Set();
   const ai = avoidIds || new Set();
   const eligible = buildCandidates(upgradesData, opts).filter(
-    (d) => !at.has(d.tag) && !ai.has(d.id),
+    (d) => !ak.has(dedupeKey(d)) && !ai.has(d.id),
   );
   if (!eligible.length) return null;
   return makeOffer(weightedPick(eligible, rng, weights, makeCombinedWeight(opts)), chosen);

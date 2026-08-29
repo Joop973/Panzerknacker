@@ -15682,6 +15682,99 @@ for (const seed of SEEDS) {
 }
 
 
+// ---- 80. drawOne()-Signaturkarten-Fix -----------------------------------
+// "Verbannen"/"Vierte Karte" (run.js: banOffer()/buyFourthCard()) sperrten
+// beim Ersatzziehen bisher den GANZEN Tag "signature" (avoidTags baute auf
+// dem rohen d.tag auf) statt nur die gebannte/schon angebotene id -- alle
+// Signaturkarten JEDER Klasse teilen sich diesen Tag. Verbannen einer von
+// mehreren gleichzeitig angebotenen Signaturkarten konnte dadurch NIE eine
+// andere Signaturkarte als Ersatz ziehen, obwohl die Erstauswahl
+// (rollOffers()) das seit Upgradepool-v2 Phase 2 (dedupeKey() auf "sig:id"
+// statt "signature") ausdruecklich erlaubt -- eine Inkonsistenz zwischen
+// Erst- und Ersatzauswahl. Fix: drawOne() filtert jetzt ueber dedupeKey()
+// statt d.tag, beide Aufrufer bauen ihre Vermeidungsmenge entsprechend.
+{
+  const { drawOne, dedupeKey } = await import('../src/game/upgradepool.js');
+  const { banOffer, buyFourthCard } = await import('../src/game/run.js');
+
+  // Drei Signaturkarten derselben (synthetischen) Klasse + eine Kernkarte.
+  const sigUpgrades = {
+    upgrades: {
+      sigA: { id: 'sigA', name: 'Sig A', tag: 'signature', signatureClass: 'x_class', rarity: 'common', isUnique: false, minRoom: 1, core: {} },
+      sigB: { id: 'sigB', name: 'Sig B', tag: 'signature', signatureClass: 'x_class', rarity: 'common', isUnique: false, minRoom: 1, core: {} },
+      sigC: { id: 'sigC', name: 'Sig C', tag: 'signature', signatureClass: 'x_class', rarity: 'common', isUnique: false, minRoom: 1, core: {} },
+      core1: { id: 'core1', name: 'Core 1', tag: 'stat', rarity: 'common', isUnique: false, minRoom: 1, core: {} },
+    },
+    offersPerScreen: 3,
+  };
+  const balance = { rarity: { common: 100 }, scrap: { cost: { ban: 2, fourthCard: 3 } } };
+
+  const makeRun = (pendingOfferIds) => ({
+    phase: 'upgrade',
+    pendingOffers: pendingOfferIds.map((id) => ({ ...sigUpgrades.upgrades[id] })),
+    upgrades: {},
+    roomIndex: 1,
+    rng: { upgrades: () => 0 },
+    data: { balance },
+    upgradesData: sigUpgrades,
+    bannedUpgrades: new Set(),
+    starterTank: 'x_class',
+    synergyTags: {},
+    selectedUniqueUpgradeIds: new Set(),
+    totalRoomIndex: 1,
+    scrap: 100,
+  });
+
+  // ---- (a) drawOne() direkt: der Mechanismus selbst mit EIGENEN Karten --
+  {
+    const opts = { chosen: {}, rng: () => 0, balance, starterTank: 'x_class', synergyTags: {}, selectedUniqueUpgradeIds: new Set() };
+    // sigB bleibt im Angebot, sigA wird verbannt -- avoidKeys nach dedupeKey()
+    // enthaelt nur "sig:sigB", NICHT den Tag "signature" selbst.
+    const avoidKeys = new Set([dedupeKey(sigUpgrades.upgrades.sigB)]);
+    const avoidIds = new Set(['sigA']);
+    const rep = drawOne(sigUpgrades, opts, avoidKeys, avoidIds);
+    check(!!rep && rep.id === 'sigC', `Abschnitt 80 (a): drawOne() findet sigC nicht als Ersatz (bekam ${rep?.id ?? 'null'})`);
+  }
+
+  // ---- (b) End-to-End ueber banOffer(): Verbannen einer von zwei
+  //          angebotenen Signaturkarten liefert eine DRITTE Signaturkarte,
+  //          nicht "kein Ersatz". -----------------------------------------
+  {
+    const run = makeRun(['sigA', 'sigB', 'core1']);
+    const ok = banOffer(run, 0); // verbannt sigA, sigB+core1 bleiben
+    check(ok, 'Abschnitt 80 (b): banOffer() meldet Fehlschlag trotz vorhandenem Ersatz (sigC)');
+    check(run.pendingOffers[0]?.id === 'sigC', `Abschnitt 80 (b): banOffer() ersetzt sigA nicht durch sigC (bekam ${run.pendingOffers[0]?.id})`);
+  }
+
+  // ---- (c) End-to-End ueber buyFourthCard(): eine vierte Karte darf eine
+  //          weitere Signaturkarte derselben Klasse sein. -----------------
+  {
+    const run = makeRun(['sigA', 'sigB', 'core1']);
+    const ok = buyFourthCard(run);
+    check(ok, 'Abschnitt 80 (c): buyFourthCard() meldet Fehlschlag trotz vorhandener vierter Karte (sigC)');
+    check(run.pendingOffers[3]?.id === 'sigC', `Abschnitt 80 (c): buyFourthCard() liefert nicht sigC als vierte Karte (bekam ${run.pendingOffers[3]?.id})`);
+  }
+
+  // ---- (d) Kontrolle: Kernpool-Karten (kein signatureClass) verhalten
+  //          sich UNVERAENDERT weiterhin tag-basiert -- zwei Karten mit
+  //          demselben Tag bleiben gegenseitig blockiert. ----------------
+  {
+    const statUpgrades = {
+      upgrades: {
+        s1: { id: 's1', name: 'Stat 1', tag: 'stat', rarity: 'common', isUnique: false, minRoom: 1, core: {} },
+        s2: { id: 's2', name: 'Stat 2', tag: 'stat', rarity: 'common', isUnique: false, minRoom: 1, core: {} },
+        other: { id: 'other', name: 'Other', tag: 'health', rarity: 'common', isUnique: false, minRoom: 1, core: {} },
+      },
+      offersPerScreen: 3,
+    };
+    const opts = { chosen: {}, rng: () => 0, balance, synergyTags: {}, selectedUniqueUpgradeIds: new Set() };
+    const avoidKeys = new Set([dedupeKey(statUpgrades.upgrades.s1)]); // = "stat"
+    const rep = drawOne(statUpgrades, opts, avoidKeys, new Set());
+    check(!!rep && rep.id === 'other', `Abschnitt 80 (d): eine zweite "stat"-Karte (s2) wird trotz Tag-Kollision faelschlich gezogen (bekam ${rep?.id})`);
+  }
+}
+
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

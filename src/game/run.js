@@ -17,7 +17,7 @@
 import { rngFor, rngForRun, hashSeed } from '../core/rng.js';
 import { recordRun, loadStats, saveCurrentRun, clearCurrentRun } from '../core/storage.js';
 import { createState, stepState } from './state.js';
-import { rollOffers as rollFromPool, drawOne, rewardRarityWeights, shopRarityWeights, eliteRarityWeights } from './upgradepool.js';
+import { rollOffers as rollFromPool, drawOne, rewardRarityWeights, shopRarityWeights, eliteRarityWeights, dedupeKey } from './upgradepool.js';
 import { arenaEnemySpawnCount } from './generator.js';
 
 const TRANSITION_S = 1.5;
@@ -1662,9 +1662,14 @@ export function banOffer(run, index) {
   run.scrap -= cost;
   run.bannedUpgrades.add(offer.id);
   const kept = run.pendingOffers.filter((_, i) => i !== index);
-  const avoidTags = new Set(kept.map((o) => o.tag));
+  // drawOne()-Signaturkarten-Fix: ueber dedupeKey() statt des rohen Tags --
+  // sonst sperrte das Verbannen EINER von mehreren angebotenen Signatur-
+  // karten den ganzen Tag "signature" und liess nie eine andere Signatur-
+  // karte als Ersatz zu, obwohl die Erstauswahl das seit Upgradepool-v2
+  // Phase 2 ausdruecklich erlaubt.
+  const avoidKeys = new Set(kept.map((o) => dedupeKey(o)));
   const avoidIds = new Set(kept.map((o) => o.id));
-  const replacement = drawOne(run.upgradesData, poolOpts(run), avoidTags, avoidIds);
+  const replacement = drawOne(run.upgradesData, poolOpts(run), avoidKeys, avoidIds);
   // Grundsteinumbau Phase 4: kein Fallback mehr -- ist der Pool erschoepft,
   // faellt die verbannte Karte ersatzlos weg statt eines Platzhaltereintrags.
   if (replacement) run.pendingOffers[index] = replacement;
@@ -1679,9 +1684,12 @@ export function buyFourthCard(run) {
   if (run.pendingOffers.length >= 4) return false;
   const cost = run.data.balance.scrap.cost.fourthCard;
   if (run.scrap < cost) return false;
-  const avoidTags = new Set(run.pendingOffers.map((o) => o.tag));
+  // drawOne()-Signaturkarten-Fix: dieselbe dedupeKey()-Umstellung wie in
+  // banOffer() -- die vierte Karte darf eine weitere Signaturkarte
+  // derselben Klasse sein, solange es nicht dieselbe id ist.
+  const avoidKeys = new Set(run.pendingOffers.map((o) => dedupeKey(o)));
   const avoidIds = new Set(run.pendingOffers.map((o) => o.id));
-  const extra = drawOne(run.upgradesData, poolOpts(run), avoidTags, avoidIds);
+  const extra = drawOne(run.upgradesData, poolOpts(run), avoidKeys, avoidIds);
   if (!extra) return false; // nichts Sinnvolles mehr -> kein Kauf
   run.scrap -= cost;
   run.pendingOffers.push(extra);
