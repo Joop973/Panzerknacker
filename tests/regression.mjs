@@ -15778,6 +15778,107 @@ for (const seed of SEEDS) {
 }
 
 
+// ---- 81. Code-Durchsicht: "Letzte Deckung" am Schild vorbei + Amboss ----
+// Flaechenschaden gegen gestapelte Untertanen (zwei echte, mit Gegenprobe
+// verifizierte Fehler, gefunden bei einer allgemeinen Code-Durchsicht, kein
+// gemeldeter Nutzer-Bug).
+{
+  const { createState } = await import('../src/game/state.js');
+  const { createGhost } = await import('../src/game/ghost.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+
+  const necroRoom = (playerUpgrades = {}, types = ['t_pink']) => {
+    const st = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 3, 'rooms'),
+      enemyTypes: types,
+      aiSeed: hashSeed(1, 3, 'ai'),
+      playerUpgrades,
+      upgradesData: necroData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'c_necro',
+    });
+    st.bullets.length = 0;
+    st.mines.length = 0;
+    st.ghosts.length = 0;
+    st.player.protect = 0;
+    st.shieldCharges = [];
+    return st;
+  };
+
+  // (a) BUGFIX "Letzte Deckung" (ghost_025) am Spieler-Schild-Punktepool
+  // vorbei: applyDamage() hatte fuer den Schild-Absorber-Zweig (schild-
+  // Upgrade, tank.shieldReady + shieldHp) einen EIGENEN "hp abziehen ->
+  // killTank()"-Ausgang, der nie bei ghost_025s Rettungspruefung vorbeikam.
+  // Ein Schild machte den Nekromanten dadurch VERWUNDBARER als ganz ohne
+  // Schild -- ein durchschlagener Treffer war nie rettbar, derselbe
+  // Treffer OHNE Schild schon.
+  {
+    const st = necroRoom({ ghost_025: 1 });
+    const g = createGhost(st, 0, 0, 0, 't_pink');
+    g.hp = 5;
+    st.ghosts.push(g);
+    st.player.hp = 30;
+    st.player.shieldReady = true;
+    st.player.shieldHp = 10; // reicht bei Weitem nicht, um 100 Schaden abzufangen
+    st.applyDamage(st.player, 100, 'test', {});
+    check(st.player.alive, 'Abschnitt 81 (a): ghost_025 rettet nicht, wenn der Treffer zuerst durch den Spieler-Schild-Absorber lief');
+    check(!g.alive, 'Abschnitt 81 (a): ghost_025 opfert bei aktivem Schild keinen Untertanen');
+    check(st.necroLastStandUsed, 'Abschnitt 81 (a): ghost_025 markiert die Nutzung nicht, wenn der Schild zuerst griff');
+  }
+
+  // (b) Derselbe Fehler galt auch fuer einen toedlichen Statuseffekt-Tick
+  // (Brand/Gift, meta.overTime): der DOT-Zweig hatte ebenfalls einen
+  // eigenen "hp abziehen -> killTank()"-Ausgang ohne Rettungspruefung.
+  // Kartentext nennt keine Einschraenkung auf Geschosse ("Tödlicher
+  // Schaden"), ein toedlicher Tick soll die Karte also genauso ausloesen.
+  {
+    const st = necroRoom({ ghost_025: 1 });
+    const g = createGhost(st, 0, 0, 0, 't_pink');
+    g.hp = 5;
+    st.ghosts.push(g);
+    st.player.hp = 5;
+    st.applyDamage(st.player, 50, 'brand', { overTime: true });
+    check(st.player.alive, 'Abschnitt 81 (b): ghost_025 rettet nicht vor einem toedlichen Statuseffekt-Tick');
+    check(st.necroLastStandUsed, 'Abschnitt 81 (b): ghost_025 markiert die Nutzung nicht bei einem toedlichen Tick');
+  }
+
+  // (c) BUGFIX state.damageGhost(): der Amboss rief fuer JEDES einzelne
+  // Untertanen-Ziel (Schockwelle/Schleifspur/Rammstoss) die FLAECHEN-
+  // funktion damageGhostsInRadius(ziel.x, ziel.y, 1, dmg) auf. Standen zwei
+  // oder mehr Untertanen nahe beieinander (z. B. ein Legion-/Champion-
+  // Build), traf JEDER dieser Aufrufe ALLE ueberlappenden Geister erneut --
+  // bei zwei exakt uebereinanderstehenden Untertanen also den doppelten
+  // Schaden statt des angegebenen. anvil.js ruft jetzt state.damageGhost()
+  // fuer ein einzelnes, bereits bekanntes Ziel auf.
+  {
+    const st = necroRoom({}, ['t_pink', 't_pink']);
+    const g1 = createGhost(st, 300, 300, 0, 't_pink');
+    const g2 = createGhost(st, 300, 300, 0, 't_pink'); // exakt dieselbe Position
+    st.ghosts.push(g1, g2);
+    const before = [g1.hp, g2.hp];
+    st.damageGhost(g1, 6);
+    st.damageGhost(g2, 6);
+    check(g1.hp === before[0] - 6, `Abschnitt 81 (c): state.damageGhost() zieht g1 den falschen Betrag ab (${before[0]} -> ${g1.hp})`);
+    check(g2.hp === before[1] - 6, `Abschnitt 81 (c): state.damageGhost() zieht g2 den falschen Betrag ab (${before[1]} -> ${g2.hp}, sollte NICHT durch g1s Aufruf mitgetroffen worden sein)`);
+  }
+
+  // (d) Kontrolle: state.damageGhostsInRadius() bleibt fuer eine ECHTE
+  // Flaechenquelle (ein gemeinsamer Mittelpunkt, mehrere Ziele im Radius)
+  // unveraendert -- der Fix darf diesen Anwendungsfall nicht brechen
+  // (spidermine.js nutzt ihn genau so).
+  {
+    const st = necroRoom({}, ['t_pink', 't_pink']);
+    const g1 = createGhost(st, 100, 100, 0, 't_pink');
+    const g2 = createGhost(st, 110, 100, 0, 't_pink');
+    st.ghosts.push(g1, g2);
+    const before = [g1.hp, g2.hp];
+    st.damageGhostsInRadius(100, 100, 50, 8);
+    check(g1.hp === before[0] - 8, `Abschnitt 81 (d): damageGhostsInRadius trifft g1 nicht mehr korrekt (${before[0]} -> ${g1.hp})`);
+    check(g2.hp === before[1] - 8, `Abschnitt 81 (d): damageGhostsInRadius trifft g2 nicht mehr korrekt (${before[1]} -> ${g2.hp})`);
+  }
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

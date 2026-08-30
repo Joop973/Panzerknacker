@@ -126,6 +126,50 @@ function applySpiderFloor(state, tank) {
   if (tank.hp < floor) tank.hp = floor;
 }
 
+// BUGFIX (Code-Review): der EINE gemeinsame Ausgang fuer jeden Schaden, der
+// die hp wirklich erreicht -- vorher hatten der DOT-Zweig, der Spieler-
+// Schild-Punktepool-Zweig UND der normale Fallthrough in applyDamage() je
+// eine EIGENE Kopie von "hp abziehen, Bodenklammer, ggf. killTank()".
+// ghost_025 "Letzte Deckung" (necroLastStand) war dabei nur im Fallthrough
+// verdrahtet: ein toedlicher Treffer, der zuerst durch den Schild-Punktepool
+// lief (jeder Treffer mit aktivem Spieler-Schild, sobald der Absorber nicht
+// mehr reicht) oder ein toedlicher Statuseffekt-Tick riefen killTank() DIREKT
+// auf und liessen die Karte nie eine Rettungschance bekommen -- ein Schild
+// machte den Nekromanten dadurch VERWUNDBARER als ganz ohne Schild. Jetzt
+// gibt es nur noch diese eine Stelle, die ueber Rettung/Tod entscheidet;
+// alle drei Aufrufer reichen nur noch den (ggf. schon durch Resistenz/Schild
+// reduzierten) Restschaden durch.
+function resolveLethalHit(state, tank, amount, cause, meta) {
+  if (
+    tank === state.player &&
+    tank.cfg.necroLastStand &&
+    !state.necroLastStandUsed &&
+    (amount ?? 1) >= tank.hp &&
+    state.ghosts.some((g) => g.alive)
+  ) {
+    let weakest = null;
+    for (const g of state.ghosts) {
+      if (g.alive && (!weakest || g.hp < weakest.hp)) weakest = g;
+    }
+    if (weakest) {
+      state.necroLastStandUsed = true;
+      weakest.alive = false;
+      tank.hp = Math.min(tank.cfg.maxHp, tank.hp + tank.cfg.maxHp * (tank.cfg.necroLastStandHealPct || 0));
+      state.sounds.push({ name: 'shield', x: tank.x });
+      state.spawnParticles(tank.x, tank.y, '#c9a6ff', 12, 130);
+      return;
+    }
+  }
+  tank.hp -= amount ?? 1;
+  applySpiderFloor(state, tank);
+  // Exekutionsschwelle (Grundsteinumbau Phase 2): war das Ziel VOR diesem
+  // Treffer schon im Exekutionszustand (t.executing, s. stepState()-Timer-
+  // Schleife), toetet dieser Treffer garantiert -- unabhaengig davon, ob der
+  // Abzug allein hp<=0 gebracht haette.
+  if (tank.hp > 0 && !tank.executing) return;
+  state.killTank(tank, cause, meta);
+}
+
 // Nekromant-V2 Phase 3: Wiederbelebungs-Anzahl fuer EINEN Kill, "Rechenweg
 // statt Obergrenze" (Auftrag Abschnitt 4a) -- derselbe Ganzzahl-plus-Rest-
 // Mechanismus wie bei anderen ueberlauffaehigen Chancen (Krit, Phase 7):
@@ -1275,15 +1319,13 @@ export function createState(data, tiles, opts) {
       // sonst drei Ladungen in anderthalb Sekunden verbrauchen. Die
       // Boss-Unverwundbarkeit oben gilt dagegen weiter.
       if (meta?.overTime) {
-        // Exekutionsschwelle (Phase 2): der Schaden wird trotzdem abgezogen
-        // (hp bleibt eine ehrliche Zahl, auch nach dem Tod) -- garantiert ist
-        // nur der TOD selbst, unabhaengig davon, ob der Abzug allein dafuer
-        // gereicht haette (ein bereits rauchender Gegner stirbt so auch an
-        // einem kleinen Statuseffekt-Tick).
-        tank.hp -= amount ?? 1;
-        applySpiderFloor(state, tank);
-        if (tank.hp > 0 && !tank.executing) return;
-        state.killTank(tank, cause, meta);
+        // BUGFIX: laeuft jetzt ueber denselben resolveLethalHit() wie jeder
+        // andere durchkommende Treffer -- ein toedlicher Statuseffekt-Tick
+        // (Brand/Gift) kann "Letzte Deckung" damit genauso ausloesen wie ein
+        // toedlicher Kugeltreffer (Kartentext nennt keine Einschraenkung auf
+        // Geschosse). Exekutionsschwelle/Bodenklammer unveraendert innerhalb
+        // von resolveLethalHit().
+        resolveLethalHit(state, tank, amount, cause, meta);
         return;
       }
       // Schild als Punktepool (Nekromant-V2 Phase 2): faengt Schaden VOR hp
@@ -1343,55 +1385,31 @@ export function createState(data, tiles, opts) {
         }
         // Vollstaendig abgefangen -> fertig. Sonst faellt der Restschaden
         // unten durch die normale hp-Verrechnung (kann bei grossem Treffer
-        // trotz Schild toeten).
+        // trotz Schild toeten). BUGFIX: lief hier vorher an "Letzte
+        // Deckung" (ghost_025) vorbei direkt in killTank() -- ein Treffer,
+        // der den Schild-Absorber durchschlug, war dadurch NIE rettbar,
+        // ein Treffer OHNE Schild (Fallthrough unten) schon. Ein Schild
+        // machte den Nekromanten so verwundbarer statt zaeher. Jetzt
+        // derselbe gemeinsame Ausgang wie ueberall sonst.
         if (amount <= 0) return;
-        tank.hp -= amount;
-        if (tank.hp > 0) return;
-        state.killTank(tank, cause, meta);
+        resolveLethalHit(state, tank, amount, cause, meta);
         return;
       }
-      // ghost_025 "Letzte Deckung" (Nekromant-V2 Phase 6): einmal pro Raum
-      // opfert ein TOEDLICHER Treffer den SCHWAECHSTEN aktiven Untertanen
-      // statt den Hauptpanzer -- NACH allen obigen Abwehr-Gattern (ein
-      // Schild soll weiterhin zuerst greifen), aber VOR dem hp-Abzug. Ohne
-      // aktiven Untertanen (state.ghosts leer) wirkungslos, wie im Auftrag
-      // gefordert. Der geopferte Untertan wird direkt entfernt (kein
-      // killGhost()-Aufruf -- die Karte ist reine Rettung, kein Geistertod
-      // im Sinne der Tabelle, loest also keine weiteren Karteneffekte aus).
-      if (
-        tank === state.player &&
-        tank.cfg.necroLastStand &&
-        !state.necroLastStandUsed &&
-        (amount ?? 1) >= tank.hp &&
-        state.ghosts.some((g) => g.alive)
-      ) {
-        let weakest = null;
-        for (const g of state.ghosts) {
-          if (g.alive && (!weakest || g.hp < weakest.hp)) weakest = g;
-        }
-        if (weakest) {
-          state.necroLastStandUsed = true;
-          weakest.alive = false;
-          tank.hp = Math.min(tank.cfg.maxHp, tank.hp + tank.cfg.maxHp * (tank.cfg.necroLastStandHealPct || 0));
-          state.sounds.push({ name: 'shield', x: tank.x });
-          state.spawnParticles(tank.x, tank.y, '#c9a6ff', 12, 130);
-          return;
-        }
-      }
+      // ghost_025 "Letzte Deckung" (Nekromant-V2 Phase 6) wirkt jetzt
+      // GENERISCH innerhalb von resolveLethalHit() -- einmal pro Raum
+      // opfert ein TOEDLICHER Treffer (Kugel, Explosion, Statuseffekt-Tick,
+      // ein den Schild-Absorber durchschlagender Rest) den SCHWAECHSTEN
+      // aktiven Untertanen statt den Hauptpanzer, NACH allen obigen Abwehr-
+      // Gattern (ein Schild soll weiterhin zuerst greifen), aber VOR dem
+      // hp-Abzug. Ohne aktiven Untertanen (state.ghosts leer) wirkungslos,
+      // wie im Auftrag gefordert. Der geopferte Untertan wird direkt
+      // entfernt (kein killGhost()-Aufruf -- die Karte ist reine Rettung,
+      // kein Geistertod im Sinne der Tabelle, loest also keine weiteren
+      // Karteneffekte aus).
+      //
       // Kein Gatter hat gegriffen -> der Treffer geht durch. Der Schaden wird
       // immer abgezogen (hp bleibt eine ehrliche Zahl).
-      tank.hp -= amount ?? 1;
-      applySpiderFloor(state, tank);
-      // Exekutionsschwelle (Grundsteinumbau Phase 2): war das Ziel VOR
-      // diesem Treffer schon im Exekutionszustand (t.executing, s.
-      // stepState()-Timer-Schleife), toetet dieser Treffer garantiert --
-      // unabhaengig davon, ob der Abzug allein hp<=0 gebracht haette.
-      // Absichtlich HIER (nach allen Abwehr-Gattern), nicht ganz oben: ein
-      // Schild soll einen Gegner unter der Schwelle weiterhin retten koennen,
-      // wenn er den Treffer voll abfaengt -- nur ein Treffer, der wirklich
-      // durchkommt, ist garantiert toedlich.
-      if (tank.hp > 0 && !tank.executing) return;
-      state.killTank(tank, cause, meta);
+      resolveLethalHit(state, tank, amount, cause, meta);
     },
     // Verwerter (G7, t_harvester): "stirbt ein Panzer ODER Geist in
     // radiusPx Umkreis, waechst er dauerhaft" -- als state-Methode statt
@@ -1424,15 +1442,31 @@ export function createState(data, tiles, opts) {
     // KREISFOERMIGE Quelle statt eines einzelnen Geschosses (spidermine.js:
     // detonateSpiderMine() ruft dies direkt NACH explodeAt() auf). Generisch
     // genug fuer jede kuenftige AOE-Quelle gegen Geister.
+    // BUGFIX: EIN einzelnes Untertan-Ziel schaedigen (Resistenz + Schildpool
+    // + killGhost, wortgleich zum Koerper von damageGhostsInRadius() unten).
+    // Fuer eine Quelle, die eine Reihe BEREITS bekannter Einzelziele nach der
+    // Reihe abarbeitet (Amboss: Schockwelle/Schleifspur pruefen Spieler UND
+    // jeden Geist EINZELN in einer eigenen Schleife) -- nicht fuer eine
+    // echte Flaechenquelle mit einem gemeinsamen Mittelpunkt (dafuer bleibt
+    // damageGhostsInRadius() zustaendig). Vorher rief anvil.js
+    // damageGhostsInRadius(g.x, g.y, 1, dmg) JE GEIST auf: bei zwei oder mehr
+    // Untertanen nahe beieinander (haeufig bei einem Legion-/Champion-Build)
+    // traf jeder dieser Aufrufe ALLE ueberlappenden Geister erneut, nicht nur
+    // den einen gemeinten -- ein Segment/eine Schockwelle richtete dadurch
+    // ein Vielfaches ihres Schadens an, je dichter die Untertanen standen.
+    damageGhost(g, dmg) {
+      if (!g.alive || g.invulnUntil > state.time) return;
+      let amount = applyResistToAmount(g.cfg, state.data.balance?.resist, dmg);
+      amount = absorbWithShieldPool(state, g, amount);
+      if (amount <= 0) return;
+      g.hp -= amount;
+      if (g.hp <= 0) killGhost(state, g);
+    },
     damageGhostsInRadius(x, y, R, dmg) {
       for (const g of state.ghosts) {
         if (!g.alive || g.invulnUntil > state.time) continue;
         if (!circlesOverlap(x, y, R, g.x, g.y, g.cfg.radius)) continue;
-        let amount = applyResistToAmount(g.cfg, state.data.balance?.resist, dmg);
-        amount = absorbWithShieldPool(state, g, amount);
-        if (amount <= 0) continue;
-        g.hp -= amount;
-        if (g.hp <= 0) killGhost(state, g);
+        state.damageGhost(g, dmg);
       }
     },
     // Amboss-Auftrag (Abschnitt 6, Zorn als Angriffspaket): der ZENTRALE

@@ -245,7 +245,12 @@ function ramHitCheck(state, tank, x, y, dmg, acfg) {
     if (!g.alive || tank.chargeHitTargets.has(g)) continue;
     if (circlesOverlap(x, y, R, g.x, g.y, g.cfg.radius)) {
       tank.chargeHitTargets.add(g);
-      state.damageGhostsInRadius(g.x, g.y, 1, dmg);
+      // BUGFIX: state.damageGhost() statt damageGhostsInRadius(g.x,g.y,1,..)
+      // -- die Flaechenfunktion haette bei mehreren nahe beieinander
+      // stehenden Untertanen jeden Aufruf dieser Schleife auf ALLE
+      // ueberlappenden Geister angewendet (N-facher Schaden bei N gestapelten
+      // Untertanen), s. Kommentar an state.damageGhost().
+      state.damageGhost(g, dmg);
       pushFromRam(state, g, tank, acfg.ramLateralPushPx ?? 0, acfg.ramForwardPushPx ?? 0);
     }
   }
@@ -393,7 +398,10 @@ function checkShockwaveHit(state, wave, target, acfg, gapHalf, offsets, halfWidt
   wave.hitTargets.add(target);
   const dmg = acfg.shockwaveDamage ?? 0;
   if (isGhost) {
-    state.damageGhostsInRadius(target.x, target.y, 1, dmg);
+    // BUGFIX: s. Kommentar an state.damageGhost() -- ein Einzelziel, keine
+    // Flaechenquelle (checkShockwaveHit() wird bereits separat je Ziel
+    // aufgerufen, s. updateAnvilShockwaves()).
+    state.damageGhost(target, dmg);
     target.stunTimer = Math.max(target.stunTimer || 0, acfg.shockwaveStunS ?? 0);
   } else {
     state.applyDamage(target, dmg, 'eine Schockwelle', { code: 'anvil_slam', enemyType: 't_anvil' });
@@ -486,7 +494,10 @@ function checkTrailHit(state, seg, target, R, dmg, interval, isGhost) {
   const last = seg.hitAt.get(target) ?? -Infinity;
   if (state.time - last < interval) return;
   seg.hitAt.set(target, state.time);
-  if (isGhost) state.damageGhostsInRadius(target.x, target.y, 1, dmg);
+  // BUGFIX: s. Kommentar an state.damageGhost() -- checkTrailHit() wird
+  // bereits separat je Ziel aufgerufen (updateAnvilTrails()), keine
+  // Flaechenquelle.
+  if (isGhost) state.damageGhost(target, dmg);
   else state.applyDamage(target, dmg, 'eine Schleifspur', { code: 'anvil_trail', enemyType: 't_anvil' });
 }
 
