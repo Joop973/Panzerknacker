@@ -359,6 +359,17 @@ ein vom Nekromanten übernommener Untertan dieses Typs feuerte dadurch mit
 Fake-Canvas der Testsuite jetzt bei non-finite Werten wie ein echter
 Browser (der blinde Fleck, an dem der Fehler vorbeilief). Details im
 eigenen Abschnitt weiter unten „Bugfix: „non-finite ab Mitte Akt 2"".
+**Zuletzt gemergt: Bugfix „Letzte Deckung" + Amboss-Flaechenschaden**
+(Phase A einer Codedurchsicht auf Nutzerauftrag) — ein aktiver Spielerschild
+liess die Nekromanten-Rettungskarte „Letzte Deckung" komplett wirkungslos
+werden (Ursache: mehrere duplizierte hp-Abzug/`killTank()`-Endstrecken statt
+einer gemeinsamen), und alle drei Amboss-Angriffe konnten dicht stehende
+Untertanen durch eine falsch genutzte Flaechenschaden-Funktion mehrfach
+treffen. Details im eigenen Abschnitt weiter unten „Bugfix: „Letzte Deckung"
+umgeht Schild + Amboss vervielfacht Flaechenschaden gegen Untertanen".
+Weitere Phasen derselben Codedurchsicht (kleinere Funde, ein Karten-vs-
+Balance-Konsistenztest, ein Neuentwurf des Standard-Klassen-Kartenpools)
+sind noch nicht beauftragt.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -8946,7 +8957,88 @@ Faelle. Reine Rendering-Politur, **kein Feld entfernt oder umbenannt**.
   Zeile, keine Ueberlappung mit Zeile 1.
 - Kein `sw.js`-Bump (reine Code-Aenderung, kein neues/geaendertes Asset).
 
+### Bugfix: „Letzte Deckung" umgeht Schild + Amboss vervielfacht Flaechenschaden gegen Untertanen — gemergt
+Auf Nutzerauftrag „geh den Code durch, schau nach Fehlern" wurde eine
+vollstaendige Codedurchsicht gemacht (Bugs + Verbesserungsvorschlaege in
+mehreren Phasen geplant); nach Rueckfrage hat der Nutzer nur **Phase A**
+(die beiden echten, sicherheitskritischen Bugs) freigegeben — Phasen B–D
+(kleinere Funde, ein Karten-vs-Balance-Konsistenztest, ein Neuentwurf des
+Standard-Klassen-Kartenpools) bleiben unbeauftragt.
+- **Bug 1 — „Letzte Deckung" (`ghost_025`) wirkte nie, solange der Spieler
+  einen aktiven `schild`-Absorber (`tank.shieldReady`) trug.** `applyDamage()`
+  hatte an MEHREREN Stellen eine eigene, duplizierte "hp abziehen → ggf.
+  `killTank()`"-Endstrecke (der DOT-/Statuseffekt-Zweig, der
+  Schild-Absorber-Zweig, der finale Fallthrough-Zweig mit der eigentlichen
+  Rettungspruefung) — die Rettung stand nur im LETZTEN Zweig, der
+  Schild-Zweig kam vorher zu seinem eigenen `return` und liess den
+  todbringenden Treffer nie bis dorthin durch, selbst wenn der Absorber den
+  Schaden gar nicht vollstaendig aufgefangen hat.
+- **Fix**: neue gemeinsame Funktion `resolveLethalHit(state, tank, amount,
+  cause, meta)` in `state.js` (nach `applySpiderFloor()`) buendelt jetzt
+  DEN EINEN Ausgang „Rettungspruefung → hp abziehen → Spinnen-Boden-Klammer →
+  Exekutionsschwelle → `killTank()`" — der DOT-Zweig, der Schild-Absorber-
+  Zweig UND der finale Fallthrough rufen ausschliesslich noch
+  `resolveLethalHit(...); return;` auf, keine eigene Kopie der Logik mehr.
+  Ein Spielerschild kann einen Treffer jetzt zwar weiterhin abschwaechen,
+  aber „Letzte Deckung" wird auf dem verbleibenden Schaden ganz normal
+  geprueft — genau wie ohne Schild.
+- **Bug 2/3 — Amboss-Angriffe (Rammstoss/Hammerschlag/Schleifspur) trafen
+  gestapelte Untertanen mehrfach.** Alle drei Angriffe riefen fuer JEDEN
+  einzeln getroffenen Geist `state.damageGhostsInRadius(ziel.x, ziel.y, 1,
+  schaden)` auf — das ist die Funktion fuer eine FLAECHENQUELLE mit einem
+  gemeinsamen Zentrum (korrekt genutzt von `spidermine.js`), keine
+  „triff genau dieses eine Ziel"-Funktion. Bei mehreren nah beieinander
+  stehenden Untertanen (haeufiger Fall beim Nekromanten) hat jeder der drei
+  Aufrufe erneut ALLE Ziele im 1-px-Radius um die jeweilige Zielposition
+  gescannt — durch Ueberschneidung wurden nahe Untertanen mehrfach getroffen,
+  ein einzelner Amboss-Angriff konnte so ein Vielfaches des vorgesehenen
+  Schadens anrichten.
+- **Fix**: neue `state`-Methode `damageGhost(g, dmg)` — die korrekte
+  Ein-Ziel-Primitive (Resistenz/Schildpool/Tod fuer GENAU diesen einen
+  Geist, kein erneuter Flaechenscan). `damageGhostsInRadius(x, y, R, dmg)`
+  ist selbst zu einer duennen Schleife ueber `damageGhost()` je
+  passendem Ziel umgebaut (keine doppelte Resistenz-/Schildpool-Logik mehr).
+  Alle drei Amboss-Trefferstellen (`anvil.js`: Rammstoss-Kontaktschleife,
+  `checkShockwaveHit()`, `checkTrailHit()`) rufen jetzt `state.damageGhost(
+  ziel, schaden)` statt der missbrauchten Flaechenfunktion auf.
+  `spidermine.js`s einzige Nutzung von `damageGhostsInRadius()` (eine echte
+  Flaechenexplosion mit gemeinsamem Zentrum) ist unveraendert korrekt und
+  wurde nicht angefasst.
+- **Neuer Testabschnitt 81** (`tests/regression.mjs`, Gegenprobe fuer beide
+  Bugs einzeln am echten Quellcode bestanden — je Fix temporaer
+  zurueckgenommen, Suite neu gelaufen, danach wiederhergestellt): (a) ein
+  Spieler mit vollem Schild-Absorber UND `ghost_025` aktiv UND einem
+  geopferbaren Untertanen uebersteht einen sonst toedlichen Treffer (Rettung
+  greift trotz Schild), (b) ohne verfuegbaren Untertanen tötet derselbe
+  Treffer trotz Schild normal (keine unbeabsichtigte zweite Unsterblichkeit),
+  (c) drei dicht beieinander stehende Untertanen nehmen bei einem einzelnen
+  `state.damageGhost()`-Aufruf pro Ziel genau EINMAL Schaden, nicht
+  mehrfach durch gegenseitige Ueberschneidung, (d) `damageGhostsInRadius()`
+  selbst bleibt fuer eine ECHTE Flaechenquelle (mehrere Ziele im Radius
+  einer gemeinsamen Explosion) unveraendert korrekt — jedes Ziel im Radius
+  nimmt weiterhin Schaden, aber jedes nur einmal. Gegenprobe (a)/(b): die
+  Wiederherstellung der alten, den Schild-Zweig separat abschliessenden
+  Fassung liess genau die erwarteten Pruefungen unter „Abschnitt 81 (a)"/„(b)"
+  rot werden. Gegenprobe (c)/(d): ein `damageGhost()`, das probeweise wieder
+  wie die alte Flaechenfunktion ALLE nahen Ziele mittrifft, liess genau die
+  erwarteten Pruefungen unter „Abschnitt 81 (c)"/„(d)" rot werden — jeweils
+  danach zurueckgesetzt und `node --check` + volle Suite erneut gruen bestaetigt.
+- Kein `sw.js`-Bump (reine Code-Aenderung, kein neues/geaendertes Asset).
+- **Phasen B–D des Codedurchsicht-Plans bleiben offen** (s. To-do-Liste
+  unten): kleinere Funde + zwei Performance-Beobachtungen (Phase B), ein
+  Test, der Kartentexte gegen `balance.json`-Werte auf Konsistenz prueft
+  (Phase C), und ein Neuentwurf des kartenarmen Standard-Klassen-Pools
+  (Phase D, braucht zuerst eine Design-Vorgabe vom Nutzer).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **Codedurchsicht-Phasen B–D** (Phase A — die beiden echten Bugs — ist
+      gemergt, s. eigener Abschnitt oben „Bugfix: „Letzte Deckung" umgeht
+      Schild + Amboss vervielfacht Flaechenschaden gegen Untertanen"):
+      Phase B (kleinere, unkritische Funde + zwei Performance-Beobachtungen
+      aus derselben Durchsicht), Phase C (ein neuer Test, der Kartentexte
+      gegen die tatsaechlichen `balance.json`-Werte auf Konsistenz prueft),
+      Phase D (Neuentwurf des kartenarmen Standard-Klassen-Pools — braucht
+      zuerst eine Design-Vorgabe vom Nutzer, kein reiner Codefix).
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
       Designdokument Abschnitt 14.3): `unlockRoomInAct` steuert nur die
