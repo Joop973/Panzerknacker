@@ -1143,12 +1143,17 @@ export function updateGhosts(state, dt) {
     // Untertanen greifen das zuletzt vom SPIELER getroffene Ziel an, solange
     // es lebt; der Champion bevorzugt darueber hinaus den Gegner mit dem
     // hoechsten maximalen Leben; sonst der normale naechstgelegene Gegner.
+    // Codedurchsicht (Phase B): strongestEnemyByMaxHp(state) rief vorher
+    // ZWEIMAL denselben O(n)-Scan ueber state.tanks auf (einmal in der
+    // Bedingung, einmal im then-Zweig) -- verhaltensgleich (reine Funktion,
+    // kein Zwischenzustand aendert sich), aber unnoetige Arbeit. Jetzt einmal
+    // berechnet und wiederverwendet.
+    const strongestTarget = g.isChampion && playerCfg?.necroCrownTargetStrongest ? strongestEnemyByMaxHp(state) : null;
     const target =
-      g.isChampion && playerCfg?.necroCrownTargetStrongest && strongestEnemyByMaxHp(state)
-        ? strongestEnemyByMaxHp(state)
-        : playerCfg?.necroSharedTarget && state.necroLastPlayerHitTarget?.alive
-          ? state.necroLastPlayerHitTarget
-          : nearestEnemy(state, g);
+      strongestTarget ||
+      (playerCfg?.necroSharedTarget && state.necroLastPlayerHitTarget?.alive
+        ? state.necroLastPlayerHitTarget
+        : nearestEnemy(state, g));
     if (g.cooldown > 0) g.cooldown -= dt;
     if (!target) {
       g.vx = 0;

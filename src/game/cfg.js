@@ -983,10 +983,13 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroCrownDeathDmgTransferPct = Math.max(cfg.necroCrownDeathDmgTransferPct || 0, c.necroCrownDeathDmgTransferPct);
       cfg.necroCrownDeathHpShieldPct = Math.max(cfg.necroCrownDeathHpShieldPct || 0, c.necroCrownDeathHpShieldPct || 0);
     }
+    // Codedurchsicht (Phase B): necroSoulbondBuffPct/-DurationS sind seit dem
+    // Champion-/Nekromant-Nachschliff v2 (ghost_095 "Seelenband" verlor den
+    // Zusatzbonus, s. Abschnitt 65o in tests/regression.mjs) tote Felder --
+    // keine Karte setzt sie mehr, nichts liest sie. Entfernt statt weiter
+    // Werte zu berechnen, die nie jemand ausliest.
     if (c.necroSoulbondPct) {
       cfg.necroSoulbondPct = Math.max(cfg.necroSoulbondPct || 0, c.necroSoulbondPct);
-      cfg.necroSoulbondBuffPct = Math.max(cfg.necroSoulbondBuffPct || 0, c.necroSoulbondBuffPct || 0);
-      cfg.necroSoulbondBuffDurationS = Math.max(cfg.necroSoulbondBuffDurationS || 0, c.necroSoulbondBuffDurationS || 0);
     }
     // ghost_096 "Koenigliches Opfer" (Nachschliff Abschnitt 10,
     // UEBERARBEITET): ein einzelner Prozentsatz ("40 % der Champion-
