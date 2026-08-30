@@ -39,8 +39,11 @@
 //   Zeitlich befristet, je EIGENER Schluessel (nicht ein gemeinsamer "Prozent-
 //     Schaden"-Topf!) -- zwei verschiedene Karten koennten sonst denselben
 //     Schluessel ueberschreiben, statt sich zu addieren:
-//     _timedDmgErbschaft (021), _timedFireRateFuel (024), _timedResistHaerte
-//     (022), _timedRequiemDmg/_timedRequiemFireRate/_timedRequiemSpeed (034).
+//     _timedFireRateFuel (024), _timedRequiemDmg/_timedRequiemFireRate/
+//     _timedRequiemSpeed (034). (021/022 waren hier urspruenglich ebenfalls
+//     zeitlich befristet, sind aber seit dem Champion-/Nekromant-Nachschliff
+//     v2 permanente, raumweite PLAIN-Stapel -- _roomDmgErbschaft/
+//     _roomResistHaerte, s. u. -- dieser Kommentar war seither veraltet.)
 //     tank.js/state.js SUMMIEREN am Ort der Verwendung ueber diese feste,
 //     bekannte Liste -- kein neuer API-Mechanismus noetig.
 //   Runweit, permanent: _runDmgBonus (029), _runHpBonus (030) -- gelesen von
@@ -775,6 +778,20 @@ function resolveGhostBaselineDamage(state, sourceType) {
 // Nekromant-V2 Phase 9: fuenf weitere zeitlich befristete Quellen
 // (086/091/095/096/104/105 -- Gadget-Buffs UND Hybrid-/Keystone-Karten
 // teilen sich dieselbe kleine, feste Aufzaehlung, kein neuer Mechanismus).
+//
+// Codedurchsicht (Phase B, kleinere Funde): '_timedSoulbondBuff'
+// (ghost_095) und '_timedHybridChampSacrificeDmg'/'-FR'/'-Resist'
+// (ghost_096) sind seit dem Champion-/Nekromant-Nachschliff v2 tote
+// Schluessel -- beide Karten wurden auf einen direkten, dauerhaften
+// cfg-Zuschlag umgebaut (cfg.necroSoulbondPct bzw. tank.js: useGadget()s
+// ghost_096-Zweig), OHNE dass die alten Getter hier entfernt wurden. Ein
+// eigenes Skript hat jeden getNecroTimedStack()/getNecroStack()-Schluessel
+// in necro.js gegen jede addNecroTimedStack()/addNecroStack()-Schreibstelle
+// im ganzen src/game-Verzeichnis abgeglichen -- diese drei waren die
+// einzigen echten Funde (niemand schreibt sie je), jetzt entfernt. Ergaenzend
+// die zwei nie gelesenen cfg-Felder necroSoulbondBuffPct/-DurationS in
+// cfg.js entfernt. Reine Aufraeumarbeit, keine Verhaltensaenderung -- beide
+// Getter lieferten ohnehin immer 0.
 export function necroDamagePct(state) {
   return (
     getNecroStack(state, 'room', '_pctDamage') +
@@ -787,8 +804,6 @@ export function necroDamagePct(state) {
     getNecroTimedStack(state, '_timedHybridAvalancheDmg') +
     getNecroTimedStack(state, '_timedHybridCircleDmg') +
     getNecroTimedStack(state, '_timedHybridSacrificeDmg') +
-    getNecroTimedStack(state, '_timedHybridChampSacrificeDmg') +
-    getNecroTimedStack(state, '_timedSoulbondBuff') +
     getNecroTimedStack(state, '_timedAncestorDmg') +
     // ghost_088 "Blutige Formation": +X% je AKTIVEM Untertan -- LIVE aus dem
     // Legion-Cache (Phase 7, "nicht pro Frame") gelesen statt eines eigenen
@@ -806,7 +821,6 @@ export function necroFireRatePct(state) {
     getNecroTimedStack(state, '_timedRequiemFireRate') +
     getNecroTimedStack(state, '_timedHybridAvalancheFR') +
     getNecroTimedStack(state, '_timedHybridSacrificeFR') +
-    getNecroTimedStack(state, '_timedHybridChampSacrificeFR') +
     getNecroTimedStack(state, '_timedAncestorFR')
   );
 }
@@ -816,11 +830,7 @@ export function necroSpeedPct(state) {
 export function necroResistBonus(state) {
   // ghost_022 "Haerte aus Verlust" (Nachschliff Abschnitt 10): jetzt ein
   // dauerhafter, raumweiter Stapel statt eines 10-Sekunden-Zeitfensters.
-  return (
-    getNecroStack(state, 'room', '_roomResistHaerte') +
-    getNecroTimedStack(state, '_timedResistHaerte') +
-    getNecroTimedStack(state, '_timedHybridChampSacrificeResist')
-  );
+  return getNecroStack(state, 'room', '_roomResistHaerte');
 }
 
 // Wandelt eine (potenziell unbegrenzt grosse) Feuerraten-Prozentbonus-Summe

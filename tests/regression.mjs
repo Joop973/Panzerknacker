@@ -8258,11 +8258,21 @@ for (const seed of SEEDS) {
     check(st.player.cfg.maxHp === Math.round(baseline.maxHp * 1.25), `Phase 6: der Run-LP-Bonus wirkt nicht beim Raumaufbau (${st.player.cfg.maxHp})`);
   }
 
-  // (k) ghost_022 "Haerte aus Verlust": zeitlich befristete Resistenz wirkt
+  // (k) ghost_022 "Haerte aus Verlust": die raumweite Resistenz (seit dem
+  // Champion-/Nekromant-Nachschliff v2 ein dauerhafter PLAIN-Stapel statt
+  // eines 10-Sekunden-Zeitfensters, s. Abschnitt (m)/65m weiter unten) wirkt
   // am Trefferpunkt (state.js: applyDamage()) -- gemessen als kleinerer
-  // Schaden mit aktivem Timed-Stack als ohne.
+  // Schaden mit aktivem Stapel als ohne. Codedurchsicht (Phase B): testete
+  // bis hierher noch den seit dem Nachschliff toten '_timedResistHaerte'-
+  // Schluessel (per addNecroTimedStack) -- eine stale Testkopie, die beim
+  // Umbau von 022 nie nachgezogen wurde, dieselbe Fehlerklasse wie die
+  // beiden in Nekromant-V2 Phase 1 gefundenen isUnique/maxStacks-Altteste.
+  // Auf den echten, aktuellen Mechanismus (addNecroStack, 'room'-Scope)
+  // umgestellt -- Abschnitt (m) prueft bereits necroResistBonus() ueber den
+  // vollen Karten-/Kill-Pfad, dieser Test bewacht separat, dass der Wert am
+  // TATSAECHLICHEN Trefferpunkt auch wirklich weniger Schaden bedeutet.
   {
-    const { addNecroTimedStack } = await import('../src/game/necro.js');
+    const { addNecroStack } = await import('../src/game/necro.js');
     const st = necroRoom({});
     st.player.hp = 1000;
     const before = st.player.hp;
@@ -8271,11 +8281,11 @@ for (const seed of SEEDS) {
 
     const st2 = necroRoom({});
     st2.player.hp = 1000;
-    addNecroTimedStack(st2, '_timedResistHaerte', 8, 10);
+    addNecroStack(st2, 'room', '_roomResistHaerte', 8);
     const before2 = st2.player.hp;
     st2.applyDamage(st2.player, 100, 'test', {});
     const dmgMit = before2 - st2.player.hp;
-    check(dmgMit < dmgOhne, `Phase 6: ghost_022s Timed-Resistenz wirkt nicht am Treffer (${dmgMit} vs ${dmgOhne})`);
+    check(dmgMit < dmgOhne, `Phase 6: ghost_022s dauerhafte Resistenz wirkt nicht am Treffer (${dmgMit} vs ${dmgOhne})`);
   }
 
   // (l) ghost_015 "Aschenhaut": Schild-Stapel waechst mit JEDEM Tod OHNE

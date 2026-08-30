@@ -367,9 +367,17 @@ einer gemeinsamen), und alle drei Amboss-Angriffe konnten dicht stehende
 Untertanen durch eine falsch genutzte Flaechenschaden-Funktion mehrfach
 treffen. Details im eigenen Abschnitt weiter unten „Bugfix: „Letzte Deckung"
 umgeht Schild + Amboss vervielfacht Flaechenschaden gegen Untertanen".
-Weitere Phasen derselben Codedurchsicht (kleinere Funde, ein Karten-vs-
-Balance-Konsistenztest, ein Neuentwurf des Standard-Klassen-Kartenpools)
-sind noch nicht beauftragt.
+**Zuletzt gemergt: Codedurchsicht Phase B** (kleinere Funde derselben
+Durchsicht) — ein doppelter, verhaltensneutraler Funktionsaufruf in
+`ghost.js` und fuenf tote Getter-Zeilen in `necro.js`/`cfg.js` (Ueberbleibsel
+des Champion-/Nekromant-Nachschliffs v2, das drei Karten von zeitlich
+befristeten Buffs auf dauerhafte Stapel/einen direkten cfg-Zuschlag
+umgebaut, aber die alten Leseverweise nicht entfernt hatte) sind bereinigt;
+dabei einen unabhaengigen stale Test gefunden und auf den aktuellen
+Mechanismus umgestellt. Details im eigenen Abschnitt weiter unten
+„Codedurchsicht Phase B (kleinere Funde)". Phasen C (Karten-vs-Balance-
+Konsistenztest) und D (Neuentwurf des Standard-Klassen-Kartenpools) sind
+weiterhin nicht beauftragt.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -9030,12 +9038,87 @@ Standard-Klassen-Kartenpools) bleiben unbeauftragt.
   (Phase C), und ein Neuentwurf des kartenarmen Standard-Klassen-Pools
   (Phase D, braucht zuerst eine Design-Vorgabe vom Nutzer).
 
+### Codedurchsicht Phase B (kleinere Funde) — gemergt
+Auf Nutzerauftrag "fange an es abzuarbeiten" (Fortsetzung der Codedurchsicht
+nach Phase A). Da der urspruengliche Fund-Katalog (K1–K4/P1–P2) aus der
+vorherigen Sitzung nirgends persistiert war (nur im Chat, nicht in einer
+Datei), wurde die Durchsicht **frisch** wiederholt statt aus dem Gedaechtnis
+zu rekonstruieren — mit Fokus auf die groessten/komplexesten, zuletzt am
+staerksten umgebauten Module (`ghost.js`, `necro.js`, `anvil.js`). Zwei
+verifizierte Funde, beide **verhaltensneutral** (kein Balance-/Spielgefuehl-
+Unterschied), jeweils mit bestandener Gegenprobe.
+- **Fund 1 (Performance/Simplification, `ghost.js: updateGhosts()`)**: die
+  Zielauswahl fuer `ghost_066` "Vorrang des Staerkeren" rief
+  `strongestEnemyByMaxHp(state)` (ein O(n)-Scan ueber `state.tanks`) **zweimal**
+  in derselben Ternary-Bedingung auf — einmal in der Bedingung, einmal im
+  then-Zweig. Da die Funktion eine reine, seiteneffektfreie Abfrage ist und
+  sich `state.tanks` zwischen den beiden Aufrufen nicht aendert, war das kein
+  Verhaltensfehler, nur unnoetige doppelte Arbeit. Auf eine einmal berechnete
+  Variable (`strongestTarget`) umgestellt. Gegenprobe: `strongestTarget`
+  probeweise auf `null` erzwungen — die bestehende Zielauswahl-Pruefung
+  ("Phase 8: ghost_066 zielt nicht auf den Gegner mit dem hoechsten maximalen
+  Leben") wurde erwartungsgemaess rot, danach zurueckgesetzt.
+- **Fund 2 (totes Fundament, `necro.js`/`cfg.js`)**: ein systematisches
+  Abgleichskript (jeder `getNecroTimedStack()`/`getNecroStack()`-Schluessel in
+  `necro.js` gegen jede `addNecroTimedStack()`/`addNecroStack()`-Schreibstelle
+  im gesamten `src/game`-Verzeichnis) fand **fuenf Getter-Zeilen, die einen
+  Schluessel lesen, den niemand mehr schreibt** — Ueberbleibsel aus dem
+  Champion-/Nekromant-Nachschliff v2, der `ghost_022`/`ghost_095`/`ghost_096`
+  von zeitlich befristeten Buffs auf dauerhafte raumweite Stapel bzw. einen
+  direkten cfg-Zuschlag umgebaut hat (s. eigener Abschnitt weiter oben), ohne
+  die alten toten Leseverweise zu entfernen: `_timedResistHaerte`
+  (`necroResistBonus()`), `_timedSoulbondBuff` und
+  `_timedHybridChampSacrificeDmg`/`-FR`/`-Resist` (`necroDamagePct()`/
+  `necroFireRatePct()`/`necroResistBonus()`). Dazu zwei nie gelesene
+  cfg-Felder (`cfg.necroSoulbondBuffPct`/`-BuffDurationS`) in `cfg.js`. Alle
+  sieben Fundstellen entfernt (reine Additionsglieder, die immer `0` beitrugen
+  — die Summenformeln sind unveraendert korrekt), der veraltete Kopfkommentar
+  in `necro.js` (nannte `_timedDmgErbschaft (021)`/`_timedResistHaerte (022)`
+  faelschlich noch als "zeitlich befristete" Beispiele) korrigiert.
+  **Dabei einen echten, unabhaengigen Testfund gemacht**: ein aelterer Test
+  ("Phase 6 (k)") injizierte noch direkt in den jetzt toten
+  `_timedResistHaerte`-Schluessel (per `addNecroTimedStack`) und haette beim
+  Entfernen der toten Getter-Zeile FAELSCHLICH rot werden muessen, obwohl der
+  eigentliche `ghost_022`-Mechanismus (der neuere Test "Abschnitt 65m" prueft
+  ihn bereits ueber den echten Karten-/Kill-Pfad) laengst auf den dauerhaften
+  `_roomResistHaerte`-Stapel umgebaut ist — derselbe Fehlerklasse wie die in
+  Nekromant-V2 Phase 1 gefundenen `isUnique`/`maxStacks`-Altteste (eine stale
+  Testkopie, die beim Umbau der Karte nie nachgezogen wurde). Test (k) auf den
+  aktuellen Mechanismus (`addNecroStack(..., 'room', '_roomResistHaerte', 8)`)
+  umgestellt, statt ihn zu loeschen — er bewacht (anders als Abschnitt 65m)
+  direkt den Trefferpunkt (`applyDamage()`), nicht nur den aufgeloesten
+  Prozentwert. Gegenprobe: `necroResistBonus()` probeweise auf `return 0;`
+  gesetzt — sowohl der aktualisierte Test (k) als auch der unabhaengige
+  Abschnitt 65m wurden erwartungsgemaess rot, danach zurueckgesetzt.
+- **Keine weiteren Funde dieser Klasse**: dasselbe Abgleichskript fand fuer
+  ALLE anderen Stapel-Schluessel entweder eine echte Schreibstelle (teils ueber
+  eine Konstante wie `DEATH_STACK_KEY` statt eines Literals, vom Skript nicht
+  automatisch erkannt, aber per Hand verifiziert: `_deaths`) oder eine echte
+  Lesestelle ausserhalb von `necro.js` (direkter Objektzugriff statt
+  `getNecroStack()`, ebenfalls per Hand verifiziert: `_runDmgBonus`/
+  `_runHpBonus` in `run.js: buildCombatRoom()`) — keine weitere „schreibt
+  niemand"/„liest niemand"-Lücke gefunden.
+- **Bewusst NICHT weiterverfolgt** (Diminishing Returns bei einer manuellen
+  Durchsicht dieser Groessenordnung — `ghost.js`/`anvil.js`/`state.js` sind
+  bereits ueber Dutzende frueherer Sitzungen mit eigener Gegenprobe geprueft):
+  keine weiteren Korrektheitsfehler in `anvil.js`/`spider.js`/`spidermine.js`
+  gefunden (vollstaendig gelesen, keine verdaechtigen Muster). Ein zweiter,
+  angekuendigter "Performance"-Fund aus der urspruenglichen (verlorenen)
+  Sitzung liess sich nicht rekonstruieren — die aktuelle Durchsicht fand keinen
+  zweiten eigenstaendigen Performance-Kandidaten von vergleichbarem Gewicht.
+- Volle Suite (`tests/regression.mjs`) + alle vier Nebensuiten (`gamepad`/
+  `music`/`championsprite`/`spidersprites`) gruen. Kein `sw.js`-Bump (reine
+  Code-/Test-Aenderung, kein neues/geaendertes Asset).
+- **Phase C (Karten-vs-Balance-Konsistenztest) und Phase D (Neuentwurf
+  Standard-Klassen-Pool) bleiben offen** — Phase D braucht weiterhin eine
+  Design-Vorgabe vom Nutzer, bevor sie sinnvoll angegangen werden kann.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Codedurchsicht-Phasen B–D** (Phase A — die beiden echten Bugs — ist
-      gemergt, s. eigener Abschnitt oben „Bugfix: „Letzte Deckung" umgeht
-      Schild + Amboss vervielfacht Flaechenschaden gegen Untertanen"):
-      Phase B (kleinere, unkritische Funde + zwei Performance-Beobachtungen
-      aus derselben Durchsicht), Phase C (ein neuer Test, der Kartentexte
+- [ ] **Codedurchsicht-Phasen C–D** (Phase A — die beiden echten Bugs — und
+      Phase B — kleinere Funde/totes Fundament — sind gemergt, s. eigene
+      Abschnitte oben „Bugfix: „Letzte Deckung" umgeht Schild + Amboss
+      vervielfacht Flaechenschaden gegen Untertanen" und „Codedurchsicht
+      Phase B (kleinere Funde)"): Phase C (ein neuer Test, der Kartentexte
       gegen die tatsaechlichen `balance.json`-Werte auf Konsistenz prueft),
       Phase D (Neuentwurf des kartenarmen Standard-Klassen-Pools — braucht
       zuerst eine Design-Vorgabe vom Nutzer, kein reiner Codefix).
