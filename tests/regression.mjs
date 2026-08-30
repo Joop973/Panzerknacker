@@ -15889,6 +15889,94 @@ for (const seed of SEEDS) {
   }
 }
 
+// ---- 82. Codedurchsicht Phase C: Kartentexte vs. core-Werte --------------
+// Fuer JEDE Karte in data/upgrades.json + data/upgrades_necro.json: hat
+// jeder numerische core-Wert IRGENDWO im deutschen Beschreibungstext eine
+// plausible Entsprechung? Bewusst eine LOSE OR-Pruefung ueber mehrere
+// Deutungen (literal, als Prozentwert x*100, als Mult-Abweichung von 1),
+// statt einer starren 1:1-Feldname-Zuordnung -- bei der Vielzahl an
+// Namenskonventionen (Pct/Mult/Bonus/Add/Radius/Threshold/...) waere eine
+// strenge Zuordnung ohne viele falsche Alarme nicht moeglich, und ein
+// Konsistenztest, der aus dem falschen Grund rot wird, ist wertlos (CLAUDE.md-
+// Grundregel). Ein erster, strengerer Entwurf (Python-Prototyp, nicht
+// eingecheckt) fand ueber alle 123 aktiven Karten genau 6 Kandidaten -- vier
+// waren echte Funde (drei gefixt, s. u.), zwei blosse Regex-Luecken (deutsche
+// Ordnungszahlwoerter statt Ziffern: "jeder DRITTE Schuss"). Die Ordnungs-
+// woerter 2.-10. sind deshalb hier als Ziffern-Aequivalente hinterlegt.
+{
+  const ORDINALS = {
+    zweite: 2, zweiten: 2, zweiter: 2, zweites: 2,
+    dritte: 3, dritten: 3, dritter: 3, drittes: 3,
+    vierte: 4, vierten: 4, vierter: 4, viertes: 4,
+    fünfte: 5, fünften: 5, fünfter: 5, fünftes: 5,
+    sechste: 6, sechsten: 6, sechster: 6, sechstes: 6,
+    siebte: 7, siebten: 7, siebter: 7, siebtes: 7,
+    achte: 8, achten: 8, achter: 8, achtes: 8,
+    neunte: 9, neunten: 9, neunter: 9, neuntes: 9,
+    zehnte: 10, zehnten: 10, zehnter: 10, zehntes: 10,
+  };
+  // Karten, deren core-Feld bewusst NICHT im Text auftaucht -- eine reine
+  // interne Engine-Feinabstimmung ohne Spec-Beleg (s. CLAUDE.md: "drei Karten
+  // haben zusaetzlich _todo: balance ... ghost_032s Zielsucher-Lenkrate").
+  const ALLOW = { ghost_032: new Set(['necroHomingTurnRate']) };
+
+  function numbersInText(text) {
+    const nums = [];
+    for (const m of (text || '').matchAll(/\d+(?:[.,]\d+)?/g)) {
+      nums.push(parseFloat(m[0].replace(',', '.')));
+    }
+    for (const m of (text || '').matchAll(/[A-Za-zäöüÄÖÜß]+/g)) {
+      const word = m[0].toLowerCase();
+      if (ORDINALS[word] != null) nums.push(ORDINALS[word]);
+    }
+    return nums;
+  }
+
+  function candidatesFor(value) {
+    const set = new Set();
+    const add = (n) => {
+      set.add(Math.round(n * 1e6) / 1e6);
+      set.add(Math.round(n));
+    };
+    add(value);
+    add(value * 100);
+    add((value - 1) * 100);
+    add(Math.abs((value - 1) * 100));
+    return set;
+  }
+
+  function fieldHasTextMatch(value, textNums, tol = 0.05) {
+    const cands = candidatesFor(value);
+    for (const c of cands) for (const n of textNums) if (Math.abs(c - n) <= tol) return true;
+    return false;
+  }
+
+  const pools = [
+    ['upgrades.json', upgradesData.upgrades],
+    ['upgrades_necro.json', necroData.upgrades],
+  ];
+  let checked = 0;
+  for (const [file, upgrades] of pools) {
+    for (const [id, card] of Object.entries(upgrades)) {
+      const core = card.core || {};
+      const textNums = numbersInText(card.description);
+      for (const [key, value] of Object.entries(core)) {
+        if (typeof value !== 'number' || value === 0) continue;
+        checked++;
+        if (ALLOW[id]?.has(key)) continue;
+        const ok = fieldHasTextMatch(value, textNums);
+        check(
+          ok,
+          `Abschnitt 82: ${file}: ${id}.${key} = ${value} hat keine plausible Entsprechung im Kartentext ("${card.description}")`,
+        );
+      }
+    }
+  }
+  // Selbstschutz (Muster wie Abschnitt 6b/45): eine kaputte Iteration (leere
+  // Objekte, falscher Dateiname) darf nicht als "keine Funde" durchgehen.
+  check(checked > 150, `Abschnitt 82: zu wenige core-Felder geprueft (${checked}) -- Iteration vermutlich kaputt`);
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);
