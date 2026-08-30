@@ -479,7 +479,6 @@
       "core": {
         "necroInheritHighPct": 0.08,
         "necroInheritLowPct": 0.04,
-        "necroInheritDurationS": 10.0,
         "necroInheritThresholdMult": 1.2
       },
       "_note": {
@@ -503,8 +502,7 @@
       "signatureClass": "c_necro",
       "core": {
         "necroResistEveryN": 3,
-        "necroResistAmount": 8,
-        "necroResistDurationS": 10.0
+        "necroResistAmount": 8
       },
       "_note": {
         "buildrolle": "Sicherheit",
@@ -1906,7 +1904,7 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Der Champion exekutiert Gegner bereits ab 50 % ihres Lebens statt ab 35 %.",
+      "description": "Ein Treffer des Champions senkt für 2 Sekunden die Exekutionsschwelle des getroffenen Ziels auf 50 % statt 35 %.",
       "signatureClass": "c_necro",
       "core": {
         "necroChampionExecThreshold": 0.5,

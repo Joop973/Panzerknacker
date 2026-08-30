@@ -375,9 +375,16 @@ befristeten Buffs auf dauerhafte Stapel/einen direkten cfg-Zuschlag
 umgebaut, aber die alten Leseverweise nicht entfernt hatte) sind bereinigt;
 dabei einen unabhaengigen stale Test gefunden und auf den aktuellen
 Mechanismus umgestellt. Details im eigenen Abschnitt weiter unten
-„Codedurchsicht Phase B (kleinere Funde)". Phasen C (Karten-vs-Balance-
-Konsistenztest) und D (Neuentwurf des Standard-Klassen-Kartenpools) sind
-weiterhin nicht beauftragt.
+„Codedurchsicht Phase B (kleinere Funde)". **Zuletzt gemergt: Codedurchsicht
+Phase C** — ein neuer Test prueft jeden numerischen Kartenwert gegen seinen
+Beschreibungstext (lose ODER-Pruefung ueber mehrere Deutungen statt starrer
+Zuordnung); dabei zwei tote Datenfelder aus der Zeit vor dem Champion-/
+Nekromant-Nachschliff v2 entfernt (`ghost_021`/`ghost_022`) und einen
+Kartentext korrigiert, der eine 2-Sekunden-Wirkdauer verschwieg (`ghost_082`).
+Details im eigenen Abschnitt weiter unten „Codedurchsicht Phase C
+(Kartentexte vs. core-Werte)". Phase D (Neuentwurf des Standard-Klassen-
+Kartenpools) ist weiterhin nicht beauftragt — braucht eine Design-Vorgabe
+vom Nutzer.
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -9113,15 +9120,81 @@ Unterschied), jeweils mit bestandener Gegenprobe.
   Standard-Klassen-Pool) bleiben offen** — Phase D braucht weiterhin eine
   Design-Vorgabe vom Nutzer, bevor sie sinnvoll angegangen werden kann.
 
+### Codedurchsicht Phase C (Kartentexte vs. core-Werte) — gemergt
+Auf Nutzerauftrag „Weiter" (Fortsetzung der Codedurchsicht). Ziel: ein neuer,
+dauerhafter Test, der jeden numerischen `core`-Wert einer Karte gegen ihren
+deutschen Beschreibungstext prueft — nicht als starre 1:1-Zuordnung (bei der
+Vielzahl an Feld-Namenskonventionen `Pct`/`Mult`/`Bonus`/`Add`/`Radius`/
+`Threshold`/... waere das ohne viele falsche Alarme unmoeglich), sondern als
+lose ODER-Pruefung ueber mehrere plausible Deutungen (literal, als
+Prozentwert `×100`, als Mult-Abweichung von 1).
+- **Kleinerer Kartenbestand als angenommen**: `data/upgrades.json` enthaelt
+  seit Grundsteinumbau Phase 4 nur noch 8 Sockelkarten (die 251 archivierten
+  Karten sind nicht mehr aktiv) — zusammen mit den 115 Nekromant-Karten aus
+  `data/upgrades_necro.json` sind es **123 aktive Karten** mit **234**
+  numerischen `core`-Feldern, nicht die anfangs befuerchteten „hunderte" —
+  eine gruendliche, manuell nachvollziehbare Pruefung war dadurch machbar.
+- **Ein Python-Prototyp** (nicht eingecheckt, nur zur Fundermittlung) mit
+  genau dieser ODER-Logik fand ueber alle 234 Felder **exakt 6 Kandidaten**:
+  - **Zwei echte tote Datenfelder**: `ghost_021.necroInheritDurationS` und
+    `ghost_022.necroResistDurationS` (beide `10.0`) — Ueberbleibsel aus der
+    Zeit VOR dem Champion-/Nekromant-Nachschliff v2, der beide Karten von
+    einem 10-Sekunden-Zeitfenster auf einen dauerhaften, raumweiten Stapel
+    umgebaut hat. `necro.js: buildNecroListeners()`s `necro021`/`necro022`-
+    Listener lesen diese Felder gar nicht (schreiben direkt per
+    `addNecroStack()`, kein Timer beteiligt) — dieselbe Fehlerklasse wie
+    Phase B, nur diesmal in den Kartendaten statt im Code. Aus
+    `data/upgrades_necro.json` UND den beiden toten `cfg.js`-Zuweisungen
+    entfernt (die Kartentexte sagten schon vorher korrekt „bis Raumende").
+  - **Ein echter Text-Genauigkeitsfehler**: `ghost_082` „Kronjaeger" behauptet
+    „Der Champion exekutiert Gegner bereits ab 50 % ihres Lebens statt ab
+    35 %" — klingt nach einer permanenten Aenderung, tatsaechlich setzt
+    `state.js` bei jedem Champion-Treffer nur ein **2 Sekunden** befristetes
+    `t.necroExecUntil`-Fenster auf das GETROFFENE Ziel (dasselbe Muster wie
+    `ghost_026`, dessen Text die Dauer korrekt nennt: „...senkt ihre
+    Exekutionsschwelle fuer 3 Sekunden auf 50 %"). Text korrigiert auf „Ein
+    Treffer des Champions senkt fuer 2 Sekunden die Exekutionsschwelle des
+    getroffenen Ziels auf 50 % statt 35 %." — reine Textkorrektur, `core`
+    war korrekt und ist unveraendert.
+  - **Eine legitime Ausnahme**: `ghost_032.necroHomingTurnRate` (3 rad/s) ist
+    eine reine interne Lenkraten-Feinabstimmung ohne Spec-Beleg (bereits in
+    einer frueheren Sitzung als `_todo: balance`-Wert dokumentiert) — als
+    expliziter, kommentierter Eintrag in einer `ALLOW`-Liste im Test
+    hinterlegt, nicht stillschweigend uebergangen.
+  - **Zwei Regex-Luecken, keine echten Funde**: `ghost_076`/`ghost_078`
+    schreiben „jeder DRITTE/FUENFTE Schuss" — deutsche Ordnungszahlwoerter
+    statt Ziffern, die der erste Entwurf der Zahlenerkennung nicht kannte.
+    Der eingecheckte Test hinterlegt jetzt eine kleine Tabelle fuer die
+    Ordnungszahlwoerter 2.–10. als Ziffern-Aequivalente, statt die beiden
+    Karten einzeln zu allowlisten (skaliert auf kuenftige Karten mit).
+- **Neuer Testabschnitt 82** (`tests/regression.mjs`): iteriert beide
+  Kartenpools, extrahiert alle Zahlen (inkl. deutscher Kommazahlen und
+  Ordnungszahlwoerter) aus jedem Beschreibungstext und prueft jedes
+  numerische `core`-Feld gegen vier Kandidaten-Deutungen (literal, `×100`,
+  `(wert-1)×100`, `|wert-1|×100`) mit kleiner Toleranz. Ein Selbstschutz-Zaehler
+  (`checked > 150`) verhindert, dass eine kaputte Iteration (leere Objekte,
+  falscher Dateiname) faelschlich als „keine Funde" durchgeht — echt gezaehlt:
+  234. **Drei Gegenproben bestanden**: (1) `ghost_001`s `ghostHpMult`
+  probeweise auf `1.5` gesetzt (statt der zum Text „+8 %" passenden `1.08`) —
+  der Test meldete genau diese Karte, `checked` blieb korrekt; (2) die
+  `ALLOW`-Liste geleert — `ghost_032` fiel wie erwartet durch, bestaetigt
+  dass die Ausnahme echte Arbeit leistet statt nur zu maskieren; danach beide
+  Male zurueckgesetzt und die volle Suite erneut gruen bestaetigt.
+- Volle Suite + alle vier Nebensuiten (`gamepad`/`music`/`championsprite`/
+  `spidersprites`) gruen. Kein `sw.js`-Bump (reine Code-/Daten-/Test-
+  Aenderung an bestehenden Dateien, kein neues Asset — `data/upgrades_necro
+  .json` ist bereits in `ASSETS`, JSON laeuft ohnehin network-first).
+- **Phase D (Neuentwurf Standard-Klassen-Pool) bleibt offen** — braucht
+  weiterhin eine Design-Vorgabe vom Nutzer, bevor sie angegangen werden kann.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Codedurchsicht-Phasen C–D** (Phase A — die beiden echten Bugs — und
-      Phase B — kleinere Funde/totes Fundament — sind gemergt, s. eigene
+- [ ] **Codedurchsicht-Phase D** (Phasen A–C sind gemergt, s. eigene
       Abschnitte oben „Bugfix: „Letzte Deckung" umgeht Schild + Amboss
-      vervielfacht Flaechenschaden gegen Untertanen" und „Codedurchsicht
-      Phase B (kleinere Funde)"): Phase C (ein neuer Test, der Kartentexte
-      gegen die tatsaechlichen `balance.json`-Werte auf Konsistenz prueft),
-      Phase D (Neuentwurf des kartenarmen Standard-Klassen-Pools — braucht
-      zuerst eine Design-Vorgabe vom Nutzer, kein reiner Codefix).
+      vervielfacht Flaechenschaden gegen Untertanen", „Codedurchsicht Phase B
+      (kleinere Funde)" und „Codedurchsicht Phase C (Kartentexte vs.
+      core-Werte)"): Neuentwurf des kartenarmen Standard-Klassen-Pools (nur
+      8 Sockelkarten aktiv) — braucht zuerst eine Design-Vorgabe vom Nutzer,
+      kein reiner Codefix.
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
       Designdokument Abschnitt 14.3): `unlockRoomInAct` steuert nur die

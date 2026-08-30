@@ -676,16 +676,22 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroExplosionRadius = Math.max(cfg.necroExplosionRadius || 0, c.necroExplosionRadius);
       cfg.necroExplosionDamagePct = Math.max(cfg.necroExplosionDamagePct || 0, c.necroExplosionDamagePct || 0);
     }
+    // Codedurchsicht (Phase C): necroInheritDurationS/necroResistDurationS
+    // waren Ueberbleibsel aus der Zeit VOR dem Champion-/Nekromant-
+    // Nachschliff v2, der ghost_021/022 von einem 10-Sekunden-Zeitfenster auf
+    // einen dauerhaften, raumweiten Stapel umgebaut hat (necro.js:
+    // buildNecroListeners()s necro021/022-Listener liest nie eine Dauer,
+    // schreibt direkt ueber addNecroStack() -- kein Timer beteiligt). Beide
+    // Felder wurden nirgends mehr gelesen, jetzt hier UND in
+    // data/upgrades_necro.json entfernt.
     if (c.necroInheritHighPct) {
       cfg.necroInheritHighPct = Math.max(cfg.necroInheritHighPct || 0, c.necroInheritHighPct);
       cfg.necroInheritLowPct = Math.max(cfg.necroInheritLowPct || 0, c.necroInheritLowPct || 0);
-      cfg.necroInheritDurationS = Math.max(cfg.necroInheritDurationS || 0, c.necroInheritDurationS || 0);
       cfg.necroInheritThresholdMult = Math.max(cfg.necroInheritThresholdMult || 0, c.necroInheritThresholdMult || 0);
     }
     if (c.necroResistEveryN) {
       cfg.necroResistEveryN = c.necroResistEveryN;
       cfg.necroResistAmount = Math.max(cfg.necroResistAmount || 0, c.necroResistAmount || 0);
-      cfg.necroResistDurationS = Math.max(cfg.necroResistDurationS || 0, c.necroResistDurationS || 0);
     }
     // Auftrag Abschnitt 9: ghost_023 wandelt den GESAMTEN Ueberlauf in Schild
     // um (kein Prozentdeckel mehr) -- reines Freischalt-Flag statt Zahl.
