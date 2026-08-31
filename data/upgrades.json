@@ -2,6 +2,7 @@
   "offersPerScreen": 3,
   "_comment_everyNRooms": "Grundsteinumbau Phase 9: everyNRooms (frueher hier: 1, 'nach jedem Raum') ist entfernt -- das Feld wurde im Code nie gelesen (die Raumtyp-Regel entscheidet: nur der 'enemiesLeft===0'-Block in run.js: stepRun() loest ueberhaupt ein Angebot aus, und der existiert strukturell nur fuer combat/elite/cursed-Raeume, da nur diese ueberhaupt einen Kampfzustand mit Panzern bauen). Archiv: archive/systeme-v1.md, Abschnitt 6.",
   "_comment_sockel": "Grundsteinumbau Phase 4: alle 251 Karten sind nach archive/upgrades-v1.json ausgelagert (ARCHIV.md). Fuenf neutrale, klassenunabhaengige Karten als Sockel -- bewusst mager, der saubere Nullpunkt fuer die kuenftigen Klassenpools. Alle core-basiert, ueber dieselbe generische Kernpool-Schleife in cfg.js (UMBAUPLAN-LP Phase 10) -- sockel_ersatzpanzer ist die einzige Ausnahme (core.extraLifeAdd wirkt auf run.maxLives/run.lives, ausgewertet in run.js: applyUpgradeChoice(), nicht in der cfg-Schleife). Werte sind Startvorschlaege (_todo: balance). Tags bewusst NICHT identisch mit den fuenf Transformations-Tags (terrain/mobility/information/defense/control aus data/transformations.json) -- sonst wuerde die Fortschrittsanzeige im Upgrade-Screen einen nie einloesbaren '3/3'-Fortschritt zeigen (unlockTransformation() wird seit dieser Phase nicht mehr aufgerufen). Grundsteinumbau Phase 7: sockel_ersatzpanzer traegt zusaetzlich upgradable:false (ein halbes Leben existiert nicht) -- run.js: workbenchOptions() filtert sie aus der Rastplatz-/Shop-Liste, cfg.js: applyUpgrades() liefert fuer sie immer Stufe 0. Nekromant-V2 Phase 1 (Stapelregel, STARTHIER.md 'gilt fuer beide Auftraege'): maxStacks ist ersatzlos abgeschafft, jede Karte traegt stattdessen isUnique. Alle fuenf Sockelkarten sind isUnique:false -- KEINE Obergrenze mehr, wie oft sie gewaehlt werden koennen (auch sockel_ersatzpanzer: +1 Leben ist unbegrenzt stapelbar, das ist Absicht, nicht ungeprueft -- die Regel gilt ausdruecklich ueber allen Balanceueberlegungen).",
+  "_comment_sockel_phase_d": "Codedurchsicht Phase D (reiner Generalist, alle fuenf Stufen, Nutzerentscheidung): 13 neue Karten schliessen die bis dahin fehlenden Stufen uncommon/rare/epic (je 4) und ergaenzen eine vierte, thematisch andere Legendaere. Bewusst KEIN neues Subsystem -- ausschliesslich bereits bestehende, generische core-Schluessel aus der Kernpool-Schleife (cfg.js: applyUpgrades()), die unabhaengig von Klasse/Schadenstyp funktionieren (Element-/Ghost-/Necro-spezifische Schluessel bewusst ausgespart, da die Standard-Klasse kein Element/Passiv hat). Alle isUnique:false wie die bestehenden acht -- Konsistenz mit der 'reiner Generalist'-Identitaet. Dabei einen echten, bis dahin unbemerkten Crash-Bug gefunden: der core.dashGrant-Kernschluessel (seit UMBAUPLAN-LP Phase 10) hatte einen Fallback auf die Basiswerte der Karte 'dash', die seit dem Grundsteinumbau archiviert ist -- ohne eine aktive Karte dieses Namens waere applyUpgrades() beim ERSTEN gezogenen dashGrant-Kartenaufruf (sockel_ausweichmanoever waere die erste) mit TypeError abgestuerzt. Behoben ueber cfg.js: resolveCfg()s neues cfg.dashBase (aus data/balance.json: dash), s. dortiger Kommentar.",
   "upgrades": {
     "sockel_panzerung": {
       "id": "sockel_panzerung",
@@ -79,6 +80,195 @@
       "upgradable": false,
       "_todo": "balance"
     },
+    "sockel_zielfernrohr": {
+      "id": "sockel_zielfernrohr",
+      "name": "Zielfernrohr",
+      "description": "Kritische-Treffer-Chance +4 Prozentpunkte.",
+      "tag": "crit",
+      "rarity": "uncommon",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔭",
+      "core": {
+        "critAdd": 0.04
+      },
+      "_todo": "balance"
+    },
+    "sockel_wanne": {
+      "id": "sockel_wanne",
+      "name": "Verstärkte Wanne",
+      "description": "+20 maximale Lebenspunkte.",
+      "tag": "health",
+      "rarity": "uncommon",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧱",
+      "core": {
+        "hpAdd": 20
+      },
+      "_todo": "balance"
+    },
+    "sockel_turbolader": {
+      "id": "sockel_turbolader",
+      "name": "Turbolader",
+      "description": "Fahrtempo +11 %.",
+      "tag": "speed",
+      "rarity": "uncommon",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌀",
+      "core": {
+        "speedMult": 1.11
+      },
+      "_todo": "balance"
+    },
+    "sockel_keramikplatten": {
+      "id": "sockel_keramikplatten",
+      "name": "Keramikplatten",
+      "description": "Schadensresistenz +5 Punkte.",
+      "tag": "defense",
+      "rarity": "uncommon",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🪨",
+      "core": {
+        "resistAdd": 5
+      },
+      "_todo": "balance",
+      "_note": "Resistenzpunkte werden addiert; der genommene Schaden wird durch (1 + Summe/100) geteilt (state.js: applyResistToAmount())."
+    },
+    "sockel_schnellverschluss": {
+      "id": "sockel_schnellverschluss",
+      "name": "Schnellverschluss",
+      "description": "Nachladezeit −16 %.",
+      "tag": "reload",
+      "rarity": "rare",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔄",
+      "core": {
+        "reloadMult": 0.84
+      },
+      "_todo": "balance"
+    },
+    "sockel_wuchtgeschoss": {
+      "id": "sockel_wuchtgeschoss",
+      "name": "Wuchtgeschoss",
+      "description": "Schaden +4.",
+      "tag": "damage",
+      "rarity": "rare",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💥",
+      "core": {
+        "damageAdd": 4
+      },
+      "_todo": "balance"
+    },
+    "sockel_energieschild": {
+      "id": "sockel_energieschild",
+      "name": "Energieschild",
+      "description": "Schild-Kapazität +25 Punkte, regeneriert 4 Punkte pro Sekunde.",
+      "tag": "defense",
+      "rarity": "rare",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💠",
+      "core": {
+        "shieldMaxAdd": 25,
+        "shieldRegenAdd": 4
+      },
+      "_todo": "balance",
+      "_note": "Eigener Schild-Punktepool (state.js: absorbWithShieldPool()) -- unabhaengig vom Notschild (shieldCharges) und vom aelteren schild-Kartenabsorber (shieldHp)."
+    },
+    "sockel_hartmetallkern": {
+      "id": "sockel_hartmetallkern",
+      "name": "Hartmetallkern",
+      "description": "Geschosse durchschlagen +1 zusätzliches Ziel.",
+      "tag": "weapon",
+      "rarity": "rare",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🔩",
+      "core": {
+        "pierceAdd": 1
+      },
+      "_todo": "balance"
+    },
+    "sockel_scharfschuetze": {
+      "id": "sockel_scharfschuetze",
+      "name": "Scharfschütze",
+      "description": "Schaden +6, kritischer Schaden +15 %.",
+      "tag": "crit",
+      "rarity": "epic",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🎯",
+      "core": {
+        "damageAdd": 6,
+        "critMultBonus": 0.15
+      },
+      "_todo": "balance"
+    },
+    "sockel_wanderpanzerung": {
+      "id": "sockel_wanderpanzerung",
+      "name": "Wanderpanzerung",
+      "description": "+34 maximale Lebenspunkte, Schadensresistenz +6 Punkte.",
+      "tag": "health",
+      "rarity": "epic",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🏰",
+      "core": {
+        "hpAdd": 34,
+        "resistAdd": 6
+      },
+      "_todo": "balance"
+    },
+    "sockel_ausweichmanoever": {
+      "id": "sockel_ausweichmanoever",
+      "name": "Ausweichmanöver",
+      "description": "Schaltet einen Ausweich-Dash frei; dessen Abklingzeit sinkt um 20 %.",
+      "tag": "dodge",
+      "rarity": "epic",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🌪️",
+      "core": {
+        "dashGrant": true,
+        "dashCdMult": 0.8
+      },
+      "_todo": "balance",
+      "_note": "core.dashGrant schaltet cfg.dash generisch frei (cfg.js: applyUpgrades(), Basiswerte aus data/balance.json: dash ueber cfg.dashBase) -- unabhaengig von der archivierten Karte 'dash'."
+    },
+    "sockel_fangschuss": {
+      "id": "sockel_fangschuss",
+      "name": "Fangschuss",
+      "description": "Schaden gegen Gegner unter 30 % Leben +40 %.",
+      "tag": "damage",
+      "rarity": "epic",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "☠️",
+      "core": {
+        "executeThreshold": 0.3,
+        "executeMult": 1.4
+      },
+      "_todo": "balance",
+      "_note": "Eigenstaendiger Schadensmultiplikator gegen angeschlagene Ziele (state.js: oc.executeThreshold/executeMult) -- NICHT dasselbe wie die globale Exekutionsschwelle aus dem Grundsteinumbau (t.executing, garantierter Kill statt Schadensbonus)."
+    },
     "sockel_kriegsmeister": {
       "id": "sockel_kriegsmeister",
       "name": "Kriegsmeister",
@@ -126,6 +316,25 @@
       },
       "_todo": "balance",
       "_comment": "Champion-/Nekromant-Nachschliff Abschnitt 16/17: klassenunabhaengige legendaere Karte."
+    },
+    "sockel_alleskoenner": {
+      "id": "sockel_alleskoenner",
+      "name": "Alleskönner",
+      "description": "+20 maximale Lebenspunkte, Fahrtempo +10 %, Nachladezeit −12 %, +1 Magazin.",
+      "tag": "stat",
+      "rarity": "legendary",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧰",
+      "core": {
+        "hpAdd": 20,
+        "speedMult": 1.1,
+        "reloadMult": 0.88,
+        "magAdd": 1
+      },
+      "_todo": "balance",
+      "_comment": "Codedurchsicht Phase D: vierte, thematisch andere Legendaere (Generalist-Kombo statt eines einzelnen Mega-Stats wie bei den drei bestehenden) -- passt am besten zur 'reiner Generalist'-Identitaet der Standard-Klasse."
     }
   }
 }

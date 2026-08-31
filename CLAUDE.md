@@ -382,9 +382,15 @@ Zuordnung); dabei zwei tote Datenfelder aus der Zeit vor dem Champion-/
 Nekromant-Nachschliff v2 entfernt (`ghost_021`/`ghost_022`) und einen
 Kartentext korrigiert, der eine 2-Sekunden-Wirkdauer verschwieg (`ghost_082`).
 Details im eigenen Abschnitt weiter unten „Codedurchsicht Phase C
-(Kartentexte vs. core-Werte)". Phase D (Neuentwurf des Standard-Klassen-
-Kartenpools) ist weiterhin nicht beauftragt — braucht eine Design-Vorgabe
-vom Nutzer.
+(Kartentexte vs. core-Werte)". **Zuletzt gemergt: Codedurchsicht Phase D**
+(letzte Phase der Codedurchsicht) — die Standard-Klasse hat jetzt 21 statt 8
+Karten (Nutzerentscheidung: reiner Generalist, alle fünf Seltenheitsstufen
+besetzt), alle über bestehende generische `core`-Schlüssel; dabei einen
+echten, bis dahin nie ausgelösten Absturz-Bug im `dashGrant`-Kernschlüssel
+gefunden und behoben (Fallback zeigte auf die seit dem Grundsteinumbau
+archivierte Karte `dash`). Details im eigenen Abschnitt weiter unten
+„Codedurchsicht Phase D (Standard-Klassen-Pool erweitert)". **Damit ist die
+komplette Codedurchsicht (Phasen A–D) abgearbeitet.**
 
 ### Phase 0a (Eingabe-Abstraktion + Ziellinie) — gemergt
 - **`src/core/input.js` ist die EINZIGE Stelle, die Geräte-Events liest.**
@@ -9184,17 +9190,86 @@ Prozentwert `×100`, als Mult-Abweichung von 1).
   `spidersprites`) gruen. Kein `sw.js`-Bump (reine Code-/Daten-/Test-
   Aenderung an bestehenden Dateien, kein neues Asset — `data/upgrades_necro
   .json` ist bereits in `ASSETS`, JSON laeuft ohnehin network-first).
-- **Phase D (Neuentwurf Standard-Klassen-Pool) bleibt offen** — braucht
-  weiterhin eine Design-Vorgabe vom Nutzer, bevor sie angegangen werden kann.
+
+### Codedurchsicht Phase D (Standard-Klassen-Pool erweitert) — gemergt
+Letzte Phase der Codedurchsicht. Per `AskUserQuestion` zwei Design-
+Entscheidungen vom Nutzer eingeholt statt geraten: (1) Identität —
+**„Reiner Generalist, alle 5 Stufen"** (keine neue Mechanik, nur bestehende
+generische `core`-Schlüssel, alle fünf Seltenheitsstufen besetzt); (2) Umfang
+— **„Klein: ~20 Karten"**. Die Standard-Klasse (`player`) hatte zuvor nur 8
+Karten (`common`×3, `rare`×2, `epic`×2, `legendary`×1) und **keine einzige**
+`uncommon`-Karte.
+- **13 neue Karten** in `data/upgrades.json` (8 → 21 gesamt, verifiziert per
+  `Counter`: `common:5, uncommon:4, rare:4, epic:4, legendary:4`) — 4×
+  `uncommon` (`sockel_zielfernrohr`, `sockel_wanne`, `sockel_turbolader`,
+  `sockel_keramikplatten`), 4× `rare` (`sockel_schnellverschluss`,
+  `sockel_wuchtgeschoss`, `sockel_energieschild`, `sockel_hartmetallkern`),
+  4× `epic` (`sockel_scharfschuetze`, `sockel_wanderpanzerung`,
+  `sockel_ausweichmanoever`, `sockel_fangschuss`), 1× `legendary`
+  (`sockel_alleskoenner`). Alle `isUnique: false` (Konsistenz mit den
+  bestehenden acht) und ausschließlich über bereits vorhandene, generische
+  `core`-Schlüssel (`damageAdd`/`damageMult`/`reloadMult`/`speedMult`/
+  `hpAdd`/`magAdd`/`magazineFixed`/`critAdd`/`critMultBonus`/`resistAdd`/
+  `pierceAdd`/`shieldMaxAdd`/`shieldRegenAdd`/`bulletSpeedMult`/
+  `executeThreshold`+`executeMult`/`dashGrant`+`dashCdMult`) — **keine
+  einzige Codezeile für die Karten selbst nötig**, exakt das Versprechen der
+  generischen `core`-Schleife aus UMBAUPLAN-LP Phase 10.
+- **Dabei einen echten, bis dahin unbemerkten Absturz-Bug gefunden** (beim
+  sorgfältigen Lesen von `cfg.js`, nicht durch einen Testfehler): der
+  `core.dashGrant`-Kernschlüssel (seit UMBAUPLAN-LP Phase 10 im Code) hatte
+  einen Fallback, der die Basiswerte der Karte **`dash`** von `U.dash
+  .distancePx/.iframeS/.cooldownS` liest — diese Karte ist aber seit
+  „Grundsteinumbau Phase 4" archiviert (`archive/upgrades-v1.json`), `U.dash`
+  ist seither `undefined`. **Bis zu dieser Sitzung setzte KEINE aktive Karte
+  jemals `core.dashGrant`** — der Pfad war rein latent. `sockel_ausweichmanoever`
+  wäre die ERSTE gewesen, die ihn auslöst, und hätte beim ersten Ziehen dieser
+  Karte in einem echten Run `applyUpgrades()` mit einem `TypeError` zum
+  Absturz gebracht.
+  - **Fix**: `cfg.js: resolveCfg()` bekommt ein neues Feld `cfg.dashBase`
+    (aus `data.balance.dash`, neu in `data/balance.json`: `distancePx: 64`/
+    `iframeS: 0.3`/`cooldownS: 2.2` — 1:1 aus dem Archiv übernommen). Der
+    `coreDashGrant`-Zweig in `applyUpgrades()` liest jetzt
+    `cfg.dash || cfg.dashBase || { dist: 64, iframe: 0.3, cooldown: 2.2 }`
+    statt `U.dash` — bewusst **kein** neuer `applyUpgrades()`-Parameter (die
+    Funktion hat ~34 Aufrufstellen quer durch Produktiv- und Testcode), der
+    Wert reist stattdessen huckepack auf dem ohnehin schon als erstes
+    Argument durchgereichten `cfg`-Objekt mit.
+  - **Gegenprobe bestätigt den vollen Blast-Radius**: die alte, kaputte
+    Fassung wiederhergestellt ließ nicht nur den neuen Test 83(a) rot werden,
+    sondern crashte bereits den bestehenden „jede Karte/Stufe resolved ohne
+    NaN"-Sicherheitstest (Abschnitt 6b) hart mit demselben `TypeError` — der
+    Bug hätte also nicht nur eine neue Karte, sondern jeden künftigen
+    `dashGrant`-Kartenzug getroffen.
+- **Neuer Testabschnitt 83** (`tests/regression.mjs`, Gegenprobe für jeden
+  Kernpunkt einzeln bestanden — je einzeln absichtlich rot gemacht und
+  zurückgesetzt: der alte `U.dash`-Fallback wiederhergestellt (crasht hart,
+  s. o.), `sockel_ausweichmanoever.core.dashGrant` auf `false`,
+  `sockel_keramikplatten.core.resistAdd` auf `0`,
+  `sockel_energieschild.core.shieldRegenAdd` bzw. `.shieldMaxAdd` je einzeln
+  auf `0`, `sockel_fangschuss.core.executeMult` auf `1.0`): (a) der
+  `dashGrant`-Mechanismus mit EIGENEN Werten (ein synthetischer Pool ohne die
+  Karte `dash`, `dashCdMult: 0.5` — keine reale Karte nutzt diesen Wert),
+  (b) Ende-zu-Ende über die echte Karte `sockel_ausweichmanoever` +
+  `tank.js: dashTank()` (der Panzer bewegt sich wirklich), (c)
+  `sockel_keramikplatten` senkt den genommenen Schaden am echten
+  Trefferpunkt (`state.js: applyDamage()`), (d) `sockel_energieschild`
+  (Schild-Pool füllt sich auf `cfg.shieldMax` UND regeneriert über echte
+  `stepState()`-Ticks), (e) `sockel_fangschuss` (`executeThreshold`/
+  `executeMult`) macht gegen ein Ziel unter 30 % Leben mehr Schaden als
+  gegen ein gleich starkes Ziel darüber — mit einem aus einem echten,
+  generierten Raum geklonten `t_brown` als Ziel (Muster „flankTreffer()" aus
+  Abschnitt 47), nicht mit einem von Hand gebauten Fake-Objekt (dem fehlen
+  Felder wie `ai`/`vx`/`vy`/`type`, die `updateEnemy()`/`updateTargeting()`
+  lesen und die sonst zum Absturz führen — genau die in dieser CLAUDE.md
+  mehrfach dokumentierte Testfalle, hier beim ersten Entwurf selbst
+  aufgetreten und vor dem Commit korrigiert).
+- Volle Suite + alle vier Nebensuiten (`gamepad`/`music`/`championsprite`/
+  `spidersprites`) grün. Kein `sw.js`-Bump (reine Code-/Daten-/Test-Änderung
+  an bestehenden Dateien, kein neues Asset — `data/balance.json`/
+  `data/upgrades.json` laufen network-first).
+- **Damit ist die komplette Codedurchsicht (Phasen A–D) abgearbeitet.**
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Codedurchsicht-Phase D** (Phasen A–C sind gemergt, s. eigene
-      Abschnitte oben „Bugfix: „Letzte Deckung" umgeht Schild + Amboss
-      vervielfacht Flaechenschaden gegen Untertanen", „Codedurchsicht Phase B
-      (kleinere Funde)" und „Codedurchsicht Phase C (Kartentexte vs.
-      core-Werte)"): Neuentwurf des kartenarmen Standard-Klassen-Pools (nur
-      8 Sockelkarten aktiv) — braucht zuerst eine Design-Vorgabe vom Nutzer,
-      kein reiner Codefix.
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
       Designdokument Abschnitt 14.3): `unlockRoomInAct` steuert nur die
