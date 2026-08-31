@@ -6928,15 +6928,23 @@ for (const seed of SEEDS) {
   //     Nachschliff Abschnitt 16/17: drei universelle legendaere Karten
   //     (sockel_kriegsmeister/-titanpanzerung/-sturmantrieb) sind dazugekommen,
   //     damit auch die Standard-Klasse genug Legendaere fuer Elite-/
-  //     Boss-Belohnungen hat -- fuenf auf acht Karten erweitert, sonst
+  //     Boss-Belohnungen hat -- fuenf auf acht Karten erweitert. Codedurchsicht
+  //     Phase D (reiner Generalist, alle fuenf Stufen): 13 weitere Karten
+  //     schliessen uncommon/rare/epic (je 4) und eine vierte Legendaere --
+  //     acht auf 21 Karten erweitert (5/4/4/4/4 je Seltenheitsstufe), sonst
   //     unveraendert.
   {
     const expected = [
-      'sockel_ersatzpanzer', 'sockel_kriegsmeister', 'sockel_ladeautomat', 'sockel_magazin',
-      'sockel_motor', 'sockel_panzerung', 'sockel_sturmantrieb', 'sockel_titanpanzerung',
+      'sockel_alleskoenner', 'sockel_ausweichmanoever', 'sockel_energieschild',
+      'sockel_ersatzpanzer', 'sockel_fangschuss', 'sockel_hartmetallkern',
+      'sockel_keramikplatten', 'sockel_kriegsmeister', 'sockel_ladeautomat',
+      'sockel_magazin', 'sockel_motor', 'sockel_panzerung', 'sockel_scharfschuetze',
+      'sockel_schnellverschluss', 'sockel_sturmantrieb', 'sockel_titanpanzerung',
+      'sockel_turbolader', 'sockel_wanderpanzerung', 'sockel_wanne',
+      'sockel_wuchtgeschoss', 'sockel_zielfernrohr',
     ];
     const actual = Object.keys(upgradesData.upgrades).sort();
-    check(actual.length === 8, `Phase 10: Pool hat ${actual.length} Karten statt 8`);
+    check(actual.length === 21, `Phase 10: Pool hat ${actual.length} Karten statt 21`);
     check(actual.join(',') === expected.join(','), `Phase 10: Pool enthaelt unerwartete/fehlende ids: ${actual.join(',')}`);
   }
 
@@ -15975,6 +15983,128 @@ for (const seed of SEEDS) {
   // Selbstschutz (Muster wie Abschnitt 6b/45): eine kaputte Iteration (leere
   // Objekte, falscher Dateiname) darf nicht als "keine Funde" durchgehen.
   check(checked > 150, `Abschnitt 82: zu wenige core-Felder geprueft (${checked}) -- Iteration vermutlich kaputt`);
+}
+
+// ---- 83. Codedurchsicht Phase D: Standard-Klasse auf alle fuenf Stufen ---
+// Nutzerentscheidung: reiner Generalist, ~20 Karten, keine neue Mechanik --
+// 13 neue Karten (data/upgrades.json) schliessen uncommon/rare/epic (je 4)
+// und eine vierte Legendaere, alle ueber bereits bestehende generische
+// core-Schluessel. Abschnitt (a) der Section 80 (Phase 10, oben) bewacht
+// bereits die geschlossene Kartenwelt (genau 21 ids); hier nur die neuen
+// Mechanismen/Effekte, die diese Phase zum ersten Mal im aktiven Pool
+// scharf schaltet.
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { dashTank } = await import('../src/game/tank.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  const playerRoom = (playerUpgrades = {}) =>
+    createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: ['t_brown'],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades,
+      upgradesData,
+      equippedSecondary: 'mine',
+      transform: {},
+      starterTank: 'player',
+    });
+
+  // (a) BUGFIX: core.dashGrant stuerzte applyUpgrades() ab, sobald KEINE
+  // aktive Karte 'dash' mehr existiert (seit dem Grundsteinumbau archiviert)
+  // -- der Fallback zeigte auf U.dash.distancePx, ein TypeError. Mechanismus
+  // mit EIGENEN, von jeder echten Karte abweichenden Werten geprueft (nicht
+  // den Zahlen von sockel_ausweichmanoever): ein synthetischer Pool OHNE die
+  // Karte 'dash', dashCdMult 0.5 (keine reale Karte nutzt diesen Wert).
+  {
+    const synU = { upgrades: { testdash: { id: 'testdash', core: { dashGrant: true, dashCdMult: 0.5 } } } };
+    let cfg;
+    let threw = false;
+    try {
+      cfg = applyUpgrades(resolveCfg(tanksData, 'player'), { testdash: 1 }, synU, 'mine', null);
+    } catch (e) {
+      threw = true;
+    }
+    check(!threw, 'Abschnitt 83 (a): core.dashGrant laesst applyUpgrades() ohne aktive Karte "dash" abstuerzen');
+    check(!!cfg?.dash && cfg.dash.dist > 0 && cfg.dash.iframe > 0, `Abschnitt 83 (a): cfg.dash ist nach dashGrant nicht sinnvoll befuellt (${JSON.stringify(cfg?.dash)})`);
+    const baseCooldown = tanksData.balance.dash.cooldownS;
+    check(
+      Math.abs(cfg.dash.cooldown - baseCooldown * 0.5) < 1e-9,
+      `Abschnitt 83 (a): dashCdMult wirkt nicht auf die Abklingzeit (${cfg?.dash?.cooldown} statt ${baseCooldown * 0.5})`,
+    );
+  }
+
+  // (b) Ende-zu-Ende ueber die ECHTE Karte sockel_ausweichmanoever: ein
+  // realer Raum, ein echter Dash-Ausfuehrungsschritt (tank.js: dashTank())
+  // bewegt den Panzer tatsaechlich, keine Ausnahme.
+  {
+    const st = playerRoom({ sockel_ausweichmanoever: 1 });
+    const before = { x: st.player.x, y: st.player.y };
+    dashTank(st.player, st, () => {});
+    const moved = Math.hypot(st.player.x - before.x, st.player.y - before.y);
+    check(moved > 10, `Abschnitt 83 (b): sockel_ausweichmanoever fuehrt keinen echten Dash aus (Bewegung ${moved.toFixed(1)} px)`);
+  }
+
+  // (c) sockel_keramikplatten (resistAdd) senkt genommenen Schaden am echten
+  // Trefferpunkt (state.js: applyDamage()) -- Mechanismus, nicht nur der
+  // aufgeloeste cfg-Wert.
+  {
+    const ohne = playerRoom({});
+    ohne.player.hp = 1000;
+    ohne.applyDamage(ohne.player, 100, 'test', {});
+    const dmgOhne = 1000 - ohne.player.hp;
+
+    const mit = playerRoom({ sockel_keramikplatten: 1 });
+    mit.player.hp = 1000;
+    mit.applyDamage(mit.player, 100, 'test', {});
+    const dmgMit = 1000 - mit.player.hp;
+    check(dmgMit < dmgOhne, `Abschnitt 83 (c): sockel_keramikplatten senkt den genommenen Schaden nicht (${dmgMit} vs ${dmgOhne})`);
+  }
+
+  // (d) sockel_energieschild (shieldMaxAdd+shieldRegenAdd): echter Schild-
+  // Punktepool faengt Schaden ab UND regeneriert ueber Zeit.
+  {
+    const st = playerRoom({ sockel_energieschild: 1 });
+    check(st.player.cfg.shieldMax === 25, `Abschnitt 83 (d): shieldMaxAdd erreicht cfg.shieldMax nicht (${st.player.cfg.shieldMax})`);
+    st.player.shield = 0;
+    st.player.hp = 1000;
+    // Schild-Regeneration laeuft im normalen Panzer-Tick (stepState()) --
+    // ein kurzer, wandloser Tick reicht, um den Regen-Tick zu beobachten.
+    for (let i = 0; i < 30; i++) stepState(st, CMD0, 1 / 60);
+    check(st.player.shield > 0, `Abschnitt 83 (d): sockel_energieschild regeneriert nicht (${st.player.shield} nach 0,5s)`);
+  }
+
+  // (e) sockel_fangschuss (executeThreshold/executeMult): Schaden gegen ein
+  // Ziel UNTER der Schwelle ist hoeher als gegen ein gleich starkes Ziel
+  // OBERHALB -- reine Trefferschaden-Multiplikation (state.js), unabhaengig
+  // von der globalen Exekutionsschwelle (t.executing, garantierter Kill).
+  // Zielobjekt ist ein ECHTER, von playerRoom() erzeugter t_brown -- kein
+  // von Hand gebautes Fake-Objekt (dem fehlen Felder wie ai/vx/vy/type, die
+  // updateEnemy()/updateTargeting() lesen und die sonst abstuerzen, s.
+  // CLAUDE.md-Faustregel "Testfallstrick" bei mehreren frueheren Sessions).
+  {
+    const shootAt = (hpFrac) => {
+      const st = playerRoom({ sockel_fangschuss: 1 });
+      const z = st.tanks.find((t) => t !== st.player);
+      Object.assign(z, {
+        x: 200, y: 250, prevX: 200, prevY: 250, heading: 0,
+        alive: true, hp: Math.round(100 * hpFrac), protect: 0, shieldReady: false,
+      });
+      z.cfg = { ...z.cfg, role: 'guardian', maxHp: 100, armor: null };
+      const b = createBullet(z.x - 2, z.y, 0, { speed: 1, radius: 3, owner: st.player, kind: 'bullet', damage: 20 });
+      b.age = 5;
+      st.bullets.length = 0;
+      st.mines.length = 0;
+      st.bullets.push(b);
+      stepState(st, CMD0, 1 / 60);
+      return Math.round(100 * hpFrac) - z.hp;
+    };
+    const lostLow = shootAt(0.2); // unter der 30%-Schwelle
+    const lostHigh = shootAt(0.8); // ueber der Schwelle
+    check(lostLow > lostHigh, `Abschnitt 83 (e): sockel_fangschuss macht gegen ein Ziel unter 30% nicht mehr Schaden (${lostLow} vs ${lostHigh})`);
+  }
 }
 
 if (failures) {

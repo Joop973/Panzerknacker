@@ -47,6 +47,12 @@
     "cap": 0.35,
     "resetsReload": true
   },
+  "_comment_dash": "Codedurchsicht Phase D: Basiswerte fuer den Ausweich-Dash, den der generische dashGrant-Kernschluessel (cfg.js: applyUpgrades()) freischaltet. Standen bis zum Grundsteinumbau als distancePx/iframeS/cooldownS auf der jetzt archivierten Karte 'dash' -- der Fallback in cfg.js las sie noch von dort (U.dash), obwohl diese Karte laengst aus data/upgrades.json entfernt ist. Das waere beim ersten aktiven dashGrant-Kartenaufruf mit TypeError abgestuerzt (nie zuvor bemerkt, weil bislang keine aktive Karte dashGrant setzte). Werte 1:1 aus dem Archiv (archive/upgrades-v1.json: 'dash') uebernommen.",
+  "dash": {
+    "distancePx": 64,
+    "iframeS": 0.3,
+    "cooldownS": 2.2
+  },
   "enemyBullet": {
     "maxActive": 24
   },

@@ -171,6 +171,17 @@ export function resolveCfg(data, type) {
     metronome: t.metronome || null, // t_metronom (G7): Feuerfreigabe-Buendelung
     grapple: t.grapple || null, // t_grabber (G6): Enterhaken auf das Ziel
     build: t.build || null, // t_mason (G7): setzt Wandzellen zur Laufzeit
+    // Codedurchsicht Phase D: Basiswerte fuer einen frisch ueber den
+    // generischen dashGrant-Kernschluessel freigeschalteten Dash (applyUpgrades()
+    // unten). Frueher stand distancePx/iframeS/cooldownS auf der Karte 'dash'
+    // selbst (data/balance.json: dash, seit dem Grundsteinumbau archiviert) --
+    // applyUpgrades() las sie noch von dort (U.dash), was seit Archivierung der
+    // Karte beim ersten dashGrant-Aufruf mit TypeError abgestuerzt waere. Ein
+    // interner Wert, keine eigene Spielerkarte -- deshalb hier statt in der
+    // oeffentlichen Whitelist weiter oben.
+    dashBase: data.balance?.dash
+      ? { dist: data.balance.dash.distancePx, iframe: data.balance.dash.iframeS, cooldown: data.balance.dash.cooldownS }
+      : null,
   };
 }
 
@@ -342,7 +353,12 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   // schild-Elite-Affix (Phase 9) fuer Gegner schon nutzt (state.js).
   if (l('nachladeschild')) cfg.shieldRegenS = U.nachladeschild.regenS;
   if (l('dash')) {
-    cfg.dash = { dist: U.dash.distancePx, iframe: U.dash.iframeS, cooldown: U.dash.cooldownS };
+    // Grundsteinumbau: die Karte 'dash' selbst ist archiviert (kein aktives
+    // U.dash mehr) -- dieser Zweig ist dadurch unerreichbar (l('dash') kann
+    // nie > 0 werden, solange keine Karte diese id traegt), bleibt aber aus
+    // Konsistenz mit dem dashGrant-Kernschluessel unten auf cfg.dashBase
+    // umgestellt statt auf das nicht mehr existierende U.dash zu verweisen.
+    cfg.dash = cfg.dashBase ? { ...cfg.dashBase } : { dist: 64, iframe: 0.3, cooldown: 2.2 };
   }
   // Erschuetterungsdash (Phase 18, requires dash): stoesst nahe Gegner beim
   // Dash weg und betaeubt sie kurz -- unabhaengig von der Sekundaerwaffe
@@ -1084,8 +1100,16 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   if (ghostRangeMultAcc !== 1) cfg.ghostRangeMult = (cfg.ghostRangeMult || 1) * ghostRangeMultAcc;
   // Ausweichen-Kernkarten schalten den Dash frei (unabhaengig von der alten
   // dash-Karte) und verkuerzen die Abklingzeit. Reusen dieselbe dash-Definition.
+  // BUGFIX (Codedurchsicht Phase D): der Fallback zeigte bisher auf das seit
+  // dem Grundsteinumbau archivierte U.dash -- ohne eine aktive Karte namens
+  // 'dash' waere das ein TypeError gewesen, sobald die ERSTE aktive
+  // dashGrant-Karte gezogen wird (bislang nie geschehen, weil keine aktive
+  // Karte core.dashGrant setzte, bis diese Phase eine hinzufuegt). cfg.dashBase
+  // (resolveCfg(), aus data.balance.dash) ist die echte, weiterhin
+  // datengetriebene Quelle; die literalen Zahlen ganz rechts sind nur ein
+  // letztes Sicherheitsnetz fuer ein von Hand gebautes cfg ohne dashBase-Feld.
   if (coreDashGrant) {
-    const base = cfg.dash || { dist: U.dash.distancePx, iframe: U.dash.iframeS, cooldown: U.dash.cooldownS };
+    const base = cfg.dash || cfg.dashBase || { dist: 64, iframe: 0.3, cooldown: 2.2 };
     cfg.dash = { ...base, cooldown: base.cooldown * coreDashCdMult };
   }
   return cfg;
