@@ -70,10 +70,11 @@
       "searchAngles": 8
     }
   },
-  "_comment_classes": "UMBAUPLAN-LP Phase 9: die zehn spielbaren Klassen in types (player:true). cfg.js zieht dann Magazin/Deckel/Kugeltempo aus den Player-Defaults in balance.json, statt sie wie frueher fest an type==='player' zu haengen (der Blocker der Phase). speedMult skaliert das Basistempo ('normal'), crit die Grundkritchance, damageType das Element (elementare Klassen schiessen es von Anfang an). Die Passiv-Felder (classMineRadiusMult/lightningBonusTargets/fire-|poisonDurationMult/frostSlowBonus/bonusRicochets/scrapDamagePer100/builtHpMult) werden in cfg.js als Whitelist durchgereicht und an genau einer Stelle ausgewertet. 'player' IST die Standard-Klasse (Default-starterTank) -- so bleiben Altpfade, die resolveCfg(data,'player') rufen, gueltig. Upgradepool-v2 Phase 4: das fruehere Nekromant-Passiv reviveChance ist abgebaut, Phase 6 hat cfg.necromancer + die Geistermechanik dafuer eingehaengt. Nekromant-V2 Phase 3: Untertanen erben jetzt den TYP des getoeteten Gegners (s. src/game/ghost.js) -- es gibt deshalb keinen eigenen ghost_tank-Typeintrag mehr hier (archiviert, s. archive/ghost-tank-v1.json). Grundsteinumbau Phase 5 ('Klassen parken'): acht Klassen (alle ausser player/c_necro) tragen jetzt zusaetzlich 'enabled': false -- rein ein UI-Auswahlfilter (src/main.js: playerClasses), NICHT geloescht und NICHT von resolveCfg() ausgewertet, ein gespeicherter Spielstand mit einer geparkten Klasse laedt also weiter unveraendert. Referenz-/Backup-Kopie: archive/klassen-v1.json (Phase 0).",
+  "_comment_classes": "UMBAUPLAN-LP Phase 9: die zehn spielbaren Klassen in types (player:true). cfg.js zieht dann Magazin/Deckel/Kugeltempo aus den Player-Defaults in balance.json, statt sie wie frueher fest an type==='player' zu haengen (der Blocker der Phase). speedMult skaliert das Basistempo ('normal'), crit die Grundkritchance, damageType das Element (elementare Klassen schiessen es von Anfang an). Die Passiv-Felder (classMineRadiusMult/lightningBonusTargets/fire-|poisonDurationMult/frostSlowBonus/bonusRicochets/scrapDamagePer100/builtHpMult) werden in cfg.js als Whitelist durchgereicht und an genau einer Stelle ausgewertet. 'player' IST die Standard-Klasse (Default-starterTank) -- so bleiben Altpfade, die resolveCfg(data,'player') rufen, gueltig. Upgradepool-v2 Phase 4: das fruehere Nekromant-Passiv reviveChance ist abgebaut, Phase 6 hat cfg.necromancer + die Geistermechanik dafuer eingehaengt. Nekromant-V2 Phase 3: Untertanen erben jetzt den TYP des getoeteten Gegners (s. src/game/ghost.js) -- es gibt deshalb keinen eigenen ghost_tank-Typeintrag mehr hier (archiviert, s. archive/ghost-tank-v1.json). AUFTRAG-FERTIGSTELLUNG Phase A1 ('Fuenf Klassen freigeben, fuenf parken'): jede der zehn Klassen traegt jetzt explizit 'released' (Boolean) -- rein ein UI-Auswahlfilter (src/main.js: playerClasses), NICHT von resolveCfg() ausgewertet, ein gespeicherter Spielstand mit einer geparkten Klasse laedt also weiter unveraendert. Ersetzt (nicht ergaenzt) das aeltere 'enabled'-Feld aus Grundsteinumbau Phase 5, das denselben Zweck mit einer anderen 2/8-Aufteilung (nur player/c_necro frei) erfuellte -- ein zweites Parallelfeld haette dieselbe Semantik doppelt gefuehrt. Release-Fuenf: player, c_blast, c_frost, c_flame, c_necro (alle mit eigenem Sprite, s. src/render/sprites.js: TANK_TYPES). Geparkt: c_tesla, c_toxic, c_scrap, c_ricochet, c_engineer (borgen sich weiterhin 'player' per SPRITE_ALIAS). Referenz-/Backup-Kopie der urspruenglichen Acht-Klassen-Parkung: archive/klassen-v1.json (Phase 0) -- unveraendert gueltig, da 'released' rein additiv zur vorherigen Datenlage ist.",
   "types": {
     "player": {
       "player": true,
+      "released": true,
       "label": "Standard",
       "desc": "Ausgewogen. Keine Sonderregel — die Messlatte für alles andere.",
       "maxHp": 100,
@@ -87,7 +88,7 @@
     },
     "c_blast": {
       "player": true,
-      "enabled": false,
+      "released": true,
       "label": "Sprengpanzer",
       "desc": "Zäh, aber langsam. Schießt Sprengstoff und legt Bomben mit +20 % Radius.",
       "maxHp": 115,
@@ -102,7 +103,7 @@
     },
     "c_frost": {
       "player": true,
-      "enabled": false,
+      "released": true,
       "label": "Frostpanzer",
       "desc": "Schießt Frost. Seine Verlangsamung greift 20 % stärker.",
       "maxHp": 110,
@@ -117,7 +118,7 @@
     },
     "c_tesla": {
       "player": true,
-      "enabled": false,
+      "released": false,
       "label": "Teslapanzer",
       "desc": "Zerbrechlich, schnell, hart. Blitze springen auf 4 statt 3 Ziele.",
       "maxHp": 90,
@@ -132,7 +133,7 @@
     },
     "c_toxic": {
       "player": true,
-      "enabled": false,
+      "released": false,
       "label": "Radioaktiv",
       "desc": "Schießt Gift. Der Giftschaden hält 25 % länger an.",
       "maxHp": 105,
@@ -147,7 +148,7 @@
     },
     "c_scrap": {
       "player": true,
-      "enabled": false,
+      "released": false,
       "label": "Schrottpanzer",
       "desc": "Wird mit dem Geldbeutel stärker: +5 % Schaden je 100 Schrott.",
       "maxHp": 95,
@@ -161,7 +162,7 @@
     },
     "c_ricochet": {
       "player": true,
-      "enabled": false,
+      "released": false,
       "label": "Abprallpanzer",
       "desc": "Ein zusätzlicher Wandabpraller auf jedem Schuss.",
       "maxHp": 100,
@@ -175,6 +176,7 @@
     },
     "c_necro": {
       "player": true,
+      "released": true,
       "necromancer": true,
       "label": "Nekromant",
       "desc": "Getötete Gegner werden mit 35 % Grundchance zu kämpfenden Geisterpanzern -- egal ob der Kill vom Hauptpanzer, dem Champion oder einem gewöhnlichen Untertanenpanzer stammt. Karten erhöhen die Chance weiter. Die Bombentaste beschwört statt einer Mine sofort einen Geist.",
@@ -188,7 +190,7 @@
     },
     "c_engineer": {
       "player": true,
-      "enabled": false,
+      "released": false,
       "label": "Ingenieur",
       "desc": "Gebautes (Sperrmauer) hält 20 % mehr aus.",
       "maxHp": 105,
@@ -202,7 +204,7 @@
     },
     "c_flame": {
       "player": true,
-      "enabled": false,
+      "released": true,
       "label": "Flammenpanzer",
       "desc": "Schießt Feuer. Der Brand hält 25 % länger an.",
       "maxHp": 100,
