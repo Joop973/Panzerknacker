@@ -9269,6 +9269,126 @@ Karten (`common`×3, `rare`×2, `epic`×2, `legendary`×1) und **keine einzige**
   `data/upgrades.json` laufen network-first).
 - **Damit ist die komplette Codedurchsicht (Phasen A–D) abgearbeitet.**
 
+### `AUFTRAG-FERTIGSTELLUNG.md` eingegangen — Phase A0 (Ist-Abgleich, kein Code)
+**Neu eingegangen: `AUFTRAG-FERTIGSTELLUNG.md`** (nur per Chat übergeben, wie
+schon `AUFTRAG-GRUNDSTEINUMBAU.md`/`AUFTRAG-NEKROMANT-V2.md` — nie als
+Repo-Datei eingecheckt, siehe `ARCHIV.md`). Fünf Stufen (A–F) vom Kernloop
+bis zum Steam-Release; A0 ist reiner Ist-Abgleich, kein Produktivcode.
+
+**1. Lebende `core`-Schlüssel (`src/game/cfg.js`)** — alle generischen,
+klassenunabhängigen Schlüssel, die künftige Kernpool-/Signaturkarten
+(Phasen A5–A18) nutzen können:
+
+| Schlüssel | Wirkung | Leseort | Skalierung |
+|---|---|---|---|
+| `damageAdd` | +Schaden | `cfg.js:529` | additiv |
+| `reloadMult` | Nachladezeit ×N | `cfg.js:530` | multiplikativ (Potenz je Stufe) |
+| `speedMult` | Tempo ×N | `cfg.js:531` | multiplikativ (Potenz) |
+| `hpAdd` | +max. LP | `cfg.js:532` | additiv |
+| `magAdd` | +Magazin | `cfg.js:533` | additiv (am Ende gerundet, Z. 1071) |
+| `critAdd` | +Krit-Chance | `cfg.js:537` | additiv (Deckel greift am Roll-Ort in `tank.js`) |
+| `mineAdd` | +Minen/Bomben | `cfg.js:548` | additiv (gerundet, Z. 1072) |
+| `dashGrant`+`dashCdMult` | schaltet Dash frei, verkürzt Cooldown | `cfg.js:549–552`, angewandt `1111–1114` | Schalter + multiplikativ |
+| `bulletSpeedMult` | Geschosstempo ×N | gesammelt Z. 554, angewandt `1066` | multiplikativ (Potenz) |
+| `damageMult` | Schaden ×N | gesammelt Z. 555, angewandt `1065` | multiplikativ (Potenz) |
+| `magazineFixed` | hartes Magazin-Limit (schlägt alles) | `cfg.js:556`, `1067` | Override |
+| `executeThreshold`+`executeMult` | Hinrichtung unter LP-Schwelle | `cfg.js:558–561` | Schwelle + Multiplikator |
+| `critMultBonus` | +Krit-Faktor | `cfg.js:562` | additiv |
+| `critExecute` | Krit tötet Nicht-Boss sofort | `cfg.js:563` | Schalter |
+| `allExplosive` | jeder Schuss zündet | `cfg.js:572`, `1079` | Schalter |
+| `shotExplosionRadius` | Basis-Explosionsradius (Schuss) | `cfg.js:573` | Maximum |
+| `explosionRadiusMult` | Radius ×N (Schuss UND Mine) | `cfg.js:574`, `1083–1086` | multiplikativ |
+| `explosionDamageMult` | Explosionsschaden ×N | `cfg.js:575`, `1087` | multiplikativ |
+| `schrapnellCount` | +Schrapnell-Splitter | `cfg.js:576`, `1088` | Maximum |
+| `statusDurationMult` | Statuseffekt-Dauer ×N | `cfg.js:578`, `1091` | multiplikativ |
+| `statusTickMult` | Statuseffekt-Tickschaden ×N | `cfg.js:579`, `1092` | multiplikativ |
+| `statusStackBonus` | +Statusstufen je Treffer | `cfg.js:580` | additiv |
+| `statusMaxStacksBonus` | +Statusstufen-Deckel | `cfg.js:581` | additiv |
+| `fireDurationMult` | multipliziert das Flammenpanzer-Passiv | `cfg.js:582`, `1093` | multiplikativ |
+| `fireSpreadRadius` | Feuer-Ausbreitungsradius | `cfg.js:583` | Maximum |
+| `frostSlowBonus` | zusätzliche Verlangsamung (additiv zum Frostpanzer-Passiv) | `cfg.js:587` | additiv |
+| `frostFreezeReduction` | Erstarrung früher | `cfg.js:588` | additiv |
+| `frostFreezeDurationBonus` | Erstarrung länger | `cfg.js:589` | additiv |
+| `shatterMult` | Extra-Schaden gg. erstarrte Ziele | `cfg.js:590` | additiv (bewusste Ausnahme trotz `Mult`-Suffix) |
+| `poisonSpreadRadius` | Gift-Ausbreitungsradius | `cfg.js:593` | Maximum |
+| `lightningBonusTargets`/`-RangeBonus`/`-FalloffBonus`/`-Stun` | Blitzketten-Stellwerte | `cfg.js:596–599` | additiv/additiv/additiv/Maximum |
+| `resistAdd` | +Schadensresistenz (Punkte) | `cfg.js:635` | additiv, **kein Deckel** |
+| `pierceAdd` | +Durchschlag (Ziele) | `cfg.js:636` | additiv |
+| `shieldMaxAdd` | +Schild-Punktepool | `cfg.js:637` | additiv |
+| `shieldRegenAdd` | +Schild-Regeneration/s | `cfg.js:638` | additiv |
+| `scrapAdd` | +Schrott/Raum | `cfg.js:538` | additiv |
+| `scrapDamageBonus` | additiv zum Schrottpanzer-Passiv | `cfg.js:543` | additiv (nur mit `c_scrap`, **geparkt**) |
+| `builtHpBonus` | additiv zum Ingenieur-Passiv | `cfg.js:547` | additiv (nur mit `c_engineer`, **geparkt**) |
+
+Alle diese Schlüssel werden über eine **einzige generische Schleife**
+(`cfg.js: applyUpgrades()`, Z. 524–1064) ausgewertet — eine neue Karte
+braucht nie eine Codezeile, nur ihren `core`-Eintrag. Additive Schlüssel
+(`*Add`/`*Bonus`) und multiplikative (`*Mult`, Ausnahme `shatterMult`)
+werden von der Rastplatz-Stufenskalierung (`scaleCore()`, Z. 242–258)
+automatisch erfasst.
+
+**Bestätigt: die Element-Engine lebt.** Explosiv-, Feuer- und Frost-Schlüssel
+sind alle noch scharf — direkt nutzbar für die Signaturpools Sprengpanzer
+(A10–A12), Flammenpanzer (A16–A18) und Frostpanzer (A13–A15). Blitz-Schlüssel
+(`lightning*`) und `poisonSpreadRadius` sind ebenfalls live, aber nur für die
+**geparkten** Klassen `c_tesla`/`c_toxic` sinnvoll — für die Kartenwellen
+dieses Auftrags irrelevant.
+
+**Bestätigt tot** (im Code nur noch als Kommentar, keine `if (c.xyz)`-Zeile
+mehr, keine andere Lesestelle im ganzen `src/`-Baum):
+`ricochetAdd` (`cfg.js:534–536`), `critOnBounce`/`bounceDamageBonus`/
+`bounceRampPerBounce` (`cfg.js:564–570`, Abprallpanzer-Signaturtopf) — alle
+vier waren an den mit Grundsteinumbau Phase 1 entfernten Bandenschuss
+gebunden. `c_ricochet` bleibt bis zu einem Neuentwurf ohne Identität
+(bestätigt Entscheidung #2 des Auftrags).
+
+**Nekromant-Pool** (`ghost*`/`necro*`-Präfix, ~150 Schlüssel,
+`cfg.js:600–1063`) ist vollständig lebend, aber ausschließlich über
+`signatureClass: "c_necro"` erreichbar — nicht einzeln aufgeführt (bereits
+in den jeweiligen „Nekromant-V2 Phase N"-Abschnitten oben dokumentiert),
+da der Pool laut Auftrag fertig ist und keine neuen Karten bekommt.
+
+**2. Aktive Filter in `src/game/upgradepool.js`:**
+
+| Filter | Zeile | Wirkung |
+|---|---|---|
+| `EXCLUDED_TAGS` (`weapon`, `elite`) | 44, geprüft 232 | ausgeschlossen außer Allowlist |
+| `WEAPON_ALLOWLIST` (`doppelrohr`, `flak`) | 50 | Ausnahme von `EXCLUDED_TAGS` |
+| `signatureClass` | 244 | nur bei passendem `starterTank` |
+| `exclusions[]` | 253 | Negativliste je Klasse |
+| `onlyRarity` | 254 | nur diese Seltenheit (Treasure/Elite) |
+| Bannliste (`bannedSet`) | 255 | verbannte ids raus |
+| `isUnique` + `selectedUniqueUpgradeIds` | 272 | einzigartige Karte nach 1. Wahl weg |
+| `minRoom`/`bypassRoomGate` | 280 | per-Karte-Raumgate |
+| `requires[]` | 281 | reines UND über Einzel-ids |
+| `requiresAnyOf[][]` | 288–293 | UND über Gruppen, ODER innerhalb |
+| `tags[]`-Synergiegewichtung | `makeSynergyWeight()` 103–114 | **kein Filter**, nur Gewichtsbonus (nie 0) |
+| `dedupeKey()` (Tag-Dedupe) | 199–201, genutzt 318/322 | Signaturkarten dedupen auf `id`, sonst auf `tag` |
+
+**`balance.rarityGates`** (das frühere globale „Seltenheit erst ab Raum X
+ziehbar") ist bestätigt **ersatzlos entfernt** — nur noch in Kommentaren,
+kein aktives Feld. Seltenheit läuft ausschließlich über die kontextabhängigen
+Bänder (`rewardRarityBands`/`shopRarityBands`/`eliteRarityBands`,
+`upgradepool.js: pickBand()`), nie über Eligibility.
+
+**`damageType` ist bestätigt KEIN Angebotsfilter mehr** — kommt in
+`upgradepool.js`/`run.js` nur noch in Kommentaren vor („mit dem
+Zweitelement-System entfernt", Grundsteinumbau Phase 4). Karten mit
+`damageType` gibt es aktuell nicht (Nekromant-Karten setzen ihn nicht),
+Entscheidung #5 des Auftrags (Signaturpools laufen über `signatureClass`)
+ist damit strukturell bereits erfüllt.
+
+**3. Kartenzahlen** (Stand vor Stufe A):
+
+| Datei | Gesamt | common/uncommon/rare/epic/legendary |
+|---|---|---|
+| `data/upgrades.json` | 21 | 5/4/4/4/4 |
+| `data/upgrades_necro.json` | 115 | 33/30/26/16/10 |
+
+Damit ist Phase A0 abgeschlossen — **kein Code geändert**, nur dieser
+Abschnitt. Nächste Sitzung (nach Freigabe): **Phase A1** (fünf Klassen
+freigeben, fünf parken).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
