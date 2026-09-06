@@ -9386,8 +9386,61 @@ ist damit strukturell bereits erfüllt.
 | `data/upgrades_necro.json` | 115 | 33/30/26/16/10 |
 
 Damit ist Phase A0 abgeschlossen — **kein Code geändert**, nur dieser
-Abschnitt. Nächste Sitzung (nach Freigabe): **Phase A1** (fünf Klassen
-freigeben, fünf parken).
+Abschnitt.
+
+### AUFTRAG-FERTIGSTELLUNG Phase A1 (Fünf Klassen freigeben, fünf parken) — gemergt
+Neue Aufteilung: **player, c_blast, c_frost, c_flame, c_necro** sind normal
+wählbar (alle fünf mit eigenem Sprite in `sprites.js: TANK_TYPES`), **c_tesla,
+c_toxic, c_scrap, c_ricochet, c_engineer** sind geparkt. Ersetzt die 2/8-
+Aufteilung aus Grundsteinumbau Phase 5 (dort nur `player`/`c_necro` frei).
+- **`enabled` ist durch `released` ERSETZT, nicht ergänzt** (bewusste
+  Konsolidierung, kein Parallelfeld): `data/tanks.json` trägt jetzt auf allen
+  zehn Klassen explizit `"released": true/false` statt des früheren, nur auf
+  acht Klassen gesetzten `enabled: false`. Ein zweites Boolean mit derselben
+  Funktion hätte nur verwirrt — der `_comment_classes`-Kopfkommentar
+  dokumentiert die Umbenennung samt Begründung.
+- **`src/main.js: playerClasses`** (die einzige Auswertungsstelle, wie schon
+  in Phase 5) filtert jetzt auf `t.player && (t.released !== false ||
+  telemetry.isDebugEnabled())` — bei `?debug=1` erscheinen alle zehn Klassen
+  UND bleiben wählbar (nicht nur sichtbar-aber-gesperrt), zum Weitertesten.
+  Derselbe Debug-Bypass gilt für den `starterTank`-Fallback-Guard (eine
+  gespeicherte Präferenz auf eine geparkte Klasse fällt ohne Debugflag auf
+  `'player'` zurück, mit Debugflag bleibt sie gültig).
+- **„(geparkt)"-Hinweis**: eine im Debugmodus sichtbare geparkte Klasse zeigt
+  den Zusatz direkt im Namensfeld des Auswahlknopfs (`" (geparkt)"`) + eine
+  neue CSS-Klasse `.classlist button.parked` (gedämpfte Deckkraft, gestrichelter
+  Rand — Muster `.mapnode.unreachable`, aber bewusst NICHT deaktiviert, da der
+  Knopf im Debugmodus ja anwählbar bleiben soll).
+- **Kein CSS-Layoutfix nötig**: `.overlay` ist bereits generisch scrollbar
+  (`overflow-y: auto` + `justify-content: safe center`, seit dem
+  „Weiter außerhalb des Bildschirms"-Bugfix) — fünf statt zwei (bzw. zehn im
+  Debugmodus) Klassenknöpfe passen ohne Änderung.
+- **Punkt 4 des Auftrags geprüft**: `grep` über den ganzen `src`-Baum zeigt
+  genau eine Stelle, die über `tanksData.types` iteriert und dabei die
+  Klassenanzahl implizit annimmt (`main.js: playerClasses`, s. o.) — kein
+  weiterer hartkodierter Zähler, keine Layoutberechnung, die von „genau zwei"
+  oder „genau zehn" ausgeht. `preview.js`/`roomscreens.js` lesen Klassenwerte
+  weiterhin nur über einzelne `tanksData.types[type]`-Lookups, nie über eine
+  eigene Iteration.
+- **`sprites.js: TANK_TYPES`/`SPRITE_ALIAS` sind jetzt exportiert** (vorher
+  modulintern, reine Sichtbarkeitsänderung) — der neue Test prüft direkt
+  gegen sie, ohne den DOM-abhängigen `initSprites()`-Seiteneffekt auszulösen
+  (der sitzt als Modul-Seiteneffekt in `renderer.js`, nicht in `sprites.js`
+  selbst — ein direkter Import von `sprites.js` bleibt DOM-frei).
+- **Testabschnitt 49 aktualisiert** (ersetzt den alten Grundsteinumbau-
+  Phase-5-Test vollständig, gleiche Nummer): Struktur (fünf Release- +
+  fünf Park-Klassen), der Auswahlfilter-Mechanismus wortgleich zu `main.js`
+  in BEIDEN Zweigen (ohne Debug genau die fünf Release-Klassen, mit Debug
+  alle zehn), `resolveCfg()` löst jede geparkte Klasse weiterhin fehlerfrei
+  auf, der Nekromant behält sein Passiv, und — neu, Prompt-Punkt 5 — jede
+  Release-Klasse hat ein eigenes Sprite (`TANK_TYPES`, kein `SPRITE_ALIAS`-
+  Eintrag).
+- **Gegenprobe bestanden**: `c_blast.released` temporär auf `false` gesetzt
+  → genau zwei erwartete Prüfungen wurden rot („Release-Klasse "c_blast" hat
+  kein released:true" + der Auswahlfilter lieferte nur noch vier statt fünf
+  Klassen), sonst nichts. Danach zurückgesetzt, volle Suite wieder grün mit
+  identischen Seed-Raumzahlen (31/32/29/38/38) wie vor der Änderung.
+- Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert

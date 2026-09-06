@@ -256,11 +256,16 @@ async function init() {
   // die Auswahl ueber Sitzungen erhalten bleibt; der laufende Run traegt sie
   // ausserdem im Snapshot (run.js), sodass "Fortsetzen" dieselbe Klasse laedt.
   let starterTank = getPref('starterTank', 'player');
-  // Grundsteinumbau Phase 5: eine gespeicherte Praeferenz auf eine geparkte
-  // Klasse (enabled:false) faellt beim naechsten Start auf 'player' zurueck
-  // -- sonst koennte ein alter Pref-Wert eine Klasse zurueckholen, die im
-  // Auswahlbildschirm gar nicht mehr angeboten wird.
-  if (!tanksData.types[starterTank]?.player || tanksData.types[starterTank]?.enabled === false) {
+  // AUFTRAG-FERTIGSTELLUNG Phase A1 (ersetzt Grundsteinumbau Phase 5s
+  // enabled-Feld): eine gespeicherte Praeferenz auf eine geparkte Klasse
+  // (released:false) faellt beim naechsten Start auf 'player' zurueck --
+  // sonst koennte ein alter Pref-Wert eine Klasse zurueckholen, die im
+  // Auswahlbildschirm gar nicht mehr angeboten wird. Bei ?debug=1 bleibt
+  // eine geparkte Praeferenz gueltig (weiter testbar).
+  if (
+    !tanksData.types[starterTank]?.player ||
+    (tanksData.types[starterTank]?.released === false && !telemetry.isDebugEnabled())
+  ) {
     starterTank = 'player';
   }
 
@@ -1320,12 +1325,15 @@ async function init() {
   const classScreen = document.getElementById('classScreen');
   const classListEl = document.getElementById('classList');
   const classOpenBtn = document.getElementById('classOpen');
-  // Grundsteinumbau Phase 5: nur player (Nulllinie) und c_necro (laufender
-  // Nekromanten-Auftrag) bleiben waehlbar -- die uebrigen acht Klassen
-  // tragen enabled:false in data/tanks.json (nicht geloescht, s.
-  // archive/klassen-v1.json), dieser Filter ist die einzige Stelle, die das
-  // auswertet.
-  const playerClasses = Object.entries(tanksData.types).filter(([, t]) => t.player && t.enabled !== false);
+  // AUFTRAG-FERTIGSTELLUNG Phase A1 (ersetzt Grundsteinumbau Phase 5s
+  // enabled-Feld): fuenf Klassen (player/c_blast/c_frost/c_flame/c_necro,
+  // released:true) bleiben normal waehlbar, fuenf sind geparkt
+  // (released:false, s. data/tanks.json: _comment_classes). Bei ?debug=1
+  // erscheinen alle zehn und sind auch waehlbar (zum Weitertesten) --
+  // eine geparkte Klasse tragt dann sichtbar den Hinweis "(geparkt)".
+  const playerClasses = Object.entries(tanksData.types).filter(
+    ([, t]) => t.player && (t.released !== false || telemetry.isDebugEnabled()),
+  );
   const refreshClassBtn = () => {
     classOpenBtn.textContent = `Klasse: ${tanksData.types[starterTank]?.label || 'Standard'} ▸`;
   };
@@ -1334,12 +1342,14 @@ async function init() {
   function buildClassList() {
     classListEl.innerHTML = '';
     for (const [id, t] of playerClasses) {
+      const parked = t.released === false;
       const b = document.createElement('button');
       b.dataset.class = id;
       b.classList.toggle('active', id === starterTank);
+      b.classList.toggle('parked', parked);
       const name = document.createElement('div');
       name.className = 'cl-name';
-      name.textContent = t.label || id;
+      name.textContent = (t.label || id) + (parked ? ' (geparkt)' : '');
       const stats = document.createElement('div');
       stats.className = 'cl-stats';
       stats.textContent = fmtClassStats(t);

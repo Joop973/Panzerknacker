@@ -5,7 +5,12 @@
 
 const BASE = 'assets/sprites/';
 
-const TANK_TYPES = [
+// AUFTRAG-FERTIGSTELLUNG Phase A1: exportiert (vorher modulintern) fuer den
+// Test "jede Release-Klasse hat ein eigenes Sprite" -- reine
+// Sichtbarkeitsaenderung, kein Verhaltensunterschied. Kein DOM-Zugriff bei
+// diesem Import: initSprites() (das new Image() aufruft) laeuft erst als
+// Seiteneffekt in renderer.js, nicht hier.
+export const TANK_TYPES = [
   'player',
   't_brown',
   't_grey',
@@ -127,7 +132,7 @@ export function spritesReady() {
 // die Phalanx den Frontbalken ueber armor.arc, beide automatisch aus
 // tanks.json, ohne Renderer-Sonderfall. (Aktuell beide Platzhalter-Bosse,
 // s. CLAUDE.md -- die Aliase bleiben als Referenz fuer einen Bossneubau.)
-const SPRITE_ALIAS = {
+export const SPRITE_ALIAS = {
   t_armored: 't_grey',
   t_reactor: 't_green',
   t_mirror: 't_teal',

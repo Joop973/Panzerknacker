@@ -6082,66 +6082,95 @@ for (const seed of SEEDS) {
   }
 }
 
-// ---- 49. Grundsteinumbau Phase 5: Klassen parken -------------------------
-// Nur player (Nulllinie) und c_necro bleiben waehlbar; die restlichen acht
-// Klassen sind ueber enabled:false geparkt, NICHT geloescht -- resolveCfg()
-// und ein bereits laufender Spielstand duerfen sie weiterhin auflösen
-// (Testschritt 4 des Auftrags: "Spielstand eines laufenden Runs laden --
-// funktioniert").
+// ---- 49. AUFTRAG-FERTIGSTELLUNG Phase A1: Klassen freigeben/parken -------
+// Ersetzt (nicht ergaenzt) den frueheren Grundsteinumbau-Phase-5-Test: das
+// Feld heisst jetzt `released` statt `enabled` und die Aufteilung ist
+// 5 frei/5 geparkt statt 2/8 -- player, c_blast, c_frost, c_flame, c_necro
+// bleiben waehlbar (alle mit eigenem Sprite), c_tesla/c_toxic/c_scrap/
+// c_ricochet/c_engineer sind geparkt (borgen weiterhin 'player' per
+// SPRITE_ALIAS). resolveCfg() und ein bereits laufender Spielstand duerfen
+// eine geparkte Klasse weiterhin aufloesen (Testschritt 4 des Auftrags:
+// "Spielstand eines laufenden Runs laden -- funktioniert").
 {
   const { resolveCfg } = await import('../src/game/cfg.js');
+  const { TANK_TYPES, SPRITE_ALIAS } = await import('../src/render/sprites.js');
   const T = tanksData.types;
-  const GEPARKT = ['c_blast', 'c_frost', 'c_tesla', 'c_toxic', 'c_scrap', 'c_ricochet', 'c_engineer', 'c_flame'];
+  const RELEASED = ['player', 'c_blast', 'c_frost', 'c_flame', 'c_necro'];
+  const GEPARKT = ['c_tesla', 'c_toxic', 'c_scrap', 'c_ricochet', 'c_engineer'];
 
-  // (a) Struktur: genau die acht namentlich benannten Klassen tragen
-  // enabled:false, player/c_necro sind unangetastet (kein enabled-Feld oder
-  // explizit true) -- ein Tippfehler in einer id waere hier sofort sichtbar.
+  // (a) Struktur: genau die fuenf namentlich benannten Klassen tragen
+  // released:false, die anderen fuenf released:true -- ein Tippfehler in
+  // einer id waere hier sofort sichtbar.
   {
-    for (const id of GEPARKT) {
-      check(T[id]?.enabled === false, `Phase 5: Klasse "${id}" ist nicht geparkt (enabled !== false)`);
+    for (const id of RELEASED) {
+      check(T[id]?.released === true, `Phase A1: Release-Klasse "${id}" hat kein released:true`);
     }
-    check(T.player.enabled !== false, 'Phase 5: die Standardklasse ist faelschlich geparkt');
-    check(T.c_necro.enabled !== false, 'Phase 5: der Nekromant ist faelschlich geparkt');
+    for (const id of GEPARKT) {
+      check(T[id]?.released === false, `Phase A1: Klasse "${id}" ist nicht geparkt (released !== false)`);
+    }
   }
 
   // (b) MECHANISMUS der Auswahl-Filterung (src/main.js: playerClasses) --
   // hier nachgebaut, weil main.js das DOM beim Import verdrahtet und nicht
   // isoliert importierbar ist. Exakt derselbe Filterausdruck wie im echten
-  // Code (t.player && t.enabled !== false); eine Abweichung hier waere ohne
-  // Aussagekraft, deshalb bewusst wortgleich zu main.js.
+  // Code (t.player && (t.released !== false || debug)); eine Abweichung hier
+  // waere ohne Aussagekraft, deshalb bewusst wortgleich zu main.js. Beide
+  // Zweige geprueft: ohne Debugflag genau die fuenf Release-Klassen, MIT
+  // Debugflag alle zehn (Auftrag: "Bei ?debug=1 bleiben alle zehn waehlbar").
   {
-    const playerClasses = Object.entries(T).filter(([, t]) => t.player && t.enabled !== false);
-    const ids = playerClasses.map(([id]) => id).sort();
+    const filterIds = (debug) =>
+      Object.entries(T)
+        .filter(([, t]) => t.player && (t.released !== false || debug))
+        .map(([id]) => id)
+        .sort();
+    const normal = filterIds(false);
     check(
-      ids.length === 2 && ids.join(',') === 'c_necro,player',
-      `Phase 5: Auswahlfilter liefert [${ids.join(', ')}] statt genau [c_necro, player]`,
+      normal.length === 5 && normal.join(',') === 'c_blast,c_flame,c_frost,c_necro,player',
+      `Phase A1: Auswahlfilter (ohne Debug) liefert [${normal.join(', ')}] statt genau die fuenf Release-Klassen`,
+    );
+    const debugged = filterIds(true);
+    check(
+      debugged.length === 10,
+      `Phase A1: Auswahlfilter (mit Debugflag) liefert ${debugged.length} statt 10 Klassen`,
     );
   }
 
   // (c) Keine geloeschten Daten: jede geparkte Klasse loest weiterhin ohne
   // Fehler/NaN in ein Spieler-cfg auf (ein alter Spielstand mit z. B.
-  // starterTank:'c_flame' muss weiter laden -- Testschritt 4).
+  // starterTank:'c_engineer' muss weiter laden -- Testschritt 4).
   {
     for (const id of GEPARKT) {
       let cfg;
       try {
         cfg = resolveCfg(tanksData, id);
       } catch (e) {
-        check(false, `Phase 5: resolveCfg() wirft fuer geparkte Klasse "${id}" (${e.message})`);
+        check(false, `Phase A1: resolveCfg() wirft fuer geparkte Klasse "${id}" (${e.message})`);
         continue;
       }
       check(
         Number.isFinite(cfg.maxHp) && Number.isFinite(cfg.damage),
-        `Phase 5: geparkte Klasse "${id}" loest nicht mehr sauber auf (maxHp=${cfg.maxHp}, damage=${cfg.damage})`,
+        `Phase A1: geparkte Klasse "${id}" loest nicht mehr sauber auf (maxHp=${cfg.maxHp}, damage=${cfg.damage})`,
       );
     }
   }
 
   // (d) c_necro ist unveraendert: sein Passiv (Geistermechanik ueber
-  // cfg.necromancer) ist von Phase 5 nicht betroffen.
+  // cfg.necromancer) ist von der Umstellung nicht betroffen.
   {
     const cfg = resolveCfg(tanksData, 'c_necro');
-    check(cfg.necromancer === true, 'Phase 5: der Nekromant hat sein Passiv verloren');
+    check(cfg.necromancer === true, 'Phase A1: der Nekromant hat sein Passiv verloren');
+  }
+
+  // (e) Jede Release-Klasse hat ein EIGENES Sprite (steht in TANK_TYPES,
+  // KEIN SPRITE_ALIAS-Eintrag) -- Prompt-A1-Punkt 5. Eine geparkte Klasse
+  // darf dagegen weiterhin (noch) auf 'player' aliasen.
+  {
+    for (const id of RELEASED) {
+      check(
+        TANK_TYPES.includes(id) && !(id in SPRITE_ALIAS),
+        `Phase A1: Release-Klasse "${id}" hat kein eigenes Sprite (TANK_TYPES/SPRITE_ALIAS)`,
+      );
+    }
   }
 }
 

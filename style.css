@@ -729,6 +729,14 @@ html, body {
   background: #26241a;
 }
 
+/* AUFTRAG-FERTIGSTELLUNG Phase A1: geparkte Klasse, nur bei ?debug=1
+   ueberhaupt sichtbar -- bleibt klickbar (zum Weitertesten), nur optisch
+   gedaempft, Muster wie .mapnode.unreachable. */
+.classlist button.parked {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
 .classlist .cl-name {
   font-weight: bold;
   color: #eaf2ff;
