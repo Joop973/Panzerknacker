@@ -521,6 +521,10 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   // obigen aus Upgradepool-v2 Phase 8.
   let ghostBulletSpdMult = 1;
   let ghostRangeMultAcc = 1;
+  // Phase M1 (AUFTRAG-UMBAU-V2.md): Makel "Heisser Lauf" -- multiplikativ
+  // gesammelt wie jeder andere *Mult-Kernschluessel, nur bei Bedarf auf cfg
+  // geschrieben (kein Typ setzt einen Basiswert, s. resolveCfg()).
+  let selfImmunityMultAcc = 1;
   for (const id in U) {
     const raw = U[id].core;
     const lvl = l(id);
@@ -597,6 +601,12 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     if (c.lightningRangeBonus) cfg.lightningRangeBonus = (cfg.lightningRangeBonus || 0) + c.lightningRangeBonus * lvl;
     if (c.lightningFalloffBonus) cfg.lightningFalloffBonus = (cfg.lightningFalloffBonus || 0) + c.lightningFalloffBonus * lvl;
     if (c.lightningStun) cfg.lightningStun = Math.max(cfg.lightningStun || 0, c.lightningStun);
+    // Phase M1 (AUFTRAG-UMBAU-V2.md, Makel "Heisser Lauf"): multipliziert die
+    // Selbst-Immunitaetszeit gegen die eigene Kugel (state.js: grace). Werte
+    // < 1 verkuerzen sie -- die Untergrenze (data/balance.json: floors
+    // .selfImmunityMinPct) klemmt den GESAMTEN Stapel, nicht diese einzelne
+    // Karte (s. applyCfgFloors() weiter unten in dieser Datei).
+    if (c.selfImmunityMult) selfImmunityMultAcc *= Math.pow(c.selfImmunityMult, lvl);
     // Upgradepool-v2 Phase 8 (Signaturtopf Nekromant): wirken NICHT auf den
     // Spieler selbst, sondern auf die Geistereinheit -- ghost.js:
     // resolveGhostCfg() liest diese Felder aus state.player.cfg.
@@ -1098,6 +1108,7 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   if (ghostHpMultAcc !== 1) cfg.ghostHpMult = (cfg.ghostHpMult || 1) * ghostHpMultAcc;
   if (ghostBulletSpdMult !== 1) cfg.ghostBulletSpeedMult = (cfg.ghostBulletSpeedMult || 1) * ghostBulletSpdMult;
   if (ghostRangeMultAcc !== 1) cfg.ghostRangeMult = (cfg.ghostRangeMult || 1) * ghostRangeMultAcc;
+  if (selfImmunityMultAcc !== 1) cfg.selfImmunityMult = selfImmunityMultAcc;
   // Ausweichen-Kernkarten schalten den Dash frei (unabhaengig von der alten
   // dash-Karte) und verkuerzen die Abklingzeit. Reusen dieselbe dash-Definition.
   // BUGFIX (Codedurchsicht Phase D): der Fallback zeigte bisher auf das seit
@@ -1169,6 +1180,45 @@ export function applyRoomModifier(cfg, modifier, isPlayer) {
     if (modifier.roleOverride) cfg.role = modifier.roleOverride;
   } else if (modifier.noSecondary) {
     cfg.secondaryDisabled = true;
+  }
+  return cfg;
+}
+
+// Phase M1 (AUFTRAG-UMBAU-V2.md): Untergrenzen/Obergrenzen fuer Makel-
+// Kartenstapel. Greift GANZ AM ENDE der Aufloesungskette (state.js: nach
+// applyUpgrades/applyScrapDamage/applyNecroRunScaling/applyRoomModifier/
+// applyRoomContext), NIE pro Karte -- eine einzelne Makel-Karte darf einen
+// Wert unterschreiten, erst die SUMME aller Karten wird geklemmt. Reine
+// Datenuebernahme aus data/balance.json: floors, nichts hartkodiert.
+// `bases` sind die Werte direkt nach resolveCfg() (VOR jeder Karte, s.
+// state.js), fuer die relativen Grenzen (Tempo/Kugeltempo mindestens X % des
+// Basiswerts, Nachladezeit hoechstens X % des Basiswerts). Nur der SPIELER
+// durchlaeuft applyUpgrades() ueberhaupt -- Gegner haben keine Karten/Makel
+// (createState(): enemies gehen direkt ueber applyHpScaling(applyRoomModifier(
+// resolveCfg(...))), nie durch applyUpgrades()) und brauchen diese Funktion
+// deshalb nicht.
+export function applyCfgFloors(cfg, floors, bases) {
+  if (!floors) return cfg;
+  if (floors.speedMinPct != null && bases?.speed) {
+    cfg.speed = Math.max(cfg.speed, bases.speed * floors.speedMinPct);
+  }
+  if (floors.bulletSpeedMinPct != null && bases?.bulletSpeed) {
+    cfg.bulletSpeed = Math.max(cfg.bulletSpeed, bases.bulletSpeed * floors.bulletSpeedMinPct);
+  }
+  if (floors.reloadMaxPct != null && bases?.fireCooldown) {
+    cfg.fireCooldown = Math.min(cfg.fireCooldown, bases.fireCooldown * floors.reloadMaxPct);
+  }
+  if (floors.magazineMin != null) {
+    cfg.magazine = Math.max(cfg.magazine, floors.magazineMin);
+  }
+  if (floors.maxHpMin != null) {
+    cfg.maxHp = Math.max(cfg.maxHp, floors.maxHpMin);
+  }
+  if (floors.resistMin != null && cfg.resist != null) {
+    cfg.resist = Math.max(cfg.resist, floors.resistMin);
+  }
+  if (floors.selfImmunityMinPct != null && cfg.selfImmunityMult != null) {
+    cfg.selfImmunityMult = Math.max(cfg.selfImmunityMult, floors.selfImmunityMinPct);
   }
   return cfg;
 }

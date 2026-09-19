@@ -9442,6 +9442,112 @@ Aufteilung aus Grundsteinumbau Phase 5 (dort nur `player`/`c_necro` frei).
   identischen Seed-Raumzahlen (31/32/29/38/38) wie vor der Änderung.
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
 
+### `AUFTRAG-UMBAU-V2.md` eingegangen — Makel, Dungeon, Kulissen
+**Neu eingegangen: `AUFTRAG-UMBAU-V2.md`** (nur per Chat übergeben, wie
+`AUFTRAG-FERTIGSTELLUNG.md`/`MACHTKURVE.md` — keine der drei existiert als
+Repo-Datei). Greift in `AUFTRAG-FERTIGSTELLUNG.md` Stufe A/E ein und ist bei
+Widersprüchen maßgeblich. Drei Teile: **Makel-System** (jede Karte oberhalb
+`common` trägt einen Malus auf einer ANDEREN Achse als ihr Vorteil, acht
+Makel-Vokabeln, vier Auswege — Werkstatt/Umpolung/Härtung/Narben), **Dungeon-
+Umbau** (Knotenkarte → erkundbare, dunkle Gänge mit hellen, türenverriegelten
+Kampfräumen, um den Bandenschuss-USP zu schützen) und **Kulissen**
+(drei KI-generierte Spielzeug-Kulissen statt einer). Reihenfolge laut
+Auftrag Teil 4: M1/M2 → M3/M4 → 14 Kartenwellen (mit Makel) →
+M5(a–d, Nekromant) → D1 → D2–D6 → G1. Geschätzt ~40 Sitzungen bis zum
+Abschluss von Stufe A/E aus `AUFTRAG-FERTIGSTELLUNG.md`.
+
+### AUFTRAG-UMBAU-V2 — Phase M1 (Engine: Makel tragfähig machen) — gemergt
+Reine Fundament-Phase, **noch keine Makel-Karte existiert** (die baut erst
+M2+) — Ziel war, dass die Engine negative/extreme `core`-Werte aushält,
+bevor überhaupt eine Karte sie erzeugen kann.
+- **Analyse (Aufgabe 1, mit Freigabe abgeschlossen)**: jeder `core`-Schlüssel
+  aus der A0-Tabelle wurde gegen den echten Code geprüft (`cfg.js`/
+  `state.js`/`tank.js`/`bullet.js`/`renderer.js`). **Korrektur an der
+  Auftragsprämisse**: „Nur `maxHp` hat eine Untergrenze (`cfg.js:1140`)"
+  stimmt nicht ganz — diese Zeile liegt in `applyHpScaling()`, die laut
+  eigenem Kommentar **ausschließlich für Gegner** läuft; der **Spieler**
+  hatte vor dieser Phase gar keine `maxHp`-Untergrenze. **Zwei echte,
+  sicherheitskritische Funde**: (1) `resistAdd` — die Resistenzformel
+  (`Schaden/(1+resist/100)`) lässt bei `resist ≤ -100` den Nenner auf 0
+  oder negativ fallen → `Infinity`-Schaden bzw. Vorzeichenwechsel
+  (Heilung statt Schaden), das bestehende `Math.max(1,...)` fängt nur den
+  Vorzeichenwechsel-Fall ab, nicht `Infinity`; (2) `hpAdd` ohne
+  Spieler-Untergrenze → `createTank()` setzt `hp = maxHp`, ein Stapel
+  „Blechhaut" kann den Run beim Raumstart lautlos unspielbar machen, ohne
+  dass je `killTank()` läuft. Zwei weitere, klar reproduzierbare
+  Softlocks ohne echten Absturz: `magAdd`/`magazineFixed` ≤0 sperrt das
+  Feuern dauerhaft (`magazineOf()` ≤0 → `liveBulletsOf() >= mag` ist
+  immer wahr), `speedMult`/`bulletSpeedMult` = 0 friert Bewegung/Geschosse
+  ein (eine Kugel mit Tempo 0 erreicht nie `maxDistance` und blockiert ein
+  Magazinplatz für immer). Mehrere Schlüssel sind bereits strukturell
+  sicher: `shotExplosionRadius`/`schrapnellCount`/`fireSpreadRadius`/
+  `poisonSpreadRadius`/`lightningStun` laufen über `Math.max(aktuell, x)`
+  (ein negativer Wert wird einfach ignoriert), `shieldMaxAdd` ist über den
+  `> 0`-Gate im Renderer UND die Regen-Bedingung (`shield < shieldMax`)
+  gegen jeden negativen/0-Wert abgesichert.
+- **`data/balance.json: floors`** (neuer Block, sieben Werte, alle
+  datengetrieben statt hartkodiert): `speedMinPct: 0.4`, `magazineMin: 2`,
+  `reloadMaxPct: 2.0`, `maxHpMin: 30`, `resistMin: -50` (die vier
+  Auftrags-Startvorschläge plus die explizit im Auftrag verlangte fünfte),
+  dazu **zwei eigene Ergänzungen** über die Auftragsliste hinaus (Aufgabe 1
+  fand sie als echte Risiken, Aufgabe 3 verlangt „Untergrenzen für ALLE
+  gefährdeten Kennwerte"): `bulletSpeedMinPct: 0.4` und
+  `selfImmunityMinPct: 0.3`.
+- **`cfg.js: applyCfgFloors(cfg, floors, bases)`** (neu, exportiert):
+  klemmt **ganz am Ende** der Auflösungskette — in `state.js` als
+  äußerste Funktion um die bestehende `applyRoomContext(applyRoomModifier(
+  applyNecroRunScaling(applyScrapDamage(applyUpgrades(...)))))`-Kette
+  gelegt, an BEIDEN Stellen, die den Spieler erzeugen (`createState()` UND
+  `respawnPlayer()`) — greift damit nach jeder Karte UND nach jedem
+  Raum-Modifikator, nie pro Karte einzeln (Auftragsvorgabe 5). `bases`
+  (Snapshot von `speed`/`bulletSpeed`/`fireCooldown` DIREKT nach
+  `resolveCfg()`, vor jeder Karte) sind eigenständige Zahlen-Kopien, keine
+  zweite Objektreferenz — die Auflösungskette mutiert dasselbe cfg-Objekt
+  mehrfach in place, eine geteilte Referenz wäre beim Lesen längst
+  verändert. **Nur der Spieler durchläuft `applyCfgFloors()`** — Gegner
+  haben keine Karten/Makel und laufen nie durch `applyUpgrades()`
+  (`createState()`: `applyHpScaling(applyRoomModifier(resolveCfg(...)))`,
+  ohne Upgrade-Kette).
+- **`selfImmunityMult`** (neuer `core`-Schlüssel für „Heißer Lauf",
+  multiplikativ gesammelt wie jeder andere `*Mult`-Schlüssel, nur bei
+  Bedarf auf `cfg` geschrieben): `state.js`s Selbst-Immunitätsfenster
+  (`grace`, bisher ein einziger konstanter Wert außerhalb der
+  Bullet-Schleife) wird jetzt **pro Kugel** mit
+  `b.owner?.cfg?.selfImmunityMult ?? 1` multipliziert — der weitaus
+  häufigste Fall (kein Makel aktiv) bleibt dadurch bit-identisch zum
+  Vorher-Zustand.
+- **Neuer Testabschnitt 84** (`tests/regression.mjs`): mit einem
+  **synthetischen** Zehn-Karten-Pool geprüft (Faustregel „eigene Zahlen
+  statt aktuelle Datenlage" — es gibt ja noch keine echte Makel-Karte),
+  zwei Achsen doppelt besetzt (`speedMult`/`hpAdd`), um echtes Stapeln
+  derselben Art zu simulieren. Prüft: Struktur (alle sieben `floors`-Werte
+  vorhanden), Spielbarkeit (Panzer lebt, **jeder** numerische `cfg`-Wert
+  ist endlich — generischer NaN-Scan über das ganze cfg-Objekt statt
+  einzelner Feldprüfungen), jeder Floor einzeln gegen den ECHTEN
+  Basiswert (nicht nur „irgendeine positive Zahl"), die Resistenzformel
+  bleibt am gefloorten Panzer endlich-positiv, 30 echte `stepState()`-
+  Ticks inklusive eines eigenen Schusses stürzen nicht ab (übt
+  `selfImmunityMult` im echten Trefferpfad aus), und eine **eingebaute
+  Gegenprobe** (`applyCfgFloors(cfg, null, bases)` direkt neben
+  `applyCfgFloors(cfg, floors, bases)`) zeigt, dass dieselben Rohwerte
+  OHNE Floors tatsächlich außerhalb der Grenzen liegen — der Test misst
+  also wirklich die Wirkung der Floors, nicht zufällig unauffällige Werte.
+- **Pflicht-Gegenprobe am echten Quellcode bestanden**: beide
+  `applyCfgFloors(...)`-Aufrufe in `state.js` temporär auf `null` gesetzt
+  (Floors deaktiviert) → genau die acht erwarteten Abschnitt-84-Prüfungen
+  wurden rot (u. a. `hp` sprang auf `-900`, `resist` auf `-500`,
+  `selfImmunityMult` auf `0.01`), sonst nichts — danach zurückgesetzt,
+  volle Suite wieder grün mit identischen Seed-Raumzahlen (31/32/29/38/38)
+  wie vor der Phase (reines Refactoring für das aktuelle, noch
+  Makel-lose Spiel — kein Verhalten geändert).
+- `sw.js` auf `v124` gebumpt (+ `telemetry.js: GAME_VERSION` mitgezogen) —
+  laut ausdrücklicher Phasenvorgabe in `AUFTRAG-UMBAU-V2.md` („Danach:
+  Suite grün, CLAUDE.md aktualisieren, sw.js bumpen, PR mergen" steht in
+  JEDEM Phasenprompt, unabhängig von Asset-Änderungen), abweichend von der
+  sonst in diesem Projekt üblichen Konvention „kein Bump ohne neues/
+  geändertes Asset" — dieses Dokument ist bei Widersprüchen maßgeblich.
+  **Nächste Sitzung: Phase M2** (Datenschema und Anzeige).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
