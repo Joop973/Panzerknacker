@@ -27,7 +27,7 @@ import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorks
 import { traceTrajectory } from '../src/game/bullet.js';
 import { validateArenas } from '../src/game/generator.js';
 import { createMine, updateMines } from '../src/game/mine.js';
-import { resolveCfg, applyUpgrades } from '../src/game/cfg.js';
+import { resolveCfg, applyUpgrades, applyCfgFloors } from '../src/game/cfg.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const load = (n) => JSON.parse(readFileSync(join(root, 'data', n + '.json'), 'utf8'));
@@ -16133,6 +16133,126 @@ for (const seed of SEEDS) {
     const lostLow = shootAt(0.2); // unter der 30%-Schwelle
     const lostHigh = shootAt(0.8); // ueber der Schwelle
     check(lostLow > lostHigh, `Abschnitt 83 (e): sockel_fangschuss macht gegen ein Ziel unter 30% nicht mehr Schaden (${lostLow} vs ${lostHigh})`);
+  }
+}
+
+// ---- 84. AUFTRAG-UMBAU-V2.md Phase M1: Makel-Untergrenzen (cfg.js:
+// applyCfgFloors()) -- noch keine echte Makel-Karte existiert (die baut erst
+// M2+), deshalb mit einem SYNTHETISCHEN Pool aus zehn stark negativen/
+// extremen Karten geprueft, nicht mit der aktuellen Datenlage (Faustregel
+// "eigene Zahlen statt aktuelle Datenlage pruefen"). Deckt genau die zwei
+// echten Funde aus der Phase-M1-Analyse ab: resist <= -100 (Infinity/
+// Vorzeichenwechsel in der Resistenzformel) und hpAdd ohne jede Untergrenze
+// fuer den Spieler (cfg.js:1140 schuetzt nur Gegner-Skalierung).
+{
+  const { createState, stepState } = await import('../src/game/state.js');
+  const { createBullet } = await import('../src/game/bullet.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+  const CMD0 = { move: { x: 0, y: 0 }, aim: { x: 0, y: 0 }, fire: false, mine: false, dash: false };
+
+  // Zehn synthetische Makel-Karten, je EINE pro gefaehrdeter Achse (zwei
+  // Achsen doppelt besetzt, um echtes "Stapeln derselben Art" zu simulieren:
+  // m1/m2 -> speedMult, m3/m4 -> hpAdd). Werte bewusst extremer als jeder
+  // realistische Makel-Schweregrad (5/10/18 %), damit die Untergrenzen
+  // wirklich greifen muessen, nicht nur zufaellig innerhalb liegen.
+  const stackedUps = {
+    upgrades: {
+      m1_speed: { id: 'm1_speed', core: { speedMult: 0.01 } },
+      m2_speed2: { id: 'm2_speed2', core: { speedMult: 0.01 } },
+      m3_hp: { id: 'm3_hp', core: { hpAdd: -500 } },
+      m4_hp2: { id: 'm4_hp2', core: { hpAdd: -500 } },
+      m5_reload: { id: 'm5_reload', core: { reloadMult: 3.0 } },
+      m6_mag: { id: 'm6_mag', core: { magAdd: -5 } },
+      m7_bulletspeed: { id: 'm7_bulletspeed', core: { bulletSpeedMult: 0.01 } },
+      m8_scrap: { id: 'm8_scrap', core: { scrapAdd: -20 } },
+      m9_resist: { id: 'm9_resist', core: { resistAdd: -500 } },
+      m10_selfimm: { id: 'm10_selfimm', core: { selfImmunityMult: 0.01 } },
+    },
+  };
+  const stackedChosen = Object.fromEntries(Object.keys(stackedUps.upgrades).map((id) => [id, 1]));
+
+  const st = createState(tanksData, tilesData, {
+    genRng: rngFor(1, 1, 'rooms'),
+    enemyTypes: ['t_brown'],
+    aiSeed: hashSeed(1, 1, 'ai'),
+    playerUpgrades: stackedChosen,
+    upgradesData: stackedUps,
+    equippedSecondary: 'mine',
+    transform: {},
+    starterTank: 'player',
+  });
+  const cfg = st.player.cfg;
+  const floors = tanksData.balance.floors;
+  const baseSpeed = resolveCfg(tanksData, 'player').speed;
+  const baseBulletSpeed = resolveCfg(tanksData, 'player').bulletSpeed;
+  const baseFireCooldown = resolveCfg(tanksData, 'player').fireCooldown;
+
+  // (a) Struktur: der floors-Block existiert mit allen sieben Schluesseln.
+  check(!!floors, 'Abschnitt 84 (a): data/balance.json hat keinen "floors"-Block');
+  for (const k of ['speedMinPct', 'bulletSpeedMinPct', 'magazineMin', 'reloadMaxPct', 'maxHpMin', 'resistMin', 'selfImmunityMinPct']) {
+    check(floors?.[k] != null, `Abschnitt 84 (a): floors.${k} fehlt`);
+  }
+
+  // (b) Spielbarkeit: der Panzer existiert, lebt, und JEDER numerische
+  // cfg-Wert ist endlich -- kein NaN, kein Absturz (dieselbe Fehlerklasse
+  // wie "non-finite ab Mitte Akt 2").
+  check(!!st.player && st.player.alive, 'Abschnitt 84 (b): Panzer mit zehn gestapelten Makel-Karten ist nicht spielbar (kein Panzer oder nicht lebendig)');
+  check(Number.isFinite(st.player.hp) && st.player.hp > 0, `Abschnitt 84 (b): hp ist nicht positiv-endlich (${st.player.hp})`);
+  let nonFinite = null;
+  for (const [k, v] of Object.entries(cfg)) {
+    if (typeof v === 'number' && !Number.isFinite(v)) { nonFinite = k; break; }
+  }
+  check(nonFinite === null, `Abschnitt 84 (b): cfg.${nonFinite} ist nicht endlich (NaN/Infinity)`);
+
+  // (c) Jeder Floor haelt einzeln, gegen den ECHTEN Basiswert (nicht nur
+  // "irgendeine positive Zahl").
+  check(cfg.speed >= baseSpeed * floors.speedMinPct - 1e-6, `Abschnitt 84 (c): speed ${cfg.speed} unter der Untergrenze (${baseSpeed * floors.speedMinPct})`);
+  check(cfg.bulletSpeed >= baseBulletSpeed * floors.bulletSpeedMinPct - 1e-6, `Abschnitt 84 (c): bulletSpeed ${cfg.bulletSpeed} unter der Untergrenze (${baseBulletSpeed * floors.bulletSpeedMinPct})`);
+  check(cfg.magazine >= floors.magazineMin, `Abschnitt 84 (c): magazine ${cfg.magazine} unter der Untergrenze (${floors.magazineMin})`);
+  check(cfg.fireCooldown <= baseFireCooldown * floors.reloadMaxPct + 1e-6, `Abschnitt 84 (c): fireCooldown ${cfg.fireCooldown} ueber der Obergrenze (${baseFireCooldown * floors.reloadMaxPct})`);
+  check(cfg.maxHp >= floors.maxHpMin, `Abschnitt 84 (c): maxHp ${cfg.maxHp} unter der Untergrenze (${floors.maxHpMin})`);
+  check(cfg.resist >= floors.resistMin, `Abschnitt 84 (c): resist ${cfg.resist} unter der Untergrenze (${floors.resistMin})`);
+  check(cfg.selfImmunityMult >= floors.selfImmunityMinPct - 1e-6, `Abschnitt 84 (c): selfImmunityMult ${cfg.selfImmunityMult} unter der Untergrenze (${floors.selfImmunityMinPct})`);
+
+  // (d) Die Resistenzformel selbst bleibt endlich UND positiv -- ohne den
+  // resistMin-Floor waere resistAdd -500*2=-1000 weit unter -100 und liesse
+  // den Nenner (1+resist/100) negativ werden (state.js: applyResistToAmount).
+  st.player.hp = 1000;
+  st.applyDamage(st.player, 100, 'test', {});
+  const dmgTaken = 1000 - st.player.hp;
+  check(Number.isFinite(dmgTaken) && dmgTaken > 0, `Abschnitt 84 (d): Schaden gegen den gefloorten Panzer ist nicht endlich-positiv (${dmgTaken})`);
+
+  // (e) kein Absturz ueber mehrere echte Simulationsschritte, inklusive
+  // eines eigenen Schusses (uebt cfg.selfImmunityMult im Trefferpfad aus,
+  // state.js: baseGrace * selfImmunityMult).
+  let threw = false;
+  try {
+    st.bullets.push(createBullet(st.player.x, st.player.y, 0, {
+      speed: cfg.bulletSpeed, radius: st.data.physics.bulletRadius, owner: st.player, kind: 'bullet', damage: cfg.damage,
+    }));
+    for (let i = 0; i < 30; i++) stepState(st, CMD0, 1 / 60);
+  } catch (e) {
+    threw = true;
+  }
+  check(!threw, 'Abschnitt 84 (e): stepState() stuerzt mit einem zehnfach gefloorten Panzer ab');
+
+  // (f) Pflicht-Gegenprobe: OHNE die Floors (floors: null direkt an
+  // applyCfgFloors) bleiben dieselben Rohwerte tatsaechlich ausserhalb der
+  // Grenzen -- der Test misst also wirklich die Wirkung der Floors, nicht
+  // zufaellig unauffaellige Werte. Baut denselben Aufloesungspfad von Hand
+  // nach (kein zweiter createState-Aufruf noetig).
+  {
+    const raw = applyUpgrades(resolveCfg(tanksData, 'player'), stackedChosen, stackedUps, 'mine', null);
+    const rawFloored = applyCfgFloors({ ...raw }, floors, { speed: baseSpeed, bulletSpeed: baseBulletSpeed, fireCooldown: baseFireCooldown });
+    const rawUnfloored = applyCfgFloors({ ...raw }, null, { speed: baseSpeed, bulletSpeed: baseBulletSpeed, fireCooldown: baseFireCooldown });
+    check(rawUnfloored.resist < floors.resistMin, `Abschnitt 84 (f)-Gegenprobe: resist ohne Floor liegt bereits ueber der Grenze (${rawUnfloored.resist}) -- der synthetische Pool testet den Mechanismus nicht scharf genug`);
+    check(rawFloored.resist >= floors.resistMin, `Abschnitt 84 (f): applyCfgFloors() korrigiert resist nicht (${rawFloored.resist})`);
+    check(rawUnfloored.maxHp < floors.maxHpMin, `Abschnitt 84 (f)-Gegenprobe: maxHp ohne Floor liegt bereits ueber der Grenze (${rawUnfloored.maxHp})`);
+    check(rawFloored.maxHp >= floors.maxHpMin, `Abschnitt 84 (f): applyCfgFloors() korrigiert maxHp nicht (${rawFloored.maxHp})`);
+    check(rawUnfloored.magazine < floors.magazineMin, `Abschnitt 84 (f)-Gegenprobe: magazine ohne Floor liegt bereits ueber der Grenze (${rawUnfloored.magazine})`);
+    check(rawFloored.magazine >= floors.magazineMin, `Abschnitt 84 (f): applyCfgFloors() korrigiert magazine nicht (${rawFloored.magazine})`);
+    check(rawUnfloored.speed < baseSpeed * floors.speedMinPct, `Abschnitt 84 (f)-Gegenprobe: speed ohne Floor liegt bereits ueber der Grenze (${rawUnfloored.speed})`);
+    check(rawFloored.speed >= baseSpeed * floors.speedMinPct - 1e-6, `Abschnitt 84 (f): applyCfgFloors() korrigiert speed nicht (${rawFloored.speed})`);
   }
 }
 

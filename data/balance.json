@@ -65,6 +65,16 @@
   "resist": {
     "divisor": 100
   },
+  "_comment_floors": "AUFTRAG-UMBAU-V2.md Phase M1: Untergrenzen/Obergrenzen, die ein gestapelter Makel-Build nicht unterschreiten/ueberschreiten kann (cfg.js: applyCfgFloors(), greift NACH allen Karten, nicht pro Karte). Zwei echte Gefahrenstellen gefunden: resist <= -100 liesse den Nenner der Resistenzformel (state.js: applyResistToAmount, 1+resist/resist.divisor) auf 0 oder negativ fallen -- Infinity- bzw. Vorzeichen-Schaden, resistMin -50 haelt den Nenner bei mindestens 0.5. hpAdd hat fuer den SPIELER (anders als die Auftragspraemisse annahm) ueberhaupt keine Untergrenze -- cfg.js:1140 (applyHpScaling) laeuft nur fuer Gegner. magazineMin verhindert den Feuersperr-Softlock (magazineOf() <= 0 -> liveBulletsOf() >= mag ist immer wahr). speedMinPct/bulletSpeedMinPct/selfImmunityMinPct sind relativ zum Basiswert VOR jeder Karte (state.js uebergibt ihn als `bases`), reloadMaxPct ebenso (Obergrenze statt Untergrenze -- schlagartig langsames statt schlagartig schnelles Nachladen ist der gefaehrliche Extremfall, kein Absturz, aber Softlock-nah). bulletSpeedMinPct/selfImmunityMinPct sind eigene Ergaenzungen ueber die vier im Auftrag vorgeschlagenen Werte hinaus (Aufgabe 1 fand beide als echte Risiken: eine Kugel mit Tempo 0 erreicht nie maxDistance und blockiert ein Magazinplatz fuer immer; die neue selfImmunityMult-Karte koennte sich sonst auf nahezu 0 stapeln).",
+  "floors": {
+    "speedMinPct": 0.4,
+    "bulletSpeedMinPct": 0.4,
+    "magazineMin": 2,
+    "reloadMaxPct": 2.0,
+    "maxHpMin": 30,
+    "resistMin": -50,
+    "selfImmunityMinPct": 0.3
+  },
   "reflect": {
     "speedMult": 1,
     "pushPx": 2,

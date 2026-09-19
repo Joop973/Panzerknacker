@@ -40,7 +40,7 @@ import { stepSpiderBoss, updateSpiderLegHits, updateSpiderWebs } from './spider.
 import { updateSpiderMines } from './spidermine.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
-import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, applyNecroRunScaling, isBossCfg } from './cfg.js';
+import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, applyNecroRunScaling, applyCfgFloors, isBossCfg } from './cfg.js';
 import { armorBlocks, reflectBullet, reflectFromAim, isLive, flankZone, angleDelta } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
@@ -754,34 +754,46 @@ export function createState(data, tiles, opts) {
       ? hazard.cells.map(({ col, row }) => ({ x: col * CELL, y: row * CELL, w: CELL, h: CELL, type: 'laser', col, row }))
       : [];
 
+  // Phase M1 (AUFTRAG-UMBAU-V2.md): Basiswerte VOR jeder Karte, fuer die
+  // relativen Floors (Tempo/Kugeltempo/Nachladezeit -- applyCfgFloors()
+  // klemmt am Ende der Kette). Eigenstaendige Zahlen-Snapshots statt einer
+  // zweiten resolveCfg()-Referenz: der Aufloesungspfad mutiert dasselbe
+  // Objekt mehrfach in place (applyUpgrades/applyScrapDamage/...), eine
+  // geteilte Objektreferenz waere beim Lesen laengst veraendert.
+  const playerBaseCfg = resolveCfg(data, starterTank);
+  const playerFloorBases = { speed: playerBaseCfg.speed, bulletSpeed: playerBaseCfg.bulletSpeed, fireCooldown: playerBaseCfg.fireCooldown };
   const player = createTank(
     starterTank,
-    applyRoomContext(
-      applyRoomModifier(
-        // Nekromant-V2 Phase 6 (ghost_029/030): permanente Run-Boni NACH dem
-        // Schrottpanzer-Passiv, VOR dem Raum-Modifikator -- gleiche Stelle
-        // wie applyScrapDamage(), ein weiterer "einmal pro Raumaufbau
-        // gebackener" Multiplikator.
-        applyNecroRunScaling(
-        applyScrapDamage(
-          applyUpgrades(
-          resolveCfg(data, starterTank),
-          playerUpgrades,
-          upgradesData,
-          equippedSecondary,
-          equippedGadget,
-          upgradeLevels,
-          levelBalance,
+    applyCfgFloors(
+      applyRoomContext(
+        applyRoomModifier(
+          // Nekromant-V2 Phase 6 (ghost_029/030): permanente Run-Boni NACH dem
+          // Schrottpanzer-Passiv, VOR dem Raum-Modifikator -- gleiche Stelle
+          // wie applyScrapDamage(), ein weiterer "einmal pro Raumaufbau
+          // gebackener" Multiplikator.
+          applyNecroRunScaling(
+          applyScrapDamage(
+            applyUpgrades(
+            playerBaseCfg,
+            playerUpgrades,
+            upgradesData,
+            equippedSecondary,
+            equippedGadget,
+            upgradeLevels,
+            levelBalance,
+          ),
+            starterScrap,
+          ),
+          necroRunDmgBonus,
+          necroRunHpBonus,
+          ),
+          modifier,
+          true,
         ),
-          starterScrap,
-        ),
-        necroRunDmgBonus,
-        necroRunHpBonus,
-        ),
-        modifier,
-        true,
+        roomContext,
       ),
-      roomContext,
+      data.balance?.floors,
+      playerFloorBases,
     ),
     room.playerSpawn.x,
     room.playerSpawn.y,
@@ -1972,30 +1984,38 @@ function spawnRadialBullets(state, owner, x, y, count, speed) {
 // Spawns; Geschosse und Minen werden entfernt; zerstoerte Waende bleiben
 // zerstoert.
 function respawnPlayer(state) {
+  // Phase M1 (AUFTRAG-UMBAU-V2.md): siehe Kommentar bei createState() --
+  // dieselbe Basiswert-Erfassung fuer applyCfgFloors().
+  const respawnBaseCfg = resolveCfg(state.data, state.starterTank);
+  const respawnFloorBases = { speed: respawnBaseCfg.speed, bulletSpeed: respawnBaseCfg.bulletSpeed, fireCooldown: respawnBaseCfg.fireCooldown };
   const fresh = createTank(
     state.starterTank,
-    applyRoomContext(
-      applyRoomModifier(
-        applyNecroRunScaling(
-        applyScrapDamage(
-          applyUpgrades(
-            resolveCfg(state.data, state.starterTank),
-            state.playerUpgrades,
-            state.upgradesData,
-            state.equippedSecondary,
-            state.equippedGadget,
-            state.upgradeLevels,
-            state.levelBalance,
+    applyCfgFloors(
+      applyRoomContext(
+        applyRoomModifier(
+          applyNecroRunScaling(
+          applyScrapDamage(
+            applyUpgrades(
+              respawnBaseCfg,
+              state.playerUpgrades,
+              state.upgradesData,
+              state.equippedSecondary,
+              state.equippedGadget,
+              state.upgradeLevels,
+              state.levelBalance,
+            ),
+            state.starterScrap,
           ),
-          state.starterScrap,
+          state.necroRunDmgBonus,
+          state.necroRunHpBonus,
+          ),
+          state.modifier,
+          true,
         ),
-        state.necroRunDmgBonus,
-        state.necroRunHpBonus,
-        ),
-        state.modifier,
-        true,
+        state.roomContext,
       ),
-      state.roomContext,
+      state.data.balance?.floors,
+      respawnFloorBases,
     ),
     state.playerSpawn.x,
     state.playerSpawn.y,
@@ -2461,9 +2481,14 @@ export function stepState(state, cmd, dt) {
   // gefaehrlichen eigenen Kugel ist die Frontpanzerung-Reflexion, E3 --
   // ohne Bandenschuss gibt es keinen "erster Abpraller macht sie scharf"-
   // Uebergang mehr, siehe armor.js: isLive()).
-  const grace = state.data.balance.bullet.selfImmunity;
+  const baseGrace = state.data.balance.bullet.selfImmunity;
   for (const b of state.bullets) {
     if (b.dead) continue;
+    // Phase M1 (AUFTRAG-UMBAU-V2.md, Makel "Heisser Lauf"): der Schuetze
+    // kann seine eigene Selbst-Immunitaet ueber cfg.selfImmunityMult
+    // verkuerzt haben (cfg.js: applyUpgrades()/applyCfgFloors()). `?? 1`
+    // heisst unveraendert -- der weitaus haeufigste Fall (kein Makel aktiv).
+    const grace = baseGrace * (b.owner?.cfg?.selfImmunityMult ?? 1);
     for (const t of state.tanks) {
       if (!t.alive) continue;
       // Geisterpanzer (Phase 7): ihre Kugeln treffen den Spieler nie --
