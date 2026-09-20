@@ -9546,7 +9546,124 @@ bevor überhaupt eine Karte sie erzeugen kann.
   JEDEM Phasenprompt, unabhängig von Asset-Änderungen), abweichend von der
   sonst in diesem Projekt üblichen Konvention „kein Bump ohne neues/
   geändertes Asset" — dieses Dokument ist bei Widersprüchen maßgeblich.
-  **Nächste Sitzung: Phase M2** (Datenschema und Anzeige).
+
+### AUFTRAG-UMBAU-V2 — Phase M2 (Datenschema und Anzeige) — gemergt
+Aufgabe 1 verlangte einen expliziten STOPP: „Schlage mir das genaue Format
+vor und warte auf Freigabe, bevor du es umsetzt." Vorschlag gesendet
+(Schema, `data/makel.json`-Entwurf, cfg.js-Verdrahtungsskizze, Anzeigeplan
+für Upgrade-Screen + Pause-Menü), vom Nutzer mit „Zahlenwerte und weiter"
+freigegeben — die Umsetzung folgt exakt dem Vorschlag. **Weiterhin keine
+Karte trägt ein `makel`-Feld** (kommt erst mit den 14 Kartenwellen nach
+M3/M4) — diese Phase liefert Vokabular, Schema, Verdrahtung und Anzeige,
+geprüft ausschließlich mit synthetischen Testkarten.
+- **`data/makel.json`** (neu): acht Einträge, jeder bindet an genau einen
+  der acht bestehenden generischen `core`-Schlüssel aus der A0-Tabelle
+  (`speedMult`/`hpAdd`/`reloadMult`/`magAdd`/`bulletSpeedMult`/`scrapAdd`/
+  `resistAdd`/`selfImmunityMult`) — bewusst kein neues Effektsystem. Jeder
+  Eintrag trägt `name`/`symbol`/`core`/`schwere.{leicht,mittel,schwer}`.
+  **Eine im Vokabular-Text gefundene Unschärfe selbst aufgelöst**: „Enges
+  Magazin" ist dort als flaches „−1 Geschossplatz" beschrieben, nicht als
+  Prozentskala — `leicht`/`mittel` bleiben bei `-1` (ein Magazinplatz ist
+  bereits die kleinste spürbare Einheit), `schwer` verdoppelt auf `-2`
+  (im Vorschlag genannt, unverändert übernommen).
+- **`cfg.js: applyMakel(entries, vocab, lvl, sm)`** (neu, modulintern in
+  `applyUpgrades()`, direkt neben `scaleCore()` deklariert): löst die
+  `makel[]`-Einträge EINER Karte gegen `data/makel.json` auf und wendet sie
+  über denselben `switch`-Dispatch wie die acht core-Schlüssel selbst an —
+  additive Achsen (`hpAdd`/`magAdd`/`scrapAdd`/`resistAdd`) direkt auf
+  `cfg`, multiplikative (`speedMult`/`reloadMult`/`bulletSpeedMult`/
+  `selfImmunityMult`) über dieselben Sammel-Akkumulatoren (`spdMult`/
+  `selfImmunityMultAcc`), die für die gleichnamigen `core`-Schlüssel ohnehin
+  schon existieren — Bonus und Malus auf derselben Achse verrechnen sich
+  dadurch automatisch zu einem Endwert, statt sich gegenseitig zu
+  überschreiben (Testabschnitt 85 (e)). **Eigenständig vom `core`-Objekt
+  der Karte gehalten** (Auftragsvorgabe): `def.makel` ist ein separates
+  Feld, `applyMakel()` liest nie `def.core` — M3 (Werkstatt) kann später
+  gezielt EINEN Makel-Eintrag entfernen, M4 (Umpolung) einen Makel-Typ
+  run-weit umpolen, ohne den Bonus der Karte je anzufassen. Dieselbe
+  Rastplatz-Stufenskalierung wie der Bonus: alle acht Vokabel-Bindungen
+  enden bewusst auf „Add"/„Mult" (wie die `core`-Schlüssel selbst), `scaleCore
+  ({[def.core]: rawDelta}, stufeMultFor(id))` skaliert den Malus deshalb über
+  denselben Ein-Schlüssel-Umweg wie den Bonus, ohne eine zweite Regel zu
+  brauchen (Testabschnitt 85 (d)). `applyUpgrades()` bekommt dafür einen
+  neuen, achten Parameter `makelVocab` — `state.js` reicht `data.makel` bzw.
+  `state.data.makel` an beiden Aufrufstellen durch (`createState()`,
+  `respawnPlayer()`); `main.js` hängt die neu geladene `data/makel.json` als
+  `tanksData.makel` an, genau wie jeden anderen Datenblock.
+- **Angebots-Passthrough** (`upgradepool.js: makeOffer()`): neues Feld
+  `makel: def.makel || []` im Angebotsobjekt — ohne diese eine Zeile wäre
+  eine Makel-Karte für die UI unsichtbar, weil `makeOffer()` bewusst nur
+  eine kleine Feldauswahl aus der Karte kopiert (Testabschnitt 85 (f), über
+  `rollOffers()` UND `drawOne()`).
+- **Anzeige, immer sichtbar** (Aufgabe 4, „nicht erst beim Antippen"): neue
+  `makelHtml(o, vocab)`-Hilfsfunktion (eigenständig in `upgradescreen.js`
+  UND `roomscreens.js` dupliziert — dasselbe Muster wie die bereits
+  bestehenden, ebenfalls unabhängig berechneten `lvl`/`plus`/`swapWarn`-
+  Bausteine) rendert Symbol + Name + Schweregrad je Makel-Eintrag in einer
+  neuen CSS-Klasse `.pv-makel` (`#d84a4a`, klar unterscheidbar von der
+  Rarity-Rahmenfarbe UND von der orangen Gadget-Tausch-Warnung `.pv-warn`).
+  Der gerenderte Text läuft durch `highlightTerms()` (Champion-/Nekromant-
+  Nachschliff-Glossar) statt nur escaped zu werden — die acht Makel-Namen
+  sind deshalb gleich mit in `data/glossary.json` eingetragen: Tap/Hover auf
+  „Schwerfällig" & Co. zeigt dieselbe Erklärungs-Sprechblase wie jeder
+  andere Fachbegriff, ganz ohne neue UI. Eingehängt in **beide** Kartenquellen,
+  die `run.data.makel` als `ctx.makelVocab` bekommen: den normalen
+  Upgrade-Screen, die garantierte Boss-Belohnung (beide laufen über
+  `upgradeScreen.show()`) und das Shop-Kartenregal.
+- **Pause-Menü „Aktive Makel"** (Aufgabe 5, `hud.js: drawPause()`): neue
+  `activeMakelList(run)` — reine Ableitung aus `run.upgrades` (Stapelzahl)
+  × `run.upgradesData.upgrades[id].makel` × `run.data.makel` (Vokabular),
+  kein eigener Zustand. Zeigt „Symbol Name (Schwere) — Kartenname" je
+  Eintrag, Zeile nur sichtbar, wenn mindestens ein Makel aktiv ist (Muster:
+  die „Aktiv:"-Zeile der Transformationen im Upgrade-Screen).
+- **`data/upgrades.json`**: neuer `_comment_makel`-Schema-Hinweis (optionales
+  `makel: [{id, schwere}]`-Feld, id verweist auf `data/makel.json`) — noch
+  von keiner Karte gesetzt, reine Dokumentation für die kommenden
+  Kartenwellen.
+- **Testabschnitt 82 erweitert** (Aufgabe 6): dieselbe Kartentext-vs.-Wert-
+  Prüfung, die bisher nur `card.core` durchging, läuft jetzt zusätzlich über
+  `card.makel[]` — aktuell ein strukturelles No-op (0 Makel-Karten in beiden
+  Pools), greift aber ab der ersten echten Kartenwelle ohne weitere
+  Teständerung. Dabei einen echten Mechanismus-Fund in der bestehenden,
+  wiederverwendeten Matching-Logik gemacht (nicht im Code, sondern in
+  Testabschnitt 82 selbst): `candidatesFor()` kannte keinen „Betrag eines
+  negativen Add-Werts"-Kandidaten (alle bisherigen `core`-Add-Werte waren
+  positiv) — ein `hpAdd: -15` fand im Text „senkt … um 15" deshalb keine
+  Entsprechung. Um `Math.abs(value)` ergänzt (ändert nichts an den
+  bestehenden, ausschließlich positiven `core`-Prüfungen, `Math.abs(v)===v`
+  dort). Die vier Hilfsfunktionen (`ORDINALS`/`numbersInText`/
+  `candidatesFor`/`fieldHasTextMatch`) sind dafür von Block- auf Modulscope
+  gehoben, damit Testabschnitt 85 sie direkt wiederverwenden kann.
+- **Neuer Testabschnitt 85**: (a) Struktur (acht Einträge, jeder `core`-Wert
+  ist einer der acht bekannten Schlüssel, jede Schwere ≠ 0); (b) Mechanismus
+  Ende-zu-Ende über einen echten `createState()`-Aufruf — eine synthetische
+  Karte mit Bonus (`damageAdd`) auf einer Achse UND Makel
+  („Schwerfällig"/schwer) auf einer ANDEREN wirken gleichzeitig und
+  unabhängig; (c) Stapeln potenziert den Malus wie einen Bonus; (d) die
+  Rastplatz-Stufenskalierung erfasst den Malus wie den Bonus (eigene
+  `bonusPct`); (e) Bonus + Malus zweier verschiedener Karten auf derselben
+  Achse (`bulletSpeedMult`) verrechnen sich zu einem Endwert; (f) Angebots-
+  Passthrough über `rollOffers()`/`drawOne()`; (g) die erweiterte
+  Testabschnitt-82-Logik direkt gegengeprüft (passender vs. fehlender Text).
+  **Pflicht-Gegenproben am echten Quellcode bestanden**: `applyMakel()`-Aufruf
+  in `cfg.js` deaktiviert → genau (b)/(c)/(d)/(e) wurden rot, (a)/(f)/(g)
+  blieben grün (bestätigt: Struktur-/Passthrough-/Matching-Tests sind vom
+  Wirkungsmechanismus unabhängig); `makel: def.makel || []` in
+  `upgradepool.js: makeOffer()` auf `makel: []` zurückgebaut → genau (f)
+  wurde rot; `data/makel.json` gezielt verfälscht (unbekannter `core`-Wert,
+  fehlender `schwere`-Eintrag) → genau (a) wurde rot — alle drei danach
+  zurückgesetzt, volle Suite wieder grün mit identischen Seed-Raumzahlen
+  (31/32/29/38/38) wie vor der Phase.
+- Playwright-Smoke (echter Server, echter Browser): Start + laufender Raum
+  ohne Konsolenfehler, Pause-Overlay (übt `drawPause()`/`activeMakelList()`
+  im echten Renderpfad aus) ebenfalls fehlerfrei — mangels einer echten
+  Makel-Karte noch ohne sichtbare `.pv-makel`-Zeile, das folgt mit der
+  ersten echten Kartenwelle.
+- `sw.js` auf `v125` gebumpt (`data/makel.json` neu in `ASSETS`) +
+  `telemetry.js: GAME_VERSION` mitgezogen — wie bei M1 laut expliziter
+  Phasenvorgabe in `AUFTRAG-UMBAU-V2.md`, unabhängig davon, dass hier
+  tatsächlich auch ein neues Asset dazukam. **Nächste Sitzung: Phase M3**
+  (Werkstatt — gezielte Entfernung eines einzelnen Makel-Eintrags).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert

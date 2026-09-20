@@ -91,6 +91,12 @@ async function loadData() {
     // fuer run.js: buyEnemies() -- an diffData angehaengt, s. u. (gehoert
     // inhaltlich zu danger/acts, nicht zu tanksData).
     'compositions',
+    // Phase M2 (AUFTRAG-UMBAU-V2.md): das Makel-Vokabular. Noch keine Karte
+    // in upgrades.json traegt ein makel[]-Feld (kommt erst mit den 14
+    // Kartenwellen nach M3/M4) -- die Datei wird trotzdem schon jetzt
+    // geladen, damit cfg.js/die Anzeige sie ab dem ersten echten Makel
+    // sofort lesen koennen, ohne main.js noch einmal anzufassen.
+    'makel',
   ];
   const out = [];
   for (const n of names) {
@@ -134,6 +140,7 @@ async function init() {
     necroUpgradesData,
     glossaryData,
     compositionsData,
+    makelData,
   ] = await loadData();
   // Champion-/Nekromant-Nachschliff Abschnitt 13: Glossar-Begriffe EINMAL
   // laden, dann JEDER Kartentext/UI-Text kann highlightTerms() darauf
@@ -156,6 +163,11 @@ async function init() {
   // nicht zu tanksData -- run.js: buyEnemies() liest sie ueber `diff
   // .compositions`.
   diffData.compositions = compositionsData.compositions;
+  // Phase M2 (AUFTRAG-UMBAU-V2.md): das Makel-Vokabular haengt an tanksData
+  // wie jeder andere Datenblock -- cfg.js: applyUpgrades() liest es ueber
+  // run.data.makel/state.data.makel (dieselbe Stelle, ueber die es auch
+  // resolveCfg() erreicht).
+  tanksData.makel = makelData.makel;
   tanksData.balance = balanceData;
   tanksData.events = eventsData; // Phase 4: Event-Raeume (run.data.events)
   tanksData.arenas = arenasData; // Phase 0b: feste Layouts (Arena-Weiche)
@@ -792,6 +804,9 @@ async function init() {
         // ein label-Feld dort).
         equippedGadget: run.equippedGadget,
         gadgetLabel: (id) => run.data.secondaries?.[id]?.label || id,
+        // Phase M2 (AUFTRAG-UMBAU-V2.md): Vokabular fuer die Makel-Zeile
+        // (Symbol/Name aus der id, die Schwere traegt jede Karte selbst).
+        makelVocab: run.data.makel,
         onPick: (idx) => {
           // Telemetrie: gewaehlte Karte + abgelehnte Alternativen (id + tag).
           const offers = run.pendingOffers;
@@ -869,6 +884,9 @@ async function init() {
         hasDash: (run.upgrades.dash || 0) > 0,
         equippedGadget: run.equippedGadget,
         gadgetLabel: (id) => run.data.secondaries?.[id]?.label || id,
+        // Phase M2 (AUFTRAG-UMBAU-V2.md): Vokabular fuer die Makel-Zeile
+        // (Symbol/Name aus der id, die Schwere traegt jede Karte selbst).
+        makelVocab: run.data.makel,
         onPick: (idx) => {
           const offers = run.pendingOffers;
           telemetry.recordUpgrade({
@@ -917,6 +935,8 @@ async function init() {
         getWorkbenchOptions: () => workbenchOptions(run),
         // Grundsteinumbau Phase 7: "+"-Suffix auch im Shop-Regal.
         getOffers: () => run.shopOffers?.map((o) => ({ ...o, stufe: run.upgradeLevels[o.id] || 0 })),
+        // Phase M2 (AUFTRAG-UMBAU-V2.md): Makel-Vokabular fuer die Shop-Karten.
+        makelVocab: run.data.makel,
         getEquippedSecondary: () => run.equippedGadget, // P4: der Shop tauscht Gadgets
         // Nutzerwunsch: der Nekromant hat keinen Gadget-Slot -- die Sektion
         // "Gadget tauschen" soll fuer ihn erst gar nicht angezeigt werden

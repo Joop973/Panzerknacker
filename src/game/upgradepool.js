@@ -180,6 +180,12 @@ function makeOffer(def, chosen) {
     // durch -- die UI zeigt bei isUnique keine Stufenzahl (immer 1), sonst
     // nur die Stufe selbst ohne Obergrenze (kein "X/Y", kein "MAX").
     isUnique: !!def.isUnique,
+    // Phase M2 (AUFTRAG-UMBAU-V2.md): Makel-Eintraege durchreichen, damit
+    // die Kartenanzeige sie VOR der Wahl zeigen kann (Auftrag Aufgabe 4:
+    // "immer sichtbar, nicht nur beim Antippen"). Leeres Array bei Karten
+    // ohne Makel (aktuell noch alle -- die 14 Kartenwellen kommen erst nach
+    // M3/M4).
+    makel: def.makel || [],
   };
 }
 

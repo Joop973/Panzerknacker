@@ -229,7 +229,7 @@ export function applyNecroRunScaling(cfg, runDmgBonusPct, runHpBonusPct) {
 // die Sockelkarten (data/upgrades.json) sind aktuell erreichbar -- sie
 // nutzen ausschliesslich hpAdd/speedMult/magAdd/reloadMult, alle vier
 // korrekt additiv bzw. multiplikativ erfasst.
-export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadget, upgradeLevels, levelBalance) {
+export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadget, upgradeLevels, levelBalance, makelVocab) {
   if (!ups) return cfg;
   const l = (k) => ups[k] || 0;
   const bonusPct = levelBalance?.bonusPct ?? 0;
@@ -255,6 +255,37 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       }
     }
     return out;
+  }
+  // Phase M2 (AUFTRAG-UMBAU-V2.md): loest die Makel-Eintraege EINER Karte
+  // gegen das Vokabular (data/makel.json) auf und wendet sie auf denselben
+  // Kanal an wie der jeweils gebundene generische core-Schluessel -- additive
+  // Achsen direkt auf cfg, multiplikative ueber dieselben Sammel-
+  // Akkumulatoren (spdMult/selfImmunityMultAcc), die weiter unten fuer die
+  // gleichnamigen core-Schluessel ohnehin schon deklariert sind. Dadurch
+  // verrechnen sich Bonus UND Malus einer Karte korrekt zu einem Endwert,
+  // statt sich gegenseitig zu ueberschreiben. Alle acht Vokabel-Bindungen
+  // (data/makel.json) enden bereits auf "Add"/"Mult" wie die core-Schluessel
+  // selbst -- scaleCore() skaliert den Malus deshalb ueber denselben
+  // Ein-Schluessel-Umweg wie den Bonus, ohne eine zweite Regel zu brauchen.
+  function applyMakel(entries, vocab, lvl, sm) {
+    if (!vocab) return;
+    for (const entry of entries) {
+      const def = vocab[entry.id];
+      const raw = def?.schwere?.[entry.schwere];
+      if (def == null || raw == null) continue;
+      const delta = scaleCore({ [def.core]: raw }, sm)[def.core];
+      switch (def.core) {
+        case 'speedMult': cfg.speed *= Math.pow(delta, lvl); break;
+        case 'hpAdd': cfg.maxHp += delta * lvl; break;
+        case 'reloadMult': cfg.fireCooldown *= Math.pow(delta, lvl); break;
+        case 'magAdd': cfg.magazine += delta * lvl; break;
+        case 'bulletSpeedMult': spdMult *= Math.pow(delta, lvl); break;
+        case 'scrapAdd': cfg.scrapBonusPerRoom = (cfg.scrapBonusPerRoom || 0) + delta * lvl; break;
+        case 'resistAdd': cfg.resist = (cfg.resist || 0) + delta * lvl; break;
+        case 'selfImmunityMult': selfImmunityMultAcc *= Math.pow(delta, lvl); break;
+        default: break; // unbekannter/zukuenftiger core-Schluessel: bewusst ignoriert
+      }
+    }
   }
   cfg.magazine += 2 * l('magazin');
   // Grundsteinumbau Phase 1: die Karte 'abpraller' (Bandenschuss) ist ohne
@@ -530,6 +561,14 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     const lvl = l(id);
     if (!raw || !lvl) continue;
     const c = scaleCore(raw, stufeMultFor(id));
+    // Phase M2 (AUFTRAG-UMBAU-V2.md): Makel der Karte -- EIGENSTAENDIG vom
+    // core-Objekt oben gehalten (M3/M4 muessen genau EINEN Makel EINER Karte
+    // entfernen bzw. seinen Typ run-weit umpolen, ohne den core-Bonus der
+    // Karte anzufassen). Jeder Vokabel-Eintrag bindet an einen bereits
+    // bestehenden generischen core-Schluessel -- dieselbe Rastplatz-
+    // Stufenskalierung (scaleCore) wie der Bonus selbst, ueber denselben
+    // Ein-Schluessel-Umweg (applyMakel(), unten in dieser Datei definiert).
+    if (U[id].makel && U[id].makel.length) applyMakel(U[id].makel, makelVocab, lvl, stufeMultFor(id));
     if (c.damageAdd) cfg.damage += c.damageAdd * lvl;
     if (c.reloadMult) cfg.fireCooldown *= Math.pow(c.reloadMult, lvl);
     if (c.speedMult) cfg.speed *= Math.pow(c.speedMult, lvl);

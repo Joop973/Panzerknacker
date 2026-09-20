@@ -4,6 +4,21 @@
 
 import { highlightTerms } from './glossary.js';
 
+// Phase M2 (AUFTRAG-UMBAU-V2.md): dieselbe Makel-Zeile wie im Upgrade-Screen
+// (src/ui/upgradescreen.js) -- eigenstaendig hier dupliziert statt geteilt,
+// gleiches Muster wie die bestehenden lvl-/plus-/swapWarn-Bausteine, die
+// beide Dateien ebenfalls unabhaengig berechnen.
+function makelHtml(o, vocab) {
+  if (!o.makel || !o.makel.length || !vocab) return '';
+  const parts = o.makel
+    .map((m) => {
+      const def = vocab[m.id];
+      return def ? `${def.symbol} ${def.name} (${m.schwere})` : null;
+    })
+    .filter(Boolean);
+  return parts.length ? `<span class="pv-makel">${highlightTerms(parts.join(' · '))}</span>` : '';
+}
+
 function makeOverlay(id) {
   const el = document.createElement('div');
   el.className = 'overlay hidden';
@@ -99,7 +114,7 @@ export function createShopScreen() {
           ? `<span class="pv-warn">Ersetzt: ${ctx.secondariesData?.[equippedNow]?.label || equippedNow}</span>`
           : '';
       card.innerHTML =
-        `<strong>${o.name}${plus}${lvl}</strong><span>${highlightTerms(o.description)}</span>${swapWarn}` +
+        `<strong>${o.name}${plus}${lvl}</strong><span>${highlightTerms(o.description)}</span>${swapWarn}${makelHtml(o, ctx.makelVocab)}` +
         `<span class="price">${o.price}⚙</span>`;
       if (scrap < o.price) {
         card.classList.add('tooexpensive');

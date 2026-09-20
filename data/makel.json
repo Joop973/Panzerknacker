@@ -1,0 +1,14 @@
+{
+  "_comment": "AUFTRAG-UMBAU-V2.md Teil 1.2/1.3. schwere-Werte sind der core-Delta je Stufe, NICHT prozentual auf der Karte gespeichert -- eine Umpolung/Werkstatt-Entfernung braucht die Zahl an genau einer Stelle. Jedes Makel-Objekt bindet an genau EINEN bestehenden generischen cfg.js-core-Schluessel (kein neues Effektsystem).",
+  "_comment_enges_magazin": "Enges Magazin ist im Vokabular als flaches '-1 Geschossplatz' beschrieben, nicht als Prozentskala -- leicht/mittel bleiben bei -1 (ein Magazinplatz ist bereits die kleinste spuerbare Einheit), schwer verdoppelt auf -2.",
+  "makel": {
+    "schwerfaellig":    { "name": "Schwerfällig",     "core": "speedMult",        "symbol": "🐌", "schwere": { "leicht": 0.95, "mittel": 0.90, "schwer": 0.82 } },
+    "blechhaut":        { "name": "Blechhaut",        "core": "hpAdd",            "symbol": "🛢️", "schwere": { "leicht": -8,    "mittel": -15,  "schwer": -25 } },
+    "klemmender_lader": { "name": "Klemmender Lader", "core": "reloadMult",       "symbol": "⏳", "schwere": { "leicht": 1.05, "mittel": 1.10, "schwer": 1.18 } },
+    "enges_magazin":    { "name": "Enges Magazin",    "core": "magAdd",           "symbol": "🔒", "schwere": { "leicht": -1,    "mittel": -1,   "schwer": -2 } },
+    "kurzer_lauf":      { "name": "Kurzer Lauf",      "core": "bulletSpeedMult",  "symbol": "🔫", "schwere": { "leicht": 0.95, "mittel": 0.90, "schwer": 0.82 } },
+    "teuer":            { "name": "Teuer",            "core": "scrapAdd",         "symbol": "💸", "schwere": { "leicht": -1,    "mittel": -2,   "schwer": -3 } },
+    "duenne_platte":    { "name": "Dünne Platte",     "core": "resistAdd",        "symbol": "🪫", "schwere": { "leicht": -5,    "mittel": -10,  "schwer": -18 } },
+    "heisser_lauf":     { "name": "Heißer Lauf",      "core": "selfImmunityMult", "symbol": "🔥", "schwere": { "leicht": 0.95, "mittel": 0.90, "schwer": 0.82 } }
+  }
+}
