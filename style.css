@@ -260,6 +260,20 @@ html, body {
   font-weight: bold;
 }
 
+/* Phase M2 (AUFTRAG-UMBAU-V2.md): der Makel einer Karte -- eigene,
+   erkennbar ANDERE Farbe als der Bonus (die Rarity-Rahmenfarbe unten) und
+   als die Gadget-Tausch-Warnung oben (#ff8a5c), damit "Vorteil" und
+   "Nachteil auf einer anderen Achse" auf einen Blick unterscheidbar bleiben.
+   Immer sichtbar, kein Tooltip -- anders als der Glossar-Hover fuer
+   Fachbegriffe im Kartentext. */
+.cards .card .pv-makel,
+.shopcards .shopcard .pv-makel {
+  display: block;
+  font-size: 11px;
+  color: #d84a4a;
+  font-weight: bold;
+}
+
 /* Rahmenfarbe nach Seltenheit (Upgradepool-v2 Phase 1: 5 statt 3 Stufen;
    Nekromant-V2 Phase 1: 'unique' -> 'uncommon' umbenannt, dieselben fuenf
    Farben bleiben an derselben Stelle in der Reihenfolge common < uncommon <

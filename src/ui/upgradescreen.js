@@ -13,6 +13,27 @@
 // mehr, s. u. (Stufenanzeige).
 import { highlightTerms } from './glossary.js';
 
+// Phase M2 (AUFTRAG-UMBAU-V2.md, Aufgabe 4): der Makel einer Karte ist
+// IMMER sichtbar, nicht erst beim Antippen -- anders als der Kartentext, der
+// bei Bedarf per Glossar-Tooltip erklaert wird. o.makel kommt aus
+// upgradepool.js: makeOffer() (id+Schwere je Eintrag), vocab aus
+// run.data.makel (main.js). Ohne bekannte Vokabel-id (aeltere/synthetische
+// Daten) wird der Eintrag stillschweigend uebersprungen statt "undefined"
+// anzuzeigen.
+function makelHtml(o, vocab) {
+  if (!o.makel || !o.makel.length || !vocab) return '';
+  const parts = o.makel
+    .map((m) => {
+      const def = vocab[m.id];
+      return def ? `${def.symbol} ${def.name} (${m.schwere})` : null;
+    })
+    .filter(Boolean);
+  // highlightTerms() escaped den Text UND markiert den Makel-Namen selbst
+  // blau, falls er im Glossar steht (data/glossary.json) -- Tap/Hover zeigt
+  // dann dieselbe Erklaerung wie bei jedem anderen Fachbegriff.
+  return parts.length ? `<span class="pv-makel">${highlightTerms(parts.join(' · '))}</span>` : '';
+}
+
 const RARITY = {
   common: 'Gewöhnlich',
   uncommon: 'Ungewöhnlich',
@@ -124,7 +145,7 @@ export function createUpgradeScreen() {
         o.tag === 'gadget' && ctx.equippedGadget && ctx.equippedGadget !== o.id
           ? `<span class="pv-warn">Ersetzt: ${ctx.gadgetLabel?.(ctx.equippedGadget) ?? ctx.equippedGadget}</span>`
           : '';
-      card.innerHTML = `<strong>${o.name}${plus}${lvl}</strong><span>${highlightTerms(o.description)}</span>${swapWarn}${meta}`;
+      card.innerHTML = `<strong>${o.name}${plus}${lvl}</strong><span>${highlightTerms(o.description)}</span>${swapWarn}${makelHtml(o, ctx.makelVocab)}${meta}`;
       card.addEventListener('click', () => {
         el.classList.add('hidden');
         ctx.onPick(i);

@@ -12,6 +12,15 @@
     "Elitegegner": "Ein Gegner mit zusaetzlichem Affix und mehr Lebenspunkten als ein gewoehnlicher Gegner. Kann wiederbelebt werden, Bosse dagegen nie.",
     "Einzigartig": "Eine Karte mit diesem Merkmal laesst sich in einem Run nur EIN einziges Mal waehlen und verschwindet danach aus jedem Angebot -- Rastplatz und Werkbank inbegriffen.",
     "Raumende": "Der Zeitpunkt, an dem der aktuelle Raum geraeumt wird -- viele zeitlich befristete Boni gelten genau bis dahin.",
-    "Geisterlimit": "Wie viele gewoehnliche Geisterpanzer gleichzeitig aktiv sein koennen. Der Champion zaehlt NIE dagegen; ein wiederbelebter Elitegegner belegt zwei Plaetze."
+    "Geisterlimit": "Wie viele gewoehnliche Geisterpanzer gleichzeitig aktiv sein koennen. Der Champion zaehlt NIE dagegen; ein wiederbelebter Elitegegner belegt zwei Plaetze.",
+    "Makel": "Der Nachteil einer Karte oberhalb der Stufe Gewoehnlich -- immer auf einer ANDEREN Achse als der Bonus der Karte, in drei Schweregraden (leicht/mittel/schwer).",
+    "Schwerfällig": "Makel: senkt das eigene Tempo.",
+    "Blechhaut": "Makel: senkt die maximalen Lebenspunkte.",
+    "Klemmender Lader": "Makel: verlaengert die Nachladezeit.",
+    "Enges Magazin": "Makel: senkt die Magazingroesse um Geschossplaetze.",
+    "Kurzer Lauf": "Makel: senkt das Geschosstempo.",
+    "Teuer": "Makel: senkt den Schrott-Ertrag je Raum.",
+    "Dünne Platte": "Makel: senkt die Schadensresistenz.",
+    "Heißer Lauf": "Makel: verkuerzt die Selbst-Immunitaetszeit gegen die eigene Kugel."
   }
 }

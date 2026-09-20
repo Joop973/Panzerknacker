@@ -279,6 +279,29 @@ export function createHud(ctx) {
     ctx.textAlign = 'left';
   }
 
+  // Phase M2 (AUFTRAG-UMBAU-V2.md): alle aktuell aktiven Makel ueber JEDE
+  // besessene Karte hinweg -- reine Ableitung aus run.upgrades (Stapelzahl)
+  // + der jeweiligen Kartendefinition, kein eigener Zustand. Eine Karte mit
+  // mehreren Makel-Eintraegen (episch/legendaer duerfen laut Auftrag bis zu
+  // zwei tragen) listet jeden einzeln.
+  function activeMakelList(run) {
+    const defs = run.upgradesData?.upgrades || {};
+    const vocab = run.data?.makel;
+    if (!vocab) return [];
+    const out = [];
+    for (const [id, lvl] of Object.entries(run.upgrades || {})) {
+      if (!(lvl > 0)) continue;
+      const def = defs[id];
+      if (!def?.makel?.length) continue;
+      for (const m of def.makel) {
+        const mv = vocab[m.id];
+        if (!mv) continue;
+        out.push(`${mv.symbol} ${mv.name} (${m.schwere}) — ${def.name}`);
+      }
+    }
+    return out;
+  }
+
   function drawPause(run) {
     dim(0.6);
     // Aktive Upgrades auflisten (Namen aus upgrades.json).
@@ -287,10 +310,17 @@ export function createHud(ctx) {
       .filter(([, lvl]) => lvl > 0)
       .map(([id, lvl]) => `${defs[id]?.name || id} ${lvl}`)
       .join(' · ');
+    const makelActive = activeMakelList(run);
     center(
       [
         ['PAUSE', 'bold 36px monospace', '#e8e4d8'],
         [active ? `Upgrades: ${active}` : 'Noch keine Upgrades', '13px monospace', '#c8b24a'],
+        // Nur eine Zeile, wenn wirklich ein Makel aktiv ist -- eine leere
+        // Zeile waere reines Rauschen (dieselbe Regel wie die "Aktiv:"-Zeile
+        // der Transformationen im Upgrade-Screen).
+        ...(makelActive.length
+          ? [[`Makel: ${makelActive.join(' · ')}`, '12px monospace', '#d84a4a']]
+          : []),
         [`Seed: ${run.seed}   Modus: ${run.mode}`, '13px monospace', '#8ecae6'],
         ['Esc/P: weiter   R: Neustart   M: Hauptmenü', '13px monospace', '#9aa0a8'],
       ],

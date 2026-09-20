@@ -48,6 +48,7 @@ tanksData.sounds = load('sounds');
 tanksData.status = load('status'); // UMBAUPLAN-LP Phase 5
 tanksData.input = load('input'); // P9: Tastencodes fuer getMenuState()-Tests
 diffData.compositions = load('compositions').compositions; // G4: Kompositionsrezepte fuer buyEnemies()
+tanksData.makel = load('makel').makel; // Phase M2 (AUFTRAG-UMBAU-V2.md): Makel-Vokabular
 
 let failures = 0;
 function check(ok, msg) {
@@ -15940,53 +15941,68 @@ for (const seed of SEEDS) {
 // waren echte Funde (drei gefixt, s. u.), zwei blosse Regex-Luecken (deutsche
 // Ordnungszahlwoerter statt Ziffern: "jeder DRITTE Schuss"). Die Ordnungs-
 // woerter 2.-10. sind deshalb hier als Ziffern-Aequivalente hinterlegt.
-{
-  const ORDINALS = {
-    zweite: 2, zweiten: 2, zweiter: 2, zweites: 2,
-    dritte: 3, dritten: 3, dritter: 3, drittes: 3,
-    vierte: 4, vierten: 4, vierter: 4, viertes: 4,
-    fünfte: 5, fünften: 5, fünfter: 5, fünftes: 5,
-    sechste: 6, sechsten: 6, sechster: 6, sechstes: 6,
-    siebte: 7, siebten: 7, siebter: 7, siebtes: 7,
-    achte: 8, achten: 8, achter: 8, achtes: 8,
-    neunte: 9, neunten: 9, neunter: 9, neuntes: 9,
-    zehnte: 10, zehnten: 10, zehnter: 10, zehntes: 10,
+//
+// Die vier Hilfsfunktionen (ORDINALS/numbersInText/candidatesFor/
+// fieldHasTextMatch) sind ausnahmsweise auf MODULSCOPE gehoben (statt wie
+// sonst ueblich in den Block dieses Abschnitts eingeschlossen) -- Phase M2
+// (AUFTRAG-UMBAU-V2.md) braucht dieselbe Matching-Logik erneut in Abschnitt
+// 85, um die dortige Makel-Erweiterung dieser Pruefung direkt (statt nur
+// indirekt ueber die aktuell leere Datenlage) gegenzuproben.
+const ORDINALS = {
+  zweite: 2, zweiten: 2, zweiter: 2, zweites: 2,
+  dritte: 3, dritten: 3, dritter: 3, drittes: 3,
+  vierte: 4, vierten: 4, vierter: 4, viertes: 4,
+  fünfte: 5, fünften: 5, fünfter: 5, fünftes: 5,
+  sechste: 6, sechsten: 6, sechster: 6, sechstes: 6,
+  siebte: 7, siebten: 7, siebter: 7, siebtes: 7,
+  achte: 8, achten: 8, achter: 8, achtes: 8,
+  neunte: 9, neunten: 9, neunter: 9, neuntes: 9,
+  zehnte: 10, zehnten: 10, zehnter: 10, zehntes: 10,
+};
+
+function numbersInText(text) {
+  const nums = [];
+  for (const m of (text || '').matchAll(/\d+(?:[.,]\d+)?/g)) {
+    nums.push(parseFloat(m[0].replace(',', '.')));
+  }
+  for (const m of (text || '').matchAll(/[A-Za-zäöüÄÖÜß]+/g)) {
+    const word = m[0].toLowerCase();
+    if (ORDINALS[word] != null) nums.push(ORDINALS[word]);
+  }
+  return nums;
+}
+
+function candidatesFor(value) {
+  const set = new Set();
+  const add = (n) => {
+    set.add(Math.round(n * 1e6) / 1e6);
+    set.add(Math.round(n));
   };
+  add(value);
+  // Phase M2 (AUFTRAG-UMBAU-V2.md): Makel-Betraege sind meist negativ (sie
+  // SENKEN einen Wert, z. B. hpAdd -15) -- der Kartentext nennt aber die
+  // reine Betragszahl ("senkt die Lebenspunkte um 15", nicht "um -15"). Alle
+  // bisherigen core-Add-Werte waren positiv, deshalb aendert dieser
+  // zusaetzliche Kandidat an Abschnitt 82s bestehenden Pruefungen nichts
+  // (Math.abs(v) === v dort).
+  add(Math.abs(value));
+  add(value * 100);
+  add((value - 1) * 100);
+  add(Math.abs((value - 1) * 100));
+  return set;
+}
+
+function fieldHasTextMatch(value, textNums, tol = 0.05) {
+  const cands = candidatesFor(value);
+  for (const c of cands) for (const n of textNums) if (Math.abs(c - n) <= tol) return true;
+  return false;
+}
+
+{
   // Karten, deren core-Feld bewusst NICHT im Text auftaucht -- eine reine
   // interne Engine-Feinabstimmung ohne Spec-Beleg (s. CLAUDE.md: "drei Karten
   // haben zusaetzlich _todo: balance ... ghost_032s Zielsucher-Lenkrate").
   const ALLOW = { ghost_032: new Set(['necroHomingTurnRate']) };
-
-  function numbersInText(text) {
-    const nums = [];
-    for (const m of (text || '').matchAll(/\d+(?:[.,]\d+)?/g)) {
-      nums.push(parseFloat(m[0].replace(',', '.')));
-    }
-    for (const m of (text || '').matchAll(/[A-Za-zäöüÄÖÜß]+/g)) {
-      const word = m[0].toLowerCase();
-      if (ORDINALS[word] != null) nums.push(ORDINALS[word]);
-    }
-    return nums;
-  }
-
-  function candidatesFor(value) {
-    const set = new Set();
-    const add = (n) => {
-      set.add(Math.round(n * 1e6) / 1e6);
-      set.add(Math.round(n));
-    };
-    add(value);
-    add(value * 100);
-    add((value - 1) * 100);
-    add(Math.abs((value - 1) * 100));
-    return set;
-  }
-
-  function fieldHasTextMatch(value, textNums, tol = 0.05) {
-    const cands = candidatesFor(value);
-    for (const c of cands) for (const n of textNums) if (Math.abs(c - n) <= tol) return true;
-    return false;
-  }
 
   const pools = [
     ['upgrades.json', upgradesData.upgrades],
@@ -16005,6 +16021,22 @@ for (const seed of SEEDS) {
         check(
           ok,
           `Abschnitt 82: ${file}: ${id}.${key} = ${value} hat keine plausible Entsprechung im Kartentext ("${card.description}")`,
+        );
+      }
+      // Phase M2 (AUFTRAG-UMBAU-V2.md, Aufgabe 5): dieselbe Pruefung auch fuer
+      // Makel-Eintraege -- aktuell strukturell ein No-op (checked bleibt bei 0
+      // Makel-Karten unveraendert), aber die Kartenwellen nach M3/M4 fuellen
+      // makel[] mit echten Werten, und dann greift diese Schleife sofort ohne
+      // weitere Testaenderung.
+      for (const m of card.makel || []) {
+        const def = tanksData.makel?.[m.id];
+        const value = def?.schwere?.[m.schwere];
+        if (typeof value !== 'number' || value === 0) continue;
+        checked++;
+        const ok = fieldHasTextMatch(value, textNums);
+        check(
+          ok,
+          `Abschnitt 82: ${file}: ${id}.makel[${m.id}/${m.schwere}] = ${value} hat keine plausible Entsprechung im Kartentext ("${card.description}")`,
         );
       }
     }
@@ -16254,6 +16286,158 @@ for (const seed of SEEDS) {
     check(rawUnfloored.speed < baseSpeed * floors.speedMinPct, `Abschnitt 84 (f)-Gegenprobe: speed ohne Floor liegt bereits ueber der Grenze (${rawUnfloored.speed})`);
     check(rawFloored.speed >= baseSpeed * floors.speedMinPct - 1e-6, `Abschnitt 84 (f): applyCfgFloors() korrigiert speed nicht (${rawFloored.speed})`);
   }
+}
+
+// ---- 85. AUFTRAG-UMBAU-V2.md Phase M2: Makel-Schema + cfg.js-Verdrahtung --
+// data/makel.json ist die REALE Vokabel-Datei (kein synthetischer Ersatz --
+// die Werte selbst SIND die zu pruefende Balance), die Karten sind dagegen
+// bewusst SYNTHETISCH (eigene Zahlen statt der aktuellen Datenlage, die noch
+// KEINE einzige Makel-Karte enthaelt -- die 14 Kartenwellen kommen erst nach
+// M3/M4). Deckt Aufgabe 2 (Schema), 3 (cfg.js: applyUpgrades()/applyMakel()),
+// 4 (Angebots-Passthrough) und 6 (Abschnitt-82-Erweiterung) ab.
+{
+  const { createState } = await import('../src/game/state.js');
+  const { rollOffers, drawOne } = await import('../src/game/upgradepool.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+
+  // (a) Struktur: acht Eintraege, jeder core-Schluessel ist einer der acht
+  // generischen Kernschluessel, die cfg.js: applyMakel() kennt, jede Schwere
+  // ist eine von 0 verschiedene Zahl (ein Makel-Wert von 0 waere sinnlos).
+  const vocab = tanksData.makel;
+  const KNOWN_CORE_KEYS = new Set([
+    'speedMult', 'hpAdd', 'reloadMult', 'magAdd', 'bulletSpeedMult', 'scrapAdd', 'resistAdd', 'selfImmunityMult',
+  ]);
+  check(!!vocab, 'Abschnitt 85 (a): data/makel.json hat keinen "makel"-Block');
+  const vocabKeys = Object.keys(vocab || {});
+  check(vocabKeys.length === 8, `Abschnitt 85 (a): erwartet 8 Makel-Eintraege, gefunden ${vocabKeys.length}`);
+  for (const id of vocabKeys) {
+    const def = vocab[id];
+    check(typeof def.name === 'string' && def.name.length > 0, `Abschnitt 85 (a): ${id}.name fehlt`);
+    check(typeof def.symbol === 'string' && def.symbol.length > 0, `Abschnitt 85 (a): ${id}.symbol fehlt`);
+    check(KNOWN_CORE_KEYS.has(def.core), `Abschnitt 85 (a): ${id}.core = "${def.core}" ist kein bekannter Kernschluessel`);
+    for (const s of ['leicht', 'mittel', 'schwer']) {
+      check(typeof def.schwere?.[s] === 'number' && def.schwere[s] !== 0, `Abschnitt 85 (a): ${id}.schwere.${s} fehlt oder ist 0`);
+    }
+  }
+
+  const baseSpeed = resolveCfg(tanksData, 'player').speed;
+  const baseDamage = resolveCfg(tanksData, 'player').damage;
+  const baseBulletSpeed = resolveCfg(tanksData, 'player').bulletSpeed;
+
+  function room(playerUpgrades, upgradesData, upgradeLevels, levelBalance) {
+    return createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: ['t_brown'],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades,
+      upgradesData,
+      equippedSecondary: 'mine',
+      upgradeLevels: upgradeLevels || {},
+      levelBalance: levelBalance || {},
+      transform: {},
+      starterTank: 'player',
+    });
+  }
+
+  // (b) Mechanismus End-zu-Ende: EINE Karte traegt einen Bonus auf einer
+  // Achse (damageAdd) UND einen Makel auf einer ANDEREN Achse (schwerfaellig
+  // -> speedMult, schwer = 0.82) -- beide muessen gleichzeitig UND
+  // unabhaengig voneinander wirken.
+  const pool85b = {
+    upgrades: {
+      testkarte: {
+        id: 'testkarte',
+        core: { damageAdd: 50 },
+        makel: [{ id: 'schwerfaellig', schwere: 'schwer' }],
+      },
+    },
+  };
+  const st85b = room({ testkarte: 1 }, pool85b);
+  const cfg85b = st85b.player.cfg;
+  check(
+    Math.abs(cfg85b.damage - (baseDamage + 50)) < 1e-6,
+    `Abschnitt 85 (b): Bonus (damageAdd) wirkt nicht neben dem Makel (${cfg85b.damage} statt ${baseDamage + 50})`,
+  );
+  const expectSpeed85b = baseSpeed * vocab.schwerfaellig.schwere.schwer;
+  check(
+    Math.abs(cfg85b.speed - expectSpeed85b) < 1e-6,
+    `Abschnitt 85 (b): Makel "Schwerfaellig" (schwer) wirkt nicht auf speed (${cfg85b.speed} statt ${expectSpeed85b})`,
+  );
+
+  // (c) Stapeln: dieselbe Karte zweimal gewaehlt -> der Malus potenziert sich
+  // (0.82^2), genau wie ein core.speedMult-Bonus es auch taete.
+  const st85c = room({ testkarte: 2 }, pool85b);
+  const expectSpeed85c = baseSpeed * Math.pow(vocab.schwerfaellig.schwere.schwer, 2);
+  check(
+    Math.abs(st85c.player.cfg.speed - expectSpeed85c) < 1e-6,
+    `Abschnitt 85 (c): zwei Stapel derselben Makel-Karte potenzieren den Malus nicht (${st85c.player.cfg.speed} statt ${expectSpeed85c})`,
+  );
+
+  // (d) Rastplatz-Stufenskalierung (scaleCore): dieselbe Karte auf Stufe 1
+  // mit bonusPct 1.0 (sm = 1+1*1.0 = 2) -- der Malus muss genauso skalieren
+  // wie ein core-Bonus (scaleCore()s Mult-Formel 1+(v-1)*sm).
+  const st85d = room({ testkarte: 1 }, pool85b, { testkarte: 1 }, { bonusPct: 1.0, maxLevel: 2 });
+  const sm85d = 1 + 1 * 1.0;
+  const expectSpeed85d = baseSpeed * (1 + (vocab.schwerfaellig.schwere.schwer - 1) * sm85d);
+  check(
+    Math.abs(st85d.player.cfg.speed - expectSpeed85d) < 1e-6,
+    `Abschnitt 85 (d): Rastplatz-Stufenskalierung wirkt nicht auf den Makel (${st85d.player.cfg.speed} statt ${expectSpeed85d})`,
+  );
+
+  // (e) Zwei Karten auf DERSELBEN Achse (eine core-Bonus-Karte fuer
+  // bulletSpeedMult, eine zweite mit einem "kurzer_lauf"-Makel auf derselben
+  // Achse) muessen sich zu EINEM Endwert verrechnen, statt sich gegenseitig
+  // zu ueberschreiben -- beweist, dass der Makel durch denselben
+  // spdMult-Akkumulator laeuft wie der core-Schluessel.
+  const pool85e = {
+    upgrades: {
+      bonuskarte: { id: 'bonuskarte', core: { bulletSpeedMult: 1.2 } },
+      makelkarte: { id: 'makelkarte', core: { hpAdd: 1 }, makel: [{ id: 'kurzer_lauf', schwere: 'schwer' }] },
+    },
+  };
+  const st85e = room({ bonuskarte: 1, makelkarte: 1 }, pool85e);
+  const expectBulletSpeed85e = baseBulletSpeed * 1.2 * vocab.kurzer_lauf.schwere.schwer;
+  check(
+    Math.abs(st85e.player.cfg.bulletSpeed - expectBulletSpeed85e) < 1e-6,
+    `Abschnitt 85 (e): Bonus + Makel auf derselben Achse verrechnen sich nicht korrekt (${st85e.player.cfg.bulletSpeed} statt ${expectBulletSpeed85e})`,
+  );
+
+  // (f) Angebots-Passthrough: rollOffers()/drawOne() reichen o.makel durch --
+  // ohne diese Zeile in upgradepool.js: makeOffer() waere die Karte fuer die
+  // UI unsichtbar (Aufgabe 4: "immer sichtbar, nicht nur beim Antippen").
+  const pool85f = {
+    offersPerScreen: 1,
+    upgrades: {
+      sichtbar: { id: 'sichtbar', tag: 'health', rarity: 'common', core: { hpAdd: 1 }, makel: [{ id: 'teuer', schwere: 'leicht' }] },
+    },
+  };
+  const offers85f = rollOffers(pool85f, { chosen: {}, roomIndex: 1, rng: rngFor(1, 1, 'upgrades'), balance: tanksData.balance, count: 1 });
+  check(offers85f.length === 1, 'Abschnitt 85 (f): rollOffers() liefert kein Angebot fuer den Ein-Karten-Pool');
+  check(
+    Array.isArray(offers85f[0]?.makel) && offers85f[0].makel.length === 1 && offers85f[0].makel[0].id === 'teuer',
+    `Abschnitt 85 (f): rollOffers()-Angebot traegt das makel-Feld nicht durch (${JSON.stringify(offers85f[0]?.makel)})`,
+  );
+  const drawn85f = drawOne(pool85f, { chosen: {}, roomIndex: 1, rng: rngFor(1, 1, 'upgrades'), balance: tanksData.balance }, new Set(), new Set());
+  check(
+    Array.isArray(drawn85f?.makel) && drawn85f.makel[0]?.id === 'teuer',
+    `Abschnitt 85 (f): drawOne() traegt das makel-Feld nicht durch (${JSON.stringify(drawn85f?.makel)})`,
+  );
+
+  // (g) Abschnitt-82-Erweiterung direkt gegengeprueft: dieselbe Matching-
+  // Logik (fieldHasTextMatch/numbersInText), mit einem Makel-Wert GENAUSO
+  // berechnet wie in der echten Erweiterung (def.schwere[m.schwere]) --
+  // ein Text OHNE die passende Zahl muss durchfallen, einer MIT ihr bestehen.
+  const makelValue85g = vocab.blechhaut.schwere.mittel; // -15
+  const matchingText = `Senkt die maximalen Lebenspunkte um ${Math.abs(makelValue85g)}.`;
+  const mismatchedText = 'Senkt die maximalen Lebenspunkte spuerbar.';
+  check(
+    fieldHasTextMatch(makelValue85g, numbersInText(matchingText)),
+    'Abschnitt 85 (g): die Matching-Logik erkennt einen passenden Makel-Wert im Text nicht (falsch-negativ)',
+  );
+  check(
+    !fieldHasTextMatch(makelValue85g, numbersInText(mismatchedText)),
+    'Abschnitt 85 (g)-Gegenprobe: die Matching-Logik erkennt einen fehlenden Makel-Wert faelschlich als vorhanden (falsch-positiv)',
+  );
 }
 
 if (failures) {
