@@ -297,11 +297,22 @@ export function createHud(ctx) {
       // entfernter Index soll hier nicht mehr als "aktiv" auftauchen -- exakt
       // dieselbe Filterung wie cfg.js: applyUpgrades() vor applyMakel().
       const removed = run.makelRemoved?.[id] || [];
+      // Phase M4: ein umgepolter Index zeigt seinen BONUS statt des Malus
+      // (mit "↻"-Markierung), ein gehaerteter Index seine gesenkte Stufe --
+      // exakt dieselbe Ableitung wie cfg.js: applyUpgrades()s Makel-Filter.
+      const umgepolt = run.makelUmgepolt?.[id] || [];
+      const overrides = run.makelSchwereOverride?.[id] || {};
       def.makel.forEach((m, index) => {
         if (removed.includes(index)) return;
         const mv = vocab[m.id];
         if (!mv) return;
-        out.push(`${mv.symbol} ${mv.name} (${m.schwere}) — ${def.name}`);
+        const eff = overrides[index] || m.schwere;
+        if (umgepolt.includes(index)) {
+          const up = mv.umpolung;
+          if (up) out.push(`↻ ${mv.name} → +${up.schwere?.[eff]} ${up.name} (${eff}) — ${def.name}`);
+          return;
+        }
+        out.push(`${mv.symbol} ${mv.name} (${eff}) — ${def.name}`);
       });
     }
     return out;
@@ -316,6 +327,10 @@ export function createHud(ctx) {
       .map(([id, lvl]) => `${defs[id]?.name || id} ${lvl}`)
       .join(' · ');
     const makelActive = activeMakelList(run);
+    // Phase M4 ("Narben"): reine Ableitung aus run.makelNarbenMatured, kein
+    // eigener Import aus run.js noetig (Muster wie der Rest dieser Funktion).
+    const narbenCount = Object.values(run.makelNarbenMatured || {}).reduce((n, arr) => n + arr.length, 0);
+    const narbeHpBonus = run.data?.balance?.makel?.narbeHpBonus ?? 0;
     center(
       [
         ['PAUSE', 'bold 36px monospace', '#e8e4d8'],
@@ -325,6 +340,10 @@ export function createHud(ctx) {
         // der Transformationen im Upgrade-Screen).
         ...(makelActive.length
           ? [[`Makel: ${makelActive.join(' · ')}`, '12px monospace', '#d84a4a']]
+          : []),
+        // Phase M4: nur sichtbar, wenn wirklich eine Narbe gereift ist.
+        ...(narbenCount
+          ? [[`Narben: ${narbenCount} (+${narbenCount * narbeHpBonus} Leben)`, '12px monospace', '#e0a860']]
           : []),
         [`Seed: ${run.seed}   Modus: ${run.mode}`, '13px monospace', '#8ecae6'],
         ['Esc/P: weiter   R: Neustart   M: Hauptmenü', '13px monospace', '#9aa0a8'],

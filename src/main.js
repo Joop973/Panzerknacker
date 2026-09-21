@@ -31,6 +31,10 @@ import {
   buyShopUpgradeLevel,
   buyShopMakelRemoval,
   removableMakelOptions,
+  buyShopMakelUmpolung,
+  umpolbareMakelOptions,
+  buyShopMakelHaertung,
+  haertbareMakelOptions,
   repairAtRest,
   workbenchOptions,
   upgradeCardAtRest,
@@ -938,6 +942,10 @@ async function init() {
         // Phase M3 (AUFTRAG-UMBAU-V2.md): Werkstatt -- entfernbare Makel-
         // Eintraege ueber alle besessenen Karten (run.js: removableMakelOptions()).
         getRemovableMakel: () => removableMakelOptions(run),
+        // Phase M4: Umpolung -- umpolbare Makel-Eintraege (run.js: umpolbareMakelOptions()).
+        getUmpolbareMakel: () => umpolbareMakelOptions(run),
+        // Phase M4: Haertung -- Makel-Eintraege, deren Stufe noch senkbar ist.
+        getHaertbareMakel: () => haertbareMakelOptions(run),
         // Grundsteinumbau Phase 7: "+"-Suffix auch im Shop-Regal.
         getOffers: () => run.shopOffers?.map((o) => ({ ...o, stufe: run.upgradeLevels[o.id] || 0 })),
         // Phase M2 (AUFTRAG-UMBAU-V2.md): Makel-Vokabular fuer die Shop-Karten.
@@ -1011,6 +1019,18 @@ async function init() {
         onRemoveMakel: (cardId, index) => {
           const ok = buyShopMakelRemoval(run, cardId, index);
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'makelRemoval', amount: costs.makelRemoval });
+          return ok;
+        },
+        // Phase M4: Umpolung -- Malus wird zu Bonus auf anderer Achse.
+        onUmpolenMakel: (cardId, index) => {
+          const ok = buyShopMakelUmpolung(run, cardId, index);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'makelUmpolung', amount: costs.makelUmpolung });
+          return ok;
+        },
+        // Phase M4: Haertung -- Stufe eines Makels um eine Stufe senken.
+        onHaertenMakel: (cardId, index) => {
+          const ok = buyShopMakelHaertung(run, cardId, index);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'makelHaertung', amount: costs.makelHaertung });
           return ok;
         },
         onDrop: (id) => {

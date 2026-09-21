@@ -23,11 +23,11 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, repairAtRest, workbenchOptions, upgradeCardAtRest, advanceAct, runSnapshot, buyShopCard, buyShopLife, buyShopUpgradeLevel, buyShieldCharge, chooseBossReward, buyShopMakelRemoval, removeMakel, removableMakelOptions } from '../src/game/run.js';
+import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, repairAtRest, workbenchOptions, upgradeCardAtRest, advanceAct, runSnapshot, buyShopCard, buyShopLife, buyShopUpgradeLevel, buyShieldCharge, chooseBossReward, buyShopMakelRemoval, removeMakel, removableMakelOptions, umpolenMakel, umpolbareMakelOptions, buyShopMakelUmpolung, haertenMakel, haertbareMakelOptions, buyShopMakelHaertung, incrementMakelNarben, makelNarbenCount } from '../src/game/run.js';
 import { traceTrajectory } from '../src/game/bullet.js';
 import { validateArenas } from '../src/game/generator.js';
 import { createMine, updateMines } from '../src/game/mine.js';
-import { resolveCfg, applyUpgrades, applyCfgFloors } from '../src/game/cfg.js';
+import { resolveCfg, applyUpgrades, applyCfgFloors, applyMakelNarben } from '../src/game/cfg.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const load = (n) => JSON.parse(readFileSync(join(root, 'data', n + '.json'), 'utf8'));
@@ -5600,9 +5600,12 @@ for (const seed of SEEDS) {
         getScrap: () => 999,
         getUpgrades: () => ({}),
         getWorkbenchOptions: () => [],
-        // Phase M3 (AUFTRAG-UMBAU-V2.md): Werkstatt-Liste, hier immer leer --
-        // dieser Testfall prueft die Gadget-Sektion, nicht die Werkstatt.
+        // Phase M3/M4 (AUFTRAG-UMBAU-V2.md): Werkstatt-/Umpolung-/Haertung-
+        // Listen, hier immer leer -- dieser Testfall prueft die
+        // Gadget-Sektion, nicht die vier Makel-Auswege.
         getRemovableMakel: () => [],
+        getUmpolbareMakel: () => [],
+        getHaertbareMakel: () => [],
         getOffers: () => [],
         getEquippedSecondary: () => null,
         lifeBought: () => false,
@@ -16730,6 +16733,10 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
           calls.push([cardId, index]);
           return true;
         },
+        // Phase M4: Umpolung-/Haertung-Listen, hier immer leer -- dieser
+        // Testfall prueft die Werkstatt, nicht die anderen beiden Auswege.
+        getUmpolbareMakel: () => [],
+        getHaertbareMakel: () => [],
       };
       const screen = createShopScreen();
 
@@ -16777,6 +16784,476 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
       check(
         einerButtons.includes('Blechhaut') && !einerButtons.includes('Schwerfällig'),
         `Abschnitt 86 (g): nach der Entfernung erscheint noch "Schwerfaellig" (${einerButtons})`,
+      );
+    } finally {
+      restore();
+    }
+  }
+}
+
+// ---- 87. AUFTRAG-UMBAU-V2.md Phase M4: Umpolung, Haertung, Narben --------
+// Die uebrigen drei "vier Auswege" gegen Makel (Auftrag Teil 1.3, s. Phase
+// M3/Abschnitt 86 oben). Wie Abschnitt 85/86 SYNTHETISCH bei der Karte (kein
+// aktiver Pool traegt bislang einen Makel -- die 14 Kartenwellen kommen erst
+// nach dieser Phase), aber gegen die ECHTEN data/makel.json-umpolung-Werte
+// (die Zahlen selbst SIND die zu pruefende Balance).
+{
+  const { createState } = await import('../src/game/state.js');
+  const { createHud } = await import('../src/ui/hud.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+
+  const zweiMakelKarte87 = {
+    id: 'zweimakel87',
+    core: { damageAdd: 50 },
+    makel: [
+      { id: 'schwerfaellig', schwere: 'schwer' }, // Index 0 -> speedMult, Umpolung -> hpAdd
+      { id: 'blechhaut', schwere: 'mittel' }, // Index 1 -> hpAdd, Umpolung -> resistAdd
+    ],
+  };
+
+  function enterWorkshop87(maxSeed = 60) {
+    for (let seed = 1; seed <= maxSeed; seed++) {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
+      let parentId = null;
+      let shopId = null;
+      for (const node of run.map.byId.values()) {
+        const hit = node.next.find((id) => run.map.byId.get(id)?.type === 'workshop');
+        if (hit != null) {
+          parentId = node.id;
+          shopId = hit;
+          break;
+        }
+      }
+      if (parentId == null) continue;
+      run.mapCurrentId = parentId;
+      run.phase = 'map';
+      const ok = chooseMapNode(run, shopId);
+      if (ok && run.phase === 'workshop') return run;
+    }
+    return null;
+  }
+
+  function room87(playerUpgrades, upgradesDataArg, makelUmgepolt, makelSchwereOverride) {
+    return createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: ['t_brown'],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades,
+      upgradesData: upgradesDataArg,
+      equippedSecondary: 'mine',
+      makelUmgepolt: makelUmgepolt || {},
+      makelSchwereOverride: makelSchwereOverride || {},
+      transform: {},
+      starterTank: 'player',
+    });
+  }
+
+  // (a) umpolenMakel(): wandelt GENAU den angegebenen Index um, ein zweiter
+  // Versuch auf denselben Index schlaegt fehl, ebenso ein Index ausserhalb
+  // der Karte, eine unbesessene Karte, ein Vokabel-Eintrag ohne umpolung-Feld
+  // UND ein bereits entfernter Index (Mutual-Exklusivitaet mit removeMakel()).
+  {
+    const run = enterWorkshop87();
+    check(!!run, 'Abschnitt 87: Testaufbau -- kein Shop-Knoten unter 60 Seeds gefunden');
+    if (run) {
+      run.upgradesData = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+      run.upgrades = { zweimakel87: 1 };
+      const ok = umpolenMakel(run, 'zweimakel87', 0);
+      check(ok === true, 'Abschnitt 87 (a): umpolenMakel() lehnt eine gueltige Umpolung ab');
+      check(
+        Array.isArray(run.makelUmgepolt.zweimakel87) && run.makelUmgepolt.zweimakel87.includes(0),
+        `Abschnitt 87 (a): run.makelUmgepolt.zweimakel87 enthaelt Index 0 nicht (${JSON.stringify(run.makelUmgepolt.zweimakel87)})`,
+      );
+      check(umpolenMakel(run, 'zweimakel87', 0) === false, 'Abschnitt 87 (a): ein zweites Mal denselben Index umpolen gelingt');
+      check(umpolenMakel(run, 'zweimakel87', 5) === false, 'Abschnitt 87 (a): ein Index ausserhalb der Karte laesst sich umpolen');
+      check(umpolenMakel(run, 'unbesessen', 0) === false, 'Abschnitt 87 (a): eine unbesessene Karte laesst sich umpolen');
+      // Vokabel-id, die absichtlich NICHT in tanksData.makel existiert --
+      // umpolenMakel() muss ablehnen, OHNE tanksData.makel selbst zu mutieren.
+      run.upgradesData.upgrades.ohneziel = { id: 'ohneziel', core: { hpAdd: 1 }, makel: [{ id: 'kein_solcher_vokabeleintrag', schwere: 'leicht' }] };
+      run.upgrades.ohneziel = 1;
+      check(umpolenMakel(run, 'ohneziel', 0) === false, 'Abschnitt 87 (a): ein Makel ohne umpolung-Feld laesst sich trotzdem umpolen');
+      // Index 1 ist noch unberuehrt -- erst entfernen, dann pruefen, dass
+      // die Umpolung danach abgelehnt wird.
+      removeMakel(run, 'zweimakel87', 1);
+      check(umpolenMakel(run, 'zweimakel87', 1) === false, 'Abschnitt 87 (a): ein bereits entfernter Index laesst sich trotzdem umpolen');
+    }
+  }
+
+  // (b) cfg.js Ende-zu-Ende: ein umgepolter Index wirkt als BONUS auf der
+  // Zielachse statt als Malus, der NICHT umgepolte Makel und der core-Bonus
+  // der Karte bleiben unveraendert.
+  {
+    const pool87b = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+    const baseSpeed87b = resolveCfg(tanksData, 'player').speed;
+    const baseHp87b = resolveCfg(tanksData, 'player').maxHp;
+    const baseDamage87b = resolveCfg(tanksData, 'player').damage;
+    const vocab = tanksData.makel;
+
+    const stFull = room87({ zweimakel87: 1 }, pool87b);
+    check(
+      Math.abs(stFull.player.cfg.speed - baseSpeed87b * vocab.schwerfaellig.schwere.schwer) < 1e-6,
+      'Abschnitt 87 (b)-Kontrolle: ohne Umpolung wirkt "Schwerfaellig" nicht als Malus',
+    );
+
+    const stUmgepolt = room87({ zweimakel87: 1 }, pool87b, { zweimakel87: [0] });
+    const expectHpBonus = vocab.schwerfaellig.umpolung.schwere.schwer;
+    const expectHpFull = baseHp87b + vocab.blechhaut.schwere.mittel + expectHpBonus;
+    check(
+      Math.abs(stUmgepolt.player.cfg.speed - baseSpeed87b) < 1e-6,
+      `Abschnitt 87 (b): umgepolter Malus "Schwerfaellig" wirkt trotzdem auf speed (${stUmgepolt.player.cfg.speed} statt ${baseSpeed87b})`,
+    );
+    check(
+      Math.abs(stUmgepolt.player.cfg.maxHp - expectHpFull) < 1e-6,
+      `Abschnitt 87 (b): Umpolungs-Bonus + verbleibender Malus verrechnen sich nicht korrekt (${stUmgepolt.player.cfg.maxHp} statt ${expectHpFull})`,
+    );
+    check(
+      Math.abs(stUmgepolt.player.cfg.damage - (baseDamage87b + 50)) < 1e-6,
+      'Abschnitt 87 (b): der core-Bonus (damageAdd) aendert sich durch die Umpolung',
+    );
+  }
+
+  // (c) umpolbareMakelOptions(): listet genau die noch nicht umgepolten/
+  // entfernten Eintraege inkl. Preview (Zielachse + Wert); removableMakelOptions()
+  // (Werkstatt) darf einen umgepolten Index nicht mehr als entfernbar fuehren.
+  {
+    const run = enterWorkshop87();
+    check(!!run, 'Abschnitt 87 (c): Testaufbau -- kein Shop-Knoten gefunden');
+    if (run) {
+      run.upgradesData = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+      run.upgrades = { zweimakel87: 1 };
+      const before = umpolbareMakelOptions(run);
+      check(before.length === 2, `Abschnitt 87 (c): erwartet 2 umpolbare Eintraege, gefunden ${before.length}`);
+      const b0 = before.find((o) => o.index === 0);
+      check(
+        b0?.targetName === 'Leben' && b0?.targetValue === tanksData.makel.schwerfaellig.umpolung.schwere.schwer,
+        `Abschnitt 87 (c): Preview-Werte fuer Index 0 stimmen nicht (${JSON.stringify(b0)})`,
+      );
+      umpolenMakel(run, 'zweimakel87', 0);
+      const after = umpolbareMakelOptions(run);
+      check(after.length === 1 && after[0].index === 1, `Abschnitt 87 (c): nach der Umpolung bleibt nicht genau Index 1 uebrig (${JSON.stringify(after)})`);
+      const removable = removableMakelOptions(run);
+      check(
+        removable.length === 1 && removable[0].index === 1,
+        `Abschnitt 87 (c): Werkstatt zeigt den umgepolten Index weiterhin als entfernbar (${JSON.stringify(removable)})`,
+      );
+    }
+  }
+
+  // (d) buyShopMakelUmpolung(): zieht exakt den konfigurierten Preis ab,
+  // verweigert bei zu wenig Schrott, verweigert ausserhalb des Shops,
+  // verweigert einen bereits umgepolten Index.
+  {
+    const run = enterWorkshop87();
+    check(!!run, 'Abschnitt 87 (d): Testaufbau -- kein Shop-Knoten gefunden');
+    if (run) {
+      run.upgradesData = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+      run.upgrades = { zweimakel87: 1 };
+      const cost = tanksData.balance.scrap.cost.makelUmpolung;
+      run.scrap = cost - 1;
+      check(buyShopMakelUmpolung(run, 'zweimakel87', 0) === false, 'Abschnitt 87 (d): kauft trotz zu wenig Schrott');
+      check(!(run.makelUmgepolt.zweimakel87 || []).includes(0), 'Abschnitt 87 (d): wandelt trotz abgelehntem Kauf um');
+      run.scrap = cost + 5;
+      const ok = buyShopMakelUmpolung(run, 'zweimakel87', 0);
+      check(ok === true, 'Abschnitt 87 (d): lehnt einen gueltigen Kauf ab');
+      check(run.scrap === 5, `Abschnitt 87 (d): Schrott sinkt nicht um genau ${cost} (Rest ${run.scrap} statt 5)`);
+      run.scrap = 999;
+      check(buyShopMakelUmpolung(run, 'zweimakel87', 0) === false, 'Abschnitt 87 (d): kauft einen bereits umgepolten Index ein zweites Mal (bei ausreichend Schrott)');
+      check(run.scrap === 999, 'Abschnitt 87 (d): zieht trotz abgelehntem Doppelkauf Schrott ab');
+      run.phase = 'playing';
+      check(buyShopMakelUmpolung(run, 'zweimakel87', 1) === false, 'Abschnitt 87 (d): kauft ausserhalb des Shops (phase != workshop)');
+    }
+  }
+
+  // (e) haertenMakel(): senkt die Stufe genau eine Stufe je Aufruf
+  // (schwer->mittel->leicht), lehnt einen dritten Versuch ueber "leicht"
+  // hinaus ab, ebenso einen Index ausserhalb der Karte, eine unbesessene
+  // Karte und einen bereits entfernten Index.
+  {
+    const run = enterWorkshop87();
+    check(!!run, 'Abschnitt 87 (e): Testaufbau -- kein Shop-Knoten gefunden');
+    if (run) {
+      run.upgradesData = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+      run.upgrades = { zweimakel87: 1 };
+      check(haertenMakel(run, 'zweimakel87', 0) === true, 'Abschnitt 87 (e): haertenMakel() lehnt eine gueltige Haertung ab');
+      check(run.makelSchwereOverride.zweimakel87?.[0] === 'mittel', `Abschnitt 87 (e): erste Haertung senkt nicht auf "mittel" (${run.makelSchwereOverride.zweimakel87?.[0]})`);
+      check(haertenMakel(run, 'zweimakel87', 0) === true, 'Abschnitt 87 (e): zweite Haertung schlaegt fehl');
+      check(run.makelSchwereOverride.zweimakel87?.[0] === 'leicht', `Abschnitt 87 (e): zweite Haertung senkt nicht auf "leicht" (${run.makelSchwereOverride.zweimakel87?.[0]})`);
+      check(haertenMakel(run, 'zweimakel87', 0) === false, 'Abschnitt 87 (e): eine dritte Haertung ueber "leicht" hinaus gelingt');
+      check(haertenMakel(run, 'zweimakel87', 5) === false, 'Abschnitt 87 (e): ein Index ausserhalb der Karte laesst sich haerten');
+      check(haertenMakel(run, 'unbesessen', 0) === false, 'Abschnitt 87 (e): eine unbesessene Karte laesst sich haerten');
+      removeMakel(run, 'zweimakel87', 1);
+      check(haertenMakel(run, 'zweimakel87', 1) === false, 'Abschnitt 87 (e): ein bereits entfernter Index laesst sich haerten');
+    }
+  }
+
+  // (f) cfg.js Ende-zu-Ende: ein gehaerteter Index wirkt mit der GESENKTEN
+  // Stufe (mittel statt schwer), nicht mit der urspruenglichen.
+  {
+    const pool87f = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+    const baseSpeed87f = resolveCfg(tanksData, 'player').speed;
+    const vocab = tanksData.makel;
+    const stMittel = room87({ zweimakel87: 1 }, pool87f, {}, { zweimakel87: { 0: 'mittel' } });
+    const expectSpeedMittel = baseSpeed87f * vocab.schwerfaellig.schwere.mittel;
+    check(
+      Math.abs(stMittel.player.cfg.speed - expectSpeedMittel) < 1e-6,
+      `Abschnitt 87 (f): gehaerteter Malus wirkt nicht mit der gesenkten Stufe (${stMittel.player.cfg.speed} statt ${expectSpeedMittel})`,
+    );
+  }
+
+  // (g) Kombination Haertung + Umpolung: die Umpolung nutzt die GESENKTE
+  // Stufe fuer ihren Bonus, nicht die urspruengliche -- beweist, dass beide
+  // Auswege denselben effektiven Schweregrad lesen.
+  {
+    const pool87g = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+    const baseSpeed87g = resolveCfg(tanksData, 'player').speed;
+    const baseHp87g = resolveCfg(tanksData, 'player').maxHp;
+    const vocab = tanksData.makel;
+    const stCombo = room87({ zweimakel87: 1 }, pool87g, { zweimakel87: [0] }, { zweimakel87: { 0: 'mittel' } });
+    const expectHpCombo = baseHp87g + vocab.blechhaut.schwere.mittel + vocab.schwerfaellig.umpolung.schwere.mittel;
+    check(Math.abs(stCombo.player.cfg.speed - baseSpeed87g) < 1e-6, 'Abschnitt 87 (g): der Malus wirkt trotz Umpolung weiter auf speed');
+    check(
+      Math.abs(stCombo.player.cfg.maxHp - expectHpCombo) < 1e-6,
+      `Abschnitt 87 (g): Haertung+Umpolung kombiniert nutzt nicht die gesenkte Stufe (${stCombo.player.cfg.maxHp} statt ${expectHpCombo})`,
+    );
+    check(
+      vocab.schwerfaellig.umpolung.schwere.mittel < vocab.schwerfaellig.umpolung.schwere.schwer,
+      'Abschnitt 87 (g)-Testvoraussetzung: umpolung.schwere.mittel ist nicht kleiner als .schwer -- der Kombinationstest waere nicht scharf',
+    );
+  }
+
+  // (h) buyShopMakelHaertung(): Preis/Ablehnungen wie (d).
+  {
+    const run = enterWorkshop87();
+    check(!!run, 'Abschnitt 87 (h): Testaufbau -- kein Shop-Knoten gefunden');
+    if (run) {
+      run.upgradesData = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+      run.upgrades = { zweimakel87: 1 };
+      const cost = tanksData.balance.scrap.cost.makelHaertung;
+      run.scrap = cost - 1;
+      check(buyShopMakelHaertung(run, 'zweimakel87', 0) === false, 'Abschnitt 87 (h): kauft trotz zu wenig Schrott');
+      run.scrap = cost + 5;
+      const ok = buyShopMakelHaertung(run, 'zweimakel87', 0);
+      check(ok === true, 'Abschnitt 87 (h): lehnt einen gueltigen Kauf ab');
+      check(run.scrap === 5, `Abschnitt 87 (h): Schrott sinkt nicht um genau ${cost} (Rest ${run.scrap} statt 5)`);
+      run.phase = 'playing';
+      check(buyShopMakelHaertung(run, 'zweimakel87', 0) === false, 'Abschnitt 87 (h): kauft ausserhalb des Shops');
+    }
+  }
+
+  // (i) incrementMakelNarben()/makelNarbenCount(): EIGENER, kleiner
+  // Schwellenwert statt des echten balance-Werts (Mechanismus statt
+  // Datenlage). Ein Eintrag reift erst BEI Erreichen der Schwelle, nicht
+  // davor, und reift kein zweites Mal.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+    run.upgradesData = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+    run.upgrades = { zweimakel87: 1 };
+    run.data = { ...run.data, balance: { ...run.data.balance, makel: { narbeRooms: 3, narbeHpBonus: 3 } } };
+    for (let i = 0; i < 2; i++) incrementMakelNarben(run);
+    check(run.makelNarbenRooms.zweimakel87?.[0] === 2, `Abschnitt 87 (i): Raumzaehler nach 2 Aufrufen nicht 2 (${run.makelNarbenRooms.zweimakel87?.[0]})`);
+    check(makelNarbenCount(run) === 0, `Abschnitt 87 (i): reift vor Erreichen der Schwelle bereits (${makelNarbenCount(run)})`);
+    incrementMakelNarben(run);
+    check(makelNarbenCount(run) === 2, `Abschnitt 87 (i): beide Makel reifen bei Erreichen der Schwelle nicht gleichzeitig (${makelNarbenCount(run)})`);
+    incrementMakelNarben(run);
+    check(makelNarbenCount(run) === 2, `Abschnitt 87 (i): ein bereits gereifter Eintrag wird ein zweites Mal gezaehlt (${makelNarbenCount(run)})`);
+
+    // (i2) ein gehaerteter/entfernter Eintrag zaehlt NICHT weiter -- eigener,
+    // unabhaengiger Lauf mit Schwelle 1.
+    const run2 = createRun(tanksData, tilesData, diffData, upgradesData, 1);
+    run2.upgradesData = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+    run2.upgrades = { zweimakel87: 1 };
+    run2.data = { ...run2.data, balance: { ...run2.data.balance, makel: { narbeRooms: 1, narbeHpBonus: 3 } } };
+    haertenMakel(run2, 'zweimakel87', 0);
+    removeMakel(run2, 'zweimakel87', 1);
+    incrementMakelNarben(run2);
+    check(makelNarbenCount(run2) === 0, `Abschnitt 87 (i2): ein bereits angefasster Eintrag reift trotzdem (${makelNarbenCount(run2)})`);
+  }
+
+  // (j) applyMakelNarben(): rechnet narbenCount*narbeHpBonus additiv auf
+  // maxHp, direkt UND Ende-zu-Ende ueber createState()s makelNarbenCount-Opt.
+  {
+    const baseHp87j = resolveCfg(tanksData, 'player').maxHp;
+    const cfgDirekt = applyMakelNarben({ maxHp: baseHp87j }, 3, { makel: { narbeHpBonus: 5 } });
+    check(cfgDirekt.maxHp === baseHp87j + 15, `Abschnitt 87 (j): applyMakelNarben() rechnet narbenCount*narbeHpBonus falsch (${cfgDirekt.maxHp} statt ${baseHp87j + 15})`);
+    const cfgNo = applyMakelNarben({ maxHp: baseHp87j }, 0, { makel: { narbeHpBonus: 5 } });
+    check(cfgNo.maxHp === baseHp87j, 'Abschnitt 87 (j): applyMakelNarben() aendert maxHp auch ohne Narben');
+
+    const stNarbe = createState(tanksData, tilesData, {
+      genRng: rngFor(1, 1, 'rooms'),
+      enemyTypes: ['t_brown'],
+      aiSeed: hashSeed(1, 1, 'ai'),
+      playerUpgrades: {},
+      upgradesData: { upgrades: {} },
+      equippedSecondary: 'mine',
+      makelNarbenCount: 4,
+      transform: {},
+      starterTank: 'player',
+    });
+    const expectHpNarbe = baseHp87j + 4 * (tanksData.balance.makel?.narbeHpBonus ?? 0);
+    check(
+      Math.abs(stNarbe.player.cfg.maxHp - expectHpNarbe) < 1e-6,
+      `Abschnitt 87 (j): createState() reicht makelNarbenCount nicht bis applyMakelNarben() durch (${stNarbe.player.cfg.maxHp} statt ${expectHpNarbe})`,
+    );
+  }
+
+  // (k) Snapshot/Fortsetzen: alle vier neuen Felder ueberstehen
+  // runSnapshot() + createRun({resume}); ein aelterer Zwischenstand ohne sie
+  // faellt auf leere Objekte zurueck statt abzustuerzen.
+  {
+    const run = enterWorkshop87();
+    check(!!run, 'Abschnitt 87 (k): Testaufbau -- kein Shop-Knoten gefunden');
+    if (run) {
+      run.upgradesData = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+      run.upgrades = { zweimakel87: 1 };
+      umpolenMakel(run, 'zweimakel87', 0);
+      haertenMakel(run, 'zweimakel87', 1);
+      run.makelNarbenRooms.zweimakel87 = { 1: 2 };
+      run.makelNarbenMatured.zweimakel87 = [1];
+      const snap = runSnapshot(run);
+      check(
+        Array.isArray(snap.makelUmgepolt?.zweimakel87) && snap.makelUmgepolt.zweimakel87.includes(0),
+        'Abschnitt 87 (k): runSnapshot() haelt makelUmgepolt nicht fest',
+      );
+      check(snap.makelSchwereOverride?.zweimakel87?.[1] === 'leicht', 'Abschnitt 87 (k): runSnapshot() haelt makelSchwereOverride nicht fest');
+      check(
+        Array.isArray(snap.makelNarbenMatured?.zweimakel87) && snap.makelNarbenMatured.zweimakel87.includes(1),
+        'Abschnitt 87 (k): runSnapshot() haelt makelNarbenMatured nicht fest',
+      );
+      const resumed = createRun(tanksData, tilesData, diffData, upgradesData, snap.seed, snap.modeKey, { resume: snap });
+      check(resumed.makelUmgepolt?.zweimakel87?.includes(0), 'Abschnitt 87 (k): Fortsetzen stellt makelUmgepolt nicht wieder her');
+      check(resumed.makelSchwereOverride?.zweimakel87?.[1] === 'leicht', 'Abschnitt 87 (k): Fortsetzen stellt makelSchwereOverride nicht wieder her');
+      check(resumed.makelNarbenMatured?.zweimakel87?.includes(1), 'Abschnitt 87 (k): Fortsetzen stellt makelNarbenMatured nicht wieder her');
+
+      const oldSnap = { ...snap };
+      delete oldSnap.makelUmgepolt;
+      delete oldSnap.makelSchwereOverride;
+      delete oldSnap.makelNarbenRooms;
+      delete oldSnap.makelNarbenMatured;
+      let crashed = false;
+      let resumedOld = null;
+      try {
+        resumedOld = createRun(tanksData, tilesData, diffData, upgradesData, oldSnap.seed, oldSnap.modeKey, { resume: oldSnap });
+      } catch (e) {
+        crashed = true;
+        check(false, `Abschnitt 87 (k): Fortsetzen ohne die vier neuen Felder stuerzt ab (${e.message})`);
+      }
+      check(
+        !crashed &&
+          resumedOld &&
+          typeof resumedOld.makelUmgepolt === 'object' &&
+          typeof resumedOld.makelSchwereOverride === 'object' &&
+          typeof resumedOld.makelNarbenRooms === 'object' &&
+          typeof resumedOld.makelNarbenMatured === 'object',
+        'Abschnitt 87 (k): aelterer Zwischenstand liefert keine leeren Fallback-Objekte',
+      );
+    }
+  }
+
+  // (l) HUD "Aktive Makel" (Pausenmenue): ein umgepolter Eintrag zeigt seinen
+  // BONUS (mit "↻") statt des Malus-Symbols, ein gereiftes Narben-Feld zeigt
+  // die Anzahl -- ueber den echten Renderpfad (drawPause()).
+  {
+    const texts = [];
+    const fakeCtx = new Proxy(
+      { canvas: { width: 768, height: 512 }, measureText: () => ({ width: 40 }) },
+      {
+        get: (t, k) => {
+          if (k in t) return t[k];
+          if (k === 'fillText') return (s) => texts.push(String(s));
+          if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop() {} });
+          return () => {};
+        },
+        set: () => true,
+      },
+    );
+    const hud = createHud(fakeCtx);
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 12);
+    run.upgradesData = { upgrades: { zweimakel87: zweiMakelKarte87 } };
+    run.upgrades = { zweimakel87: 1 };
+    run.phase = 'playing';
+    umpolenMakel(run, 'zweimakel87', 0);
+    run.makelNarbenMatured = { zweimakel87: [1] };
+    texts.length = 0;
+    hud.render(run, { paused: true });
+    const joined = texts.join('\n');
+    check(joined.includes('↻') && joined.includes('Leben'), `Abschnitt 87 (l): Pausenmenue zeigt die Umpolung nicht (${joined})`);
+    check(!joined.includes('🐌'), `Abschnitt 87 (l): Pausenmenue zeigt trotz Umpolung weiter das Malus-Symbol (${joined})`);
+    check(joined.includes('Blechhaut'), 'Abschnitt 87 (l): Pausenmenue zeigt den nicht umgepolten Makel nicht mehr');
+    check(joined.includes('Narben: 1'), `Abschnitt 87 (l): Pausenmenue zeigt die Narbe nicht (${joined})`);
+  }
+
+  // (m) Shop-UI: Umpolung-/Haertung-Sektionen erscheinen nur bei einer nicht
+  // leeren Liste (Muster renderSecondaries()/renderWerkstatt()), zeigen
+  // Zielachse/naechste Stufe, und ein Klick ruft den richtigen Callback mit
+  // den richtigen Argumenten auf.
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { createShopScreen } = await import('../src/ui/roomscreens.js');
+      const calls = { umpolung: [], haertung: [] };
+      const baseCtx = {
+        upgradesData,
+        secondariesData: tanksData.secondaries,
+        costs: tanksData.balance.scrap.cost,
+        dropRefund: tanksData.balance.scrap.dropRefund,
+        getScrap: () => 999,
+        getUpgrades: () => ({}),
+        getWorkbenchOptions: () => [],
+        getOffers: () => [],
+        getEquippedSecondary: () => null,
+        necromancer: false,
+        lifeBought: () => false,
+        atFullLives: () => false,
+        onBuyCard: () => false,
+        onBuyShield: () => false,
+        onBuySecondary: () => false,
+        onBuyLife: () => false,
+        onUpgradeLevel: () => false,
+        onDrop: () => false,
+        onLeave: () => {},
+        getRemovableMakel: () => [],
+        onRemoveMakel: () => false,
+        getUmpolbareMakel: () => [],
+        onUmpolenMakel: (cardId, index) => {
+          calls.umpolung.push([cardId, index]);
+          return true;
+        },
+        getHaertbareMakel: () => [],
+        onHaertenMakel: (cardId, index) => {
+          calls.haertung.push([cardId, index]);
+          return true;
+        },
+      };
+      const screen = createShopScreen();
+
+      screen.show(baseCtx);
+      const emptyText = document.getElementById('workshop').textContent;
+      check(!emptyText.includes('Umpolung') && !emptyText.includes('Härtung'), 'Abschnitt 87 (m): zeigt Umpolung-/Haertung-Sektionen trotz leerer Listen');
+
+      const umpolOpt = [
+        { cardId: 'zweimakel87', index: 0, cardName: 'Testkarte', symbol: '🐌', name: 'Schwerfällig', schwere: 'schwer', targetName: 'Leben', targetValue: 18 },
+      ];
+      const haertOpt = [
+        { cardId: 'zweimakel87', index: 1, cardName: 'Testkarte', symbol: '🛢️', name: 'Blechhaut', schwere: 'schwer', nextSchwere: 'mittel' },
+      ];
+      screen.show({ ...baseCtx, getUmpolbareMakel: () => umpolOpt, getHaertbareMakel: () => haertOpt });
+      const gefuellt = document.getElementById('workshop').textContent;
+      check(gefuellt.includes('Umpolung') && gefuellt.includes('Härtung'), `Abschnitt 87 (m): zeigt die Sektionsueberschriften nicht (${gefuellt})`);
+      const buttons = [...document.querySelectorAll('.dropbtn')];
+      const umpolBtn = buttons.find((b) => b.innerHTML.includes('Schwerfällig'));
+      const haertBtn = buttons.find((b) => b.innerHTML.includes('Blechhaut'));
+      check(!!umpolBtn && umpolBtn.innerHTML.includes('Leben'), `Abschnitt 87 (m): Umpolung-Knopf zeigt keine Zielachse (${umpolBtn?.innerHTML})`);
+      check(!!haertBtn && haertBtn.innerHTML.includes('mittel'), `Abschnitt 87 (m): Haertung-Knopf zeigt keine naechste Stufe (${haertBtn?.innerHTML})`);
+      if (umpolBtn) umpolBtn.click();
+      if (haertBtn) haertBtn.click();
+      check(
+        calls.umpolung.length === 1 && calls.umpolung[0][0] === 'zweimakel87' && calls.umpolung[0][1] === 0,
+        `Abschnitt 87 (m): Klick ruft onUmpolenMakel nicht mit den richtigen Argumenten auf (${JSON.stringify(calls.umpolung)})`,
+      );
+      check(
+        calls.haertung.length === 1 && calls.haertung[0][0] === 'zweimakel87' && calls.haertung[0][1] === 1,
+        `Abschnitt 87 (m): Klick ruft onHaertenMakel nicht mit den richtigen Argumenten auf (${JSON.stringify(calls.haertung)})`,
       );
     } finally {
       restore();

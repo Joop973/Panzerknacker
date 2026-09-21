@@ -21,6 +21,9 @@
     "Kurzer Lauf": "Makel: senkt das Geschosstempo.",
     "Teuer": "Makel: senkt den Schrott-Ertrag je Raum.",
     "Dünne Platte": "Makel: senkt die Schadensresistenz.",
-    "Heißer Lauf": "Makel: verkuerzt die Selbst-Immunitaetszeit gegen die eigene Kugel."
+    "Heißer Lauf": "Makel: verkuerzt die Selbst-Immunitaetszeit gegen die eigene Kugel.",
+    "Umpolung": "Einer der vier Auswege gegen einen Makel: wandelt ihn dauerhaft von einem Nachteil in einen Bonus auf einer ANDEREN Achse um, gegen Schrott in der Werkstatt.",
+    "Härtung": "Einer der vier Auswege gegen einen Makel: senkt seinen Schweregrad um eine Stufe (schwer -> mittel -> leicht), gegen Schrott in der Werkstatt.",
+    "Narbe": "Ein Makel, der ueber mehrere Raeume hinweg unangetastet blieb, wird dauerhaft 'vernarbt' und gewaehrt von da an automatisch einen kleinen Bonus -- unabhaengig davon, was spaeter mit dem Original-Makel passiert."
   }
 }

@@ -224,6 +224,54 @@ export function createShopScreen() {
     el.appendChild(list);
   }
 
+  // Umpolung (Phase M4, AUFTRAG-UMBAU-V2.md): zweiter der "vier Auswege" --
+  // wandelt einen einzelnen Makel-Eintrag in einen Bonus auf einer ANDEREN
+  // Achse um (ctx.getUmpolbareMakel liefert die Zielachse als Preview-Text
+  // mit, run.js: umpolbareMakelOptions()). Bleibt wie die Werkstatt
+  // unsichtbar, solange keine besessene Karte einen umpolbaren Makel traegt.
+  function renderUmpolung(scrap) {
+    const options = ctx.getUmpolbareMakel();
+    if (!options.length) return;
+    el.appendChild(sectionTitle(`Umpolung — Makel in Bonus umwandeln (${ctx.costs.makelUmpolung}⚙):`));
+    const list = document.createElement('div');
+    list.className = 'droplist';
+    for (const o of options) {
+      const b = document.createElement('button');
+      b.className = 'dropbtn';
+      b.innerHTML =
+        `${o.symbol} ${o.name} (${o.schwere}) → +${o.targetValue} ${o.targetName} — ${o.cardName} <span class="price">${ctx.costs.makelUmpolung}⚙</span>`;
+      b.disabled = scrap < ctx.costs.makelUmpolung;
+      b.addEventListener('click', () => {
+        if (ctx.onUmpolenMakel(o.cardId, o.index)) render();
+      });
+      list.appendChild(b);
+    }
+    el.appendChild(list);
+  }
+
+  // Haertung (Phase M4): dritter der "vier Auswege" -- senkt die Stufe eines
+  // Makel-Eintrags um eine Stufe (schwer->mittel->leicht), guenstiger als die
+  // anderen beiden. Bleibt ebenso unsichtbar ohne eine noch senkbare Karte.
+  function renderHaertung(scrap) {
+    const options = ctx.getHaertbareMakel();
+    if (!options.length) return;
+    el.appendChild(sectionTitle(`Härtung — Schweregrad senken (${ctx.costs.makelHaertung}⚙):`));
+    const list = document.createElement('div');
+    list.className = 'droplist';
+    for (const o of options) {
+      const b = document.createElement('button');
+      b.className = 'dropbtn';
+      b.innerHTML =
+        `${o.symbol} ${o.name} (${o.schwere} → ${o.nextSchwere}) — ${o.cardName} <span class="price">${ctx.costs.makelHaertung}⚙</span>`;
+      b.disabled = scrap < ctx.costs.makelHaertung;
+      b.addEventListener('click', () => {
+        if (ctx.onHaertenMakel(o.cardId, o.index)) render();
+      });
+      list.appendChild(b);
+    }
+    el.appendChild(list);
+  }
+
   function renderSecondaries(scrap) {
     // P4: der Shop tauscht das GADGET -- die Bombe liegt im festen Slot und
     // steht nicht zum Tausch. Deshalb nur Eintraege mit category 'gadget'.
@@ -298,6 +346,8 @@ export function createShopScreen() {
     renderActions(scrap);
     renderWorkbench(scrap);
     renderWerkstatt(scrap);
+    renderUmpolung(scrap);
+    renderHaertung(scrap);
     renderSecondaries(scrap);
     renderDrops();
 

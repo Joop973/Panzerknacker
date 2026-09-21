@@ -40,7 +40,7 @@ import { stepSpiderBoss, updateSpiderLegHits, updateSpiderWebs } from './spider.
 import { updateSpiderMines } from './spidermine.js';
 import { circlesOverlap } from './collision.js';
 import { generateRoom, buildFixedRoom } from './generator.js';
-import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, applyNecroRunScaling, applyCfgFloors, isBossCfg } from './cfg.js';
+import { resolveCfg, applyUpgrades, applyRoomModifier, applyRoomContext, applyHpScaling, applyScrapDamage, applyNecroRunScaling, applyMakelNarben, applyCfgFloors, isBossCfg } from './cfg.js';
 import { armorBlocks, reflectBullet, reflectFromAim, isLive, flankZone, angleDelta } from './armor.js';
 
 // Zelltyp -> Wandtyp. 'hole' blockiert Panzer, Geschosse fliegen drueber.
@@ -712,6 +712,7 @@ export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
     destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses, upgradeLevels, levelBalance, makelRemoved,
+    makelUmgepolt, makelSchwereOverride, makelNarbenCount = 0,
     starterTank = 'player', starterScrap = 0, actEnemyPool, necroRunStacksBase,
     necroRunDmgBonus = 0, necroRunHpBonus = 0 } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
@@ -771,6 +772,7 @@ export function createState(data, tiles, opts) {
           // Schrottpanzer-Passiv, VOR dem Raum-Modifikator -- gleiche Stelle
           // wie applyScrapDamage(), ein weiterer "einmal pro Raumaufbau
           // gebackener" Multiplikator.
+          applyMakelNarben(
           applyNecroRunScaling(
           applyScrapDamage(
             applyUpgrades(
@@ -783,11 +785,16 @@ export function createState(data, tiles, opts) {
             levelBalance,
             data.makel,
             makelRemoved,
+            makelUmgepolt,
+            makelSchwereOverride,
           ),
             starterScrap,
           ),
           necroRunDmgBonus,
           necroRunHpBonus,
+          ),
+            makelNarbenCount,
+            data.balance,
           ),
           modifier,
           true,
@@ -854,6 +861,9 @@ export function createState(data, tiles, opts) {
     upgradeLevels, // Grundsteinumbau Phase 7: fuer respawnPlayer()
     levelBalance,
     makelRemoved, // Phase M3 (AUFTRAG-UMBAU-V2.md): fuer respawnPlayer()
+    makelUmgepolt, // Phase M4: dito, fuer respawnPlayer()
+    makelSchwereOverride, // Phase M4: dito, fuer respawnPlayer()
+    makelNarbenCount, // Phase M4: dito, fuer respawnPlayer()
     equippedSecondary: equippedSecondary || 'mine', // Phase 6: fuer respawnPlayer()
     equippedGadget: equippedGadget || null, // P4: zweiter Slot, ebenfalls fuer respawnPlayer()
     starterTank, // Phase 9: gewaehlte Klasse -- respawnPlayer() baut denselben Panzer
@@ -1996,6 +2006,7 @@ function respawnPlayer(state) {
     applyCfgFloors(
       applyRoomContext(
         applyRoomModifier(
+          applyMakelNarben(
           applyNecroRunScaling(
           applyScrapDamage(
             applyUpgrades(
@@ -2008,11 +2019,16 @@ function respawnPlayer(state) {
               state.levelBalance,
               state.data.makel,
               state.makelRemoved,
+              state.makelUmgepolt,
+              state.makelSchwereOverride,
             ),
             state.starterScrap,
           ),
           state.necroRunDmgBonus,
           state.necroRunHpBonus,
+          ),
+            state.makelNarbenCount,
+            state.data.balance,
           ),
           state.modifier,
           true,
