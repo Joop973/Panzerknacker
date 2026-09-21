@@ -9662,8 +9662,119 @@ geprüft ausschließlich mit synthetischen Testkarten.
 - `sw.js` auf `v125` gebumpt (`data/makel.json` neu in `ASSETS`) +
   `telemetry.js: GAME_VERSION` mitgezogen — wie bei M1 laut expliziter
   Phasenvorgabe in `AUFTRAG-UMBAU-V2.md`, unabhängig davon, dass hier
-  tatsächlich auch ein neues Asset dazukam. **Nächste Sitzung: Phase M3**
-  (Werkstatt — gezielte Entfernung eines einzelnen Makel-Eintrags).
+  tatsächlich auch ein neues Asset dazukam.
+
+### AUFTRAG-UMBAU-V2 — Phase M3 (Werkstatt) — gemergt
+Der erste der „vier Auswege" gegen Makel (Auftrag Teil 1.3): eine
+**Werkstatt**-Aktion im Shop entfernt gegen Schrott GENAU EINEN Makel-Eintrag
+einer besessenen Karte, dauerhaft für den Rest des Runs, ohne den `core`-Bonus
+der Karte oder einen anderen Makel derselben Karte anzufassen.
+- **Ist-Abgleich-Hinweis (transparent dokumentiert)**: der genaue
+  Aufgabentext von Phase M3 aus `AUFTRAG-UMBAU-V2.md` lag in dieser Sitzung
+  nicht mehr im Kontext vor (das Dokument ist reiner Chat-Text, keine
+  Repo-Datei — wie schon bei `AUFTRAG-GRUNDSTEINUMBAU.md`/
+  `AUFTRAG-NEKROMANT-V2.md` dokumentiert). Umgesetzt wurde deshalb exakt das,
+  was Phase M2s eigener CLAUDE.md-Eintrag bereits als Architekturvorgabe
+  festhielt: „`def.makel` ist ein separates Feld, `applyMakel()` liest nie
+  `def.core` — M3 (Werkstatt) kann später gezielt EINEN Makel-Eintrag
+  entfernen ... ohne den Bonus der Karte je anzufassen". Der Name
+  „Werkstatt" ist bewusst als **Shop-Aktion** verortet (nicht am
+  Rastplatz) — der Shop-Raum heißt intern seit Phase 13 ohnehin `workshop`
+  („Werkstatt"), die textliche Deckungsgleichheit war der naheliegendste,
+  am wenigsten spekulative Anschlusspunkt. Sollte der tatsächliche
+  Auftragstext etwas anderes verlangen (z. B. eine eigene Rastplatz-Option),
+  ist das in einer Folgesitzung nachzuziehen — die Kernmechanik
+  (`removeMakel()`) ist dafür bereits UI-unabhängig gebaut.
+- **`run.makelRemoved`** (neu, `{kartenId: [entfernte Indizes]}`, Start
+  `{}`): run-lokal, mutiert **nie** die geteilte Kartendefinition
+  (`upgradesData.upgrades[id].makel` gilt für jede Instanz dieser Karte im
+  ganzen Spiel unverändert). Persistiert im `runSnapshot()`, mit Fallback
+  auf `{}` für ältere Zwischenstände ohne das Feld (Muster wie
+  `upgradeLevels` seit Grundsteinumbau Phase 7).
+- **`run.js: removeMakel(run, cardId, index)`** (neu, exportiert): der
+  Kernmechanismus — lehnt eine unbesessene Karte, einen ungültigen Index und
+  einen bereits entfernten Index ab (`false`), sonst wird der Index in
+  `run.makelRemoved[cardId]` eingetragen. Kostenlos, kein Raumfluss — der
+  Aufrufer (aktuell nur die Shop-Werkstatt) entscheidet über Preis/Ablauf,
+  exakt das Muster von `repickOwnedCard()`.
+- **`run.js: removableMakelOptions(run)`** (neu, exportiert): eine FLACHE
+  Liste über alle besessenen Karten, ein Eintrag je noch nicht entferntem
+  Makel (`{cardId, index, cardName, symbol, name, schwere}`) — eine Karte
+  trägt laut Vokabular selten mehr als einen Eintrag, deshalb keine
+  verschachtelte „erst Karte, dann Makel wählen"-UI.
+- **`run.js: buyShopMakelRemoval(run, cardId, index)`** (neu, exportiert):
+  Shop-Aktion, `data/balance.json: scrap.cost.makelRemoval` (8) — prüft
+  `run.phase === 'workshop'`, Schrott, ruft dann `removeMakel()`. Bleibt wie
+  jede andere Shop-Aktion im Raum offen (kein Raumfluss).
+- **`cfg.js: applyUpgrades()`** bekommt einen 9. Parameter `makelRemoved` —
+  filtert `U[id].makel` VOR dem Aufruf von `applyMakel()` um die entfernten
+  Indizes dieser Karte, der `core`-Bonus (`c.*`) bleibt davon vollkommen
+  unberührt (eigener Codeabschnitt, läuft parallel zur core-Auswertung).
+  `state.js: createState()`/`respawnPlayer()` reichen `makelRemoved` an
+  beiden Aufrufstellen durch (`state.makelRemoved` für `respawnPlayer()`,
+  Muster `upgradeLevels`/`levelBalance`); `run.js: buildCombatRoom()` reicht
+  `run.makelRemoved` als `createState()`-Opt durch.
+- **Shop-UI** (`roomscreens.js: renderWerkstatt()`, neu, zwischen Werkbank
+  und Gadget-Tausch): eine flache Liste entfernbarer Makel-Einträge, Preis
+  je Klick. Bleibt wie `renderSecondaries()` **komplett unsichtbar**, solange
+  keine besessene Karte einen Makel trägt (kein Dauer-Platzhalter) — aktuell
+  trifft das auf JEDEN Run zu, die 14 Kartenwellen mit echten Makel-Karten
+  kommen erst nach Phase M4.
+- **HUD „Aktive Makel"** (`hud.js: activeMakelList()`): filtert entfernte
+  Indizes jetzt genauso heraus wie `cfg.js` — ein per Werkstatt entfernter
+  Makel verschwindet auch aus der Pausenmenü-Anzeige.
+- **Neuer Testabschnitt 86** (`tests/regression.mjs`, sieben Unterprüfungen
+  (a)–(g)): (a) `removeMakel()`-Mechanismus direkt (gültig/doppelt/
+  ungültiger Index/unbesessen), (b) cfg.js Ende-zu-Ende mit einer
+  synthetischen Zwei-Makel-Karte — der entfernte Index wirkt nicht mehr, der
+  NICHT entfernte UND der `core`-Bonus bleiben unverändert, (c)
+  `removableMakelOptions()` vor/nach einer Entfernung, (d) der Shop-
+  Mechanismus (`buyShopMakelRemoval()`, exakter Preis, Ablehnung bei zu
+  wenig Schrott/außerhalb des Shops/doppeltem Versuch) über einen ECHTEN,
+  per Kartengraph angesteuerten Shop-Raum (Muster: Abschnitt 52s
+  `enterWorkshop()`), (e) Snapshot/Fortsetzen inkl. Fallback für einen
+  älteren Zwischenstand ohne das Feld, (f) HUD-Filterung über den echten
+  `drawPause()`-Renderpfad, (g) die Shop-UI selbst (`createShopScreen()`,
+  domstub) — Sektion unsichtbar bei leerer Liste, zeigt beide Einträge,
+  ein Klick ruft `onRemoveMakel` mit den richtigen Argumenten auf, danach
+  nur noch der verbleibende Eintrag.
+- **Zwei echte Testkonstruktionsfehler beim eigenen Testbau gefunden und
+  behoben** (kein Code-Bug): (1) Test (d)s zweiter Kaufversuch auf denselben
+  Index war ursprünglich durch den inzwischen NIEDRIGEN Schrottstand
+  konfundiert (die erste Gegenprobe für die Doppel-Entfernungs-Sperre blieb
+  dadurch grün, obwohl die Sperre ausgebaut war) — behoben, indem vor dem
+  zweiten Versuch reichlich Schrott gesetzt wird, damit eine Ablehnung
+  eindeutig der Sperre zuzuordnen ist. (2) Test (g) prüfte zuerst
+  `element.textContent` auf die per `innerHTML` gesetzten Kartennamen — die
+  bereits im Nekromant-Feinschliff dokumentierte domstub-Falle
+  (`innerHTML` ist im Stub nur ein gespeicherter String, `appendChild()`
+  aktualisiert ihn nicht, UND `get textContent()` liest ihn nie mit) machte
+  den Test blind fürs eigentliche Kartenlisting; umgestellt auf
+  `button.innerHTML` der einzelnen `.dropbtn`-Elemente.
+- **Sechs Pflicht-Gegenproben am echten Quellcode bestanden** (jede
+  einzeln zurückgesetzt, danach volle Suite wieder grün mit identischen
+  Seed-Raumzahlen 31/32/29/38/38 wie vor der Phase): `cfg.js`s
+  Entfernungs-Filter ausgebaut → genau (b) rot; `removeMakel()`s
+  Doppel-Sperre ausgebaut → (a) UND (d) rot (beide korrekt auf dieselbe
+  Ursache zurückführbar); `buyShopMakelRemoval()`s Phasen-Gate UND
+  Schrottabzug gemeinsam ausgebaut → alle fünf (d)-Prüfungen rot
+  (nachvollziehbare Kaskade: ohne Preisprüfung „gelingt" der erste,
+  eigentlich ungültige Kauf bereits und entfernt den Index vorzeitig);
+  `removableMakelOptions()`s Filter ausgebaut → genau (c) rot; `hud.js:
+  activeMakelList()`s Filter ausgebaut → genau (f) rot; `runSnapshot()`s
+  `makelRemoved`-Feld ausgebaut → genau (e) rot. Zusätzlich zwei gezielte
+  UI-Gegenproben: die Leer-Rückkehr in `renderWerkstatt()` ausgebaut → genau
+  „zeigt die Werkstatt-Sektion trotz leerer Liste" (g) rot; der
+  `onRemoveMakel`-Aufruf im Klick-Handler ausgebaut → genau die
+  Klick-Prüfung (g) rot.
+- Playwright-Smoke (echter Server, echter Browser): Start + laufender Raum
+  ohne Konsolenfehler (Canvas vorhanden) — mangels einer echten Makel-Karte
+  im aktiven Pool erscheint die Werkstatt-Sektion noch in keinem echten
+  Shop-Besuch, das folgt mit den 14 Kartenwellen nach Phase M4.
+- `sw.js` auf `v126` gebumpt (keine neuen/geänderten Assets) +
+  `telemetry.js: GAME_VERSION` mitgezogen — wie bei M1/M2 laut expliziter
+  Phasenvorgabe in `AUFTRAG-UMBAU-V2.md`. **Nächste Sitzung: Phase M4**
+  (Umpolung, Härtung, Narben — die übrigen drei „Auswege" gegen Makel).
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert

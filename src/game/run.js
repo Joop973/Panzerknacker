@@ -514,6 +514,7 @@ export function runSnapshot(run) {
     scrap: run.scrap,
     upgrades: { ...run.upgrades },
     upgradeLevels: { ...run.upgradeLevels }, // Grundsteinumbau Phase 7
+    makelRemoved: { ...run.makelRemoved }, // Phase M3 (AUFTRAG-UMBAU-V2.md)
     equippedSecondary: run.equippedSecondary,
     equippedGadget: run.equippedGadget,
     banned: [...run.bannedUpgrades],
@@ -660,6 +661,7 @@ function buildCombatRoom(run, type, isFinal) {
     upgradesData: run.upgradesData,
     upgradeLevels: run.upgradeLevels, // Grundsteinumbau Phase 7: am Rastplatz aufgewertete Stufen
     levelBalance: run.data.balance.upgradeLevel,
+    makelRemoved: run.makelRemoved, // Phase M3: per Werkstatt entfernte Makel-Eintraege
     equippedSecondary: run.equippedSecondary,
     equippedGadget: run.equippedGadget,
     shieldCharges: run.shieldCharges, // raumuebergreifende Notschild-Ladungen
@@ -932,6 +934,48 @@ export function workbenchOptions(run) {
     }));
 }
 
+// Phase M3 (AUFTRAG-UMBAU-V2.md, "Werkstatt"): eine flache Liste ueber ALLE
+// besessenen Karten, ein Eintrag je noch nicht entfernten Makel -- eine
+// Karte traegt selten mehr als einen (Auftrag Teil 1.3), deshalb keine
+// verschachtelte "erst Karte, dann Makel waehlen"-UI. removed (run.
+// makelRemoved[id]) filtert bereits entfernte Indizes heraus, kein
+// zweiter Deckel noetig.
+export function removableMakelOptions(run) {
+  const defs = run.upgradesData.upgrades;
+  const vocab = run.data.makel;
+  if (!vocab) return [];
+  const out = [];
+  for (const [id, stack] of Object.entries(run.upgrades)) {
+    if (!(stack > 0)) continue;
+    const def = defs[id];
+    if (!def?.makel?.length) continue;
+    const removed = run.makelRemoved[id] || [];
+    def.makel.forEach((m, index) => {
+      if (removed.includes(index)) return;
+      const mv = vocab[m.id];
+      if (!mv) return;
+      out.push({ cardId: id, index, cardName: def.name, symbol: mv.symbol, name: mv.name, schwere: m.schwere });
+    });
+  }
+  return out;
+}
+
+// Kernmechanismus: entfernt GENAU EINEN Makel-Eintrag einer besessenen Karte,
+// dauerhaft fuer den Rest des Runs -- der core-Bonus der Karte bleibt
+// unangetastet, s. cfg.js: applyMakel()/den Filter davor (der einzige Ort,
+// der run.makelRemoved wirklich auswertet). Kostenlos/kein Raumfluss -- der
+// Aufrufer (aktuell nur die Shop-Werkstatt) entscheidet ueber Preis/Ablauf.
+export function removeMakel(run, cardId, index) {
+  if (!(run.upgrades[cardId] > 0)) return false;
+  const def = run.upgradesData.upgrades[cardId];
+  const entry = def?.makel?.[index];
+  if (!entry) return false;
+  const removed = run.makelRemoved[cardId] || (run.makelRemoved[cardId] = []);
+  if (removed.includes(index)) return false;
+  removed.push(index);
+  return true;
+}
+
 // Gemeinsamer Kern: eine bereits besessene, wiederholbare Karte "erneut
 // waehlen" -- ruft denselben applyUpgradeChoice()-Hook wie eine frische
 // Kartenwahl (Stapelzaehler, Tag-/Synergie-Buchfuehrung, Sonderfaelle wie
@@ -1128,6 +1172,12 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     // Rastplatz aufgewertet sein. cfg.js: applyUpgrades() skaliert damit die
     // core-Effekte der Karte (1 + stufe*balance.upgradeLevel.bonusPct).
     upgradeLevels: {},
+    // Phase M3 (AUFTRAG-UMBAU-V2.md, Werkstatt): {kartenId: [entfernte Makel-
+    // Indizes]} -- run-lokal, mutiert NIE die geteilte Kartendefinition
+    // (upgradesData.upgrades[id].makel bleibt fuer jede Instanz dieser Karte
+    // unangetastet). cfg.js: applyUpgrades() filtert damit die Makel-Liste
+    // VOR applyMakel(), der core-Bonus der Karte ist davon unberuehrt.
+    makelRemoved: {},
     equippedSecondary: 'mine', // Phase 6/P4: fester Bombenslot, nicht tauschbar
     equippedGadget: null, // P4: zweiter, tauschbarer Slot -- Start: keines
     upgradeChoices: 0,
@@ -1229,6 +1279,7 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     run.scrap = r.scrap || 0;
     run.upgrades = { ...(r.upgrades || {}) };
     run.upgradeLevels = { ...(r.upgradeLevels || {}) }; // Phase 7: aeltere Zwischenstaende kennen das Feld noch nicht
+    run.makelRemoved = { ...(r.makelRemoved || {}) }; // Phase M3: aeltere Zwischenstaende kennen das Feld noch nicht
     run.equippedSecondary = r.equippedSecondary || 'mine';
     run.equippedGadget = r.equippedGadget || null;
     run.bannedUpgrades = new Set(r.banned || []);
@@ -1778,6 +1829,19 @@ export function buyShopUpgradeLevel(run, id) {
   const cost = run.data.balance.scrap.cost.upgradeLevel ?? 0;
   if (run.scrap < cost) return false;
   if (!repickOwnedCard(run, id)) return false;
+  run.scrap -= cost;
+  return true;
+}
+
+// Werkstatt im Shop (Phase M3, AUFTRAG-UMBAU-V2.md, einer der "vier
+// Auswege" gegen Makel): gegen Schrott GENAU EINEN Makel-Eintrag einer
+// besessenen Karte entfernen (removeMakel() oben). Bleibt wie jede andere
+// Shop-Aktion im Raum -- kein Raumfluss.
+export function buyShopMakelRemoval(run, cardId, index) {
+  if (run.phase !== 'workshop') return false;
+  const cost = run.data.balance.scrap.cost.makelRemoval ?? 0;
+  if (run.scrap < cost) return false;
+  if (!removeMakel(run, cardId, index)) return false;
   run.scrap -= cost;
   return true;
 }

@@ -29,6 +29,8 @@ import {
   buyShopSecondary,
   buyShopLife,
   buyShopUpgradeLevel,
+  buyShopMakelRemoval,
+  removableMakelOptions,
   repairAtRest,
   workbenchOptions,
   upgradeCardAtRest,
@@ -933,6 +935,9 @@ async function init() {
         // Grundsteinumbau Phase 8: Werkbank im Shop -- dieselbe Filterliste
         // wie am Rastplatz (run.js: workbenchOptions()).
         getWorkbenchOptions: () => workbenchOptions(run),
+        // Phase M3 (AUFTRAG-UMBAU-V2.md): Werkstatt -- entfernbare Makel-
+        // Eintraege ueber alle besessenen Karten (run.js: removableMakelOptions()).
+        getRemovableMakel: () => removableMakelOptions(run),
         // Grundsteinumbau Phase 7: "+"-Suffix auch im Shop-Regal.
         getOffers: () => run.shopOffers?.map((o) => ({ ...o, stufe: run.upgradeLevels[o.id] || 0 })),
         // Phase M2 (AUFTRAG-UMBAU-V2.md): Makel-Vokabular fuer die Shop-Karten.
@@ -1000,6 +1005,12 @@ async function init() {
         onUpgradeLevel: (id) => {
           const ok = buyShopUpgradeLevel(run, id);
           if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'upgradeLevel', amount: costs.upgradeLevel });
+          return ok;
+        },
+        // Phase M3 (AUFTRAG-UMBAU-V2.md): Werkstatt -- ein Makel weniger.
+        onRemoveMakel: (cardId, index) => {
+          const ok = buyShopMakelRemoval(run, cardId, index);
+          if (ok) telemetry.recordScrapSpend({ room: run.roomIndex, type: 'makelRemoval', amount: costs.makelRemoval });
           return ok;
         },
         onDrop: (id) => {

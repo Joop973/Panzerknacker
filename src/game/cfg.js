@@ -229,7 +229,13 @@ export function applyNecroRunScaling(cfg, runDmgBonusPct, runHpBonusPct) {
 // die Sockelkarten (data/upgrades.json) sind aktuell erreichbar -- sie
 // nutzen ausschliesslich hpAdd/speedMult/magAdd/reloadMult, alle vier
 // korrekt additiv bzw. multiplikativ erfasst.
-export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadget, upgradeLevels, levelBalance, makelVocab) {
+// Phase M3 (AUFTRAG-UMBAU-V2.md, Werkstatt): makelRemoved ist ein Objekt
+// {kartenId: [entfernte Indizes]} -- run.js: removeMakel() traegt dort einen
+// Index EINER besessenen Karte ein, wenn die Werkstatt genau diesen Makel-
+// Eintrag entfernt hat. Rein run-lokal (nie die geteilte Kartendefinition
+// upsData.upgrades[id].makel selbst mutiert -- die gilt fuer jede Instanz
+// dieser Karte im ganzen Spiel).
+export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadget, upgradeLevels, levelBalance, makelVocab, makelRemoved) {
   if (!ups) return cfg;
   const l = (k) => ups[k] || 0;
   const bonusPct = levelBalance?.bonusPct ?? 0;
@@ -568,7 +574,15 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     // bestehenden generischen core-Schluessel -- dieselbe Rastplatz-
     // Stufenskalierung (scaleCore) wie der Bonus selbst, ueber denselben
     // Ein-Schluessel-Umweg (applyMakel(), unten in dieser Datei definiert).
-    if (U[id].makel && U[id].makel.length) applyMakel(U[id].makel, makelVocab, lvl, stufeMultFor(id));
+    // Phase M3: ein per Werkstatt entfernter Index dieser Karte faellt hier
+    // raus, BEVOR applyMakel() ihn ueberhaupt sieht -- der core-Bonus (c.*
+    // oben) bleibt davon vollkommen unberuehrt.
+    if (U[id].makel && U[id].makel.length) {
+      const removedIdx = makelRemoved?.[id];
+      const activeMakel =
+        removedIdx && removedIdx.length ? U[id].makel.filter((_, i) => !removedIdx.includes(i)) : U[id].makel;
+      if (activeMakel.length) applyMakel(activeMakel, makelVocab, lvl, stufeMultFor(id));
+    }
     if (c.damageAdd) cfg.damage += c.damageAdd * lvl;
     if (c.reloadMult) cfg.fireCooldown *= Math.pow(c.reloadMult, lvl);
     if (c.speedMult) cfg.speed *= Math.pow(c.speedMult, lvl);
