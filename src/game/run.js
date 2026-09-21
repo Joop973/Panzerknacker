@@ -515,6 +515,10 @@ export function runSnapshot(run) {
     upgrades: { ...run.upgrades },
     upgradeLevels: { ...run.upgradeLevels }, // Grundsteinumbau Phase 7
     makelRemoved: { ...run.makelRemoved }, // Phase M3 (AUFTRAG-UMBAU-V2.md)
+    makelUmgepolt: { ...run.makelUmgepolt }, // Phase M4
+    makelSchwereOverride: { ...run.makelSchwereOverride }, // Phase M4
+    makelNarbenRooms: { ...run.makelNarbenRooms }, // Phase M4
+    makelNarbenMatured: { ...run.makelNarbenMatured }, // Phase M4
     equippedSecondary: run.equippedSecondary,
     equippedGadget: run.equippedGadget,
     banned: [...run.bannedUpgrades],
@@ -662,6 +666,9 @@ function buildCombatRoom(run, type, isFinal) {
     upgradeLevels: run.upgradeLevels, // Grundsteinumbau Phase 7: am Rastplatz aufgewertete Stufen
     levelBalance: run.data.balance.upgradeLevel,
     makelRemoved: run.makelRemoved, // Phase M3: per Werkstatt entfernte Makel-Eintraege
+    makelUmgepolt: run.makelUmgepolt, // Phase M4: per Umpolung umgewandelte Makel-Eintraege
+    makelSchwereOverride: run.makelSchwereOverride, // Phase M4: per Haertung gesenkte Stufen
+    makelNarbenCount: makelNarbenCount(run), // Phase M4: Anzahl gereifter Narben (einmal pro Raumaufbau gebacken)
     equippedSecondary: run.equippedSecondary,
     equippedGadget: run.equippedGadget,
     shieldCharges: run.shieldCharges, // raumuebergreifende Notschild-Ladungen
@@ -939,7 +946,8 @@ export function workbenchOptions(run) {
 // Karte traegt selten mehr als einen (Auftrag Teil 1.3), deshalb keine
 // verschachtelte "erst Karte, dann Makel waehlen"-UI. removed (run.
 // makelRemoved[id]) filtert bereits entfernte Indizes heraus, kein
-// zweiter Deckel noetig.
+// zweiter Deckel noetig. Phase M4: ein bereits umgepolter Index ist kein
+// Malus mehr (s. removeMakel()) und faellt hier ebenfalls raus.
 export function removableMakelOptions(run) {
   const defs = run.upgradesData.upgrades;
   const vocab = run.data.makel;
@@ -950,8 +958,9 @@ export function removableMakelOptions(run) {
     const def = defs[id];
     if (!def?.makel?.length) continue;
     const removed = run.makelRemoved[id] || [];
+    const umgepolt = run.makelUmgepolt[id] || [];
     def.makel.forEach((m, index) => {
-      if (removed.includes(index)) return;
+      if (removed.includes(index) || umgepolt.includes(index)) return;
       const mv = vocab[m.id];
       if (!mv) return;
       out.push({ cardId: id, index, cardName: def.name, symbol: mv.symbol, name: mv.name, schwere: m.schwere });
@@ -972,8 +981,162 @@ export function removeMakel(run, cardId, index) {
   if (!entry) return false;
   const removed = run.makelRemoved[cardId] || (run.makelRemoved[cardId] = []);
   if (removed.includes(index)) return false;
+  // Phase M4: ein bereits umgepolter Index ist kein Malus mehr -- die
+  // Werkstatt hat nichts mehr zu entfernen (s. Kopfkommentar bei
+  // umpolenMakel()).
+  if ((run.makelUmgepolt[cardId] || []).includes(index)) return false;
   removed.push(index);
   return true;
+}
+
+// Phase M4 (AUFTRAG-UMBAU-V2.md, "Umpolung"): eine flache Liste wie
+// removableMakelOptions(), aber fuer noch NICHT entfernte/umgepolte
+// Eintraege -- jedes Vokabular-Objekt traegt seit dieser Phase ein
+// `umpolung`-Unterobjekt (ANDERE Zielachse, data/makel.json), das hier als
+// Preview mitgeliefert wird ("Schwerfällig -> +10 Leben statt -10% Tempo").
+// Eine Karte ohne umpolung-Feld (aktuell keine) wuerde hier automatisch
+// nicht auftauchen (up == null -> Zeile faellt raus).
+export function umpolbareMakelOptions(run) {
+  const defs = run.upgradesData.upgrades;
+  const vocab = run.data.makel;
+  if (!vocab) return [];
+  const out = [];
+  for (const [id, stack] of Object.entries(run.upgrades)) {
+    if (!(stack > 0)) continue;
+    const def = defs[id];
+    if (!def?.makel?.length) continue;
+    const removed = run.makelRemoved[id] || [];
+    const umgepolt = run.makelUmgepolt[id] || [];
+    const overrides = run.makelSchwereOverride[id] || {};
+    def.makel.forEach((m, index) => {
+      if (removed.includes(index) || umgepolt.includes(index)) return;
+      const mv = vocab[m.id];
+      const up = mv?.umpolung;
+      if (!mv || !up) return;
+      const schwere = overrides[index] || m.schwere;
+      out.push({
+        cardId: id,
+        index,
+        cardName: def.name,
+        symbol: mv.symbol,
+        name: mv.name,
+        schwere,
+        targetName: up.name,
+        targetValue: up.schwere?.[schwere],
+      });
+    });
+  }
+  return out;
+}
+
+// Kernmechanismus: wandelt GENAU EINEN Makel-Eintrag von Malus in Bonus um
+// (cfg.js: applyUmpolung()) -- kein zweiter Zustand, derselbe Index kann
+// entweder entfernt ODER umgepolt sein, nie beides (s. removeMakel()).
+export function umpolenMakel(run, cardId, index) {
+  if (!(run.upgrades[cardId] > 0)) return false;
+  const def = run.upgradesData.upgrades[cardId];
+  const entry = def?.makel?.[index];
+  const vocabEntry = entry && run.data.makel?.[entry.id];
+  if (!entry || !vocabEntry?.umpolung) return false;
+  if ((run.makelRemoved[cardId] || []).includes(index)) return false;
+  const umgepolt = run.makelUmgepolt[cardId] || (run.makelUmgepolt[cardId] = []);
+  if (umgepolt.includes(index)) return false;
+  umgepolt.push(index);
+  return true;
+}
+
+// Phase M4 ("Haertung"): dieselbe flache Liste, aber fuer noch entfernbare
+// (nicht entfernt/umgepolt) Eintraege, die NICHT bereits auf der leichtesten
+// Stufe stehen -- die Stufenfolge ist schwer->mittel->leicht, "leicht" ist
+// der Boden (kein weiteres Haerten moeglich, kein Sonderfall in
+// haertenMakel() noetig, da hier schon aussortiert).
+export function haertbareMakelOptions(run) {
+  const defs = run.upgradesData.upgrades;
+  const vocab = run.data.makel;
+  if (!vocab) return [];
+  const order = ['schwer', 'mittel', 'leicht'];
+  const out = [];
+  for (const [id, stack] of Object.entries(run.upgrades)) {
+    if (!(stack > 0)) continue;
+    const def = defs[id];
+    if (!def?.makel?.length) continue;
+    const removed = run.makelRemoved[id] || [];
+    const umgepolt = run.makelUmgepolt[id] || [];
+    const overrides = run.makelSchwereOverride[id] || {};
+    def.makel.forEach((m, index) => {
+      if (removed.includes(index) || umgepolt.includes(index)) return;
+      const mv = vocab[m.id];
+      if (!mv) return;
+      const current = overrides[index] || m.schwere;
+      if (current === 'leicht') return;
+      const next = order[order.indexOf(current) + 1];
+      out.push({ cardId: id, index, cardName: def.name, symbol: mv.symbol, name: mv.name, schwere: current, nextSchwere: next });
+    });
+  }
+  return out;
+}
+
+// Kernmechanismus: senkt die effektive Stufe eines noch nicht entfernten/
+// umgepolten Makel-Eintrags um genau eine Stufe (schwer->mittel->leicht,
+// dauerhaft fuer den Rest des Runs). Wirkt ueber makelSchwereOverride sowohl
+// auf den Malus (applyMakel()) als auch auf eine SPAETERE Umpolung desselben
+// Index -- deshalb ist "erst haerten, dann umpolen" eine gueltige Reihenfolge.
+export function haertenMakel(run, cardId, index) {
+  if (!(run.upgrades[cardId] > 0)) return false;
+  const def = run.upgradesData.upgrades[cardId];
+  const entry = def?.makel?.[index];
+  if (!entry) return false;
+  if ((run.makelRemoved[cardId] || []).includes(index)) return false;
+  if ((run.makelUmgepolt[cardId] || []).includes(index)) return false;
+  const overrides = run.makelSchwereOverride[cardId] || (run.makelSchwereOverride[cardId] = {});
+  const current = overrides[index] || entry.schwere;
+  if (current === 'leicht') return false;
+  overrides[index] = current === 'schwer' ? 'mittel' : 'leicht';
+  return true;
+}
+
+// Phase M4 ("Narben"): zaehlt bei JEDEM echten Raumabschluss (stepRun()s
+// Raum-geraeumt-Zweig, dieselbe Stelle wie ageShieldCharges()) einen Raum auf
+// jeden Makel-Eintrag, der noch NIE angefasst wurde (nicht entfernt/
+// umgepolt/gehaertet) -- absichtlich strenger als "nur aktuell unveraendert":
+// ein SPAETER gehaerteter/umgepolter Eintrag darf keine Narbe mehr reifen
+// lassen, sonst waere "Ausgleich fuers Ertragen" mit einer der anderen drei
+// Auswege kombinierbar, ohne wirklich ausgeharrt zu haben. Ab
+// balance.makel.narbeRooms ist der Eintrag dauerhaft "vernarbt"
+// (makelNarbenMatured) -- die Narbe bleibt bestehen, auch wenn der
+// Original-Makel danach doch noch entfernt/umgepolt/gehaertet wird
+// (Kopfkommentar bei cfg.js: applyMakelNarben()).
+export function incrementMakelNarben(run) {
+  const threshold = run.data.balance.makel?.narbeRooms;
+  if (!threshold) return;
+  const defs = run.upgradesData.upgrades;
+  for (const [id, stack] of Object.entries(run.upgrades)) {
+    if (!(stack > 0)) continue;
+    const def = defs[id];
+    if (!def?.makel?.length) continue;
+    const removed = run.makelRemoved[id] || [];
+    const umgepolt = run.makelUmgepolt[id] || [];
+    const overrides = run.makelSchwereOverride[id] || {};
+    def.makel.forEach((_, index) => {
+      if (removed.includes(index) || umgepolt.includes(index) || overrides[index]) return;
+      const perCard = run.makelNarbenRooms[id] || (run.makelNarbenRooms[id] = {});
+      const cur = (perCard[index] || 0) + 1;
+      perCard[index] = cur;
+      if (cur >= threshold) {
+        const matured = run.makelNarbenMatured[id] || (run.makelNarbenMatured[id] = []);
+        if (!matured.includes(index)) matured.push(index);
+      }
+    });
+  }
+}
+
+// Reine Zaehlfunktion fuer cfg.js: applyMakelNarben() (Muster wie
+// applyNecroRunScaling()s runDmgBonus/runHpBonus -- ein pro Raumaufbau
+// gebackener Zahlenwert statt einer Kartenliste).
+export function makelNarbenCount(run) {
+  let n = 0;
+  for (const id in run.makelNarbenMatured) n += run.makelNarbenMatured[id].length;
+  return n;
 }
 
 // Gemeinsamer Kern: eine bereits besessene, wiederholbare Karte "erneut
@@ -1178,6 +1341,10 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     // unangetastet). cfg.js: applyUpgrades() filtert damit die Makel-Liste
     // VOR applyMakel(), der core-Bonus der Karte ist davon unberuehrt.
     makelRemoved: {},
+    makelUmgepolt: {}, // Phase M4: dieselbe Struktur wie makelRemoved, s. umpolenMakel()
+    makelSchwereOverride: {}, // Phase M4: {kartenId: {index: 'mittel'|'leicht'}}, s. haertenMakel()
+    makelNarbenRooms: {}, // Phase M4: {kartenId: {index: geraeumte Raeume seit Draw}}
+    makelNarbenMatured: {}, // Phase M4: {kartenId: [gereifte Indizes]}, s. incrementMakelNarben()
     equippedSecondary: 'mine', // Phase 6/P4: fester Bombenslot, nicht tauschbar
     equippedGadget: null, // P4: zweiter, tauschbarer Slot -- Start: keines
     upgradeChoices: 0,
@@ -1280,6 +1447,10 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     run.upgrades = { ...(r.upgrades || {}) };
     run.upgradeLevels = { ...(r.upgradeLevels || {}) }; // Phase 7: aeltere Zwischenstaende kennen das Feld noch nicht
     run.makelRemoved = { ...(r.makelRemoved || {}) }; // Phase M3: aeltere Zwischenstaende kennen das Feld noch nicht
+    run.makelUmgepolt = { ...(r.makelUmgepolt || {}) }; // Phase M4: dito
+    run.makelSchwereOverride = { ...(r.makelSchwereOverride || {}) }; // Phase M4: dito
+    run.makelNarbenRooms = { ...(r.makelNarbenRooms || {}) }; // Phase M4: dito
+    run.makelNarbenMatured = { ...(r.makelNarbenMatured || {}) }; // Phase M4: dito
     run.equippedSecondary = r.equippedSecondary || 'mine';
     run.equippedGadget = r.equippedGadget || null;
     run.bannedUpgrades = new Set(r.banned || []);
@@ -1469,6 +1640,10 @@ export function stepRun(run, cmd, dt) {
     // E2: Schildladungen altern pro geraeumtem Raum -- Transformation
     // "Bollwerk" (Phase 17, Tag defense) setzt das komplett aus.
     if (!transformEffects(run).shieldNeverDecays) ageShieldCharges(run);
+    // Phase M4 ("Narben"): derselbe "Raum wirklich geraeumt"-Zeitpunkt wie
+    // ageShieldCharges() -- ein Makel-Eintrag zaehlt hier einen Raum weiter,
+    // wenn er noch nie angefasst wurde.
+    incrementMakelNarben(run);
     st.texts.push({
       x: st.player.x,
       y: st.player.y - 30,
@@ -1842,6 +2017,30 @@ export function buyShopMakelRemoval(run, cardId, index) {
   const cost = run.data.balance.scrap.cost.makelRemoval ?? 0;
   if (run.scrap < cost) return false;
   if (!removeMakel(run, cardId, index)) return false;
+  run.scrap -= cost;
+  return true;
+}
+
+// Umpolung im Shop (Phase M4): gegen Schrott GENAU EINEN Makel-Eintrag von
+// Malus in Bonus umwandeln (umpolenMakel() oben). Teurer als die reine
+// Werkstatt-Entfernung -- ein Flip ist mehr wert als ein blosses Verschwinden.
+export function buyShopMakelUmpolung(run, cardId, index) {
+  if (run.phase !== 'workshop') return false;
+  const cost = run.data.balance.scrap.cost.makelUmpolung ?? 0;
+  if (run.scrap < cost) return false;
+  if (!umpolenMakel(run, cardId, index)) return false;
+  run.scrap -= cost;
+  return true;
+}
+
+// Haertung im Shop (Phase M4): gegen Schrott die Stufe EINES Makel-Eintrags
+// um eine Stufe senken (haertenMakel() oben). Guenstiger als die anderen
+// beiden Auswege -- schwaecht den Malus nur, statt ihn zu beseitigen/umzudrehen.
+export function buyShopMakelHaertung(run, cardId, index) {
+  if (run.phase !== 'workshop') return false;
+  const cost = run.data.balance.scrap.cost.makelHaertung ?? 0;
+  if (run.scrap < cost) return false;
+  if (!haertenMakel(run, cardId, index)) return false;
   run.scrap -= cost;
   return true;
 }

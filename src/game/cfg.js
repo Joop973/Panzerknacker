@@ -207,6 +207,22 @@ export function applyNecroRunScaling(cfg, runDmgBonusPct, runHpBonusPct) {
   return cfg;
 }
 
+// Phase M4 (AUFTRAG-UMBAU-V2.md, Narben): "Ausgleich fuers Ertragen" -- ein
+// Makel-Eintrag, der NIE angefasst wurde (nicht entfernt/umgepolt/
+// gehaertet), wird nach balance.makel.narbeRooms echten Raumabschluessen
+// dauerhaft "vernarbt" (run.js: incrementMakelNarben()) und traegt ab dann
+// bei JEDEM Raumaufbau denselben kleinen Bonus, unabhaengig davon, was
+// SPAETER mit dem Original-Makel passiert (die Narbe bleibt ein Andenken).
+// Gleiche Stelle/gleiches Muster wie applyNecroRunScaling() -- einmal pro
+// Raumaufbau gebackener, permanenter Run-Bonus, narbenCount ist eine
+// einfache Zahl (run.js: makelNarbenCount()), keine Karten-/Achsenlogik
+// noetig.
+export function applyMakelNarben(cfg, narbenCount, balance) {
+  const perNarbe = balance?.makel?.narbeHpBonus ?? 0;
+  if (narbenCount && perNarbe) cfg.maxHp += narbenCount * perNarbe;
+  return cfg;
+}
+
 // Upgrade-Level auf das Spieler-cfg anwenden (Spec Abschnitt 8 +
 // Erweiterungen). Die Stellwerte der neuen Upgrades kommen aus
 // upgrades.json (upsData).
@@ -235,7 +251,17 @@ export function applyNecroRunScaling(cfg, runDmgBonusPct, runHpBonusPct) {
 // Eintrag entfernt hat. Rein run-lokal (nie die geteilte Kartendefinition
 // upsData.upgrades[id].makel selbst mutiert -- die gilt fuer jede Instanz
 // dieser Karte im ganzen Spiel).
-export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadget, upgradeLevels, levelBalance, makelVocab, makelRemoved) {
+// Phase M4 (Umpolung/Haertung, dieselbe Datei/Architektur): makelUmgepolt
+// ist dasselbe {kartenId: [Indizes]}-Muster wie makelRemoved, nur dass der
+// Eintrag NICHT verschwindet, sondern ueber applyUmpolung() als BONUS auf
+// einer anderen Achse wirkt (run.js: umpolenMakel()). makelSchwereOverride
+// ({kartenId: {index: 'mittel'|'leicht'}}) senkt die effektive Stufe eines
+// noch nicht entfernten/umgepolten Eintrags um eine Stufe (run.js:
+// haertenMakel()) -- wirkt gleichermassen auf den Malus (applyMakel()) UND
+// eine eventuelle Umpolung desselben Index (Haerten + Umpolen ist eine
+// gueltige Kombination: erst die Stufe senken, dann die GESENKTE Stufe in
+// einen Bonus verwandeln).
+export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadget, upgradeLevels, levelBalance, makelVocab, makelRemoved, makelUmgepolt, makelSchwereOverride) {
   if (!ups) return cfg;
   const l = (k) => ups[k] || 0;
   const bonusPct = levelBalance?.bonusPct ?? 0;
@@ -290,6 +316,32 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
         case 'resistAdd': cfg.resist = (cfg.resist || 0) + delta * lvl; break;
         case 'selfImmunityMult': selfImmunityMultAcc *= Math.pow(delta, lvl); break;
         default: break; // unbekannter/zukuenftiger core-Schluessel: bewusst ignoriert
+      }
+    }
+  }
+  // Phase M4 (AUFTRAG-UMBAU-V2.md, Umpolung): eigenstaendiger Zwilling von
+  // applyMakel() -- liest denselben Vokabular-Eintrag, aber sein `umpolung`-
+  // Unterobjekt (ANDERE Zielachse, eigene schwere-Werte) statt `core`/
+  // `schwere` direkt. Braucht einen eigenen Dispatch, weil die Zielachsen
+  // (damageAdd/critAdd/necroReviveChanceAdd) teilweise andere sind als die
+  // acht Malus-Achsen von applyMakel() -- reloadMult/hpAdd/resistAdd werden
+  // trotzdem ueber dieselben scaleCore()-Regeln skaliert.
+  function applyUmpolung(entries, vocab, lvl, sm) {
+    if (!vocab) return;
+    for (const entry of entries) {
+      const def = vocab[entry.id];
+      const up = def?.umpolung;
+      const raw = up?.schwere?.[entry.schwere];
+      if (up == null || raw == null) continue;
+      const delta = scaleCore({ [up.core]: raw }, sm)[up.core];
+      switch (up.core) {
+        case 'hpAdd': cfg.maxHp += delta * lvl; break;
+        case 'resistAdd': cfg.resist = (cfg.resist || 0) + delta * lvl; break;
+        case 'damageAdd': cfg.damage += delta * lvl; break;
+        case 'critAdd': cfg.critChance += delta * lvl; break;
+        case 'reloadMult': cfg.fireCooldown *= Math.pow(delta, lvl); break;
+        case 'necroReviveChanceAdd': cfg.necroReviveChanceAdd = (cfg.necroReviveChanceAdd || 0) + delta * lvl; break;
+        default: break; // unbekannter/zukuenftiger Umpolungs-Zielschluessel: bewusst ignoriert
       }
     }
   }
@@ -577,11 +629,24 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
     // Phase M3: ein per Werkstatt entfernter Index dieser Karte faellt hier
     // raus, BEVOR applyMakel() ihn ueberhaupt sieht -- der core-Bonus (c.*
     // oben) bleibt davon vollkommen unberuehrt.
+    // Phase M4: ein umgepolter Index wandert in applyUmpolung() statt
+    // applyMakel() (Malus wird zu Bonus auf einer anderen Achse); ein
+    // gehaerteter Index behaelt seinen Effekt, nur mit gesenkter Stufe
+    // (effSchwere) -- gilt fuer beide Zweige gleichermassen.
     if (U[id].makel && U[id].makel.length) {
-      const removedIdx = makelRemoved?.[id];
-      const activeMakel =
-        removedIdx && removedIdx.length ? U[id].makel.filter((_, i) => !removedIdx.includes(i)) : U[id].makel;
+      const removedIdx = makelRemoved?.[id] || [];
+      const umgepoltIdx = makelUmgepolt?.[id] || [];
+      const schwereOv = makelSchwereOverride?.[id] || {};
+      const activeMakel = [];
+      const activeUmpolung = [];
+      U[id].makel.forEach((entry, i) => {
+        if (removedIdx.includes(i)) return;
+        const eff = { id: entry.id, schwere: schwereOv[i] || entry.schwere };
+        if (umgepoltIdx.includes(i)) activeUmpolung.push(eff);
+        else activeMakel.push(eff);
+      });
       if (activeMakel.length) applyMakel(activeMakel, makelVocab, lvl, stufeMultFor(id));
+      if (activeUmpolung.length) applyUmpolung(activeUmpolung, makelVocab, lvl, stufeMultFor(id));
     }
     if (c.damageAdd) cfg.damage += c.damageAdd * lvl;
     if (c.reloadMult) cfg.fireCooldown *= Math.pow(c.reloadMult, lvl);

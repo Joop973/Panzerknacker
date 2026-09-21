@@ -75,6 +75,11 @@
     "resistMin": -50,
     "selfImmunityMinPct": 0.3
   },
+  "_comment_makel_m4": "AUFTRAG-UMBAU-V2.md Phase M4 (Narben, letzter der 'vier Auswege'): ein Makel-Eintrag, der NIE angefasst wurde (nicht entfernt/umgepolt/gehaertet), zaehlt bei jedem echten Raumabschluss einen Raum hoch (run.js: incrementMakelNarben()) -- ab narbeRooms ist er dauerhaft 'vernarbt' und traegt narbeHpBonus Leben, unabhaengig davon, was SPAETER mit dem Original-Makel passiert (cfg.js: applyMakelNarben()). Die Umpolung-/Haertung-Preise liegen bei scrap.cost.makelUmpolung/makelHaertung.",
+  "makel": {
+    "narbeRooms": 5,
+    "narbeHpBonus": 3
+  },
   "reflect": {
     "speedMult": 1,
     "pushPx": 2,
@@ -135,7 +140,9 @@
       "shopSecondary": 6,
       "shopLife": 12,
       "upgradeLevel": 6,
-      "makelRemoval": 8
+      "makelRemoval": 8,
+      "makelUmpolung": 12,
+      "makelHaertung": 5
     }
   },
   "_comment_upgrades": "Upgradepool-v2 Phase 3: synergyStep ist der Gewichtsaufschlag PRO bereits gewaehlter Karte mit einem passenden tags[]-Eintrag (0.5 = +50 % je Treffer, mehrere passende Tags summieren sich), synergyCap deckelt den Gesamtfaktor (2.0 = hoechstens doppelt so wahrscheinlich) -- der Faktor ist immer >= 1, schliesst also nie eine Karte aus. Grundsteinumbau Phase 4: secondElementWeight (Zweitelement-Gewichtung, UMBAUPLAN-LP Phase 17) ist mit dem Zweitelement-System entfernt.",

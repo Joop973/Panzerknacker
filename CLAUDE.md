@@ -9776,6 +9776,155 @@ der Karte oder einen anderen Makel derselben Karte anzufassen.
   Phasenvorgabe in `AUFTRAG-UMBAU-V2.md`. **Nächste Sitzung: Phase M4**
   (Umpolung, Härtung, Narben — die übrigen drei „Auswege" gegen Makel).
 
+### AUFTRAG-UMBAU-V2 — Phase M4 (Umpolung, Härtung, Narben) — gemergt
+Die übrigen drei „vier Auswege" gegen Makel (Auftrag Teil 1.3). Der Plantext
+nannte nur die drei Namen, für zwei davon ganz ohne Beschreibung — statt zu
+raten wurden die Mechaniken per `AskUserQuestion` geklärt (Nutzerantworten
+wörtlich): **Umpolung** „Es werden Makel positiv gepolt. Z.B für jede -2
+Tempo bekommt er +1 Leben. Oder für jede minus feuerrate, steigt die
+Wiederbelebung um die Hälfte" (freie Antwort, keine der beiden angebotenen
+Optionen), **Härtung** „Schweregrad senken" (empfohlene Option bestätigt),
+**Narben** „Ausgleich fürs Ertragen" (empfohlene Option bestätigt). Weiterhin
+KEINE aktive Karte trägt `makel`/`umpolung` (die 14 Kartenwellen kommen erst
+danach) — alle Tests sind wie in M2/M3 synthetisch bei der Karte, aber gegen
+die ECHTEN `data/makel.json`-Werte.
+- **Umpolung wandelt einen Malus dauerhaft in einen Bonus auf einer ANDEREN
+  Achse um.** `data/makel.json`: jeder der acht Vokabel-Einträge bekommt ein
+  `umpolung`-Unterobjekt (`core`, `name`, `schwere.{leicht,mittel,schwer}`)
+  — bewusst dieselbe ZAHL/GRÖSSENORDNUNG wie der jeweilige Malus bei
+  gleicher Stufe, nur auf die neue Achse übertragen („was du an Tempo
+  verlierst, wird zu Leben"): `schwerfaellig`→`hpAdd` (5/10/18),
+  `blechhaut`→`resistAdd` (8/15/25), `klemmender_lader`→
+  `necroReviveChanceAdd` (0.05/0.10/0.18, genau das Nutzerbeispiel — nur für
+  `c_necro` wirksam, für andere Klassen derselbe stille No-op wie jede
+  andere Nekromant-exklusive Karte), `enges_magazin`→`damageAdd` (3/3/6),
+  `kurzer_lauf`→`critAdd` (0.05/0.10/0.18), `teuer`→`damageAdd` (2/4/6),
+  `duenne_platte`→`hpAdd` (5/10/18), `heisser_lauf`→`reloadMult`
+  (0.95/0.90/0.82, derselbe Multiplikator wie der Malus, nur diesmal < 1 =
+  schnelleres statt langsameres Nachladen).
+- **`cfg.js: applyUmpolung()`** (neu, direkt neben `applyMakel()`): ein
+  eigenständiger Zwilling mit eigenem `switch`-Dispatch (`hpAdd`/
+  `resistAdd`/`damageAdd`/`critAdd`/`reloadMult`/`necroReviveChanceAdd`) —
+  über dieselbe `scaleCore()`-Skalierung wie der Malus, weil alle sechs
+  Zielachsen bereits auf `Add`/`Mult` enden. Die Makel-Schleife in
+  `applyUpgrades()` trennt pro Karte jetzt `activeMakel`/`activeUmpolung`
+  (ein umgepolter Index läuft durch `applyUmpolung()`, alle anderen weiter
+  durch `applyMakel()`) und liest dabei den EFFEKTIVEN Schweregrad
+  (`makelSchwereOverride`, s. Härtung) statt immer `entry.schwere` — Härten
+  UND Umpolen desselben Index ist dadurch eine gültige Kombination: erst die
+  Stufe senken, dann die GESENKTE Stufe in einen Bonus verwandeln.
+  `applyUpgrades()` hat jetzt 11 Parameter (`makelUmgepolt`,
+  `makelSchwereOverride` neu am Ende) — alle Bestandsaufrufer (aktuell nur
+  `state.js`) sind mitgezogen.
+- **Härtung senkt die Stufe eines Makel-Eintrags um eine Stufe**
+  (schwer→mittel→leicht, dauerhaft) — `run.js: haertenMakel(run, cardId,
+  index)` schreibt in `run.makelSchwereOverride` (`{kartenId: {index:
+  'mittel'|'leicht'}}`), lehnt einen bereits auf „leicht" stehenden Index
+  ab (kein weiteres Senken möglich) sowie einen bereits entfernten/
+  umgepolten Index.
+- **Mutual-Exklusivität, an drei Stellen durchgesetzt**: ein Index kann
+  entweder entfernt (Werkstatt) ODER umgepolt (Umpolung) sein, nie beides —
+  `removeMakel()` lehnt jetzt einen bereits umgepolten Index ab,
+  `umpolenMakel()` einen bereits entfernten. Härtung ist davon unabhängig
+  (wirkt auf die Stufe, nicht den Zustand) und bleibt mit beiden anderen
+  kombinierbar, solange der Index nicht entfernt/umgepolt ist.
+  `removableMakelOptions()` (Werkstatt) blendet einen umgepolten Index jetzt
+  ebenfalls aus — er ist kein Malus mehr, den man „entfernen" könnte.
+- **`run.js: umpolbareMakelOptions(run)`/`haertbareMakelOptions(run)`**
+  (neu, Muster `removableMakelOptions()`): flache Listen über alle
+  besessenen Karten, mit Preview (`targetName`/`targetValue` bzw.
+  `nextSchwere`) für die UI. `buyShopMakelUmpolung`/`buyShopMakelHaertung`
+  (neu, Muster `buyShopMakelRemoval`): eigene Preise
+  (`data/balance.json: scrap.cost.makelUmpolung` 12,
+  `scrap.cost.makelHaertung` 5 — Umpolung teurer als die reine Werkstatt-
+  Entfernung, ein Flip ist mehr wert als ein blosses Verschwinden; Härtung
+  günstiger, weil sie den Malus nur schwächt statt ihn zu beseitigen).
+- **Narben: „Ausgleich fürs Ertragen".** Ein Makel-Eintrag, der NIE
+  angefasst wurde (nicht entfernt/umgepolt/gehärtet), zählt bei jedem
+  ECHTEN Raumabschluss (`run.js`s `stepRun()`-Raum-geräumt-Zweig, dieselbe
+  Stelle wie `ageShieldCharges()`) einen Raum hoch
+  (`run.makelNarbenRooms`). Ab `balance.makel.narbeRooms` (5) ist er
+  dauerhaft „vernarbt" (`run.makelNarbenMatured`) — die Narbe bleibt
+  bestehen, auch wenn der Original-Makel DANACH doch noch entfernt/
+  umgepolt/gehärtet wird (bewusst strenger geprüft als „aktuell
+  unverändert": ein Index, der irgendwann angefasst wurde, kann nie mehr
+  reifen, sonst wäre Narben mit einem der anderen drei Auswege
+  kombinierbar, ohne wirklich ausgeharrt zu haben). `run.js:
+  makelNarbenCount(run)` zählt gereifte Einträge (reiner Zahlenwert, Muster
+  `applyNecroRunScaling()`s `runDmgBonus`/`runHpBonus`) — `cfg.js:
+  applyMakelNarben(cfg, narbenCount, balance)` (neu, exportiert) addiert
+  `narbenCount * balance.makel.narbeHpBonus` (3) auf `cfg.maxHp`, einmal pro
+  Raumaufbau gebacken, an derselben Stelle wie `applyNecroRunScaling()` in
+  `state.js: createState()`/`respawnPlayer()`.
+- **UI**: `roomscreens.js` bekommt zwei neue Shop-Sektionen
+  (`renderUmpolung()`/`renderHaertung()`, Muster `renderWerkstatt()` —
+  komplett unsichtbar ohne mindestens einen passenden Eintrag, kein
+  Dauerplatzhalter). `hud.js: activeMakelList()` zeigt einen umgepolten
+  Eintrag jetzt mit „↻" und seinem BONUS statt des Malus-Symbols, einen
+  gehärteten mit der gesenkten Stufe; `drawPause()` bekommt zusätzlich eine
+  „Narben: N (+X Leben)"-Zeile (nur sichtbar, wenn wirklich eine Narbe
+  gereift ist). Drei neue Glossar-Einträge (`data/glossary.json`:
+  „Umpolung"/„Härtung"/„Narbe") für die Tap-/Hover-Erklärung in Kartentexten
+  — die acht Makel-Namen selbst waren schon seit M2 im Glossar.
+- **`run.js: createRun()`/`runSnapshot()`/der Resume-Fallback-Block**: vier
+  neue Felder (`makelUmgepolt`, `makelSchwereOverride`, `makelNarbenRooms`,
+  `makelNarbenMatured`) laufen exakt wie `makelRemoved` seit M3 durch die
+  ganze Persistenz-Kette, mit `{}`-Fallback für ältere Zwischenstände ohne
+  die Felder.
+- **Fünf Pflicht-Gegenproben am echten Quellcode bestanden** (jede einzeln
+  zurückgesetzt, danach volle Suite wieder grün mit identischen
+  Seed-Raumzahlen 31/32/29/38/38 wie vor der Phase): `applyUmpolung()`-
+  Aufruf deaktiviert → genau die beiden Umpolungs-Wirkungsprüfungen ((b),
+  (g)) rot; `umpolenMakel()`s Sperre gegen einen bereits entfernten Index
+  ausgebaut → genau diese eine Prüfung in (a) rot; der Härtung-Override-
+  Read in `cfg.js`s Makel-Schleife auf `entry.schwere` zurückgebaut → genau
+  (f) und (g) rot; `incrementMakelNarben()`s „nie angefasst"-Filter
+  deaktiviert → genau die Kombinationsprüfung (i2) rot (ein Eintrag reift
+  trotz Härtung/Entfernung); die `makelNarbenCount`-Weiterreichung in
+  `state.js: createState()` auf `0` erzwungen → genau die
+  `applyMakelNarben()`-Ende-zu-Ende-Prüfung (j) rot.
+- Neuer Testabschnitt 87 (`tests/regression.mjs`, 13 Unterprüfungen a–m):
+  `umpolenMakel()`-Mechanismus (inkl. eines Vokabel-Eintrags ohne
+  `umpolung`-Feld über eine bewusst nicht existierende Vokabel-id statt
+  `tanksData.makel` selbst zu mutieren), cfg.js Ende-zu-Ende für Umpolung,
+  `umpolbareMakelOptions()`/`removableMakelOptions()`-Interaktion,
+  `buyShopMakelUmpolung()`, `haertenMakel()`-Mechanismus (schwer→mittel→
+  leicht, Ablehnung über „leicht" hinaus), cfg.js Ende-zu-Ende für Härtung,
+  die Kombination Härtung+Umpolung (mit einer eigenen Testvoraussetzungs-
+  Prüfung, dass `umpolung.schwere.mittel < .schwer` — sonst wäre der
+  Kombinationstest nicht scharf), `buyShopMakelHaertung()`,
+  `incrementMakelNarben()`/`makelNarbenCount()` mit EIGENEM, kleinem
+  Schwellenwert (nicht dem echten Balance-Wert), `applyMakelNarben()`
+  direkt + Ende-zu-Ende über `createState()`, Snapshot/Fortsetzen aller
+  vier neuen Felder inkl. Fallback für einen älteren Zwischenstand, HUD-
+  Pausenmenü (Umpolungs-Symbol/Narben-Zeile über den echten Renderpfad),
+  Shop-UI (beide neuen Sektionen erscheinen nur bei nicht leerer Liste,
+  Preview-Text, Klick ruft den richtigen Callback mit den richtigen
+  Argumenten auf). Zwei bestehende Shop-UI-Testblöcke (P4-Gadget-Test,
+  Abschnitt-86(g)-Werkstatt-Test) mussten um `getUmpolbareMakel`/
+  `getHaertbareMakel: () => []` ergänzt werden — ohne die neuen Ctx-Felder
+  crashte `render()` jetzt auch dort, weil beide neuen Sektionen
+  unbedingt (nicht optional verkettet) gerendert werden, genau wie
+  `renderWerkstatt()` es seit M3 schon tut.
+- **Ein eigener Testkonstruktionsfehler beim Schreiben von (k) gefunden und
+  behoben** (kein Code-Bug): die Testkarte hat `blechhaut` (Index 1) bereits
+  mit `schwere: 'mittel'` vordefiniert — eine EINMALIGE Härtung senkt das
+  auf „leicht" (mittel→leicht), nicht auf „mittel" (das wäre nur bei einer
+  Ausgangsstufe „schwer" der Fall). Die erste Testfassung erwartete
+  fälschlich „mittel" nach der Härtung und schlug fehl, obwohl der
+  Mechanismus korrekt arbeitete — auf „leicht" korrigiert.
+- Playwright-Smoke (echter Server, echter Browser): Start + laufender Raum
+  + Pausenmenü-Toggle (übt `drawPause()`/`activeMakelList()` im echten
+  Renderpfad aus) ohne Konsolenfehler — mangels einer echten Makel-Karte im
+  aktiven Pool erscheinen die beiden neuen Shop-Sektionen noch in keinem
+  echten Shop-Besuch, das folgt mit den 14 Kartenwellen.
+- `sw.js` auf `v127` gebumpt (keine neuen/geänderten Assets) +
+  `telemetry.js: GAME_VERSION` mitgezogen — wie bei M1–M3 laut expliziter
+  Phasenvorgabe in `AUFTRAG-UMBAU-V2.md`. **Damit sind alle vier „Auswege"
+  gegen Makel (Werkstatt/Umpolung/Härtung/Narben) gebaut — die Engine ist
+  bereit für die 14 Kartenwellen (laut Auftrag Teil 4.1 die nächste
+  Sitzung), die ersten echten Makel-Karten liefern.**
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
