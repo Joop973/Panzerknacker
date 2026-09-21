@@ -711,7 +711,7 @@ function updateGrappleRopes(state) {
 export function createState(data, tiles, opts) {
   const { genRng, enemyTypes, aiSeed, fixedRoom, weights, playerUpgrades, upgradesData, shieldCharges,
     roomSpec, arenas, transform, equippedSecondary, equippedGadget, waveSplit, waveCfg, eliteAffixes, modifier,
-    destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses, upgradeLevels, levelBalance,
+    destructibleWalls, hazardType, roomContext, hpScale, hpSkipBosses, upgradeLevels, levelBalance, makelRemoved,
     starterTank = 'player', starterScrap = 0, actEnemyPool, necroRunStacksBase,
     necroRunDmgBonus = 0, necroRunHpBonus = 0 } = opts;
   // Weiche (Phase 0b): festes Layout aus data/arenas.json vor dem Generator.
@@ -782,6 +782,7 @@ export function createState(data, tiles, opts) {
             upgradeLevels,
             levelBalance,
             data.makel,
+            makelRemoved,
           ),
             starterScrap,
           ),
@@ -852,6 +853,7 @@ export function createState(data, tiles, opts) {
     upgradesData,
     upgradeLevels, // Grundsteinumbau Phase 7: fuer respawnPlayer()
     levelBalance,
+    makelRemoved, // Phase M3 (AUFTRAG-UMBAU-V2.md): fuer respawnPlayer()
     equippedSecondary: equippedSecondary || 'mine', // Phase 6: fuer respawnPlayer()
     equippedGadget: equippedGadget || null, // P4: zweiter Slot, ebenfalls fuer respawnPlayer()
     starterTank, // Phase 9: gewaehlte Klasse -- respawnPlayer() baut denselben Panzer
@@ -2005,6 +2007,7 @@ function respawnPlayer(state) {
               state.upgradeLevels,
               state.levelBalance,
               state.data.makel,
+              state.makelRemoved,
             ),
             state.starterScrap,
           ),

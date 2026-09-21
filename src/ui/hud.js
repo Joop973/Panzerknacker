@@ -293,11 +293,16 @@ export function createHud(ctx) {
       if (!(lvl > 0)) continue;
       const def = defs[id];
       if (!def?.makel?.length) continue;
-      for (const m of def.makel) {
+      // Phase M3 (AUFTRAG-UMBAU-V2.md, Werkstatt): ein per Werkstatt
+      // entfernter Index soll hier nicht mehr als "aktiv" auftauchen -- exakt
+      // dieselbe Filterung wie cfg.js: applyUpgrades() vor applyMakel().
+      const removed = run.makelRemoved?.[id] || [];
+      def.makel.forEach((m, index) => {
+        if (removed.includes(index)) return;
         const mv = vocab[m.id];
-        if (!mv) continue;
+        if (!mv) return;
         out.push(`${mv.symbol} ${mv.name} (${m.schwere}) — ${def.name}`);
-      }
+      });
     }
     return out;
   }

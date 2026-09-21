@@ -195,6 +195,35 @@ export function createShopScreen() {
     el.appendChild(list);
   }
 
+  // Werkstatt (Phase M3, AUFTRAG-UMBAU-V2.md): einer der "vier Auswege"
+  // gegen Makel -- ein einzelner, noch nicht entfernter Makel-Eintrag einer
+  // besessenen Karte verschwindet dauerhaft gegen Schrott. ctx.getRemovableMakel
+  // liefert bereits eine flache Liste (run.js: removableMakelOptions()) --
+  // keine verschachtelte "erst Karte waehlen"-UI noetig. Bleibt (wie
+  // renderSecondaries()) komplett unsichtbar statt eines leeren Platzhalters,
+  // solange KEINE besessene Karte einen Makel traegt -- aktuell trifft das
+  // auf jeden Run zu (die "14 Kartenwellen" mit Makel-Karten kommen erst
+  // nach Phase M4), ein Dauerplatzhalter waere reines Rauschen.
+  function renderWerkstatt(scrap) {
+    const options = ctx.getRemovableMakel();
+    if (!options.length) return;
+    el.appendChild(sectionTitle(`Werkstatt — einen Makel entfernen (${ctx.costs.makelRemoval}⚙):`));
+    const list = document.createElement('div');
+    list.className = 'droplist';
+    for (const o of options) {
+      const b = document.createElement('button');
+      b.className = 'dropbtn';
+      b.innerHTML =
+        `${o.symbol} ${o.name} (${o.schwere}) — ${o.cardName} <span class="price">${ctx.costs.makelRemoval}⚙</span>`;
+      b.disabled = scrap < ctx.costs.makelRemoval;
+      b.addEventListener('click', () => {
+        if (ctx.onRemoveMakel(o.cardId, o.index)) render();
+      });
+      list.appendChild(b);
+    }
+    el.appendChild(list);
+  }
+
   function renderSecondaries(scrap) {
     // P4: der Shop tauscht das GADGET -- die Bombe liegt im festen Slot und
     // steht nicht zum Tausch. Deshalb nur Eintraege mit category 'gadget'.
@@ -268,6 +297,7 @@ export function createShopScreen() {
     renderCards(scrap);
     renderActions(scrap);
     renderWorkbench(scrap);
+    renderWerkstatt(scrap);
     renderSecondaries(scrap);
     renderDrops();
 

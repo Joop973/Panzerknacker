@@ -23,7 +23,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, repairAtRest, workbenchOptions, upgradeCardAtRest, advanceAct, runSnapshot, buyShopCard, buyShopLife, buyShopUpgradeLevel, buyShieldCharge, chooseBossReward } from '../src/game/run.js';
+import { createRun, stepRun, chooseUpgrade, enterRoom, chooseMapNode, leaveWorkshop, chooseEventOption, repairAtRest, workbenchOptions, upgradeCardAtRest, advanceAct, runSnapshot, buyShopCard, buyShopLife, buyShopUpgradeLevel, buyShieldCharge, chooseBossReward, buyShopMakelRemoval, removeMakel, removableMakelOptions } from '../src/game/run.js';
 import { traceTrajectory } from '../src/game/bullet.js';
 import { validateArenas } from '../src/game/generator.js';
 import { createMine, updateMines } from '../src/game/mine.js';
@@ -5600,6 +5600,9 @@ for (const seed of SEEDS) {
         getScrap: () => 999,
         getUpgrades: () => ({}),
         getWorkbenchOptions: () => [],
+        // Phase M3 (AUFTRAG-UMBAU-V2.md): Werkstatt-Liste, hier immer leer --
+        // dieser Testfall prueft die Gadget-Sektion, nicht die Werkstatt.
+        getRemovableMakel: () => [],
         getOffers: () => [],
         getEquippedSecondary: () => null,
         lifeBought: () => false,
@@ -16438,6 +16441,347 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
     !fieldHasTextMatch(makelValue85g, numbersInText(mismatchedText)),
     'Abschnitt 85 (g)-Gegenprobe: die Matching-Logik erkennt einen fehlenden Makel-Wert faelschlich als vorhanden (falsch-positiv)',
   );
+}
+
+// ---- 86. AUFTRAG-UMBAU-V2.md Phase M3: Werkstatt (Makel gezielt entfernen) --
+// Einer der "vier Auswege" gegen Makel (Auftrag Teil 1.3). Wie Abschnitt 85
+// SYNTHETISCH bei der Karte (kein aktiver Pool traegt bislang einen Makel --
+// die 14 Kartenwellen kommen erst nach M4), aber die Shop-/Snapshot-Mechanik
+// laeuft ueber einen ECHTEN, per Kartengraph angesteuerten Shop-Raum (Muster:
+// Abschnitt 52s enterWorkshop()).
+{
+  const { createState } = await import('../src/game/state.js');
+  const { createHud } = await import('../src/ui/hud.js');
+  const { hashSeed, rngFor } = await import('../src/core/rng.js');
+
+  function enterWorkshop86(maxSeed = 60) {
+    for (let seed = 1; seed <= maxSeed; seed++) {
+      const run = createRun(tanksData, tilesData, diffData, upgradesData, seed);
+      let parentId = null;
+      let shopId = null;
+      for (const node of run.map.byId.values()) {
+        const hit = node.next.find((id) => run.map.byId.get(id)?.type === 'workshop');
+        if (hit != null) {
+          parentId = node.id;
+          shopId = hit;
+          break;
+        }
+      }
+      if (parentId == null) continue;
+      run.mapCurrentId = parentId;
+      run.phase = 'map';
+      const ok = chooseMapNode(run, shopId);
+      if (ok && run.phase === 'workshop') return run;
+    }
+    return null;
+  }
+
+  // Synthetische Zwei-Makel-Karte: ein Bonus (damageAdd) auf einer Achse,
+  // ZWEI Makel-Eintraege auf zwei ANDEREN Achsen -- das Kernversprechen von
+  // M3 ("gezielt EINEN entfernen, ohne den Bonus der Karte oder den anderen
+  // Makel anzufassen", CLAUDE.md-Eintrag zu Phase M2) laesst sich nur mit
+  // mindestens zwei Eintraegen wirklich pruefen.
+  const zweiMakelKarte = {
+    id: 'zweimakel',
+    core: { damageAdd: 50 },
+    makel: [
+      { id: 'schwerfaellig', schwere: 'schwer' }, // Index 0 -> speedMult
+      { id: 'blechhaut', schwere: 'mittel' }, // Index 1 -> hpAdd
+    ],
+  };
+
+  // (a) Kernmechanismus removeMakel(): entfernt GENAU den angegebenen Index,
+  // ein zweiter Versuch auf denselben Index schlaegt fehl (schon entfernt),
+  // ebenso ein Index ausserhalb der Karte und eine unbesessene Karte.
+  {
+    const run = enterWorkshop86();
+    check(!!run, 'Abschnitt 86: Testaufbau -- kein Shop-Knoten unter 60 Seeds gefunden');
+    if (run) {
+      run.upgradesData = { upgrades: { zweimakel: zweiMakelKarte } };
+      run.upgrades = { zweimakel: 1 };
+      const ok = removeMakel(run, 'zweimakel', 0);
+      check(ok === true, 'Abschnitt 86 (a): removeMakel() lehnt eine gueltige Entfernung ab');
+      check(
+        Array.isArray(run.makelRemoved.zweimakel) && run.makelRemoved.zweimakel.includes(0),
+        `Abschnitt 86 (a): run.makelRemoved.zweimakel enthaelt Index 0 nicht (${JSON.stringify(run.makelRemoved.zweimakel)})`,
+      );
+      check(removeMakel(run, 'zweimakel', 0) === false, 'Abschnitt 86 (a): ein zweites Mal denselben Index entfernen gelingt');
+      check(removeMakel(run, 'zweimakel', 5) === false, 'Abschnitt 86 (a): ein Index ausserhalb der Karte laesst sich entfernen');
+      check(removeMakel(run, 'unbesessen', 0) === false, 'Abschnitt 86 (a): eine unbesessene Karte laesst sich entfernen');
+    }
+  }
+
+  // (b) cfg.js End-zu-Ende: der entfernte Index wirkt nicht mehr, der NICHT
+  // entfernte Makel UND der core-Bonus der Karte bleiben unveraendert.
+  {
+    function room86(playerUpgrades, upgradesDataArg, makelRemoved) {
+      return createState(tanksData, tilesData, {
+        genRng: rngFor(1, 1, 'rooms'),
+        enemyTypes: ['t_brown'],
+        aiSeed: hashSeed(1, 1, 'ai'),
+        playerUpgrades,
+        upgradesData: upgradesDataArg,
+        equippedSecondary: 'mine',
+        makelRemoved: makelRemoved || {},
+        transform: {},
+        starterTank: 'player',
+      });
+    }
+    const pool86 = { upgrades: { zweimakel: zweiMakelKarte } };
+    const baseSpeed86 = resolveCfg(tanksData, 'player').speed;
+    const baseHp86 = resolveCfg(tanksData, 'player').maxHp;
+    const baseDamage86 = resolveCfg(tanksData, 'player').damage;
+
+    // Kontrolle: OHNE Entfernung wirken BEIDE Makel.
+    const stFull = room86({ zweimakel: 1 }, pool86, {});
+    const expectSpeedFull = baseSpeed86 * tanksData.makel.schwerfaellig.schwere.schwer;
+    const expectHpFull = baseHp86 + tanksData.makel.blechhaut.schwere.mittel;
+    check(
+      Math.abs(stFull.player.cfg.speed - expectSpeedFull) < 1e-6,
+      `Abschnitt 86 (b)-Kontrolle: ohne Entfernung wirkt "Schwerfaellig" nicht (${stFull.player.cfg.speed} statt ${expectSpeedFull})`,
+    );
+    check(
+      Math.abs(stFull.player.cfg.maxHp - expectHpFull) < 1e-6,
+      `Abschnitt 86 (b)-Kontrolle: ohne Entfernung wirkt "Blechhaut" nicht (${stFull.player.cfg.maxHp} statt ${expectHpFull})`,
+    );
+
+    // Index 0 ("Schwerfaellig") entfernt: speed zurueck auf den Basiswert,
+    // "Blechhaut" (Index 1) UND der damageAdd-Bonus bleiben unveraendert.
+    const stPartial = room86({ zweimakel: 1 }, pool86, { zweimakel: [0] });
+    check(
+      Math.abs(stPartial.player.cfg.speed - baseSpeed86) < 1e-6,
+      `Abschnitt 86 (b): entfernter Makel "Schwerfaellig" wirkt trotzdem (${stPartial.player.cfg.speed} statt ${baseSpeed86})`,
+    );
+    check(
+      Math.abs(stPartial.player.cfg.maxHp - expectHpFull) < 1e-6,
+      `Abschnitt 86 (b): der NICHT entfernte Makel "Blechhaut" verschwindet mit (${stPartial.player.cfg.maxHp} statt ${expectHpFull})`,
+    );
+    check(
+      Math.abs(stPartial.player.cfg.damage - (baseDamage86 + 50)) < 1e-6,
+      `Abschnitt 86 (b): der core-Bonus (damageAdd) aendert sich durch die Entfernung (${stPartial.player.cfg.damage} statt ${baseDamage86 + 50})`,
+    );
+  }
+
+  // (c) removableMakelOptions(): listet genau die noch nicht entfernten
+  // Eintraege -- vor der Entfernung beide, danach nur noch "Blechhaut".
+  {
+    const run = enterWorkshop86();
+    check(!!run, 'Abschnitt 86 (c): Testaufbau -- kein Shop-Knoten gefunden');
+    if (run) {
+      run.upgradesData = { upgrades: { zweimakel: zweiMakelKarte } };
+      run.upgrades = { zweimakel: 1 };
+      run.makelRemoved = {};
+      const before = removableMakelOptions(run);
+      check(before.length === 2, `Abschnitt 86 (c): erwartet 2 entfernbare Eintraege vor der Werkstatt, gefunden ${before.length}`);
+      removeMakel(run, 'zweimakel', 0);
+      const after = removableMakelOptions(run);
+      check(
+        after.length === 1 && after[0].index === 1 && after[0].name === 'Blechhaut',
+        `Abschnitt 86 (c): nach der Entfernung bleibt nicht genau "Blechhaut" uebrig (${JSON.stringify(after)})`,
+      );
+    }
+  }
+
+  // (d) Shop-Mechanismus: buyShopMakelRemoval() zieht exakt den
+  // konfigurierten Preis ab, verweigert bei zu wenig Schrott, verweigert
+  // ausserhalb des Shops, verweigert einen bereits entfernten Index.
+  {
+    const run = enterWorkshop86();
+    check(!!run, 'Abschnitt 86 (d): Testaufbau -- kein Shop-Knoten gefunden');
+    if (run) {
+      run.upgradesData = { upgrades: { zweimakel: zweiMakelKarte } };
+      run.upgrades = { zweimakel: 1 };
+      run.makelRemoved = {};
+      const cost = tanksData.balance.scrap.cost.makelRemoval;
+      run.scrap = cost - 1;
+      check(buyShopMakelRemoval(run, 'zweimakel', 0) === false, 'Abschnitt 86 (d): kauft trotz zu wenig Schrott');
+      check(!(run.makelRemoved.zweimakel || []).includes(0), 'Abschnitt 86 (d): entfernt trotz abgelehntem Kauf');
+      run.scrap = cost + 5;
+      const ok = buyShopMakelRemoval(run, 'zweimakel', 0);
+      check(ok === true, 'Abschnitt 86 (d): lehnt einen gueltigen Kauf ab');
+      check(run.scrap === 5, `Abschnitt 86 (d): Schrott sinkt nicht um genau ${cost} (Rest ${run.scrap} statt 5)`);
+      // Testaufbau-Falle (per Gegenprobe gefunden): reichlich Schrott VOR dem
+      // zweiten Versuch, sonst waere eine Ablehnung nicht eindeutig der
+      // Doppel-Entfernungs-Sperre zuzuordnen (koennte auch am jetzt niedrigen
+      // Schrottstand liegen).
+      run.scrap = 999;
+      check(
+        buyShopMakelRemoval(run, 'zweimakel', 0) === false,
+        'Abschnitt 86 (d): kauft einen bereits entfernten Index ein zweites Mal (bei ausreichend Schrott)',
+      );
+      check(run.scrap === 999, 'Abschnitt 86 (d): zieht trotz abgelehntem Doppelkauf Schrott ab');
+      run.phase = 'playing';
+      check(buyShopMakelRemoval(run, 'zweimakel', 1) === false, 'Abschnitt 86 (d): kauft ausserhalb des Shops (phase != workshop)');
+    }
+  }
+
+  // (e) Snapshot/Fortsetzen: run.makelRemoved uebersteht runSnapshot() +
+  // createRun({resume}); ein aelterer Zwischenstand ohne das Feld faellt
+  // auf ein leeres Objekt zurueck statt abzustuerzen.
+  {
+    const run = enterWorkshop86();
+    check(!!run, 'Abschnitt 86 (e): Testaufbau -- kein Shop-Knoten gefunden');
+    if (run) {
+      run.upgradesData = { upgrades: { zweimakel: zweiMakelKarte } };
+      run.upgrades = { zweimakel: 1 };
+      removeMakel(run, 'zweimakel', 0);
+      const snap = runSnapshot(run);
+      check(
+        Array.isArray(snap.makelRemoved?.zweimakel) && snap.makelRemoved.zweimakel.includes(0),
+        `Abschnitt 86 (e): runSnapshot() haelt makelRemoved nicht fest (${JSON.stringify(snap.makelRemoved)})`,
+      );
+      const resumed = createRun(tanksData, tilesData, diffData, upgradesData, snap.seed, snap.modeKey, { resume: snap });
+      check(
+        Array.isArray(resumed.makelRemoved?.zweimakel) && resumed.makelRemoved.zweimakel.includes(0),
+        `Abschnitt 86 (e): Fortsetzen stellt makelRemoved nicht wieder her (${JSON.stringify(resumed.makelRemoved)})`,
+      );
+      const oldSnap = { ...snap };
+      delete oldSnap.makelRemoved;
+      let crashed = false;
+      let resumedOld = null;
+      try {
+        resumedOld = createRun(tanksData, tilesData, diffData, upgradesData, oldSnap.seed, oldSnap.modeKey, { resume: oldSnap });
+      } catch (e) {
+        crashed = true;
+        check(false, `Abschnitt 86 (e): Fortsetzen eines aelteren Zwischenstands ohne makelRemoved stuerzt ab (${e.message})`);
+      }
+      check(
+        !crashed && resumedOld && typeof resumedOld.makelRemoved === 'object',
+        'Abschnitt 86 (e): aelterer Zwischenstand liefert kein leeres makelRemoved-Fallback-Objekt',
+      );
+    }
+  }
+
+  // (f) HUD "Aktive Makel" (Pausenmenue): zeigt vor der Entfernung BEIDE
+  // Eintraege, danach nur noch den nicht entfernten (hud.js:
+  // activeMakelList()) -- ueber den echten Renderpfad (drawPause()), da die
+  // Funktion modulintern ist und nicht exportiert wird.
+  {
+    const texts = [];
+    const fakeCtx = new Proxy(
+      { canvas: { width: 768, height: 512 }, measureText: () => ({ width: 40 }) },
+      {
+        get: (t, k) => {
+          if (k in t) return t[k];
+          if (k === 'fillText') return (s) => texts.push(String(s));
+          if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop() {} });
+          return () => {};
+        },
+        set: () => true,
+      },
+    );
+    const hud = createHud(fakeCtx);
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 12);
+    run.upgradesData = { upgrades: { zweimakel: zweiMakelKarte } };
+    run.upgrades = { zweimakel: 1 };
+    run.makelRemoved = {};
+    run.phase = 'playing';
+    texts.length = 0;
+    hud.render(run, { paused: true });
+    let joined = texts.join('\n');
+    check(
+      joined.includes('Schwerfällig') && joined.includes('Blechhaut'),
+      `Abschnitt 86 (f): Pausenmenue zeigt nicht beide Makel (${joined})`,
+    );
+
+    removeMakel(run, 'zweimakel', 0);
+    texts.length = 0;
+    hud.render(run, { paused: true });
+    joined = texts.join('\n');
+    check(
+      !joined.includes('Schwerfällig') && joined.includes('Blechhaut'),
+      `Abschnitt 86 (f): Pausenmenue zeigt einen entfernten Makel weiter an (${joined})`,
+    );
+  }
+
+  // (g) Shop-UI (Werkstatt): die Sektion erscheint NUR, wenn tatsaechlich
+  // etwas entfernbar ist (Muster renderSecondaries() -- kein Dauer-
+  // Platzhalter, solange kein aktiver Kartenpool einen Makel traegt), zeigt
+  // beide Eintraege VOR und nur den verbleibenden NACH einer Entfernung, und
+  // ein Klick ruft ctx.onRemoveMakel mit den richtigen Argumenten auf.
+  {
+    const { installDom } = await import('./domstub.mjs');
+    const restore = installDom();
+    try {
+      const { createShopScreen } = await import('../src/ui/roomscreens.js');
+      const calls = [];
+      const baseCtx = {
+        upgradesData,
+        secondariesData: tanksData.secondaries,
+        costs: tanksData.balance.scrap.cost,
+        dropRefund: tanksData.balance.scrap.dropRefund,
+        getScrap: () => 999,
+        getUpgrades: () => ({}),
+        getWorkbenchOptions: () => [],
+        getOffers: () => [],
+        getEquippedSecondary: () => null,
+        necromancer: false,
+        lifeBought: () => false,
+        atFullLives: () => false,
+        onBuyCard: () => false,
+        onBuyShield: () => false,
+        onBuySecondary: () => false,
+        onBuyLife: () => false,
+        onUpgradeLevel: () => false,
+        onDrop: () => false,
+        onLeave: () => {},
+        getRemovableMakel: () => [],
+        onRemoveMakel: (cardId, index) => {
+          calls.push([cardId, index]);
+          return true;
+        },
+      };
+      const screen = createShopScreen();
+
+      // Leer -- keine Sektion (aktueller Ist-Stand: kein aktiver Kartenpool
+      // traegt einen Makel, ein Dauerplatzhalter waere reines Rauschen).
+      screen.show(baseCtx);
+      const emptyText = document.getElementById('workshop').textContent;
+      check(!emptyText.includes('Werkstatt'), 'Abschnitt 86 (g): zeigt die Werkstatt-Sektion trotz leerer Liste');
+
+      // Zwei entfernbare Eintraege.
+      const zwei = [
+        { cardId: 'zweimakel', index: 0, cardName: 'Testkarte', symbol: '🐌', name: 'Schwerfällig', schwere: 'schwer' },
+        { cardId: 'zweimakel', index: 1, cardName: 'Testkarte', symbol: '🛢️', name: 'Blechhaut', schwere: 'mittel' },
+      ];
+      // domstub-Falle (bereits im Nekromant-Feinschliff dokumentiert):
+      // b.innerHTML ist nur ein gespeicherter String, appendChild()
+      // aktualisiert ihn nicht UND get textContent() liest ihn nie mit --
+      // die Sektionsueberschrift (echtes p.textContent) bleibt darueber
+      // sichtbar, die Kartennamen (per innerHTML gesetzt) muessen ueber
+      // .innerHTML der einzelnen .dropbtn-Elemente gelesen werden.
+      screen.show({ ...baseCtx, getRemovableMakel: () => zwei });
+      const beideTitel = document.getElementById('workshop').textContent;
+      const beideButtons = [...document.querySelectorAll('.dropbtn')].map((b) => b.innerHTML).join('\n');
+      check(beideTitel.includes('Werkstatt'), `Abschnitt 86 (g): zeigt die Werkstatt-Sektionsueberschrift nicht (${beideTitel})`);
+      check(
+        beideButtons.includes('Schwerfällig') && beideButtons.includes('Blechhaut'),
+        `Abschnitt 86 (g): zeigt nicht beide entfernbaren Makel (${beideButtons})`,
+      );
+
+      // Klick auf den ERSTEN Eintrag ruft onRemoveMakel mit den richtigen
+      // Argumenten -- ueber innerHTML statt Dokumentreihenfolge gefunden
+      // (renderSecondaries() nutzt dieselbe .dropbtn-Klasse).
+      const buttons = [...document.querySelectorAll('.dropbtn')];
+      const btn = buttons.find((b) => b.innerHTML.includes('Schwerfällig'));
+      check(!!btn, 'Abschnitt 86 (g): kein anklickbarer Eintrag fuer "Schwerfaellig" im DOM');
+      if (btn) btn.click();
+      check(
+        calls.length === 1 && calls[0][0] === 'zweimakel' && calls[0][1] === 0,
+        `Abschnitt 86 (g): Klick ruft onRemoveMakel nicht mit den richtigen Argumenten auf (${JSON.stringify(calls)})`,
+      );
+
+      // Nur noch EIN entfernbarer Eintrag -- die Sektion zeigt nur ihn.
+      screen.show({ ...baseCtx, getRemovableMakel: () => [zwei[1]] });
+      const einerButtons = [...document.querySelectorAll('.dropbtn')].map((b) => b.innerHTML).join('\n');
+      check(
+        einerButtons.includes('Blechhaut') && !einerButtons.includes('Schwerfällig'),
+        `Abschnitt 86 (g): nach der Entfernung erscheint noch "Schwerfaellig" (${einerButtons})`,
+      );
+    } finally {
+      restore();
+    }
+  }
 }
 
 if (failures) {
