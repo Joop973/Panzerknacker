@@ -9984,6 +9984,101 @@ Originaltext rekonstruiert), plus einem klar abgesetzten, nachgetragenen
 - Reine Markdown-Änderung: **kein `sw.js`-Bump** (kein Spiel-Asset, dieselbe
   Regel wie für Änderungen an dieser CLAUDE.md), keine Codeänderung, Suite
   unberührt.
+### AUFTRAG-FERTIGSTELLUNG Phase A2 (state.js entflechten) — gemergt
+Reines Refactoring nach harter Auftragsvorgabe: **kein Verhalten, keine
+Zahl, keine Reihenfolge, kein RNG-Aufruf darf sich ändern** — Determinismus
+unantastbar. Erst die volle Suite als Baseline gelaufen (5 Seeds: 31/32/29/
+38/38 geräumte Räume), dann ein 5-Modul-Split vorgeschlagen und vom Nutzer
+freigegeben, danach implementiert. `src/game/state.js` **3014 → 1351
+Zeilen** (`createState()` allein: ~1240 → ~190 Zeilen orchestrierender
+Code, keine Methoden mehr inline).
+- **Vier neue Module, drei davon reine Methoden-Factories** (Muster: eine
+  Funktion `createXMethods(state, …)` gibt ein Objekt mit den vorher
+  objektliteral-inline definierten Methoden zurück, `createState()` mischt
+  sie per `Object.assign(state, …)` in den bereits konstruierten `state` —
+  jede Methode las im Original ausschließlich `state`/geschlossene lokale
+  Variablen aus `createState()`, nie `this`; verifiziert per `grep`, bevor
+  irgendetwas verschoben wurde): **`state_world.js`** (~260 Zeilen,
+  `isSolid`/`blocksSight`/`placeTrapWall`/`destroyWall`/`setWallSolid`/
+  `wouldIsolateArea`/`tickMovingWalls` + die Modul-Helfer `buildWalls`/
+  `bfsReachable`/`WALL_TYPES`), **`state_fx.js`** (~80 Zeilen, `applyStatus`/
+  `addShake`/`spawnParticles`/`createReplacementGhost`/`spawnFreeGhosts`),
+  **`state_damage.js`** (~790 Zeilen — **bewusst über der ~300-Zeilen-
+  Konvention**, im Kopfkommentar dokumentiert: `killTank()` allein ist
+  ~290 Zeilen, eine weitere Aufteilung wäre eine eigene, spätere Phase,
+  nicht Teil dieses reinen Verschiebe-Refactorings; enthält `applyDamage`/
+  `applyHarvestGrowth`/`damageGhost`/`damageGhostsInRadius`/
+  `registerAnvilRage`/`killTank` + die Modul-Helfer `applyResistToAmount`/
+  `absorbWithShieldPool`/`applySpiderFloor`/`resolveLethalHit`/
+  `rollGhostSpawnCount`/`DEBRIS_COLORS`/`spawnRadialBullets`).
+- **Ein fünftes Modul für die reinen Datenfelder**: `state_init.js`
+  (~245 Zeilen), `buildInitialFields(data, tiles, room, grid, walls, tanks,
+  player, pendingWave, hazardBundle, opts)` — GENAU der Objektliteral-Teil
+  von `createState()` (keine Methode, keine Logik außer den schon vorher
+  vorhandenen Default-Ausdrücken wie `|| []`/`?? 1`), byte-für-byte
+  identisch übernommen. Destrukturiert `opts` mit **derselben** Zeile wie
+  `createState()` selbst (keine zweite Quelle der Wahrheit); `hazard`/
+  `movingWalls`/`oilCells`/`conveyor`/`laserWalls` bleiben als bereits
+  berechnete Werte in `createState()` und werden nur durchgereicht (kein
+  zweiter Berechnungsort für diese Ableitungen). `createState()` ruft
+  `buildInitialFields(...)` auf und erhält `state` als reines Datenobjekt
+  **vor** dem `Object.assign()` der drei Methoden-Factories — dieselbe
+  Reihenfolge wie beim alten Objektliteral (Methoden lasen `state` erst bei
+  ihrem späteren Aufruf, nie während der Konstruktion selbst).
+- **Ein sechstes Modul für die G2/G3/G5/G7/G8-„Sondergegner"-Tick-
+  Funktionen**: `enemymechanics.js` (~430 Zeilen — ebenfalls über der
+  Konvention, aber ein zusammenhängendes Subsystem aus neun bereits eng
+  verwandten Funktionen; keine weitere Aufteilung in dieser Phase versucht).
+  `updateDeathFuses`/`bondTethers`/`updateTethers`/`updateMedics`/
+  `updateMasons`/`updateMetronomes`/`metronomeHolds`/`updateGrapples`/
+  `updateGrappleRopes` (+ der intern bleibende Helfer `pointSegmentDistSq`) —
+  jede Funktion nahm schon vorher `state` explizit als Parameter, keine
+  Closure-Abhängigkeit, deshalb reine Verschiebung ohne Umbau.
+- **Öffentliche API unverändert**: per `grep` über alle `tests/*.mjs`
+  bestätigt, dass nur `createState`, `stepState` und `bondTethers` je aus
+  `state.js` importiert werden — `state.js` importiert `bondTethers` jetzt
+  aus `enemymechanics.js` und reicht es mit einer eigenen `export {
+  bondTethers };`-Zeile unverändert weiter (die Tests brauchen keine
+  Änderung).
+- **Zwei echte Funde beim Bau, jeweils durch die Suite selbst aufgedeckt**
+  (kein stiller Fehler — die schnellste mögliche Rückmeldung: ein
+  `ReferenceError` beim ersten Testlauf nach dem Zusammensetzen): (1)
+  `applyAffixByIndex()` blieb entgegen dem ursprünglichen 5-Modul-Vorschlag
+  in `state.js` selbst (statt in einem der neuen Module) — ihre beiden
+  Aufrufer (`createState()`s Spawn-Schleife, `updateWave()`) bleiben ja
+  ebenfalls dort; eine Verschiebung hätte nur einen zusätzlichen Import ohne
+  Nutzen bedeutet. (2) `applyResistToAmount`/`absorbWithShieldPool` (beide
+  ursprünglich modulinterne Helfer in `state_damage.js`) werden NICHT nur
+  von `applyDamage()`/`damageGhost()` gebraucht, sondern zusätzlich direkt
+  in `stepState()`s „Gegner-Geschosse gegen Geister"-Kollisionsschleife
+  (Champion-Schadensumleitung/-weiterleitung, Nekromant-V2 Phase 9) — beim
+  ersten vollen Testlauf lief die Suite bis kurz vor Ende durch (alle 5
+  Seeds siegten bereits, der Fehler saß in einem seltener getroffenen
+  Codepfad ganz am Schluss) und brach dort mit `applyResistToAmount is not
+  defined` ab. Beide Funktionen sind jetzt aus `state_damage.js` exportiert
+  und in `state.js` zusätzlich importiert — der Ist-Abgleich vor dem Bau
+  (Zeilen-für-Zeilen-`grep` über alle vermeintlich „staying"-Codebereiche)
+  hatte diese beiden Aufrufstellen übersehen, weil sie tief in einem noch
+  nicht vollständig gelesenen Teil von `stepState()` lagen — die Lehre:
+  bei einem Refactoring dieser Größe ist der Testlauf selbst die
+  verlässlichere Vollständigkeitsprobe als eine manuelle Grep-Analyse.
+- **Nach dem Fix: Suite erneut komplett grün, byte-identische Ausgabe zur
+  Baseline** (5 Seeds: 31/32/29/38/38 geräumte Räume, „Grüner
+  (Mörserschütze)"- und „Phase 28 Raumdauer"-Zeilen unverändert) — dieselbe
+  Regel wie bei jedem früheren größeren Refactoring in diesem Projekt: ein
+  einziger abweichender Wert hätte den Rollback erzwungen, nicht eine
+  Testanpassung. `node --check` auf allen sechs betroffenen/neuen Dateien
+  grün, alle vier Nebensuiten (`gamepad`/`music`/`championsprite`/
+  `spidersprites`) unverändert grün. Kein einziger `rng()`-Aufruf verschoben
+  (dieselben Modul-Import-Reihenfolgen berühren die Aufrufreihenfolge der
+  Spiellogik nicht — ES-Module-Ladereihenfolge ist von der
+  Ausführungsreihenfolge des Codes entkoppelt).
+- **`sw.js` auf `v124` gebumpt** (fünf neue `src/game/*.js`-Dateien in
+  `ASSETS` ergänzt — dieselbe Fehlerklasse wie beim Nekromant-V2-Phase-9-
+  Fund, s. o.: ohne den Eintrag würden neue ES-Module-Dateien beim ersten
+  Offline-Install fehlen und nur lazy über den network-first-Fetch-Handler
+  nachgecacht, nie beim initialen Cache-Aufbau), `telemetry.js:
+  GAME_VERSION` mitgezogen.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Vier Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
@@ -10115,9 +10210,27 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `effects.js`/`cfg.js`).
 
 ### Wichtige Dateien
-- `src/game/state.js` — `stepState`, Treffer, Minen, `killTank`.
+- `src/game/state.js` — `createState`/`stepState`. **AUFTRAG-FERTIGSTELLUNG
+  Phase A2**: die vorher inline im `createState()`-Objektliteral definierten
+  Methoden/Datenfelder sind auf fünf Module verteilt (reine Verschiebung,
+  kein Verhaltensunterschied) — `state_init.js` (Datenfelder,
+  `buildInitialFields()`), `state_world.js` (Wand-/Grid-Methoden,
+  `createWorldMethods()`), `state_damage.js` (Schaden/Tod, `applyDamage`/
+  `killTank`/`registerAnvilRage`/…, `createDamageMethods()` — bewusst über
+  der ~300-Zeilen-Konvention, `killTank()` allein ist ~290 Zeilen),
+  `state_fx.js` (Statuseffekt/Partikel, `createFxMethods()`) und
+  `enemymechanics.js` (die G2/G3/G5/G7/G8-Sondergegner-Tick-Funktionen wie
+  `updateMasons`/`updateGrapples`/`bondTethers`). `createState()` selbst
+  bleibt die Orchestrierung (Raumbau, Spielerpanzer, Gegner-Spawnschleife)
+  und mischt die drei Methoden-Factories per `Object.assign()` in den von
+  `buildInitialFields()` gelieferten `state`. `bondTethers` bleibt über eine
+  `export { bondTethers };`-Zeile Teil der öffentlichen API von `state.js`
+  (Tests importieren es weiterhin von dort). Treffer, Minen, `killTank`
+  liegen jetzt in `state_damage.js`.
   Nekromant-V2 Phase 2: `applyResistToAmount()`/`absorbWithShieldPool()`
-  (Modulebene, nicht Methoden auf `state`) — Schadensresistenz (additiv,
+  (jetzt in `state_damage.js`, exportiert — `stepState()`s Geister-
+  Kollisionsschleife in `state.js` importiert sie direkt) — Schadensresistenz
+  (additiv,
   `Schaden/(1+resistSumme/divisor)`, nie 0 dank `max(1,…)`) und der neue
   Schild-Punktepool (`tank.shield`/`cfg.shieldMax`, überspringt DOT wie alle
   anderen Schilde). Beide gebraucht von `applyDamage()` (Spieler/Gegner) UND
@@ -10473,7 +10586,7 @@ Wenn ein Punkt erledigt ist: Haken setzen bzw. Zeile entfernen.
   `upgradescreen.js`/`roomscreens.js`, einmalig initialisiert in `main.js`.
 - `sw.js` — Service Worker (Offline-fähig). **Strategie: network-first für
   Code+Daten (HTML/JS/JSON), cache-first für Bilder/Fonts.** Cache-Version
-  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v117`; dabei
+  bumpen + `data/*`/`src/*` in `ASSETS` eintragen! (Aktuell `v124`; dabei
   auch `telemetry.js: GAME_VERSION` mitziehen.) So
   erscheinen Updates sofort beim Neuladen (online holt eine Seite ALLE
   Code-/Datendateien frisch → konsistent, nie alter Code + neue `data/*.json`
