@@ -9443,9 +9443,12 @@ Aufteilung aus Grundsteinumbau Phase 5 (dort nur `player`/`c_necro` frei).
 - Kein `sw.js`-Bump (reine Code-/Datenänderung, kein neues Asset).
 
 ### `AUFTRAG-UMBAU-V2.md` eingegangen — Makel, Dungeon, Kulissen
-**Neu eingegangen: `AUFTRAG-UMBAU-V2.md`** (nur per Chat übergeben, wie
-`AUFTRAG-FERTIGSTELLUNG.md`/`MACHTKURVE.md` — keine der drei existiert als
-Repo-Datei). Greift in `AUFTRAG-FERTIGSTELLUNG.md` Stufe A/E ein und ist bei
+**Neu eingegangen: `AUFTRAG-UMBAU-V2.md`** (war zunächst nur per Chat
+übergeben; **seit dem Nachtrag „Plan eingecheckt" weiter unten als echte
+Repo-Datei vorhanden**, wortgetreu + einem nachgetragenen Teil 5
+„Umsetzungsstand". `AUFTRAG-FERTIGSTELLUNG.md`/`MACHTKURVE.md` fehlen
+weiterhin — nicht rekonstruierbar, sie liegen in bereits rotierten
+Gesprächsverläufen). Greift in `AUFTRAG-FERTIGSTELLUNG.md` Stufe A/E ein und ist bei
 Widersprüchen maßgeblich. Drei Teile: **Makel-System** (jede Karte oberhalb
 `common` trägt einen Malus auf einer ANDEREN Achse als ihr Vorteil, acht
 Makel-Vokabeln, vier Auswege — Werkstatt/Umpolung/Härtung/Narben), **Dungeon-
@@ -9925,7 +9928,71 @@ die ECHTEN `data/makel.json`-Werte.
   bereit für die 14 Kartenwellen (laut Auftrag Teil 4.1 die nächste
   Sitzung), die ersten echten Makel-Karten liefern.**
 
+### `AUFTRAG-UMBAU-V2.md` als Repo-Datei eingecheckt — zwei Abweichungen gefunden
+Nutzerauftrag: „Lese den Plan durch und falls da keiner ist lese meine
+prompts und füge ihn als Plan ein." Der Auftragstext lag bis dahin nur im
+Gesprächsverlauf, nicht im Repo — er ist jetzt **wortgetreu** als
+`AUFTRAG-UMBAU-V2.md` eingecheckt (Teil 0–4 unverändert, 671 Zeilen aus dem
+Originaltext rekonstruiert), plus einem klar abgesetzten, nachgetragenen
+**Teil 5 „Umsetzungsstand"**. Precedent: `UMBAUPLAN-GEGNER.md` und
+`docs/AUFTRAG-GEGNERDESIGN.md` liegen ebenso im Repo.
+- **`MACHTKURVE.md` und `AUFTRAG-FERTIGSTELLUNG.md` bleiben verschollen** —
+  sie liegen in bereits rotierten Gesprächsverläufen und sind nicht
+  rekonstruierbar. Verweise darauf in `AUFTRAG-UMBAU-V2.md` Teil 0/1.3/4.2
+  laufen ins Leere; maßgeblich für den Ist-Stand ist diese Datei. (Der
+  A0-Ist-Abgleich aus `AUFTRAG-FERTIGSTELLUNG.md` steht immerhin vollständig
+  weiter oben in dieser CLAUDE.md, ebenso Phase A1.)
+- **Der eigentliche Ertrag war der Abgleich Plan vs. gebauter Code**
+  (jede Abweichung gegen den echten Code verifiziert, nicht aus dem
+  Gedächtnis): **M1 und M2 sind deckungsgleich**, **M3 und M4 weichen
+  erheblich ab**. In beiden Sitzungen lag der Auftragstext nicht im Kontext
+  vor — M3 wurde nach der Architekturvorgabe aus dem M2-CLAUDE.md-Eintrag
+  gebaut, M4s drei Mechaniken wurden stattdessen direkt beim Nutzer erfragt
+  (`AskUserQuestion`), dessen Antworten ihrerseits vom eigenen Plan
+  abwichen. **Bewusst nicht stillschweigend „korrigiert"** — das ist eine
+  Designentscheidung, keine Bugfix-Aufgabe. Vollständige Gegenüberstellung
+  in `AUFTRAG-UMBAU-V2.md` Abschnitt 5.3/5.4; die Kurzfassung:
+  - **M3**: gebaut nur im Shop statt „Rastplatz **und** Shop"; Preis fest
+    (`makelRemoval: 8`) statt „steigt mit jeder Entfernung, Formel im JSON";
+    das Merkmal „nicht entfernbar" fehlt ganz.
+  - **M4 Umpolung**: gebaut als **Shop-Aktion** auf EINEN Makel-Eintrag EINER
+    Karte, umgepolt auf eine **andere Achse** — der Plan wollte **acht
+    legendäre Keystone-Karten**, die **alle** Makel EINER Art im
+    **Vorzeichen** drehen (der eigentliche Build-Motor, „ab dem Moment
+    suchst du gezielt nach Karten mit genau diesem Makel").
+  - **M4 Härtung**: gebaut als Schweregrad-Senkung (schwer→mittel→leicht) —
+    der Plan wollte ein **Kartenmerkmal**, das den Makel nach N geräumten
+    Räumen **verfallen** lässt.
+  - **M4 Narben**: gebaut als automatischer Run-Bonus (ein nie angefasster
+    Makel reift nach 5 Räumen zu +3 max. LP) — der Plan wollte einen
+    **`core`-Schlüssel** und eine **Kartenfamilie**, die je **aktivem** Makel
+    skaliert („Narbengewebe: +4 % Schaden je aktivem Makel").
+- **Eine Korrektur am Auftragstext selbst** (M1-Befund, jetzt auch dort
+  dokumentiert): Abschnitt 1.2 behauptet „Nur `maxHp` ist im Code gegen
+  negative Werte abgesichert (`cfg.js:1140`)" — diese Zeile liegt in
+  `applyHpScaling()`, die ausschließlich für **Gegner** läuft; der Spieler
+  hatte vor M1 gar keine Untergrenze. Die Schlussfolgerung des Auftrags
+  stimmt, die Begründung war zu optimistisch.
+- **Eine Konsequenz mit direkter Wirkung auf die NÄCHSTE Sitzung** (die 14
+  Kartenwellen): die Balance-Auflage aus Abschnitt 1.4 — „ein Run, der alle
+  Makel wegkauft, muss schwächer sein als einer, der mit ihnen arbeitet" —
+  ist mit dem gebauten Stand **nicht erfüllbar**, weil keine Karte von
+  aktiven Makeln profitiert. Der Narben-LP-Bonus (3 LP je gereiftem Makel)
+  ist der einzige Anreiz zum Behalten und verliert gegen die volle
+  Entfernung praktisch immer. Entweder die Narben-Kartenfamilie nachtragen
+  oder die Auflage bewusst fallenlassen — s. To-do-Liste.
+- Reine Markdown-Änderung: **kein `sw.js`-Bump** (kein Spiel-Asset, dieselbe
+  Regel wie für Änderungen an dieser CLAUDE.md), keine Codeänderung, Suite
+  unberührt.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **Vier Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
+      (s. dort Abschnitt 5.5, Entscheidung des Nutzers nötig, ob nachgetragen
+      wird): (1) die **acht Umpolungs-Keystone-Karten**, (2) das Kartenmerkmal
+      **„nicht entfernbar"** (hängt an 1), (3) der **Makel-Verfall** nach N
+      Räumen („Notschweißung"), (4) die **Narben-Kartenfamilie**
+      („+X % je aktivem Makel"). Punkt 4 blockiert die Balance-Auflage aus
+      Abschnitt 1.4 und betrifft direkt die 14 Kartenwellen.
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
       Designdokument Abschnitt 14.3): `unlockRoomInAct` steuert nur die
