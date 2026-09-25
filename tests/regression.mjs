@@ -8167,7 +8167,8 @@ for (const seed of SEEDS) {
   // ausgeloest (Spieler-hp unveraendert vom vollen Stand).
   {
     const st = necroRoom({ ghost_011: 1, ghost_014: 1, ghost_035: 1 });
-    check(Math.abs(necroDamagePct(st) - 4 * 0.05) < 1e-9, `Phase 6: ghost_035 stellt die Stapel nicht sofort (${necroDamagePct(st)})`);
+    const deaths35 = necroData.upgrades.ghost_035.core.necroVirtualDeathsOnStart;
+    check(Math.abs(necroDamagePct(st) - deaths35 * 0.05) < 1e-9, `Phase 6: ghost_035 stellt die Stapel nicht sofort (${necroDamagePct(st)})`);
     check(st.player.hp === st.player.cfg.maxHp, `Phase 6: ghost_035 loest faelschlich ghost_014s Heilung aus (hp=${st.player.hp})`);
   }
 
@@ -8862,7 +8863,8 @@ for (const seed of SEEDS) {
     const baseline = resolveGhostBaselineFor(st, 't_pink');
     check(ordinary[0].cfg.damage < baseline, `Phase 7: ghost_060 senkt den Untertanen-Schaden nicht um 15 % (${ordinary[0].cfg.damage} vs Baseline ${baseline})`);
     const cap = (st.data.balance.ghost?.maxActive ?? 3) + (st.player.cfg.ghostMaxAdd || 0);
-    check(cap === 5, `Phase 7: ghost_060 erhoeht das Limit nicht um 2 (${cap})`);
+    const expectedAdd = necroData.upgrades.ghost_060.core.ghostMaxAdd;
+    check(cap === (st.data.balance.ghost?.maxActive ?? 3) + expectedAdd, `Phase 7: ghost_060 erhoeht das Limit nicht um ${expectedAdd} (${cap})`);
   }
   function resolveGhostBaselineFor(st, type) {
     const withoutCard = legionRoom({});
@@ -9080,13 +9082,14 @@ for (const seed of SEEDS) {
     // Champions (winner) -- genau die vom Auftrag genannte Verwechslung.
     // Champion-Nachschliff (Abschnitt 22): ghost_085 traegt jetzt 150% statt
     // der alten 50% (core.necroFusionReplaceHpPct 1.5).
-    const expectedHp = Math.round((loserBaseMaxHp || 0) * 1.5);
+    const replaceHpPct = necroData.upgrades.ghost_085.core.necroFusionReplaceHpPct;
+    const expectedHp = Math.round((loserBaseMaxHp || 0) * replaceHpPct);
     check(
       champ.fusionHpBonus === expectedHp,
-      `Phase 8: ghost_085 ersetzt den Uebertragungswert nicht auf 150% des Verschmolzenen (${champ.fusionHpBonus} statt ${expectedHp})`,
+      `Phase 8: ghost_085 ersetzt den Uebertragungswert nicht auf ${replaceHpPct * 100}% des Verschmolzenen (${champ.fusionHpBonus} statt ${expectedHp})`,
     );
     // Ohne Ersetzung wuerde die neue 100%-Basisuebertragung (Abschnitt 4) plus
-    // ghost_072s Zusatzrate (0.08) addiert -- das muss von den 150% Ersatzwert
+    // ghost_072s Zusatzrate (0.08) addiert -- das muss vom Ersatzwert
     // klar unterscheidbar bleiben.
     const wouldBeIfAdditive = Math.round((loserBaseMaxHp || 0) * (1.0 + 0.08));
     check(
@@ -9871,8 +9874,9 @@ for (const seed of SEEDS) {
     check(ok, 'Phase 9: ghost_096 loest nicht aus');
     check(!champ.alive, 'Phase 9: ghost_096 opfert nicht den Champion');
     check(other.alive, 'Phase 9: ghost_096 opfert einen Nicht-Champion mit');
-    const expectedDmg = dmgBefore + Math.round(champBaseDamage * 0.4);
-    const expectedHp = hpBefore + Math.round(champBaseMaxHp * 0.4);
+    const sacPct = necroData.upgrades.ghost_096.core.necroSacrificeChampionStatPct;
+    const expectedDmg = dmgBefore + Math.round(champBaseDamage * sacPct);
+    const expectedHp = hpBefore + Math.round(champBaseMaxHp * sacPct);
     check(
       st.player.cfg.damage === expectedDmg,
       `Phase 9: ghost_096 gibt keinen dauerhaften Schadensbonus (${st.player.cfg.damage} statt ${expectedDmg})`,
@@ -11767,8 +11771,8 @@ for (const seed of SEEDS) {
       ['ghost_044', 'common', 0.07],
       ['ghost_109', 'uncommon', 0.13], // M5a: Brutto 10 -> 13 (Makel Kurzer Lauf)
       ['ghost_055', 'rare', 0.16], // M5b: Brutto 12 -> 16 (Makel Kurzer Lauf)
-      ['ghost_110', 'epic', 0.18],
-      ['ghost_111', 'legendary', 0.25],
+      ['ghost_110', 'epic', 0.23], // M5c: Brutto 18 -> 23 (Makel Teuer)
+      ['ghost_111', 'legendary', 0.34], // M5d: Brutto 25 -> 34 (Makel Enges Magazin)
     ];
     for (const [id, rarity, pct] of revive) {
       const d = necroData.upgrades[id];
@@ -11781,8 +11785,8 @@ for (const seed of SEEDS) {
       ['ghost_005', 'common', 'ghostLifetimeAdd', 0.5],
       ['ghost_112', 'uncommon', 'necroCrownLifetimeAdd', 1.3], // M5a: Brutto 1,0 -> 1,3 s (Makel Blechhaut)
       ['ghost_113', 'rare', 'necroCrownLifetimeAdd', 2.0], // M5b: Brutto 1,5 -> 2,0 s (Makel Klemmender Lader)
-      ['ghost_114', 'epic', 'necroCrownLifetimeAdd', 2.0],
-      ['ghost_115', 'legendary', 'necroCrownLifetimeAdd', 3.0],
+      ['ghost_114', 'epic', 'necroCrownLifetimeAdd', 2.5], // M5c: Brutto 2,0 -> 2,5 s (Makel Blechhaut)
+      ['ghost_115', 'legendary', 'necroCrownLifetimeAdd', 4.2], // M5d: Brutto 3,0 -> 4,2 s (Makel Klemmender Lader)
     ];
     for (const [id, rarity, field, val] of lifetime) {
       const d = necroData.upgrades[id];
@@ -11839,7 +11843,7 @@ for (const seed of SEEDS) {
     check((st.necroStacks._roomResistHaerte || 0) > 0, 'Abschnitt 65m: Haerte aus Verlust liegt nicht im dauerhaften Raum-Stapel');
   }
 
-  // ---- (n) Koenigliches Opfer: 40 % Champion-Basis, kein Zeitfenster -----
+  // ---- (n) Koenigliches Opfer: Champion-Basis, kein Zeitfenster ----------
   {
     const { useGadget } = await import('../src/game/tank.js');
     const st = necroRoom({ ghost_096: 1 }, ['t_pink']);
@@ -11851,10 +11855,17 @@ for (const seed of SEEDS) {
     champ.baseMaxHp = 200;
     const dmgBefore = st.player.cfg.damage;
     const hpBefore = st.player.cfg.maxHp;
+    const sacPct96 = necroData.upgrades.ghost_096.core.necroSacrificeChampionStatPct;
     useGadget(st.player, st);
     check(!champ.alive, 'Abschnitt 65n: Koenigliches Opfer toetet den Champion nicht');
-    check(st.player.cfg.damage === dmgBefore + 20, `Abschnitt 65n: Hauptpanzer erhaelt nicht +40 % Champion-Basisschaden (${st.player.cfg.damage - dmgBefore} statt 20)`);
-    check(st.player.cfg.maxHp === hpBefore + 80, `Abschnitt 65n: Hauptpanzer erhaelt nicht +40 % Champion-Basis-LP (${st.player.cfg.maxHp - hpBefore} statt 80)`);
+    check(
+      st.player.cfg.damage === dmgBefore + Math.round(50 * sacPct96),
+      `Abschnitt 65n: Hauptpanzer erhaelt nicht +${sacPct96 * 100} % Champion-Basisschaden (${st.player.cfg.damage - dmgBefore} statt ${Math.round(50 * sacPct96)})`,
+    );
+    check(
+      st.player.cfg.maxHp === hpBefore + Math.round(200 * sacPct96),
+      `Abschnitt 65n: Hauptpanzer erhaelt nicht +${sacPct96 * 100} % Champion-Basis-LP (${st.player.cfg.maxHp - hpBefore} statt ${Math.round(200 * sacPct96)})`,
+    );
     check(!('necroSacrificeChampionDurationS' in necroData.upgrades.ghost_096.core), 'Abschnitt 65n: Koenigliches Opfer traegt noch das alte Zeitfenster-Feld');
   }
 
@@ -17433,6 +17444,146 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
   const base = resolveCfg(tanksData, 'c_necro');
   const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_080: 1 }, necroData, 'mine', null, {}, {}, tanksData.makel, {}, {}, {});
   check(cfg.maxHp === base.maxHp + vocab.blechhaut.schwere.mittel, `Abschnitt 90: ghost_080s Makel wirkt nicht (${cfg.maxHp} statt ${base.maxHp + vocab.blechhaut.schwere.mittel})`);
+}
+
+// ============================================================================
+// Abschnitt 91 -- AUFTRAG-UMBAU-V2 Phase M5c (Makel-Pass Nekromant, epic)
+// Wie Abschnitt 89/90, eine Stufe hoeher: jede epic-Nekromantenkarte traegt
+// GENAU EINEN schweren Makel (Abschnitt 1.3 laesst "ein schwerer ODER zwei
+// leichte" zu -- diese Session nutzt durchgehend die erste Option), Limit
+// ceil(n/8)+1 je Makel, Achsenregel. Dazu ein echter, beim Bau gefundener
+// Bug: der Champion erbt seine Basiswerte MULTIPLIKATIV aus dem AKTUELLEN
+// Spieler-maxHp/-damage (promoteToChampion(), Champion-Nachschliff) -- ein
+// Blechhaut-Makel auf einer Karte, die selbst Champion-maxHp prozentual
+// erhoeht (necroCrownHpPct/necroCrownMassHpPerSlot), untergraebt dadurch
+// ihren eigenen Bonus. Das ist die eigentliche Achsenregel-Verletzung, die
+// beim ersten Entwurf uebersehen wurde (ghost_083 lieferte netto WENIGER
+// Champion-maxHp als ganz ohne die Karte) -- der Struktur-Check unten
+// bewacht genau diese Kopplung generisch, nicht nur die beiden Fundstellen.
+// ============================================================================
+{
+  const vocab = tanksData.makel;
+  const epic = Object.values(necroData.upgrades).filter((d) => d.rarity === 'epic');
+  check(epic.length === 16, `Abschnitt 91: ${epic.length} epic-Nekromantenkarten statt 16`);
+  let bad = 0;
+  const perMakel = {};
+  for (const d of epic) {
+    const m = d.makel;
+    if (!Array.isArray(m) || m.length !== 1 || !vocab[m[0].id] || m[0].schwere !== 'schwer') { bad++; continue; }
+    perMakel[m[0].id] = (perMakel[m[0].id] || 0) + 1;
+  }
+  check(bad === 0, `Abschnitt 91: ${bad} epic-Karte(n) ohne genau einen schweren Vokabel-Makel`);
+  const limit = Math.ceil(epic.length / 8) + 1;
+  const over = Object.entries(perMakel).filter(([, n]) => n > limit);
+  check(over.length === 0, `Abschnitt 91: Makel ueber dem Stufenlimit ${limit}: ${JSON.stringify(over)}`);
+  const PLAYER_AXIS = {
+    duenne_platte: /^necro(Resist|Soulbond)/,
+    klemmender_lader: /^necro(FireBurst|FireRatePctPerDeath)/,
+    blechhaut: /(ToPlayer|RandomTransferShield|^necroHeal|Soulbond|SacrificeShield|CrownDeathHpShield|necroRunHp)/,
+    teuer: /^scrap/,
+  };
+  const axisBad = epic.filter((d) => {
+    const re = PLAYER_AXIS[d.makel?.[0]?.id];
+    return re && Object.keys(d.core).some((k) => re.test(k));
+  });
+  check(axisBad.length === 0, `Abschnitt 91: Makel trifft die eigene Spielerachse: ${axisBad.map((d) => d.id)}`);
+  // Der Champion-HP-Kopplungs-Fund: KEINE Karte darf Blechhaut tragen, wenn
+  // ihr eigener core einen Champion-maxHp-Prozentbonus setzt -- der Bonus
+  // wuerde sich sonst am reduzierten Spieler-maxHp selbst untergraben.
+  const CHAMPION_HP_KEYS = /^necro(CrownHpPct|CrownMassHpPerSlot)$/;
+  const hpCoupled = epic.filter(
+    (d) => d.makel?.[0]?.id === 'blechhaut' && Object.keys(d.core).some((k) => CHAMPION_HP_KEYS.test(k)),
+  );
+  check(hpCoupled.length === 0, `Abschnitt 91: Blechhaut untergraebt den eigenen Champion-HP-Bonus: ${hpCoupled.map((d) => d.id)}`);
+  const rev = (id) => necroData.upgrades[id].core.necroReviveChanceAdd;
+  check(rev('ghost_110') > rev('ghost_055'), `Abschnitt 91: epic-Wiederbelebung (${rev('ghost_110')}) liegt nicht ueber rare (${rev('ghost_055')})`);
+  const lt = (id) => necroData.upgrades[id].core.necroCrownLifetimeAdd;
+  check(lt('ghost_114') > lt('ghost_113'), `Abschnitt 91: epic-Lebenszeit (${lt('ghost_114')}) liegt nicht ueber rare (${lt('ghost_113')})`);
+  // Ende-zu-Ende: der schwere Makel wirkt am Nekromanten (Blechhaut -25 LP).
+  const base = resolveCfg(tanksData, 'c_necro');
+  const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_114: 1 }, necroData, 'mine', null, {}, {}, tanksData.makel, {}, {}, {});
+  check(cfg.maxHp === base.maxHp + vocab.blechhaut.schwere.schwer, `Abschnitt 91: ghost_114s Makel wirkt nicht (${cfg.maxHp} statt ${base.maxHp + vocab.blechhaut.schwere.schwer})`);
+  // Gegenprobe (dokumentiert, nicht Teil des Laufs): der Champion-HP-Kopplungs-
+  // Fund wurde am echten ghost_083 reproduziert (Blechhaut statt Duenne
+  // Platte liess das Champion-maxHp trotz +31 % Bonus UNTER den Wert ohne
+  // die Karte fallen, 64 statt 67) und nach dem Fix (Duenne Platte) bestand
+  // der bestehende Phase-8-Test "ghost_083 erhoeht das Champion-Maximalleben"
+  // wieder -- diese Session tauscht keinen Wert probeweise zurueck, weil
+  // der obige CHAMPION_HP_KEYS-Struktur-Check dieselbe Klasse von Fehler
+  // bereits am echten, unveraenderten Datenbestand bewacht.
+}
+
+// ============================================================================
+// Abschnitt 92 -- AUFTRAG-UMBAU-V2 Phase M5d (Makel-Pass Nekromant, legendary)
+// Letzte der vier Makel-Pass-Sessions (M5a-d): "regelbrechend", schwerer
+// Makel, TEILS ZWEI (Abschnitt 1.3). Diese Session gibt zwei der zehn
+// Karten (ghost_034, ghost_091) je zwei schwere Makel, die uebrigen acht
+// je einen. Limit ceil(n/8)+1 gilt je Makel-ART ueber alle Slots dieser
+// Stufe (nicht je Karte).
+// ============================================================================
+{
+  const vocab = tanksData.makel;
+  const legendary = Object.values(necroData.upgrades).filter((d) => d.rarity === 'legendary');
+  check(legendary.length === 10, `Abschnitt 92: ${legendary.length} legendary-Nekromantenkarten statt 10`);
+  let bad = 0;
+  let doubles = 0;
+  const perMakel = {};
+  for (const d of legendary) {
+    const m = d.makel;
+    if (!Array.isArray(m) || m.length < 1 || m.length > 2) { bad++; continue; }
+    for (const entry of m) {
+      if (!vocab[entry.id] || entry.schwere !== 'schwer') { bad++; continue; }
+      perMakel[entry.id] = (perMakel[entry.id] || 0) + 1;
+    }
+    if (m.length === 2) doubles++;
+  }
+  check(bad === 0, `Abschnitt 92: ${bad} ungueltige(r) Makel-Eintrag(e)`);
+  check(doubles === 2, `Abschnitt 92: ${doubles} Karte(n) mit zwei Makeln statt 2 ("teils zwei")`);
+  const limit = Math.ceil(legendary.length / 8) + 1;
+  const over = Object.entries(perMakel).filter(([, n]) => n > limit);
+  check(over.length === 0, `Abschnitt 92: Makel ueber dem Stufenlimit ${limit}: ${JSON.stringify(over)}`);
+  const PLAYER_AXIS = {
+    duenne_platte: /^necro(Resist|Soulbond)/,
+    klemmender_lader: /^necro(FireBurst|FireRatePctPerDeath)/,
+    blechhaut: /(ToPlayer|RandomTransferShield|^necroHeal|Soulbond|SacrificeShield|CrownDeathHpShield|necroRunHp)/,
+    teuer: /^scrap/,
+    schwerfaellig: /^necroKeystoneSpeedPct$/,
+  };
+  const axisBad = legendary.filter((d) =>
+    (d.makel || []).some((entry) => {
+      const re = PLAYER_AXIS[entry.id];
+      return re && Object.keys(d.core).some((k) => re.test(k));
+    }),
+  );
+  check(axisBad.length === 0, `Abschnitt 92: Makel trifft die eigene Spielerachse: ${axisBad.map((d) => d.id)}`);
+  const CHAMPION_HP_KEYS = /^necro(CrownHpPct|CrownMassHpPerSlot)$/;
+  const hpCoupled = legendary.filter(
+    (d) => (d.makel || []).some((entry) => entry.id === 'blechhaut') && Object.keys(d.core).some((k) => CHAMPION_HP_KEYS.test(k)),
+  );
+  check(hpCoupled.length === 0, `Abschnitt 92: Blechhaut untergraebt den eigenen Champion-HP-Bonus: ${hpCoupled.map((d) => d.id)}`);
+  const rev = (id) => necroData.upgrades[id].core.necroReviveChanceAdd;
+  check(rev('ghost_111') > rev('ghost_110'), `Abschnitt 92: legendary-Wiederbelebung (${rev('ghost_111')}) liegt nicht ueber epic (${rev('ghost_110')})`);
+  const lt = (id) => necroData.upgrades[id].core.necroCrownLifetimeAdd;
+  check(lt('ghost_115') > lt('ghost_114'), `Abschnitt 92: legendary-Lebenszeit (${lt('ghost_115')}) liegt nicht ueber epic (${lt('ghost_114')})`);
+  // Ende-zu-Ende: der Doppel-Makel wirkt am Nekromanten (ghost_091: Kurzer
+  // Lauf + Heisser Lauf, beide multiplikativ auf jeweils eigene Achsen).
+  // bulletSpeedMult wird DIREKT in cfg.bulletSpeed hineinmultipliziert
+  // (cfg.js:1217), es gibt kein eigenstaendiges cfg.bulletSpeedMult-Feld --
+  // deshalb gegen die tatsaechliche cfg.bulletSpeed geprueft.
+  const base = resolveCfg(tanksData, 'c_necro');
+  const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_091: 1 }, necroData, 'mine', null, {}, {}, tanksData.makel, {}, {}, {});
+  const expBulletSpeed = base.bulletSpeed * vocab.kurzer_lauf.schwere.schwer;
+  const expSelfImm = vocab.heisser_lauf.schwere.schwer; // Basis-Akkumulator ist 1, kein Vorwert am Necro
+  check(Math.abs(cfg.bulletSpeed - expBulletSpeed) < 1e-6, `Abschnitt 92: ghost_091s erster Makel wirkt nicht (${cfg.bulletSpeed} statt ${expBulletSpeed})`);
+  check(Math.abs(cfg.selfImmunityMult - expSelfImm) < 1e-9, `Abschnitt 92: ghost_091s zweiter Makel wirkt nicht (${cfg.selfImmunityMult} statt ${expSelfImm})`);
+  // Ende-zu-Ende der einfachen legendary-Karte (Blechhaut ist absichtlich
+  // NICHT vertreten -- s. Abschnitt 91-Fund -- daher hier Kurzer Lauf statt
+  // Blechhaut, ghost_103 nach dem Fix).
+  const cfg2 = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_103: 1 }, necroData, 'mine', null, {}, {}, tanksData.makel, {}, {}, {});
+  check(
+    Math.abs(cfg2.bulletSpeed - base.bulletSpeed * vocab.kurzer_lauf.schwere.schwer) < 1e-6,
+    `Abschnitt 92: ghost_103s Makel wirkt nicht (${cfg2.bulletSpeed})`,
+  );
 }
 
 if (failures) {

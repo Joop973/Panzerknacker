@@ -698,7 +698,7 @@ Ist-Stand ist `CLAUDE.md`.
 | Narben-Nachtrag (5.5 Punkt 4) | gebaut, gemergt | ja (Kartenfamilie, s. 5.5) |
 | M5a — Nekromanten-Pass uncommon | gebaut, gemergt | ja, mit einer Abweichung (s. 5.7) |
 | M5b — Nekromanten-Pass rare | gebaut, gemergt | ja, gleiche Abweichung wie M5a (s. 5.8) |
-| M5c–d — Nekromanten-Pass epic/legendary | offen | — |
+| M5c–d — Nekromanten-Pass epic/legendary | gebaut, gemergt | ja, eigener Fund (Champion-HP-Kopplung, s. 5.9) |
 | D1 — Machbarkeitsprüfung Dungeon | offen | — |
 | D2–D6 — Dungeon-Umbau | offen | — |
 | G1 — Kulissen einbauen | offen | — |
@@ -887,3 +887,84 @@ Run-Leben). Nettowert **nicht gemessen**.
 | ghost_107 | Einziges Schild | FusionHpPctBonus 0,15 | 0,2 | Schwerfällig (0,9) | ~+30 % |
 | ghost_108 | Einziger Bogen | FusionFireRatePctBonus 0,15 | 0,2 | Blechhaut (-15) | ~+30 % |
 | ghost_113 | Verlängerte Herrschaft | CrownLifetimeAdd 1,5 | 2,0 | Klemmender Lader (1,1) | ~+30 % |
+
+## 5.9 M5c+M5d — Makel-Pass epic+legendary (Umsetzung)
+
+Beide letzten Stufen des Nekromanten-Makel-Passes in einer Sitzung gemacht
+(Nutzerauftrag „Mache alle Seltenheiten" statt der ursprünglich in 4.1
+vorgesehenen Trennung in zwei Sessions).
+
+**epic** (16 Karten, ein schwerer Makel, Limit `ceil(16/8)+1 = 3`, gebaut 2
+je Makel):
+
+| Karte | Name | alter Wert | neuer Bruttowert | Makel (schwer) | Anhebung |
+|---|---|---|---|---|---|
+| ghost_025 | Letzte Deckung | LastStandHealPct 0,25 | 0,31 | Kurzer Lauf (0,82) | ~+24 % |
+| ghost_031 | Märtyrerbefehl | ActiveDmgPct 0,08, ActiveFireRatePct 0,05, ActiveDurationS 10 | 0,10, 0,065, 13 | Dünne Platte (-18) | ~+25–30 % |
+| ghost_035 | Vorbote des Endes | VirtualDeathsOnStart 4 | 5 | Enges Magazin (-2) | ~+25 % |
+| ghost_057 | Gemeinsamer Wille | SharedWillResist 10 | 13 | Schwerfällig (0,82) | ~+30 % |
+| ghost_058 | Chor der Toten | — | — (Schalter, nicht skalierbar) | Heißer Lauf (0,82) | keine (netto −) |
+| ghost_059 | Grabfeld | GraveyardBonus 0,25 | 0,31 | Teuer (-3) | ~+24 % |
+| ghost_071 | Einziger Thron | UniqueThronePerFusionPct 0,05 | 0,065 | Klemmender Lader (1,18) | ~+30 % |
+| ghost_083 | Ewiger Thron | CrownDamagePct 0,25, CrownHpPct 0,25 | 0,31, 0,31 | Dünne Platte (-18) | ~+24 % |
+| ghost_084 | Unsterblicher König | ImmortalKingHealPct 0,3, InvulnS 1,0, CooldownS 15 | 0,38, 1,3, 12 | Enges Magazin (-2) | ~+27–30 % |
+| ghost_090 | Rückkehr im Zorn | ReplacementChance 0,25, StatPct 0,5, LifetimeS 6 | 0,31, 0,62, 7,5 | Dünne Platte (-18) | ~+24–25 % |
+| ghost_096 | Königliches Opfer | SacrificeChampionStatPct 0,4 | 0,5 | Schwerfällig (0,82) | ~+25 % |
+| ghost_101 | Seelenlieferanten | HybridGhostKillReviveChance 0,2 | 0,25 | Kurzer Lauf (0,82) | ~+25 % |
+| ghost_102 | Kronengarde | GuardResistPerAlly 10, SoloShieldPct 0,1, SoloIntervalS 5 | 13, 0,13, 4 | Heißer Lauf (0,82) | ~+30 % |
+| ghost_110 | Ruf der Legion | ReviveChanceAdd 0,18 | 0,23 | Teuer (-3) | ~+28 % |
+| ghost_114 | Ungebrochener Schwur | CrownLifetimeAdd 2,0 | 2,5 | Blechhaut (-25) | ~+25 % |
+| ghost_116 | Losgelöste Ketten | — | — (Schalter, nicht skalierbar) | Klemmender Lader (1,18) | keine (netto −) |
+
+**Echter Fund, kein Testartefakt**: `ghost_083`/`ghost_103` (der zweiten
+in der legendary-Tabelle) erhöhen den **Champion**-maxHp prozentual
+(`necroCrownHpPct`/`necroCrownMassHpPerSlot`). Der Champion erbt seine
+Basiswerte aber `championStatPct × Spieler-maxHp` (`ghost.js:
+promoteToChampion()`, Champion-Nachschliff) — ein Blechhaut-Makel auf einer
+solchen Karte untergräbt dadurch den eigenen Bonus. Am echten `ghost_083`
+gemessen: mit Blechhaut sank das Champion-maxHp trotz +31 % Bonus auf 64
+statt 67 ganz ohne Karte — netto **negativ**. Beide Karten haben deshalb
+`duenne_platte` bzw. `kurzer_lauf` statt Blechhaut. Ein neuer Struktur-Test
+(`tests/regression.mjs`, Abschnitt 91/92, `CHAMPION_HP_KEYS`-Regex) bewacht
+diese Kopplung generisch für jede künftige Karte mit diesen beiden Feldern,
+nicht nur die zwei Fundstellen.
+
+**legendary** (10 Karten, ein schwerer Makel, **zwei Karten mit zwei
+Makeln** — „teils zwei" —, Limit `ceil(10/8)+1 = 3`):
+
+| Karte | Name | alter Wert | neuer Bruttowert | Makel (schwer) | Anhebung |
+|---|---|---|---|---|---|
+| ghost_034 | Unheiliger Höhepunkt | WindowS 4, DamagePct 0,35, FireRatePct 0,25, SpeedPct 0,15, DurationS 8, CooldownS 18 | 5, 0,47, 0,34, 0,20, 11, 14 | Dünne Platte (-18) + Teuer (-3) | ~+33–37 % |
+| ghost_060 | Armee der Toten | ghostMaxAdd 2, GuaranteedReviveStatPct 0,5 | 3, 0,68 | Enges Magazin (-2) | +50 %/+36 % |
+| ghost_085 | Seelenkoloss | FusionReplaceHpPct 1,5, DamagePct 1,5, FireRatePct 0,6 | 2,0, 2,0, 0,8 | Klemmender Lader (1,18) | ~+33 % |
+| ghost_091 | Lawine der Toten | WindowS 5, Spawn 2, StatPct 0,6, DmgPct 0,2, FRPct 0,2, DurationS 8, CooldownS 20 | 6, 3, 0,8, 0,27, 0,27, 11, 16 | Kurzer Lauf (0,82) + Heißer Lauf (0,82) | ~+20–50 % |
+| ghost_097 | Thron aus Gebein | ThroneDmgPct 0,03, ShieldPct 0,015 | 0,04, 0,02 | Dünne Platte (-18) | ~+33 % |
+| ghost_103 | Massenkrone | MassDmgPerSlot 0,08, HpPerSlot 0,08, SlotThreshold 3, SoloFireRatePct 0,25 | 0,11, 0,11, 2, 0,35 | Kurzer Lauf (0,82) | ~+37–40 % |
+| ghost_104 | Kreislauf der Verdammten | CircleThreshold 5, ReviveStatPct 0,5, DmgPct 0,15, DurationS 8 | 4, 0,68, 0,20, 11 | Schwerfällig (0,82) | ~+33–37 % |
+| ghost_105 | Herrschaft über den Tod | LifetimeS 20, BuffDmgPct 0,15, BuffFRPct 0,15, BuffDurationS 10 | 27, 0,20, 0,20, 14 | Teuer (-3) | ~+33–40 % |
+| ghost_111 | Unaufhaltsamer Totenruf | ReviveChanceAdd 0,25 | 0,34 | Enges Magazin (-2) | ~+36 % |
+| ghost_115 | Vermächtnis der Krone | CrownLifetimeAdd 3,0 | 4,2 | Klemmender Lader (1,18) | ~+40 % |
+
+Mehrere Werte sind bewusst als **Schwellen-/Cooldown-Senkung** statt reiner
+Prozentanhebung umgesetzt (kürzere Fenster/Cooldowns, niedrigere
+Auslöseschwellen = leichter/öfter auslösbar = stärker), analog zu M5b's
+`ghost_053`-Muster — „regelbrechend" (Abschnitt 1.3) erlaubt das
+ausdrücklich, anders als bei common/uncommon/rare.
+
+**Stufenordnung nachgezogen**: `ghost_110` (epic) 0,23 > rare `ghost_055`
+0,16; `ghost_111` (legendary) 0,34 > epic 0,23. `ghost_114` (epic) 2,5 s
+löst die von M5b offengelassene Gleichstand-Nebenwirkung mit rare
+`ghost_113` (2,0 s) auf; `ghost_115` (legendary) 4,2 s > epic 2,5 s.
+
+Zwölf Bestandstests lasen alte Werte fest ein (Phase 6/7/8/9,
+Abschnitt 65j/65n) — umgestellt auf `necroData.upgrades.<id>.core.<feld>`.
+Neue Testabschnitte 91 (epic)/92 (legendary): Struktur, Achsenregel
+(inkl. der neuen Champion-HP-Kopplungsprüfung), Stufenordnung, Doppel-
+Makel-Zähler, Ende-zu-Ende (inkl. der Erkenntnis, dass `bulletSpeedMult`
+über `cfg.bulletSpeed` wirkt, nicht über ein eigenes Feld). Sechs
+Gegenproben am echten Quellcode bestanden. Nettowert **nicht gemessen** —
+wie bei M5a/M5b eine offene Balance-Frage für eine spätere Session.
+
+**Damit ist der komplette Nekromanten-Makel-Pass (M5a–d, 115 Karten)
+abgeschlossen.** Nächste Sitzung laut 4.1: Phase D1 (Machbarkeitsprüfung
+Dungeon).
