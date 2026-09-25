@@ -10105,6 +10105,26 @@ immer der beste Zug (Balance-Auflage 1.4).
   umgepolte mitgezählt, gehärtete ausgeschlossen, Feuerrate aus). `sw.js`
   `v129`.
 
+### AUFTRAG-UMBAU-V2 — Phase M5a (Makel-Pass Nekromant, uncommon) — gemergt
+Reine Datenphase: alle 30 uncommon-Karten in `data/upgrades_necro.json`
+tragen genau einen **leichten** Makel und einen um rund +30 % angehobenen
+Hauptwert (Tabelle in `AUFTRAG-UMBAU-V2.md` 5.7). Kartentexte nennen den
+Makel samt Zahl (Testabschnitt 82 prüft sie).
+- **Abweichung vom Auftrag (Nutzerentscheidung):** Limit je Makel und Stufe
+  `ceil(n/8)+1` statt 2 (bei 30 Karten sonst unerfüllbar). Gebaut 3–4 je Makel.
+- **Achsenregel:** Makel trifft nie die Spielerachse der Karte (z. B. keine
+  Dünne Platte auf `ghost_022`-Resistenz, keine Blechhaut auf
+  Spieler-Schild/-Heilung). Geister-Achsen gelten als eigene Achse.
+- **Neun Tests** hatten alte Kartenzahlen fest eingetragen. Sie lesen jetzt
+  die Kartenwerte aus den Daten, zwei Datenpins in 65j/65l sind auf die neuen
+  Werte gesetzt. `ghost_026` nennt jetzt seinen Rückstoß („um 40 px“), der
+  vorher nur zufällig über „40 %“ im Text abgedeckt war.
+- **Testabschnitt 89** prüft die Struktur (ein leichter Vokabel-Makel je
+  uncommon-Karte, Limit, common makellos, Achsenregel) und die Wirkung
+  Ende-zu-Ende. Vier Gegenproben wurden rot. `sw.js` `v130`.
+- **Offen:** Der Nettowert ist nicht gemessen. `ghost_109` (uncommon 13 %)
+  überholt bis M5b `ghost_055` (rare 12 %).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
       (s. dort Abschnitt 5.5): (1) die **acht Umpolungs-Keystone-Karten**,
