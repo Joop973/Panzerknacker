@@ -10144,6 +10144,54 @@ Wie M5a eine Stufe höher: alle 26 rare-Karten tragen genau einen
   Limit), Achsenregel, Stufenordnung der Wiederbelebung, Wirkung Ende-zu-
   Ende. Drei Gegenproben rot. `sw.js` `v131`. Nettowert nicht gemessen.
 
+### AUFTRAG-UMBAU-V2 — Phase M5c+M5d (Makel-Pass Nekromant, epic+legendary) — gemergt
+Beide letzten Stufen des Nekromanten-Makel-Passes in einer Sitzung
+(Nutzerauftrag „Mache alle Seltenheiten"). epic: alle 16 Karten tragen
+genau einen **schweren** Makel (Abschnitt 1.3 erlaubt auch „zwei leichte" —
+diese Session nutzt durchgehend die erste Option), Bruttowerte ~+24–36 %,
+Limit `ceil(16/8)+1 = 3`, gebaut 2 je Makel. legendary: alle 10 Karten
+tragen einen schweren Makel, **zwei Karten (`ghost_034`, `ghost_091`)
+tragen zwei** ("teils zwei"), Bruttowerte „regelbrechend" (~+25–50 %,
+teils Schwellen-/Cooldown-Senkungen statt reiner Prozentanhebung), Limit
+`ceil(10/8)+1 = 3`.
+- **Echter Fund beim Bau, kein bloßer Testartefakt**: `ghost_083` („Ewiger
+  Thron") und `ghost_103` („Massenkrone") erhöhen den **Champion**-maxHp
+  prozentual (`necroCrownHpPct`/`necroCrownMassHpPerSlot`) — der Champion
+  erbt seine Basiswerte aber MULTIPLIKATIV aus dem AKTUELLEN Spieler-maxHp
+  (`ghost.js: promoteToChampion()`, `championStatPct × playerCfg.maxHp`,
+  Champion-Nachschliff). Ein Blechhaut-Makel (senkt Spieler-maxHp) auf
+  genau diesen Karten untergräbt dadurch ihren eigenen Bonus — gemessen am
+  echten `ghost_083`: mit Blechhaut sank das Champion-maxHp trotz +31 %
+  Bonus auf 64 statt der 67 ganz ohne Karte. Beide Karten bekamen
+  stattdessen `duenne_platte` bzw. `kurzer_lauf`. **Ein neuer, generischer
+  Struktur-Test** (`CHAMPION_HP_KEYS`-Regex in Abschnitt 91/92) bewacht
+  diese Kopplung fortan für JEDE Karte mit `necroCrownHpPct`/
+  `necroCrownMassHpPerSlot`, nicht nur die beiden Fundstellen.
+- **Stufenordnung nachgezogen**: `ghost_110` (epic, Wiederbelebung) jetzt
+  0,23 (> rare 0,16), `ghost_111` (legendary) 0,34 (> epic 0,23);
+  `ghost_114` (epic, Champion-Lebenszeit) jetzt 2,5 s (löst die von M5b
+  offengelassene Gleichstand-Nebenwirkung mit rare `ghost_113` = 2,0 s
+  auf), `ghost_115` (legendary) 4,2 s (> epic 2,5 s).
+- Reine Schalterkarten ohne numerische Anhebung: `ghost_058`, `ghost_116`
+  (epic, wie schon `ghost_023` in M5b).
+- Zwölf Bestandstests lasen alte Werte fest ein (Phase 6/7/8/9,
+  Abschnitt 65j/65n), umgestellt auf `necroData.upgrades.<id>.core.<feld>`
+  statt hartkodierter Zahlen.
+- **Testabschnitte 91 (epic) + 92 (legendary)**: Struktur (Kartenzahl,
+  Makel-Schwere, Limit je Makel-Art), Achsenregel inkl. der neuen
+  Champion-HP-Kopplungsprüfung, Stufenordnung (Wiederbelebung +
+  Champion-Lebenszeit über alle vier Stufen), Doppel-Makel-Zähler
+  ("teils zwei" = genau 2 Karten), Wirkung Ende-zu-Ende (inkl. einer
+  Doppel-Makel-Karte, `bulletSpeedMult` wirkt über `cfg.bulletSpeed`, nicht
+  über ein eigenes `cfg.bulletSpeedMult`-Feld — Fund beim Testbau). Sechs
+  Gegenproben am echten Quellcode bestanden (u. a. `ghost_083` zurück auf
+  Blechhaut reproduziert exakt den oben beschriebenen Bug UND lässt den
+  neuen Struktur-Test rot werden). `sw.js` `v132`. Nettowert nicht
+  gemessen — wie bei M5a/M5b bleibt das eine offene Balance-Frage.
+- **Damit ist der komplette Nekromanten-Makel-Pass (M5a–d, alle 115 Karten)
+  abgeschlossen.** Laut `AUFTRAG-UMBAU-V2.md` folgt als nächstes Phase D1
+  (Dungeon-Umbau).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
       (s. dort Abschnitt 5.5): (1) die **acht Umpolungs-Keystone-Karten**,
