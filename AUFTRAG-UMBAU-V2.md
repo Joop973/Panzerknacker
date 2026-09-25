@@ -697,7 +697,8 @@ Ist-Stand ist `CLAUDE.md`.
 | 14 Kartenwellen (mit Makel, M6) | offen | — nächste Sitzung laut 4.1 |
 | Narben-Nachtrag (5.5 Punkt 4) | gebaut, gemergt | ja (Kartenfamilie, s. 5.5) |
 | M5a — Nekromanten-Pass uncommon | gebaut, gemergt | ja, mit einer Abweichung (s. 5.7) |
-| M5b–d — Nekromanten-Pass rare/epic/legendary | offen | — |
+| M5b — Nekromanten-Pass rare | gebaut, gemergt | ja, gleiche Abweichung wie M5a (s. 5.8) |
+| M5c–d — Nekromanten-Pass epic/legendary | offen | — |
 | D1 — Machbarkeitsprüfung Dungeon | offen | — |
 | D2–D6 — Dungeon-Umbau | offen | — |
 | G1 — Kulissen einbauen | offen | — |
@@ -845,3 +846,44 @@ sinkt also. Nebenwirkung bis M5b: `ghost_109` (uncommon, 13 %) liegt über
 | ghost_098 | Auslese der Legion | CapFusionHpPct 1, CapFusionDamagePct 1, CapFusionFireRatePct 1 | 1,3, 1,3, 1,3 | Klemmender Lader (1,05) | ~+30 % |
 | ghost_109 | Flüstern der Gefallenen | ReviveChanceAdd 0,1 | 0,13 | Kurzer Lauf (0,95) | ~+30 % |
 | ghost_112 | Beständiger Regent | CrownLifetimeAdd 1 | 1,3 | Blechhaut (-8) | ~+30 % |
+
+## 5.8 M5b — Makel-Pass rare (Umsetzung)
+
+Wie M5a, eine Stufe höher: jede der 26 rare-Karten trägt genau einen
+**mittleren** Makel, Limit `ceil(26/8)+1 = 5` je Makel (gebaut 3–4).
+Hauptwerte brutto rund +30 %. `ghost_023` ist ein Schalter ohne Anhebung,
+`ghost_053` wird durch eine **niedrigere** Schwelle stärker (30 → 23 %).
+`ghost_055` liegt jetzt mit 16 % wieder über `ghost_109` (13 %).
+Nebenwirkung bis M5c: `ghost_113` (rare, 2,0 s) ist gleichauf mit
+`ghost_114` (epic, 2,0 s). Achsenregel erweitert: kein Blechhaut/Dünne
+Platte auf Karten, die den Spieler schützen (Seelenband, Opfer-/Kronen-Schild,
+Run-Leben). Nettowert **nicht gemessen**.
+
+| Karte | Name | alter Wert | neuer Bruttowert | Makel (mittel) | Anhebung |
+|---|---|---|---|---|---|
+| ghost_010 | Jenseitsziel | FlankDamageBonus 0,15 | 0,2 | Teuer (-2) | ~+30 % |
+| ghost_023 | Überlaufende Seele | — | — (Schalter, nicht skalierbar) | Schwerfällig (0,9) | keine (netto −) |
+| ghost_029 | Seelenhunger | RunDmgPct 0,01 | 0,013 | Dünne Platte (-10) | ~+30 % |
+| ghost_030 | Unsterbliche Maschine | RunHpPct 0,01 | 0,013 | Kurzer Lauf (0,9) | ~+30 % |
+| ghost_032 | Totenkanone | HomingDamageMult 1,5 | 2,0 | Heißer Lauf (0,9) | ~+30 % |
+| ghost_033 | Rückkehr aus Asche | StartGhostPct 0,3 | 0,4 | Enges Magazin (-1) | ~+30 % |
+| ghost_052 | Mehrfachwiederbelebung | DoubleReviveChance 0,2 | 0,26 | Teuer (-2) | ~+30 % |
+| ghost_053 | Verstärkte Hülle | HullThresholdPct 0,3 | 0,23 | Schwerfällig (0,9) | ~+30 % |
+| ghost_054 | Legionskern | CoreHealPct 0,2, CoreDamageBonus 0,1 | 0,26, 0,13 | Blechhaut (-15) | ~+30 % |
+| ghost_055 | Totenruf der Tiefe | ReviveChanceAdd 0,12 | 0,16 | Kurzer Lauf (0,9) | ~+30 % |
+| ghost_056 | Elite-Reaktivierung | EliteReviveStatPct 0,9 | 1,0 | Dünne Platte (-10) | ~+30 % |
+| ghost_078 | Alpha-Schuss | CrownAlphaShotDamageMult 2,0 | 2,3 | Enges Magazin (-1) | ~+30 % |
+| ghost_079 | Unantastbarer | CrownUnassailableS 2,0 | 2,6 | Klemmender Lader (1,1) | ~+30 % |
+| ghost_080 | Kronenerbe | CrownHeirPct 0,6 | 0,78 | Blechhaut (-15) | ~+30 % |
+| ghost_081 | Seelenmonolith | CrownAnchorDamagePct 0,45, CrownAnchorRangePct 0,25, CrownAnchorResist 20 | 0,58, 0,33, 26 | Schwerfällig (0,9) | ~+30 % |
+| ghost_082 | Kronjäger | ChampionExecThreshold 0,5 | 0,55 | Teuer (-2) | ~+30 % |
+| ghost_088 | Blutige Formation | HybridPerAllyDmgPct 0,05, HybridFlankBonusPct 0,1, HybridReviveDeathBonusPct 0,08 | 0,065, 0,13, 0,1 | Blechhaut (-15) | ~+30 % |
+| ghost_089 | Wechselopfer | SacrificeHealPct 0,2, SacrificeShieldPct 0,1 | 0,26, 0,13 | Kurzer Lauf (0,9) | ~+30 % |
+| ghost_094 | Erbe des Herrschers | CrownDeathDmgTransferPct 0,25, CrownDeathHpShieldPct 0,25 | 0,33, 0,33 | Heißer Lauf (0,9) | ~+30 % |
+| ghost_095 | Seelenband | SoulbondPct 0,25 | 0,33 | Klemmender Lader (1,1) | ~+30 % |
+| ghost_099 | Krönungszug | CrownProcPerAllyPct 0,05 | 0,065 | Enges Magazin (-1) | ~+30 % |
+| ghost_100 | Ersatzkörper | SuccessionPct 0,5 | 0,65 | Dünne Platte (-10) | ~+30 % |
+| ghost_106 | Einziges Schwert | FusionDamagePctBonus 0,15 | 0,2 | Heißer Lauf (0,9) | ~+30 % |
+| ghost_107 | Einziges Schild | FusionHpPctBonus 0,15 | 0,2 | Schwerfällig (0,9) | ~+30 % |
+| ghost_108 | Einziger Bogen | FusionFireRatePctBonus 0,15 | 0,2 | Blechhaut (-15) | ~+30 % |
+| ghost_113 | Verlängerte Herrschaft | CrownLifetimeAdd 1,5 | 2,0 | Klemmender Lader (1,1) | ~+30 % |

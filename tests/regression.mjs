@@ -8268,7 +8268,8 @@ for (const seed of SEEDS) {
     killGhost(st2, g, 'damage'); // 5. Tod -> Totenkanone feuert
     const homing = st2.bullets.find((bb) => bb.owner === st2.player && bb.homing > 0);
     check(!!homing, 'Phase 6: ghost_032 feuert nach 5 Toden keinen Zielsucher');
-    check(homing && homing.damage === Math.round(st2.player.cfg.damage * 1.5), `Phase 6: ghost_032s Zielsucher hat nicht 150 % Schaden (${homing?.damage})`);
+    const homingMult = necroData.upgrades.ghost_032.core.necroHomingDamageMult; // M5b: Kartenwert aus den Daten
+    check(homing && homing.damage === Math.round(st2.player.cfg.damage * homingMult), `Phase 6: ghost_032s Zielsucher hat nicht ${homingMult * 100} % Schaden (${homing?.damage})`);
   }
 
   // (j) ghost_029/030 "Seelenhunger"/"Unsterbliche Maschine": permanente
@@ -8759,7 +8760,7 @@ for (const seed of SEEDS) {
     // unter der Basis-Chance (0,35 -> gelingt) und ueber der 20-%-Doppel-
     // Chance (-> verfehlt), unabhaengig davon, an welcher Stelle er greift.
     const st2 = legionRoom({ ghost_052: 1 });
-    st2.rng = () => 0.25;
+    st2.rng = () => 0.3; // M5b: Doppel-Chance 26 %, Basis 35 % -- 0,3 liegt dazwischen
     st2.killTank(mkEnemy(), 'test', { killer: st2.player });
     check(st2.ghosts.length === 1, `Phase 7: ghost_052 erzeugt trotz verfehlter Chance eine zweite Kopie (${st2.ghosts.length})`);
   }
@@ -9116,7 +9117,7 @@ for (const seed of SEEDS) {
     const successor = createGhost(st, 10, 10, 0, 't_pink');
     pushGhost(st, successor);
     check(successor.isChampion, 'Phase 8: der Nachfolger wird nicht zum Champion befoerdert');
-    const expected = hpBonusBefore * 0.6;
+    const expected = hpBonusBefore * necroData.upgrades.ghost_080.core.necroCrownHeirPct; // M5b: aus den Daten
     check(
       Math.abs(successor.fusionHpBonus - expected) < 1e-6,
       `Phase 8: der Nachfolger erbt nicht 60% der Fusionsboni (${successor.fusionHpBonus} statt ${expected})`,
@@ -9549,7 +9550,7 @@ for (const seed of SEEDS) {
     fireGhost(st, g, target);
     st.tanks = [st.player, target];
     stepState(st, CMD, 0.3);
-    check(target.necroExecThreshold === 0.5, `Phase 8: ghost_082 setzt die erhoehte Exekutionsschwelle nicht (${target.necroExecThreshold})`);
+    check(target.necroExecThreshold === necroData.upgrades.ghost_082.core.necroChampionExecThreshold, `Phase 8: ghost_082 setzt die erhoehte Exekutionsschwelle nicht (${target.necroExecThreshold})`);
     check(target.necroExecUntil > st.time, 'Phase 8: ghost_082 setzt kein Zeitfenster fuer die Exekutionsschwelle');
   }
 
@@ -11654,8 +11655,9 @@ for (const seed of SEEDS) {
     check(successor === other, 'Abschnitt 65d: der einzige verbleibende gewoehnliche Geist wird nicht Nachfolger');
     // Kronenerbe: 60 % von 10 = 6, ohne jedes Zeitfenster (keine Wartezeit
     // zwischen Tod und Befoerderung noetig -- beides passiert synchron).
-    check(successor.fusionDamageBonus === 6, `Abschnitt 65d: Kronenerbe uebertraegt ${successor.fusionDamageBonus} statt 6`);
-    check(successor.cfg.damage === successor.baseDamage + 6, 'Abschnitt 65d: der geerbte Bonus wirkt nicht auf cfg.damage');
+    const heir = 10 * necroData.upgrades.ghost_080.core.necroCrownHeirPct; // M5b: 78 % von 10
+    check(Math.abs(successor.fusionDamageBonus - heir) < 1e-9, `Abschnitt 65d: Kronenerbe uebertraegt ${successor.fusionDamageBonus} statt ${heir}`);
+    check(Math.abs(successor.cfg.damage - (successor.baseDamage + heir)) < 1e-9, 'Abschnitt 65d: der geerbte Bonus wirkt nicht auf cfg.damage');
   }
   // Gegenprobe (d): Kronenerbe-Konsum in promoteToChampion() auskommentiert
   // -- successor.fusionDamageBonus bleibt 0 statt 6, Check schlaegt fehl; am
@@ -11699,7 +11701,8 @@ for (const seed of SEEDS) {
     const loser3 = createGhost(st3, 100, 100, 0, 't_pink');
     const loser3BaseDmg = loser3.baseDamage;
     pushGhost(st3, loser3);
-    check(champ3.fusionDamageBonus === Math.round(loser3BaseDmg * 1.15), `Abschnitt 65e: Einziges Schwert ergibt nicht 115 % Schadensuebertragung (${champ3.fusionDamageBonus} vs. ${Math.round(loser3BaseDmg * 1.15)})`);
+    const swordRate = 1 + necroData.upgrades.ghost_106.core.necroFusionDamagePctBonus; // M5b: aus den Daten
+    check(champ3.fusionDamageBonus === Math.round(loser3BaseDmg * swordRate), `Abschnitt 65e: Einziges Schwert ergibt nicht ${Math.round(swordRate * 100)} % Schadensuebertragung (${champ3.fusionDamageBonus} vs. ${Math.round(loser3BaseDmg * swordRate)})`);
   }
   // Gegenprobe (e): fuseGhost()s Fallback ?? 1.0 auf ?? 0.3 zurueckgesetzt --
   // Auslese-der-Legion-Check faellt sofort auf den alten, viel kleineren
@@ -11752,7 +11755,7 @@ for (const seed of SEEDS) {
     const src = readFileSync(join(root, 'src', 'game', 'state.js'), 'utf8');
     const canReviveLine = src.match(/const canRevive = [^;]+;/)?.[0] || '';
     check(!canReviveLine.includes('isElite'), `Abschnitt 65i: canRevive schliesst Eliten weiterhin ohne Karte aus (${canReviveLine})`);
-    check(necroData.upgrades.ghost_056.core.necroEliteReviveStatPct === 0.9, 'Abschnitt 65i: Elite-Reaktivierung liefert nicht 90 % Basiswert-Anteil');
+    check(necroData.upgrades.ghost_056.core.necroEliteReviveStatPct === 1.0, 'Abschnitt 65i: Elite-Reaktivierung liefert nicht 100 % Basiswert-Anteil (M5b: 90 -> 100)');
   }
   // Gegenprobe (i): `(!isElite || pc.necroEliteRevive)` probeweise wieder
   // eingefuegt -- der erste Check schlaegt fehl (Zeile enthaelt wieder
@@ -11763,7 +11766,7 @@ for (const seed of SEEDS) {
     const revive = [
       ['ghost_044', 'common', 0.07],
       ['ghost_109', 'uncommon', 0.13], // M5a: Brutto 10 -> 13 (Makel Kurzer Lauf)
-      ['ghost_055', 'rare', 0.12],
+      ['ghost_055', 'rare', 0.16], // M5b: Brutto 12 -> 16 (Makel Kurzer Lauf)
       ['ghost_110', 'epic', 0.18],
       ['ghost_111', 'legendary', 0.25],
     ];
@@ -11777,7 +11780,7 @@ for (const seed of SEEDS) {
     const lifetime = [
       ['ghost_005', 'common', 'ghostLifetimeAdd', 0.5],
       ['ghost_112', 'uncommon', 'necroCrownLifetimeAdd', 1.3], // M5a: Brutto 1,0 -> 1,3 s (Makel Blechhaut)
-      ['ghost_113', 'rare', 'necroCrownLifetimeAdd', 1.5],
+      ['ghost_113', 'rare', 'necroCrownLifetimeAdd', 2.0], // M5b: Brutto 1,5 -> 2,0 s (Makel Klemmender Lader)
       ['ghost_114', 'epic', 'necroCrownLifetimeAdd', 2.0],
       ['ghost_115', 'legendary', 'necroCrownLifetimeAdd', 3.0],
     ];
@@ -17387,6 +17390,49 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
   const base = resolveCfg(tanksData, 'c_necro');
   const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_112: 1 }, necroData, 'mine', null, {}, {}, tanksData.makel, {}, {}, {});
   check(cfg.maxHp === base.maxHp + vocab.blechhaut.schwere.leicht, `Abschnitt 89: ghost_112s Makel wirkt nicht (${cfg.maxHp} statt ${base.maxHp + vocab.blechhaut.schwere.leicht})`);
+}
+
+// ============================================================================
+// Abschnitt 90 -- AUFTRAG-UMBAU-V2 Phase M5b (Makel-Pass Nekromant, rare)
+// Wie Abschnitt 89, eine Stufe hoeher: jede rare-Nekromantenkarte traegt GENAU
+// EINEN mittleren Makel, Limit ceil(n/8)+1 je Makel, Achsenregel. Dazu die
+// Stufenordnung der Wiederbelebungskarten (rare muss ueber uncommon liegen --
+// M5a hatte ghost_109 voruebergehend ueber ghost_055 gehoben).
+// ============================================================================
+{
+  const vocab = tanksData.makel;
+  const rare = Object.values(necroData.upgrades).filter((d) => d.rarity === 'rare');
+  check(rare.length === 26, `Abschnitt 90: ${rare.length} rare-Nekromantenkarten statt 26`);
+  let bad = 0;
+  const perMakel = {};
+  for (const d of rare) {
+    const m = d.makel;
+    if (!Array.isArray(m) || m.length !== 1 || !vocab[m[0].id] || m[0].schwere !== 'mittel') { bad++; continue; }
+    perMakel[m[0].id] = (perMakel[m[0].id] || 0) + 1;
+  }
+  check(bad === 0, `Abschnitt 90: ${bad} rare-Karte(n) ohne genau einen mittleren Vokabel-Makel`);
+  const limit = Math.ceil(rare.length / 8) + 1;
+  const over = Object.entries(perMakel).filter(([, n]) => n > limit);
+  check(over.length === 0, `Abschnitt 90: Makel ueber dem Stufenlimit ${limit}: ${JSON.stringify(over)}`);
+  // Achsenregel, erweitert um die Spieler-Schutzachsen der rare-Stufe
+  // (Seelenband leitet Spielerschaden um, Opfer-/Kronen-Schilde).
+  const PLAYER_AXIS = {
+    duenne_platte: /^necro(Resist|Soulbond)/,
+    klemmender_lader: /^necro(FireBurst|FireRatePctPerDeath)/,
+    blechhaut: /(ToPlayer|RandomTransferShield|^necroHeal|Soulbond|SacrificeShield|CrownDeathHpShield|necroRunHp)/,
+    teuer: /^scrap/,
+  };
+  const axisBad = rare.filter((d) => {
+    const re = PLAYER_AXIS[d.makel?.[0]?.id];
+    return re && Object.keys(d.core).some((k) => re.test(k));
+  });
+  check(axisBad.length === 0, `Abschnitt 90: Makel trifft die eigene Spielerachse: ${axisBad.map((d) => d.id)}`);
+  const rev = (id) => necroData.upgrades[id].core.necroReviveChanceAdd;
+  check(rev('ghost_055') > rev('ghost_109'), `Abschnitt 90: rare-Wiederbelebung (${rev('ghost_055')}) liegt nicht ueber uncommon (${rev('ghost_109')})`);
+  // Ende-zu-Ende: der mittlere Makel wirkt am Nekromanten (Blechhaut -15 LP).
+  const base = resolveCfg(tanksData, 'c_necro');
+  const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_080: 1 }, necroData, 'mine', null, {}, {}, tanksData.makel, {}, {}, {});
+  check(cfg.maxHp === base.maxHp + vocab.blechhaut.schwere.mittel, `Abschnitt 90: ghost_080s Makel wirkt nicht (${cfg.maxHp} statt ${base.maxHp + vocab.blechhaut.schwere.mittel})`);
 }
 
 if (failures) {

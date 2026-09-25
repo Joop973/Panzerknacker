@@ -10122,8 +10122,27 @@ Makel samt Zahl (Testabschnitt 82 prüft sie).
 - **Testabschnitt 89** prüft die Struktur (ein leichter Vokabel-Makel je
   uncommon-Karte, Limit, common makellos, Achsenregel) und die Wirkung
   Ende-zu-Ende. Vier Gegenproben wurden rot. `sw.js` `v130`.
-- **Offen:** Der Nettowert ist nicht gemessen. `ghost_109` (uncommon 13 %)
-  überholt bis M5b `ghost_055` (rare 12 %).
+- **Offen:** Der Nettowert ist nicht gemessen. (`ghost_109` lag bis M5b
+  über `ghost_055` — mit M5b behoben.)
+
+### AUFTRAG-UMBAU-V2 — Phase M5b (Makel-Pass Nekromant, rare) — gemergt
+Wie M5a eine Stufe höher: alle 26 rare-Karten tragen genau einen
+**mittleren** Makel, Hauptwerte brutto rund +30 % (Tabelle in
+`AUFTRAG-UMBAU-V2.md` 5.8). Limit `ceil(26/8)+1 = 5`, gebaut 3–4 je Makel.
+- `ghost_023` (Schalter) ohne Anhebung, `ghost_053` wird über eine
+  niedrigere Schwelle stärker (30 → 23 %), `ghost_056` 90 → 100 %.
+- `ghost_055` jetzt 16 % und damit wieder über `ghost_109` (13 %).
+  **Neue Nebenwirkung bis M5c:** `ghost_113` (rare, 2,0 s) ist gleichauf mit
+  `ghost_114` (epic, 2,0 s).
+- Achsenregel erweitert: kein Blechhaut/Dünne Platte auf Karten, die den
+  Spieler schützen (Seelenband, Opfer-/Kronen-Schild, Run-Leben).
+- Neun Tests lasen alte Werte fest ein, sie lesen jetzt die Kartenwerte aus
+  den Daten (ghost_032/080/082/106) bzw. pinnen die neuen (055/056/113);
+  der ghost_052-Wurf-Stub steht auf 0,3 (zwischen 26 % Doppel- und 35 %
+  Basischance).
+- **Testabschnitt 90**: Struktur (26 rare, ein mittlerer Vokabel-Makel,
+  Limit), Achsenregel, Stufenordnung der Wiederbelebung, Wirkung Ende-zu-
+  Ende. Drei Gegenproben rot. `sw.js` `v131`. Nettowert nicht gemessen.
 
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**

@@ -230,12 +230,18 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Untertanenpanzer umfahren ihr Ziel aktiv zur ungeschützten Seite und verursachen bei Flanken- und Hecktreffern zusätzlich +15 % Schaden.",
+      "description": "Untertanenpanzer umfahren ihr Ziel aktiv zur ungeschützten Seite und verursachen bei Flanken- und Hecktreffern zusätzlich +20 % Schaden. Makel: Teuer (2 Schrott weniger pro Raum).",
       "signatureClass": "c_necro",
       "core": {
         "ghostFlankSeek": true,
-        "ghostFlankDamageBonus": 0.15
+        "ghostFlankDamageBonus": 0.2
       },
+      "makel": [
+        {
+          "id": "teuer",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Engine",
         "balanceHinweis": "Nutzt die Flanken- und Heckmechanik des Spiels."
@@ -555,11 +561,17 @@
       "requires": [
         "ghost_014"
       ],
-      "description": "Heilung durch Geistertode, die über volles Leben hinausgeht, wird vollständig in Schild umgewandelt.",
+      "description": "Heilung durch Geistertode, die über volles Leben hinausgeht, wird vollständig in Schild umgewandelt. Makel: Schwerfällig (Tempo −10 %).",
       "signatureClass": "c_necro",
       "core": {
         "necroOverflowToShield": true
       },
+      "makel": [
+        {
+          "id": "schwerfaellig",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sustain",
         "balanceHinweis": "Eine der vier Karten mit Voraussetzung."
@@ -723,12 +735,18 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Nach jeweils 10 Geistertoden erhält der Hauptpanzer +1 % Schaden für den restlichen Run.",
+      "description": "Nach jeweils 10 Geistertoden erhält der Hauptpanzer +1,3 % Schaden für den restlichen Run. Makel: Dünne Platte (Schadensresistenz −10 Punkte).",
       "signatureClass": "c_necro",
       "core": {
         "necroRunDmgEveryN": 10,
-        "necroRunDmgPct": 0.01
+        "necroRunDmgPct": 0.013
       },
+      "makel": [
+        {
+          "id": "duenne_platte",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Skalierung",
         "balanceHinweis": "Eine von zwei runweiten Karten. Läuft über rund 50 Räume."
@@ -748,12 +766,18 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Nach jeweils 10 Geistertoden erhält der Hauptpanzer +1 % maximales Leben für den restlichen Run.",
+      "description": "Nach jeweils 10 Geistertoden erhält der Hauptpanzer +1,3 % maximales Leben für den restlichen Run. Makel: Kurzer Lauf (Geschosstempo −10 %).",
       "signatureClass": "c_necro",
       "core": {
         "necroRunHpEveryN": 10,
-        "necroRunHpPct": 0.01
+        "necroRunHpPct": 0.013
       },
+      "makel": [
+        {
+          "id": "kurzer_lauf",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sicherheit",
         "balanceHinweis": "Eine von zwei runweiten Karten."
@@ -799,13 +823,19 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Nach jeweils 5 Geistertoden feuert der Hauptpanzer ein zielsuchendes Seelengeschoss mit 150 % seines aktuellen Schadens. Es exekutiert Gegner unterhalb der Exekutionsschwelle sofort.",
+      "description": "Nach jeweils 5 Geistertoden feuert der Hauptpanzer ein zielsuchendes Seelengeschoss mit 200 % seines aktuellen Schadens. Es exekutiert Gegner unterhalb der Exekutionsschwelle sofort. Makel: Heißer Lauf (eigene Explosionen treffen dich 10 % früher).",
       "signatureClass": "c_necro",
       "core": {
         "necroHomingEveryN": 5,
-        "necroHomingDamageMult": 1.5,
+        "necroHomingDamageMult": 2.0,
         "necroHomingTurnRate": 3.0
       },
+      "makel": [
+        {
+          "id": "heisser_lauf",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Burst",
         "balanceHinweis": "Nutzt Zielsuche und Exekution."
@@ -824,12 +854,18 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Zu Beginn jedes Raums erscheint ein zerbrechlicher Untertanenpanzer mit 30 % Basiswert-Anteil und 5 Sekunden Lebenszeit. Sein Ablauf löst alle Todeseffekte aus. Er kann nicht erneut wiederbelebt werden.",
+      "description": "Zu Beginn jedes Raums erscheint ein zerbrechlicher Untertanenpanzer mit 40 % Basiswert-Anteil und 5 Sekunden Lebenszeit. Sein Ablauf löst alle Todeseffekte aus. Er kann nicht erneut wiederbelebt werden. Makel: Enges Magazin (1 Geschossplatz weniger).",
       "signatureClass": "c_necro",
       "core": {
-        "necroStartGhostPct": 0.3,
+        "necroStartGhostPct": 0.4,
         "necroStartGhostLifetimeS": 5.0
       },
+      "makel": [
+        {
+          "id": "enges_magazin",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Engine"
       }
@@ -1311,12 +1347,18 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Eine gelungene Wiederbelebungsprobe hat 20 % Chance, eine zweite Kopie desselben Gegnertyps mit 60 % Basiswert-Anteil zu erzeugen. Sie zählt gegen das Geisterlimit.",
+      "description": "Eine gelungene Wiederbelebungsprobe hat 26 % Chance, eine zweite Kopie desselben Gegnertyps mit 60 % Basiswert-Anteil zu erzeugen. Sie zählt gegen das Geisterlimit. Makel: Teuer (2 Schrott weniger pro Raum).",
       "signatureClass": "c_necro",
       "core": {
-        "necroDoubleReviveChance": 0.2,
+        "necroDoubleReviveChance": 0.26,
         "necroDoubleReviveStatPct": 0.6
       },
+      "makel": [
+        {
+          "id": "teuer",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Skalierung",
         "balanceHinweis": "Nutzt aus, dass Untertanen den Typ des getöteten Gegners erben."
@@ -1334,11 +1376,17 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Jeder Untertanenpanzer ignoriert einmal je Leben einen Treffer, der mehr als 30 % seines maximalen Lebens verursacht.",
+      "description": "Jeder Untertanenpanzer ignoriert einmal je Leben einen Treffer, der mehr als 23 % seines maximalen Lebens verursacht. Makel: Schwerfällig (Tempo −10 %).",
       "signatureClass": "c_necro",
       "core": {
-        "necroHullThresholdPct": 0.3
+        "necroHullThresholdPct": 0.23
       },
+      "makel": [
+        {
+          "id": "schwerfaellig",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sicherheit"
       }
@@ -1356,13 +1404,19 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Gelingt eine Wiederbelebungsprobe bei vollem Geisterlimit, heilen alle aktiven Untertanen 20 % und erhalten bis Raumende +10 % Schaden. Abklingzeit 5 Sekunden.",
+      "description": "Gelingt eine Wiederbelebungsprobe bei vollem Geisterlimit, heilen alle aktiven Untertanen 26 % und erhalten bis Raumende +13 % Schaden. Abklingzeit 5 Sekunden. Makel: Blechhaut (maximale Lebenspunkte −15).",
       "signatureClass": "c_necro",
       "core": {
-        "necroCoreHealPct": 0.2,
-        "necroCoreDamageBonus": 0.1,
+        "necroCoreHealPct": 0.26,
+        "necroCoreDamageBonus": 0.13,
         "necroCoreCooldownS": 5.0
       },
+      "makel": [
+        {
+          "id": "blechhaut",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sustain"
       }
@@ -1379,11 +1433,17 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Die Wiederbelebungschance nach einem Abschuss durch den Hauptpanzer, den Champion oder einen anderen Untertanen steigt um 12 Prozentpunkte.",
+      "description": "Die Wiederbelebungschance nach einem Abschuss durch den Hauptpanzer, den Champion oder einen anderen Untertanen steigt um 16 Prozentpunkte. Makel: Kurzer Lauf (Geschosstempo −10 %).",
       "signatureClass": "c_necro",
       "core": {
-        "necroReviveChanceAdd": 0.12
+        "necroReviveChanceAdd": 0.16
       },
+      "makel": [
+        {
+          "id": "kurzer_lauf",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Skalierung",
         "balanceHinweis": "Über 100 % gelingt die Probe sicher; der Überschuss ist die Chance auf einen zweiten Untertanen."
@@ -1402,13 +1462,19 @@
       "isUnique": true,
       "weight": 22,
       "requires": [],
-      "description": "Elitegegner sind bereits generell für Wiederbelebungsproben zulässig (belegen dabei immer 2 Geisterplätze). Mit dieser Karte erscheinen wiederbelebte Eliten mit 90 % Basiswert-Anteil statt der üblichen 50 %. Bosse bleiben ausgeschlossen.",
+      "description": "Elitegegner sind bereits generell für Wiederbelebungsproben zulässig (belegen dabei immer 2 Geisterplätze). Mit dieser Karte erscheinen wiederbelebte Eliten mit 100 % Basiswert-Anteil statt der üblichen 50 %. Bosse bleiben ausgeschlossen. Makel: Dünne Platte (Schadensresistenz −10 Punkte).",
       "signatureClass": "c_necro",
       "core": {
         "necroEliteRevive": true,
-        "necroEliteReviveStatPct": 0.9,
+        "necroEliteReviveStatPct": 1.0,
         "necroEliteReviveSlots": 2
       },
+      "makel": [
+        {
+          "id": "duenne_platte",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Skalierung"
       }
@@ -1946,13 +2012,19 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Jeder fünfte Schuss des Champions verursacht +100 % Schaden und erhält +1 Durchschlag.",
+      "description": "Jeder fünfte Schuss des Champions verursacht +130 % Schaden und erhält +1 Durchschlag. Makel: Enges Magazin (1 Geschossplatz weniger).",
       "signatureClass": "c_necro",
       "core": {
         "necroCrownAlphaShotEvery": 5,
-        "necroCrownAlphaShotDamageMult": 2.0,
+        "necroCrownAlphaShotDamageMult": 2.3,
         "necroCrownAlphaShotPierceAdd": 1
       },
+      "makel": [
+        {
+          "id": "enges_magazin",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Burst"
       }
@@ -1970,12 +2042,18 @@
       "isUnique": true,
       "weight": 22,
       "requires": [],
-      "description": "Einmal pro Raum: Der erste tödliche Treffer gegen den Champion lässt ihn bei 1 Leben und macht ihn 2 Sekunden unverwundbar.",
+      "description": "Einmal pro Raum: Der erste tödliche Treffer gegen den Champion lässt ihn bei 1 Leben und macht ihn 2,6 Sekunden unverwundbar. Makel: Klemmender Lader (Nachladezeit +10 %).",
       "signatureClass": "c_necro",
       "core": {
         "necroCrownUnassailable": true,
-        "necroCrownUnassailableS": 2.0
+        "necroCrownUnassailableS": 2.6
       },
+      "makel": [
+        {
+          "id": "klemmender_lader",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sicherheit",
         "balanceHinweis": "Rettet den Champion, nicht den Hauptpanzer."
@@ -1994,11 +2072,17 @@
       "isUnique": true,
       "weight": 22,
       "requires": [],
-      "description": "Stirbt der Champion, übernimmt der sofort nachfolgende Champion 60 % seiner raumweiten Kronen- und Fusionsboni. Einmal pro Raum.",
+      "description": "Stirbt der Champion, übernimmt der sofort nachfolgende Champion 78 % seiner raumweiten Kronen- und Fusionsboni. Einmal pro Raum. Makel: Blechhaut (maximale Lebenspunkte −15).",
       "signatureClass": "c_necro",
       "core": {
-        "necroCrownHeirPct": 0.6
+        "necroCrownHeirPct": 0.78
       },
+      "makel": [
+        {
+          "id": "blechhaut",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sicherheit"
       }
@@ -2016,14 +2100,20 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Bewegt sich der Hauptpanzer 5 Sekunden nicht, verankert sich der Champion: +45 % Schaden, +25 % Reichweite und +20 Punkte Schadensresistenz, bis der Hauptpanzer sich wieder bewegt.",
+      "description": "Bewegt sich der Hauptpanzer 5 Sekunden nicht, verankert sich der Champion: +58 % Schaden, +33 % Reichweite und +26 Punkte Schadensresistenz, bis der Hauptpanzer sich wieder bewegt. Makel: Schwerfällig (Tempo −10 %).",
       "signatureClass": "c_necro",
       "core": {
         "necroCrownAnchorAfterS": 5.0,
-        "necroCrownAnchorDamagePct": 0.45,
-        "necroCrownAnchorRangePct": 0.25,
-        "necroCrownAnchorResist": 20
+        "necroCrownAnchorDamagePct": 0.58,
+        "necroCrownAnchorRangePct": 0.33,
+        "necroCrownAnchorResist": 26
       },
+      "makel": [
+        {
+          "id": "schwerfaellig",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Skalierung",
         "balanceHinweis": "Resistenzpunkte werden addiert; der genommene Schaden wird durch (1 + Summe/100) geteilt."
@@ -2042,12 +2132,18 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Ein Treffer des Champions senkt für 2 Sekunden die Exekutionsschwelle des getroffenen Ziels auf 50 % statt 35 %.",
+      "description": "Ein Treffer des Champions senkt für 2 Sekunden die Exekutionsschwelle des getroffenen Ziels auf 55 % statt 35 %. Makel: Teuer (2 Schrott weniger pro Raum).",
       "signatureClass": "c_necro",
       "core": {
-        "necroChampionExecThreshold": 0.5,
+        "necroChampionExecThreshold": 0.55,
         "necroChampionExecDurationS": 2.0
       },
+      "makel": [
+        {
+          "id": "teuer",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Burst",
         "balanceHinweis": "Nutzt die Exekutionsmechanik des Spiels."
@@ -2202,13 +2298,19 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Der Hauptpanzer verursacht +5 % Schaden je aktivem Untertanenpanzer, und seine Flanken- und Hecktreffer zusätzlich +10 %. Der nächste wiederbelebte Untertan erhält +8 % Schaden je Geistertod im aktuellen Raum, ohne Obergrenze.",
+      "description": "Der Hauptpanzer verursacht +6,5 % Schaden je aktivem Untertanenpanzer, und seine Flanken- und Hecktreffer zusätzlich +13 %. Der nächste wiederbelebte Untertan erhält +10 % Schaden je Geistertod im aktuellen Raum, ohne Obergrenze. Makel: Blechhaut (maximale Lebenspunkte −15).",
       "signatureClass": "c_necro",
       "core": {
-        "necroHybridPerAllyDmgPct": 0.05,
-        "necroHybridFlankBonusPct": 0.1,
-        "necroHybridReviveDeathBonusPct": 0.08
+        "necroHybridPerAllyDmgPct": 0.065,
+        "necroHybridFlankBonusPct": 0.13,
+        "necroHybridReviveDeathBonusPct": 0.1
       },
+      "makel": [
+        {
+          "id": "blechhaut",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Skalierung",
         "balanceHinweis": "Nutzt die Flanken- und Heckmechanik."
@@ -2228,14 +2330,20 @@
       "isUnique": true,
       "weight": 22,
       "requires": [],
-      "description": "Ersetzt dein Gadget. Abklingzeit 18 Sekunden: Opfert den Untertanenpanzer mit dem niedrigsten Leben. Alle übrigen heilen 20 %, der Hauptpanzer erhält einen Schild über 10 % seines maximalen Lebens, und die nächste Wiederbelebungsprobe innerhalb von 8 Sekunden gelingt garantiert. Die Opferung zählt als Geistertod.",
+      "description": "Ersetzt dein Gadget. Abklingzeit 18 Sekunden: Opfert den Untertanenpanzer mit dem niedrigsten Leben. Alle übrigen heilen 26 %, der Hauptpanzer erhält einen Schild über 13 % seines maximalen Lebens, und die nächste Wiederbelebungsprobe innerhalb von 8 Sekunden gelingt garantiert. Die Opferung zählt als Geistertod. Makel: Kurzer Lauf (Geschosstempo −10 %).",
       "signatureClass": "c_necro",
       "core": {
         "necroActiveKind": "sacrifice_lowest",
-        "necroSacrificeHealPct": 0.2,
-        "necroSacrificeShieldPct": 0.1,
+        "necroSacrificeHealPct": 0.26,
+        "necroSacrificeShieldPct": 0.13,
         "necroSacrificeGuaranteeWindowS": 8
       },
+      "makel": [
+        {
+          "id": "kurzer_lauf",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sustain",
         "balanceHinweis": "Eine von drei Aktivkarten."
@@ -2377,12 +2485,18 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Stirbt der Champion, erhält der Hauptpanzer bis Raumende 25 % von dessen angesammeltem Schadensbonus als eigenen Schaden und einen Schild in Höhe von 25 % seines angesammelten Lebensbonus.",
+      "description": "Stirbt der Champion, erhält der Hauptpanzer bis Raumende 33 % von dessen angesammeltem Schadensbonus als eigenen Schaden und einen Schild in Höhe von 33 % seines angesammelten Lebensbonus. Makel: Heißer Lauf (eigene Explosionen treffen dich 10 % früher).",
       "signatureClass": "c_necro",
       "core": {
-        "necroCrownDeathDmgTransferPct": 0.25,
-        "necroCrownDeathHpShieldPct": 0.25
+        "necroCrownDeathDmgTransferPct": 0.33,
+        "necroCrownDeathHpShieldPct": 0.33
       },
+      "makel": [
+        {
+          "id": "heisser_lauf",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Skalierung"
       }
@@ -2400,11 +2514,17 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "25 % des Schadens am Hauptpanzer werden auf den Champion umgeleitet. Ohne lebenden Champion passiert nichts.",
+      "description": "33 % des Schadens am Hauptpanzer werden auf den Champion umgeleitet. Ohne lebenden Champion passiert nichts. Makel: Klemmender Lader (Nachladezeit +10 %).",
       "signatureClass": "c_necro",
       "core": {
-        "necroSoulbondPct": 0.25
+        "necroSoulbondPct": 0.33
       },
+      "makel": [
+        {
+          "id": "klemmender_lader",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sicherheit"
       }
@@ -2501,12 +2621,18 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Der Champion erhält +5 % Schaden für jeden anderen aktiven Untertanenpanzer. Stirbt ein anderer Untertan, wird die Hälfte des aktuellen Bonus bis Raumende dauerhaft.",
+      "description": "Der Champion erhält +6,5 % Schaden für jeden anderen aktiven Untertanenpanzer. Stirbt ein anderer Untertan, wird die Hälfte des aktuellen Bonus bis Raumende dauerhaft. Makel: Enges Magazin (1 Geschossplatz weniger).",
       "signatureClass": "c_necro",
       "core": {
-        "necroCrownProcPerAllyPct": 0.05,
+        "necroCrownProcPerAllyPct": 0.065,
         "necroCrownProcHalfPermanent": true
       },
+      "makel": [
+        {
+          "id": "enges_magazin",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Skalierung"
       }
@@ -2524,11 +2650,17 @@
       "isUnique": true,
       "weight": 22,
       "requires": [],
-      "description": "Stirbt der Champion, während ein weiterer Untertanenpanzer aktiv ist, übernimmt der gesündeste Überlebende 50 % der raumweiten Kronen- und Fusionsboni. Einmal pro Raum.",
+      "description": "Stirbt der Champion, während ein weiterer Untertanenpanzer aktiv ist, übernimmt der gesündeste Überlebende 65 % der raumweiten Kronen- und Fusionsboni. Einmal pro Raum. Makel: Dünne Platte (Schadensresistenz −10 Punkte).",
       "signatureClass": "c_necro",
       "core": {
-        "necroSuccessionPct": 0.5
+        "necroSuccessionPct": 0.65
       },
+      "makel": [
+        {
+          "id": "duenne_platte",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sicherheit"
       }
@@ -2680,11 +2812,17 @@
       "requires": [
         "ghost_071"
       ],
-      "description": "Jede Verschmelzung überträgt zusätzlich 15 Prozentpunkte Basis-Schaden, oben auf die 100 % Grundübertragung von Einziger Thron.",
+      "description": "Jede Verschmelzung überträgt zusätzlich 20 Prozentpunkte Basis-Schaden, oben auf die 100 % Grundübertragung von Einziger Thron. Makel: Heißer Lauf (eigene Explosionen treffen dich 10 % früher).",
       "signatureClass": "c_necro",
       "core": {
-        "necroFusionDamagePctBonus": 0.15
+        "necroFusionDamagePctBonus": 0.2
       },
+      "makel": [
+        {
+          "id": "heisser_lauf",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Skalierung",
         "balanceHinweis": "Ohne eine aktive Verschmelzungskarte (Einziger Thron/Auslese der Legion) wirkungslos -- deshalb an ghost_071 gebunden."
@@ -2705,11 +2843,17 @@
       "requires": [
         "ghost_071"
       ],
-      "description": "Jede Verschmelzung überträgt zusätzlich 15 Prozentpunkte Basis-Leben, oben auf die 100 % Grundübertragung von Einziger Thron.",
+      "description": "Jede Verschmelzung überträgt zusätzlich 20 Prozentpunkte Basis-Leben, oben auf die 100 % Grundübertragung von Einziger Thron. Makel: Schwerfällig (Tempo −10 %).",
       "signatureClass": "c_necro",
       "core": {
-        "necroFusionHpPctBonus": 0.15
+        "necroFusionHpPctBonus": 0.2
       },
+      "makel": [
+        {
+          "id": "schwerfaellig",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sicherheit",
         "balanceHinweis": "Ohne eine aktive Verschmelzungskarte (Einziger Thron/Auslese der Legion) wirkungslos -- deshalb an ghost_071 gebunden."
@@ -2730,11 +2874,17 @@
       "requires": [
         "ghost_071"
       ],
-      "description": "Jede Verschmelzung überträgt zusätzlich 15 Prozentpunkte Basis-Feuerrate, oben auf die 100 % Grundübertragung von Einziger Thron.",
+      "description": "Jede Verschmelzung überträgt zusätzlich 20 Prozentpunkte Basis-Feuerrate, oben auf die 100 % Grundübertragung von Einziger Thron. Makel: Blechhaut (maximale Lebenspunkte −15).",
       "signatureClass": "c_necro",
       "core": {
-        "necroFusionFireRatePctBonus": 0.15
+        "necroFusionFireRatePctBonus": 0.2
       },
+      "makel": [
+        {
+          "id": "blechhaut",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Tempo",
         "balanceHinweis": "Ohne eine aktive Verschmelzungskarte (Einziger Thron/Auslese der Legion) wirkungslos -- deshalb an ghost_071 gebunden."
@@ -2853,11 +3003,17 @@
       "isUnique": false,
       "weight": 22,
       "requires": [],
-      "description": "Die Lebenszeit des Champions steigt um 1,5 Sekunden.",
+      "description": "Die Lebenszeit des Champions steigt um 2,0 Sekunden. Makel: Klemmender Lader (Nachladezeit +10 %).",
       "signatureClass": "c_necro",
       "core": {
-        "necroCrownLifetimeAdd": 1.5
+        "necroCrownLifetimeAdd": 2.0
       },
+      "makel": [
+        {
+          "id": "klemmender_lader",
+          "schwere": "mittel"
+        }
+      ],
       "_note": {
         "buildrolle": "Sicherheit"
       }
