@@ -336,6 +336,81 @@
       },
       "_todo": "balance",
       "_comment": "Codedurchsicht Phase D: vierte, thematisch andere Legendaere (Generalist-Kombo statt eines einzelnen Mega-Stats wie bei den drei bestehenden) -- passt am besten zur 'reiner Generalist'-Identitaet der Standard-Klasse."
+    },
+    "sockel_narbengewebe": {
+      "id": "sockel_narbengewebe",
+      "name": "Narbengewebe",
+      "description": "Schaden +4 % je aktivem Makel. Makel: Teuer (1 Schrott weniger pro Raum).",
+      "tag": "scaling",
+      "tags": [
+        "narben"
+      ],
+      "rarity": "uncommon",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🩹",
+      "core": {
+        "narbenDamageBonus": 0.04
+      },
+      "makel": [
+        {
+          "id": "teuer",
+          "schwere": "leicht"
+        }
+      ],
+      "_todo": "balance",
+      "_note": "Narben-Nachtrag (AUFTRAG-UMBAU-V2.md 1.4 Weg 4): skaliert je AKTIVEM Makel (Stapelzahl x nicht entfernte, nicht umgepolte Eintraege; ein gehaerteter Makel zaehlt weiter). Der eigene Makel der Karte zaehlt mit. cfg.js: applyUpgrades(), nach der Kartenschleife."
+    },
+    "sockel_wundpanzer": {
+      "id": "sockel_wundpanzer",
+      "name": "Wundpanzer",
+      "description": "Maximale Lebenspunkte +5 je aktivem Makel. Makel: Kurzer Lauf (Geschosstempo −10 %).",
+      "tag": "scaling",
+      "tags": [
+        "narben"
+      ],
+      "rarity": "rare",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "🧱",
+      "core": {
+        "narbenHpAdd": 5
+      },
+      "makel": [
+        {
+          "id": "kurzer_lauf",
+          "schwere": "mittel"
+        }
+      ],
+      "_todo": "balance",
+      "_note": "Narben-Nachtrag (AUFTRAG-UMBAU-V2.md 1.4 Weg 4): skaliert je AKTIVEM Makel (Stapelzahl x nicht entfernte, nicht umgepolte Eintraege; ein gehaerteter Makel zaehlt weiter). Der eigene Makel der Karte zaehlt mit. cfg.js: applyUpgrades(), nach der Kartenschleife."
+    },
+    "sockel_zornige_narben": {
+      "id": "sockel_zornige_narben",
+      "name": "Zornige Narben",
+      "description": "Feuerrate +5 % je aktivem Makel. Makel: Schwerfällig (Tempo −18 %).",
+      "tag": "scaling",
+      "tags": [
+        "narben"
+      ],
+      "rarity": "epic",
+      "isUnique": false,
+      "requires": [],
+      "minRoom": 1,
+      "symbol": "💢",
+      "core": {
+        "narbenReloadBonus": 0.05
+      },
+      "makel": [
+        {
+          "id": "schwerfaellig",
+          "schwere": "schwer"
+        }
+      ],
+      "_todo": "balance",
+      "_note": "Narben-Nachtrag (AUFTRAG-UMBAU-V2.md 1.4 Weg 4): skaliert je AKTIVEM Makel (Stapelzahl x nicht entfernte, nicht umgepolte Eintraege; ein gehaerteter Makel zaehlt weiter). Der eigene Makel der Karte zaehlt mit. cfg.js: applyUpgrades(), nach der Kartenschleife."
     }
   }
 }

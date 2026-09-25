@@ -614,6 +614,16 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
   // gesammelt wie jeder andere *Mult-Kernschluessel, nur bei Bedarf auf cfg
   // geschrieben (kein Typ setzt einen Basiswert, s. resolveCfg()).
   let selfImmunityMultAcc = 1;
+  // Narben-Nachtrag (AUFTRAG-UMBAU-V2.md Abschnitt 1.4 Weg 4): Anzahl AKTIVER
+  // Makel (Stapelzahl x nicht entfernte, nicht umgepolte Eintraege) und die
+  // drei Narben-Skalierungswerte werden in der Schleife gesammelt und erst
+  // NACH ihr angewandt -- die Zaehlung muss alle Karten kennen, egal in
+  // welcher Reihenfolge die Narbenkarte selbst im Objekt steht.
+  // Auswertungsreihenfolge (Auftrag M4 Punkt 4): Umpolung -> Verfall ->
+  // Narbenzaehlung. Einen Verfall gibt es im gebauten Stand nicht; eine
+  // Haertung senkt nur die Schwere, der Makel bleibt aktiv und zaehlt mit.
+  let activeMakelCount = 0;
+  let narbenDmg = 0, narbenHp = 0, narbenReload = 0;
   for (const id in U) {
     const raw = U[id].core;
     const lvl = l(id);
@@ -645,10 +655,14 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
         if (umgepoltIdx.includes(i)) activeUmpolung.push(eff);
         else activeMakel.push(eff);
       });
+      activeMakelCount += activeMakel.length * lvl;
       if (activeMakel.length) applyMakel(activeMakel, makelVocab, lvl, stufeMultFor(id));
       if (activeUmpolung.length) applyUmpolung(activeUmpolung, makelVocab, lvl, stufeMultFor(id));
     }
     if (c.damageAdd) cfg.damage += c.damageAdd * lvl;
+    if (c.narbenDamageBonus) narbenDmg += c.narbenDamageBonus * lvl;
+    if (c.narbenHpAdd) narbenHp += c.narbenHpAdd * lvl;
+    if (c.narbenReloadBonus) narbenReload += c.narbenReloadBonus * lvl;
     if (c.reloadMult) cfg.fireCooldown *= Math.pow(c.reloadMult, lvl);
     if (c.speedMult) cfg.speed *= Math.pow(c.speedMult, lvl);
     if (c.hpAdd) cfg.maxHp += c.hpAdd * lvl;
@@ -1189,6 +1203,15 @@ export function applyUpgrades(cfg, ups, upsData, equippedSecondary, equippedGadg
       cfg.necroAncestorBuffFRPct = Math.max(cfg.necroAncestorBuffFRPct || 0, c.necroAncestorBuffFRPct || 0);
       cfg.necroAncestorBuffDurationS = Math.max(cfg.necroAncestorBuffDurationS || 0, c.necroAncestorBuffDurationS || 0);
     }
+  }
+  // Narben-Nachtrag: je aktivem Makel. Feuerrate ueber den Kehrwert
+  // (1/(1+x)), dieselbe deckelfreie, nie negative Bauart wie
+  // necro.js: fireRateFactor() -- kein Ersatzdeckel.
+  cfg.activeMakelCount = activeMakelCount;
+  if (activeMakelCount) {
+    if (narbenDmg) dmgMult *= 1 + narbenDmg * activeMakelCount;
+    if (narbenHp) cfg.maxHp += narbenHp * activeMakelCount;
+    if (narbenReload) cfg.fireCooldown /= 1 + narbenReload * activeMakelCount;
   }
   cfg.damage = Math.round(cfg.damage * dmgMult);
   cfg.bulletSpeed *= spdMult;

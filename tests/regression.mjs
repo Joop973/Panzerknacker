@@ -6968,19 +6968,20 @@ for (const seed of SEEDS) {
   //     Phase D (reiner Generalist, alle fuenf Stufen): 13 weitere Karten
   //     schliessen uncommon/rare/epic (je 4) und eine vierte Legendaere --
   //     acht auf 21 Karten erweitert (5/4/4/4/4 je Seltenheitsstufe), sonst
-  //     unveraendert.
+  //     unveraendert. Narben-Nachtrag (AUFTRAG-UMBAU-V2.md 1.4 Weg 4): drei
+  //     Narbenkarten (uncommon/rare/epic) -- 21 auf 24.
   {
     const expected = [
       'sockel_alleskoenner', 'sockel_ausweichmanoever', 'sockel_energieschild',
       'sockel_ersatzpanzer', 'sockel_fangschuss', 'sockel_hartmetallkern',
       'sockel_keramikplatten', 'sockel_kriegsmeister', 'sockel_ladeautomat',
-      'sockel_magazin', 'sockel_motor', 'sockel_panzerung', 'sockel_scharfschuetze',
+      'sockel_magazin', 'sockel_motor', 'sockel_narbengewebe', 'sockel_panzerung', 'sockel_scharfschuetze',
       'sockel_schnellverschluss', 'sockel_sturmantrieb', 'sockel_titanpanzerung',
       'sockel_turbolader', 'sockel_wanderpanzerung', 'sockel_wanne',
-      'sockel_wuchtgeschoss', 'sockel_zielfernrohr',
+      'sockel_wuchtgeschoss', 'sockel_wundpanzer', 'sockel_zielfernrohr', 'sockel_zornige_narben',
     ];
     const actual = Object.keys(upgradesData.upgrades).sort();
-    check(actual.length === 21, `Phase 10: Pool hat ${actual.length} Karten statt 21`);
+    check(actual.length === 24, `Phase 10: Pool hat ${actual.length} Karten statt 24`);
     check(actual.join(',') === expected.join(','), `Phase 10: Pool enthaelt unerwartete/fehlende ids: ${actual.join(',')}`);
   }
 
@@ -17259,6 +17260,87 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
       restore();
     }
   }
+}
+
+// ============================================================================
+// Abschnitt 88 -- Narben-Nachtrag (AUFTRAG-UMBAU-V2.md 1.4 Weg 4)
+// Drei core-Schluessel skalieren je AKTIVEM Makel (narbenDamageBonus/
+// narbenHpAdd/narbenReloadBonus). Aktiv = nicht entfernt (Werkstatt), nicht
+// umgepolt; eine Haertung senkt nur die Schwere, der Makel bleibt aktiv.
+// Mechanismus mit EIGENEN Zahlen (synthetische Karten, nicht die echten
+// Sockelwerte), gegen direkte applyUpgrades()-Aufrufe.
+// ============================================================================
+{
+  const vocab = tanksData.makel;
+  const { createState } = await import("../src/game/state.js");
+  const { rngFor, hashSeed } = await import("../src/core/rng.js");
+  const pool = {
+    upgrades: {
+      narbe: { id: 'narbe', core: { narbenDamageBonus: 0.5, narbenHpAdd: 7, narbenReloadBonus: 1.0 } },
+      traeger: { id: 'traeger', core: { critAdd: 0.01 }, makel: [
+        { id: 'teuer', schwere: 'leicht' },
+        { id: 'blechhaut', schwere: 'schwer' },
+      ] },
+    },
+  };
+  const make = (ups, rem, ump, ov) =>
+    applyUpgrades(resolveCfg(tanksData, 'player'), ups, pool, 'mine', null, {}, {}, tanksData.makel, rem || {}, ump || {}, ov || {});
+  const base = resolveCfg(tanksData, 'player');
+
+  // (a) ohne Makel-Traeger: Narbenkarte wirkt nicht (0 aktive Makel).
+  const a = make({ narbe: 1 });
+  check(a.activeMakelCount === 0, `Abschnitt 88 (a): activeMakelCount ${a.activeMakelCount} statt 0`);
+  check(a.damage === base.damage && a.maxHp === base.maxHp && Math.abs(a.fireCooldown - base.fireCooldown) < 1e-9,
+    `Abschnitt 88 (a): Narben wirken ohne aktiven Makel (dmg ${a.damage}, hp ${a.maxHp}, cd ${a.fireCooldown})`);
+
+  // (b) zwei Makel-Eintraege, Traeger zweimal gestapelt -> 4 aktive Makel.
+  const b = make({ narbe: 1, traeger: 2 });
+  const hpMalus = 2 * vocab.blechhaut.schwere.schwer;
+  check(b.activeMakelCount === 4, `Abschnitt 88 (b): activeMakelCount ${b.activeMakelCount} statt 4 (2 Eintraege x Stapel 2)`);
+  check(b.damage === Math.round(base.damage * (1 + 0.5 * 4)), `Abschnitt 88 (b): Narbenschaden ${b.damage} statt ${Math.round(base.damage * 3)}`);
+  check(Math.abs(b.maxHp - (base.maxHp + hpMalus + 7 * 4)) < 1e-9, `Abschnitt 88 (b): Narben-LP ${b.maxHp} statt ${base.maxHp + hpMalus + 28}`);
+  check(Math.abs(b.fireCooldown - base.fireCooldown / (1 + 1.0 * 4)) < 1e-9, `Abschnitt 88 (b): Narben-Feuerrate ${b.fireCooldown} statt ${base.fireCooldown / 5}`);
+
+  // (c) Narbenkarte gestapelt: der Faktor je Makel addiert sich (keine Obergrenze).
+  const c = make({ narbe: 3, traeger: 1 });
+  check(c.damage === Math.round(base.damage * (1 + 1.5 * 2)), `Abschnitt 88 (c): gestapelte Narben ${c.damage} statt ${Math.round(base.damage * 4)}`);
+
+  // (d) Werkstatt: ein entfernter Eintrag zaehlt nicht mehr.
+  const d = make({ narbe: 1, traeger: 1 }, { traeger: [0] });
+  check(d.activeMakelCount === 1, `Abschnitt 88 (d): nach Werkstatt-Entfernung activeMakelCount ${d.activeMakelCount} statt 1`);
+
+  // (e) Umpolung: ein umgepolter Eintrag ist kein aktiver Makel mehr.
+  const e = make({ narbe: 1, traeger: 1 }, {}, { traeger: [1] });
+  check(e.activeMakelCount === 1, `Abschnitt 88 (e): nach Umpolung activeMakelCount ${e.activeMakelCount} statt 1`);
+
+  // (f) Haertung: senkt die Schwere, der Makel bleibt aktiv und zaehlt mit.
+  const f = make({ narbe: 1, traeger: 1 }, {}, {}, { traeger: { 1: 'leicht' } });
+  check(f.activeMakelCount === 2, `Abschnitt 88 (f): gehaerteter Makel zaehlt nicht mehr (${f.activeMakelCount} statt 2)`);
+  check(Math.abs(f.maxHp - (base.maxHp + vocab.blechhaut.schwere.leicht + 7 * 2)) < 1e-9, `Abschnitt 88 (f): Haertung+Narben-LP ${f.maxHp} falsch`);
+
+  // (g) Kombination Werkstatt + Umpolung: beide Eintraege weg -> 0, keine Wirkung.
+  const g = make({ narbe: 1, traeger: 1 }, { traeger: [0] }, { traeger: [1] });
+  check(g.activeMakelCount === 0 && g.damage === base.damage, `Abschnitt 88 (g): Werkstatt+Umpolung lassen Narben weiter wirken (${g.activeMakelCount}, ${g.damage})`);
+
+  // (h) Balance-Auflage 1.4: wer Makel behaelt, trifft mit Narben haerter
+  //     als wer sie alle wegkauft (sonst waere die Werkstatt der einzig
+  //     richtige Zug). Mit den ECHTEN Sockelkarten gemessen.
+  const up = upgradesData;
+  const keep = applyUpgrades(resolveCfg(tanksData, 'player'), { sockel_narbengewebe: 1, sockel_zornige_narben: 1 }, up, 'mine', null, {}, {}, tanksData.makel, {}, {}, {});
+  const clean = applyUpgrades(resolveCfg(tanksData, 'player'), { sockel_narbengewebe: 1, sockel_zornige_narben: 1 }, up, 'mine', null, {}, {}, tanksData.makel,
+    { sockel_narbengewebe: [0], sockel_zornige_narben: [0] }, {}, {});
+  check(keep.activeMakelCount === 2 && clean.activeMakelCount === 0, `Abschnitt 88 (h): echte Narbenkarten zaehlen ihre eigenen Makel nicht (${keep.activeMakelCount}/${clean.activeMakelCount})`);
+  check(keep.damage > clean.damage && keep.fireCooldown < clean.fireCooldown,
+    `Abschnitt 88 (h): Makel behalten ist mit Narben nicht staerker (dmg ${keep.damage}/${clean.damage}, cd ${keep.fireCooldown}/${clean.fireCooldown})`);
+
+  // (i) Ende-zu-Ende ueber createState(): der Wert kommt wirklich am Panzer an.
+  const st = createState(tanksData, tilesData, {
+    genRng: rngFor(1, 1, 'rooms'), enemyTypes: ['t_brown'], aiSeed: hashSeed(1, 1, 'ai'),
+    playerUpgrades: { narbe: 1, traeger: 1 }, upgradesData: pool, equippedSecondary: 'mine',
+    upgradeLevels: {}, levelBalance: {}, transform: {}, starterTank: 'player',
+  });
+  check(st.player.cfg.activeMakelCount === 2 && st.player.cfg.damage === Math.round(base.damage * 2),
+    `Abschnitt 88 (i): createState() liefert keine Narbenwirkung (${st.player.cfg.activeMakelCount}, ${st.player.cfg.damage})`);
 }
 
 if (failures) {

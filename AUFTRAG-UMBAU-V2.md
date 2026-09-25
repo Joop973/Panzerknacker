@@ -774,7 +774,11 @@ eine eigene Nachtragsphase, falls sie gewollt sind:
    gereiftem Makel) ist der einzige Anreiz zum Behalten und steht gegen
    volle Makel-Entfernung praktisch immer hinten.
 
-Punkt 4 ist der einzige mit direkter Konsequenz für die **nächste**
+**Nachtrag:** Punkt 4 ist inzwischen gebaut (drei `narben*`-core-Schlüssel,
+drei Karten `sockel_narbengewebe`/`sockel_wundpanzer`/`sockel_zornige_narben`,
+Testabschnitt 88) — die Balance-Auflage aus 1.4 ist damit erfüllbar.
+
+Punkt 4 war der einzige mit direkter Konsequenz für die **nächste**
 Sitzung (die 14 Kartenwellen): solange keine Karte von aktiven Makeln
 profitiert, ist die Werkstatt nicht ein Weg von vieren, sondern der
 einzig richtige Zug.

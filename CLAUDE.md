@@ -10080,14 +10080,37 @@ Code, keine Methoden mehr inline).
   nachgecacht, nie beim initialen Cache-Aufbau), `telemetry.js:
   GAME_VERSION` mitgezogen.
 
+### AUFTRAG-UMBAU-V2 — Narben-Nachtrag (Abschnitt 1.4 Weg 4) — gemergt
+Nutzerentscheidung vor M5: die Narben-**Kartenfamilie** aus dem Auftragstext
+wird vor den Makel-Pässen nachgetragen, sonst bleibt „alle Makel wegkaufen“
+immer der beste Zug (Balance-Auflage 1.4).
+- **Drei neue `core`-Schlüssel** (`cfg.js: applyUpgrades()`):
+  `narbenDamageBonus` (Schaden ×(1+x·n)), `narbenHpAdd` (+x max. LP je n),
+  `narbenReloadBonus` (Nachladezeit ÷(1+x·n), Kehrwert-Bauart wie
+  `fireRateFactor()`, kein Deckel). `n` = **aktive Makel** = Stapelzahl ×
+  nicht entfernte, nicht umgepolte Einträge; gehärtete zählen weiter. Die
+  Zählung läuft in der Kartenschleife, die Anwendung danach (reihenfolge-
+  unabhängig), `cfg.activeMakelCount` wird mitgeschrieben. Der alte
+  automatische Narben-LP-Bonus (M4) bleibt daneben bestehen.
+- **Drei Karten** (`data/upgrades.json`, Tag `scaling`, `tags: ["narben"]`,
+  Pool 21 → 24): `sockel_narbengewebe` (uncommon, +4 % Schaden je Makel,
+  Makel Teuer leicht), `sockel_wundpanzer` (rare, +5 max. LP je Makel,
+  Kurzer Lauf mittel), `sockel_zornige_narben` (epic, +5 % Feuerrate je
+  Makel, Schwerfällig schwer). Der eigene Makel zählt mit. Werte `_todo:
+  balance`.
+- **Testabschnitt 88**: Zählung mit eigenen Zahlen, Stapeln, Werkstatt/
+  Umpolung/Härtung einzeln und kombiniert, Balance-Auflage 1.4 mit den
+  echten Karten (Makel behalten > wegkaufen), Ende-zu-Ende über
+  `createState()`. Vier Gegenproben am Quellcode rot (Zählung aus,
+  umgepolte mitgezählt, gehärtete ausgeschlossen, Feuerrate aus). `sw.js`
+  `v129`.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **Vier Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
-      (s. dort Abschnitt 5.5, Entscheidung des Nutzers nötig, ob nachgetragen
-      wird): (1) die **acht Umpolungs-Keystone-Karten**, (2) das Kartenmerkmal
-      **„nicht entfernbar"** (hängt an 1), (3) der **Makel-Verfall** nach N
-      Räumen („Notschweißung"), (4) die **Narben-Kartenfamilie**
-      („+X % je aktivem Makel"). Punkt 4 blockiert die Balance-Auflage aus
-      Abschnitt 1.4 und betrifft direkt die 14 Kartenwellen.
+- [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
+      (s. dort Abschnitt 5.5): (1) die **acht Umpolungs-Keystone-Karten**,
+      (2) das Kartenmerkmal **„nicht entfernbar"** (hängt an 1), (3) der
+      **Makel-Verfall** nach N Räumen („Notschweißung"). Die Narben-
+      Kartenfamilie (früher Punkt 4) ist nachgetragen.
 - [ ] **Neue Gegner debuetieren ausserhalb der Raeume 1-3 nicht garantiert
       ausserhalb von Elite-/Fluchraeumen** (Gegner-Umbau G9-Befund,
       Designdokument Abschnitt 14.3): `unlockRoomInAct` steuert nur die
