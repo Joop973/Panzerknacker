@@ -8123,7 +8123,7 @@ for (const seed of SEEDS) {
       const g = createGhost(st, target.x + 30, target.y, 0, 't_pink');
       const hpVor = target.hp;
       killGhost(st, g, cause);
-      const expectedDmg = Math.round(st.player.cfg.damage * 0.25);
+      const expectedDmg = Math.round(st.player.cfg.damage * necroData.upgrades.ghost_020.core.necroExplosionDamagePct);
       check(
         target.hp === hpVor - expectedDmg,
         `Phase 6: ghost_020 (${cause}) zuendet nicht mit dem erwarteten Schaden (${hpVor} -> ${target.hp}, erwartet -${expectedDmg})`,
@@ -8195,7 +8195,7 @@ for (const seed of SEEDS) {
     const st3 = necroRoom({ ghost_011: 1, ghost_028: 1 });
     const g3 = createGhost(st3, 0, 0, 0, 't_pink');
     killGhost(st3, g3, 'expire');
-    check(Math.abs(necroDamagePct(st3) - 0.05 * 1.5) < 1e-9, `Phase 6: ghost_028 verstaerkt Ablauf-Stapel nicht um 50 % (${necroDamagePct(st3)})`);
+    check(Math.abs(necroDamagePct(st3) - 0.05 * (1 + necroData.upgrades.ghost_028.core.necroExpireStackBonus)) < 1e-9, `Phase 6: ghost_028 verstaerkt Ablauf-Stapel nicht um 50 % (${necroDamagePct(st3)})`);
     const st4 = necroRoom({ ghost_011: 1, ghost_028: 1 });
     const g4 = createGhost(st4, 0, 0, 0, 't_pink');
     killGhost(st4, g4, 'damage'); // normaler Tod -- 028 wirkt NUR bei Ablauf
@@ -8657,8 +8657,8 @@ for (const seed of SEEDS) {
     check(!g.isVeteran && g.cfg.damage === baseDmg, 'Phase 7: ghost_046 befoerdert zu frueh');
     updateGhosts(st, 5); // gesamt 9s -- jetzt befoerdert
     check(g.isVeteran, 'Phase 7: ghost_046 befoerdert nach 8s ueberlebter Zeit nicht');
-    check(g.cfg.damage === Math.round(baseDmg * 1.2), `Phase 7: ghost_046s Schadensbonus stimmt nicht (${g.cfg.damage} statt ${Math.round(baseDmg * 1.2)})`);
-    check(g.cfg.maxHp === Math.round(baseHp * 1.12), `Phase 7: ghost_046s LP-Bonus stimmt nicht (${g.cfg.maxHp} statt ${Math.round(baseHp * 1.12)})`);
+    check(g.cfg.damage === Math.round(baseDmg * necroData.upgrades.ghost_046.core.necroVeteranDamageMult), `Phase 7: ghost_046s Schadensbonus stimmt nicht (${g.cfg.damage})`);
+    check(g.cfg.maxHp === Math.round(baseHp * necroData.upgrades.ghost_046.core.necroVeteranHpMult), `Phase 7: ghost_046s LP-Bonus stimmt nicht (${g.cfg.maxHp})`);
   }
 
   // (o) ghost_047 "Sturmformation": Anflug-Tempobonus IMMER, Flankenbonus
@@ -8710,7 +8710,7 @@ for (const seed of SEEDS) {
       updateGhosts(st, 0.001);
     }
     const stack = getNecroStack(st, 'room', '_legionAmmoExchange');
-    check(Math.abs(stack - 0.05) < 1e-9, `Phase 7: ghost_050s Stapel waechst nicht mit jedem Schuss (${stack})`);
+    check(Math.abs(stack - 5 * necroData.upgrades.ghost_050.core.necroAmmoExchangePerShot) < 1e-9, `Phase 7: ghost_050s Stapel waechst nicht mit jedem Schuss (${stack})`);
     for (let i = 0; i < 40; i++) {
       g.cooldown = 0;
       updateGhosts(st, 0.001);
@@ -8723,7 +8723,7 @@ for (const seed of SEEDS) {
       `Phase 7 (Nachschliff): ghost_050 waechst nicht ueber den alten 30-%-Deckel hinaus (${stackAfter})`,
     );
     check(
-      Math.abs(stackAfter - 0.45) < 1e-6,
+      Math.abs(stackAfter - 45 * necroData.upgrades.ghost_050.core.necroAmmoExchangePerShot) < 1e-6,
       `Phase 7 (Nachschliff): ghost_050s Stapel ist nach 45 Schuessen nicht exakt 45 % (${stackAfter})`,
     );
   }
@@ -9387,8 +9387,8 @@ for (const seed of SEEDS) {
     pushGhost(st, createGhost(st, 100, 100, 0, 't_pink'));
     check(champ.shield > 0, `Phase 8: ghost_073 gewaehrt bei Verschmelzung keinen Schild (${champ.shield})`);
     check(
-      Math.abs(champ.shield - champ.cfg.maxHp * 0.15) < 1e-6,
-      `Phase 8: ghost_073s Schild-Betrag stimmt nicht (${champ.shield} statt ${champ.cfg.maxHp * 0.15})`,
+      Math.abs(champ.shield - champ.cfg.maxHp * necroData.upgrades.ghost_073.core.necroFusionShieldOnFusionPct) < 1e-6,
+      `Phase 8: ghost_073s Schild-Betrag stimmt nicht (${champ.shield})`,
     );
   }
 
@@ -11675,7 +11675,7 @@ for (const seed of SEEDS) {
     const loserBaseDmg = weakest.baseDamage;
     const championBaseDmg = champ.baseDamage;
     pushGhost(st, createGhost(st, 100, 100, 0, 't_pink')); // loest die Verdraengungs-Fusion aus
-    check(champ.cfg.damage === championBaseDmg + Math.round(loserBaseDmg * 1.0), `Abschnitt 65e: Auslese der Legion ueberträgt nicht 100 % Basis-Schaden (${champ.cfg.damage} vs. erwartet ${championBaseDmg + loserBaseDmg})`);
+    check(champ.cfg.damage === championBaseDmg + Math.round(loserBaseDmg * necroData.upgrades.ghost_098.core.necroCapFusionDamagePct), `Abschnitt 65e: Auslese der Legion ueberträgt nicht den Kartenanteil Basis-Schaden (${champ.cfg.damage})`);
 
     // Einziger Thron: +5 %/Verschmelzung, ohne Obergrenze.
     const st2 = necroRoom({ ghost_071: 1 }, ['t_pink']);
@@ -11762,7 +11762,7 @@ for (const seed of SEEDS) {
   {
     const revive = [
       ['ghost_044', 'common', 0.07],
-      ['ghost_109', 'uncommon', 0.10],
+      ['ghost_109', 'uncommon', 0.13], // M5a: Brutto 10 -> 13 (Makel Kurzer Lauf)
       ['ghost_055', 'rare', 0.12],
       ['ghost_110', 'epic', 0.18],
       ['ghost_111', 'legendary', 0.25],
@@ -11776,7 +11776,7 @@ for (const seed of SEEDS) {
     }
     const lifetime = [
       ['ghost_005', 'common', 'ghostLifetimeAdd', 0.5],
-      ['ghost_112', 'uncommon', 'necroCrownLifetimeAdd', 1.0],
+      ['ghost_112', 'uncommon', 'necroCrownLifetimeAdd', 1.3], // M5a: Brutto 1,0 -> 1,3 s (Makel Blechhaut)
       ['ghost_113', 'rare', 'necroCrownLifetimeAdd', 1.5],
       ['ghost_114', 'epic', 'necroCrownLifetimeAdd', 2.0],
       ['ghost_115', 'legendary', 'necroCrownLifetimeAdd', 3.0],
@@ -11808,7 +11808,7 @@ for (const seed of SEEDS) {
   // ---- (l) Seelenzorn/Totenrhythmus 5 %, Treues Ende 50 % ---------------
   check(necroData.upgrades.ghost_011.core.necroDmgPctPerDeath === 0.05, 'Abschnitt 65l: Seelenzorn liefert nicht 5 % Schaden je Geistertod');
   check(necroData.upgrades.ghost_012.core.necroFireRatePctPerDeath === 0.05, 'Abschnitt 65l: Totenrhythmus liefert nicht 5 % Feuerrate je Geistertod');
-  check(necroData.upgrades.ghost_028.core.necroExpireStackBonus === 0.5, 'Abschnitt 65l: Treues Ende liefert nicht 50 % Bonus');
+  check(necroData.upgrades.ghost_028.core.necroExpireStackBonus === 0.65, 'Abschnitt 65l: Treues Ende liefert nicht 65 % Bonus (M5a: 50 % -> 65 % Brutto)');
   check(necroData.upgrades.ghost_024.core.necroFireBurstWindowS === 2.0, 'Abschnitt 65l: Dunkler Treibstoff hat nicht das 2-Sekunden-Fenster');
 
   // ---- (m) Erbschaft des Starken/Haerte aus Verlust: bis Raumende --------
@@ -17341,6 +17341,52 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
   });
   check(st.player.cfg.activeMakelCount === 2 && st.player.cfg.damage === Math.round(base.damage * 2),
     `Abschnitt 88 (i): createState() liefert keine Narbenwirkung (${st.player.cfg.activeMakelCount}, ${st.player.cfg.damage})`);
+}
+
+// ============================================================================
+// Abschnitt 89 -- AUFTRAG-UMBAU-V2 Phase M5a (Makel-Pass Nekromant, uncommon)
+// Struktur der Datenphase: jede uncommon-Nekromantenkarte traegt GENAU EINEN
+// leichten Makel aus dem Vokabular, common bleibt makellos, kein Makel
+// haeuft sich in der Stufe (Nutzerentscheidung: hoechstens
+// ceil(Kartenzahl/8)+1 je Makel statt der im Auftrag genannten 2, die bei 30
+// Karten und 8 Makeln nicht erfuellbar waere), und der Makel trifft nie die
+// Spielerachse, die die Karte selbst verbessert.
+// ============================================================================
+{
+  const vocab = tanksData.makel;
+  const all = Object.values(necroData.upgrades);
+  const unc = all.filter((d) => d.rarity === 'uncommon');
+  check(unc.length === 30, `Abschnitt 89: ${unc.length} uncommon-Nekromantenkarten statt 30`);
+  let bad = 0;
+  const perMakel = {};
+  for (const d of unc) {
+    const m = d.makel;
+    if (!Array.isArray(m) || m.length !== 1 || !vocab[m[0].id] || m[0].schwere !== 'leicht') { bad++; continue; }
+    perMakel[m[0].id] = (perMakel[m[0].id] || 0) + 1;
+  }
+  check(bad === 0, `Abschnitt 89: ${bad} uncommon-Karte(n) ohne genau einen leichten Vokabel-Makel`);
+  const limit = Math.ceil(unc.length / 8) + 1;
+  const over = Object.entries(perMakel).filter(([, n]) => n > limit);
+  check(over.length === 0, `Abschnitt 89: Makel ueber dem Stufenlimit ${limit}: ${JSON.stringify(over)}`);
+  const commonWithMakel = all.filter((d) => d.rarity === 'common' && d.makel?.length);
+  check(commonWithMakel.length === 0, `Abschnitt 89: common-Karten mit Makel: ${commonWithMakel.map((d) => d.id)}`);
+  // Achsenregel: der Makel darf die Spielerachse, die die Karte selbst
+  // verbessert, nicht treffen. Geister-Achsen (ghost*) sind eigene Achsen.
+  const PLAYER_AXIS = {
+    duenne_platte: /^necroResist/,
+    klemmender_lader: /^necro(FireBurst|FireRatePctPerDeath)/,
+    blechhaut: /(ToPlayer|RandomTransferShield|^necroHeal)/,
+    teuer: /^scrap/,
+  };
+  const axisBad = unc.filter((d) => {
+    const re = PLAYER_AXIS[d.makel?.[0]?.id];
+    return re && Object.keys(d.core).some((k) => re.test(k));
+  });
+  check(axisBad.length === 0, `Abschnitt 89: Makel trifft die eigene Spielerachse: ${axisBad.map((d) => d.id)}`);
+  // Ende-zu-Ende: der Makel wirkt wirklich am Nekromanten (Blechhaut -8 LP).
+  const base = resolveCfg(tanksData, 'c_necro');
+  const cfg = applyUpgrades(resolveCfg(tanksData, 'c_necro'), { ghost_112: 1 }, necroData, 'mine', null, {}, {}, tanksData.makel, {}, {}, {});
+  check(cfg.maxHp === base.maxHp + vocab.blechhaut.schwere.leicht, `Abschnitt 89: ghost_112s Makel wirkt nicht (${cfg.maxHp} statt ${base.maxHp + vocab.blechhaut.schwere.leicht})`);
 }
 
 if (failures) {

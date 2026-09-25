@@ -695,7 +695,9 @@ Ist-Stand ist `CLAUDE.md`.
 | M3 — Werkstatt | gebaut, gemergt | **nein, s. 5.3** |
 | M4 — Umpolung, Härtung, Narben | gebaut, gemergt | **nein, s. 5.4** |
 | 14 Kartenwellen (mit Makel, M6) | offen | — nächste Sitzung laut 4.1 |
-| M5a–d — Nekromanten-Pass | offen | — |
+| Narben-Nachtrag (5.5 Punkt 4) | gebaut, gemergt | ja (Kartenfamilie, s. 5.5) |
+| M5a — Nekromanten-Pass uncommon | gebaut, gemergt | ja, mit einer Abweichung (s. 5.7) |
+| M5b–d — Nekromanten-Pass rare/epic/legendary | offen | — |
 | D1 — Machbarkeitsprüfung Dungeon | offen | — |
 | D2–D6 — Dungeon-Umbau | offen | — |
 | G1 — Kulissen einbauen | offen | — |
@@ -798,3 +800,48 @@ jeden der 14 Kartenwellen-Prompts:
 
 Schemaform des Feldes (M2, freigegeben):
 `"makel": [{ "id": "<vokabel-id>", "schwere": "leicht"|"mittel"|"schwer" }]`
+
+## 5.7 M5a — Makel-Pass uncommon (Umsetzung)
+
+Durchgezogen ohne Freigabestopp (Nutzerentscheidung). **Abweichung:** die
+Regel „höchstens zwei Karten je Stufe mit demselben Makel“ ist bei 30
+Karten und 8 Makeln nicht erfüllbar (8×2 = 16 < 30). Nutzerentscheidung:
+höchstens `ceil(Kartenzahl/8)+1` je Makel und Stufe (uncommon: 5). Gebaut:
+jeder Makel 3–4-mal. Bruttoanhebung je Karte rund +30 % auf den Hauptwert
+(Abschnitt 1.3), der Nettowert ist **nicht gemessen**, nur geschätzt.
+`ghost_092` ist ein reiner Schalter und bekam keine Anhebung, sein Netto
+sinkt also. Nebenwirkung bis M5b: `ghost_109` (uncommon, 13 %) liegt über
+`ghost_055` (rare, 12 %).
+
+| Karte | Name | alter Wert | neuer Bruttowert | Makel (leicht) | Anhebung |
+|---|---|---|---|---|---|
+| ghost_008 | Schattenschild | ShieldOnSpawnPct 0,1 | 0,13 | Teuer (-1) | ~+30 % |
+| ghost_009 | Ätherhülle | ResistAdd 4 | 5 | Schwerfällig (0,95) | ~+30 % |
+| ghost_020 | Sterbeexplosion | ExplosionDamagePct 0,25 | 0,33 | Heißer Lauf (0,95) | ~+30 % |
+| ghost_021 | Erbschaft des Starken | InheritHighPct 0,08, InheritLowPct 0,04 | 0,1, 0,05 | Enges Magazin (-1) | ~+30 % |
+| ghost_022 | Härte aus Verlust | ResistAmount 8 | 10 | Kurzer Lauf (0,95) | ~+30 % |
+| ghost_024 | Dunkler Treibstoff | FireBurstPct 0,15 | 0,2 | Blechhaut (-8) | ~+30 % |
+| ghost_026 | Opferstoß | ShockDamagePct 0,4 | 0,52 | Heißer Lauf (0,95) | ~+30 % |
+| ghost_027 | Kettenopfer | DoubleStackChance 0,2 | 0,26 | Teuer (-1) | ~+30 % |
+| ghost_028 | Treues Ende | ExpireStackBonus 0,5 | 0,65 | Dünne Platte (-5) | ~+30 % |
+| ghost_045 | Überzahl | OverwhelmBulletSizeMult 1,15, OverwhelmBulletSpeedMult 1,1 | 1,2, 1,13 | Schwerfällig (0,95) | ~+30 % |
+| ghost_046 | Veteranen | VeteranDamageMult 1,2, VeteranHpMult 1,12 | 1,26, 1,16 | Enges Magazin (-1) | ~+30 % |
+| ghost_047 | Sturmformation | StormApproachSpeedMult 1,15, StormApproachDamageMult 1,15 | 1,2, 1,2 | Blechhaut (-8) | ~+30 % |
+| ghost_048 | Schildwall | WallShieldPct 0,12 | 0,16 | Kurzer Lauf (0,95) | ~+30 % |
+| ghost_049 | Seelenoffizier | OfficerDamageMult 1,14, OfficerFireRateBonus 0,08 | 1,18, 0,1 | Teuer (-1) | ~+30 % |
+| ghost_050 | Munitionsaustausch | AmmoExchangePerShot 0,01 | 0,013 | Dünne Platte (-5) | ~+30 % |
+| ghost_051 | Erbmunition | ErbmunitionDamagePct 0,25 | 0,33 | Heißer Lauf (0,95) | ~+30 % |
+| ghost_070 | Herrscheraura | CrownAuraDamageTakenReduction 0,1, CrownAuraGhostDamageBonus 0,1 | 0,13, 0,13 | Schwerfällig (0,95) | ~+30 % |
+| ghost_072 | Seelenauslese | FusionHpPctBonus 0,08, FusionDamagePctBonus 0,08, FusionFireRatePctBonus 0,03 | 0,1, 0,1, 0,04 | Blechhaut (-8) | ~+30 % |
+| ghost_073 | Endloser Anspruch | FusionShieldOnFusionPct 0,15 | 0,2 | Kurzer Lauf (0,95) | ~+30 % |
+| ghost_074 | Verdichtete Geschosse | CrownBulletSizePct 0,08, CrownRangePct 0,06 | 0,1, 0,08 | Enges Magazin (-1) | ~+30 % |
+| ghost_075 | Raubseele | CrownLifestealToPlayerPct 0,02 | 0,026 | Klemmender Lader (1,05) | ~+30 % |
+| ghost_076 | Erbgeschütz | CrownExtraShotDamagePct 0,4 | 0,52 | Dünne Platte (-5) | ~+30 % |
+| ghost_077 | Seelenverdichtung | CrownFusionDamagePer3 0,1 | 0,13 | Teuer (-1) | ~+30 % |
+| ghost_086 | Totenmarsch | HybridDeathPlayerDmgPct 0,04, HybridDeathGhostDmgPct 0,06 | 0,05, 0,08 | Klemmender Lader (1,05) | ~+30 % |
+| ghost_087 | Erben der Front | HybridRandomTransferPct 0,15 | 0,2 | Schwerfällig (0,95) | ~+30 % |
+| ghost_092 | Blutiger Thron | — | — (Schalter, nicht skalierbar) | Heißer Lauf (0,95) | keine (netto −) |
+| ghost_093 | Tribut des Königs | HybridChampionSpawnStatPct 0,25 | 0,33 | Dünne Platte (-5) | ~+30 % |
+| ghost_098 | Auslese der Legion | CapFusionHpPct 1, CapFusionDamagePct 1, CapFusionFireRatePct 1 | 1,3, 1,3, 1,3 | Klemmender Lader (1,05) | ~+30 % |
+| ghost_109 | Flüstern der Gefallenen | ReviveChanceAdd 0,1 | 0,13 | Kurzer Lauf (0,95) | ~+30 % |
+| ghost_112 | Beständiger Regent | CrownLifetimeAdd 1 | 1,3 | Blechhaut (-8) | ~+30 % |
