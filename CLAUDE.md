@@ -10192,6 +10192,154 @@ teils Schwellen-/Cooldown-Senkungen statt reiner Prozentanhebung), Limit
   abgeschlossen.** Laut `AUFTRAG-UMBAU-V2.md` folgt als nächstes Phase D1
   (Dungeon-Umbau).
 
+### AUFTRAG-UMBAU-V2 — Phase D1 (Machbarkeitsprüfung Dungeon) — reine Prüfung, kein Code
+**Kein Produktivcode, wie von der Phase verlangt** — nur Analyse des echten
+Codes gegen die fünf Auftragsfragen (Teil 2.5), danach Stopp. Ergebnis:
+**der Dungeon-Umbau ist machbar und liegt im vom Auftrag selbst genannten
+Rahmen (10–15 Sessions für D2–D6)**, nicht darüber — mit einem konkreten,
+entlastenden Fund: die Kamera-Kapselung ist strukturell schon zur Hälfte da.
+
+**1. Kamera (`src/render/renderer.js`)**: es gibt keine — `render(state,
+alpha, tracks, minePreview, gadgetAim)` zeichnet strikt in Arena-Koordinaten
+(`WIDTH`/`HEIGHT` aus `config.js`, fest 768×512 = 24×16 Zellen à 32 px), weil
+Canvas-Backing-Store und Arena bisher IMMER exakt deckungsgleich sind.
+`floorCanvas`/`vignetteCanvas`/`fogCanvas` sind alle einmalig bei genau
+`WIDTH×HEIGHT` gebacken und werden 1:1 auf `(0,0)` geblittet — jede dieser
+drei Offscreen-Flächen müsste für eine bewegliche Kamera entweder pro
+sichtbarem Fenster neu gezeichnet oder (Boden/Fog) auf Weltkoordinaten
+umgestellt werden, während die Vignette bewusst BILDSCHIRM-fest bleiben
+muss (ein Post-Effekt, der nicht mit der Kamera wandern darf). **Entlastender
+Fund**: `render()` legt Screenshake schon heute als `ctx.save()` +
+`ctx.translate(...)` um GENAU den Weltzeichenblock, und HUD (`hud.js`) sowie
+das Debug-Overlay werden in `main.js: render()` (Zeile 1172–1185) ERST NACH
+`renderer.render()` gezeichnet, also außerhalb dieses Blocks, in reinen
+Bildschirmkoordinaten. Eine Kamera-Transformation (Position + Zoom) kann
+exakt an derselben Stelle wie der Shake eingehängt werden — Boden/Wände/
+Panzer/Geschosse/alle Telegraphen (`drawMortars`/`drawAnvilHazards`/
+`drawTankLinks` usw., alle bereits reine Weltkoordinaten-Funktionen) würden
+automatisch mitlaufen, HUD/Debug blieben unverändert fest. Der DPR-Transform
+aus `src/core/viewport.js` (`ctx.setTransform(dpr,0,0,dpr,0,0)`) ist die
+Basistransformation, auf die Shake heute schon per `ctx.translate()`
+aufsetzt — dieselbe Komposition trägt auch eine Kamera-Skalierung/-Translation.
+**Was wirklich neu gebaut werden muss**: ein Kamera-Zustand (Position, Zoom),
+eine Umrechnung Welt→sichtbares Rechteck für Culling (aktuell zeichnet der
+Renderer blind alles, weil „alles" immer im Bild ist), und ein Umbau der drei
+gebackenen Canvases (Boden pro Raum statt global, Fog auf Weltraum,
+Vignette bleibt bildschirmfest).
+
+**2. Eingabe (`src/core/input.js`, `src/ui/touchcontrols.js`)**: **genau
+eine** Stelle rechnet heute Bildschirm- in Arena-Koordinaten um —
+`input.js: toCanvas()` (Zeile 98–102): `x = (e.clientX-rect.left) *
+(WIDTH/rect.width)`, `y` analog — das nimmt an, dass der Canvas IMMER die
+volle Arena 0..WIDTH zeigt. Mit Kamera-Pan/Zoom muss diese eine Funktion
+zusätzlich Kameraposition und -zoom kennen (`worldX = cam.x +
+(clientX-rect.left) * (sichtbareWeltbreite/rect.width)`) — genau die von D2
+selbst verlangte Bündelung „an EINER Stelle" ist damit schon die
+IST-Situation, kein Umbau nötig, nur eine Erweiterung dieser einen Funktion.
+Die Zwillingsstick-Steuerung (`touchcontrols.js`, Zeilen 92–105/187–203)
+rechnet dagegen **nie** in absolute Arena-Koordinaten — Stick-Position und
+-Auslenkung sind reine Bildschirm-relative Deltas (Startpunkt der Berührung
+vs. aktuelle Position), liefern nur einen normierten Richtungsvektor.
+Kamera-unabhängig, keine Änderung nötig. Der Gamepad-Cursor
+(`main.js: gamepadCursor()`, `document.elementFromPoint()`) bewegt sich
+ebenfalls rein in DOM-Bildschirmkoordinaten (Menüs/Overlays) und berührt die
+Arena nie — ebenfalls unberührt.
+
+**3. Gegner-KI (`src/game/ai.js: clearLine()`/`targetInSight()`)**: beide
+sind reine Ray-March-Funktionen in Weltkoordinaten über
+`state.blocksSight(x,y)` (ein Closure über das raumlokale Wandgitter aus
+`state_world.js`) — sie kennen weder Bildschirm noch Kamera und bräuchten
+für sich genommen **keine** Änderung. `raycastMaxPx` (`data/tanks.json:
+ai.raycastMaxPx`, aktuell 900 px) deckt die heutige Arenadiagonale
+(√(768²+512²) ≈ 922 px) schon nur knapp — bleibt die Raumgröße wie
+angenommen bei 24×16 Zellen (s. Punkt 4), ist das unverändert ausreichend.
+Der eigentliche Punkt aus Abschnitt 2.1 („Gegner schießen aus dem Dunkeln")
+ist architektonisch NICHT über die KI zu lösen, sondern über D5s eigene harte
+Regel: ein Kampfraum ist **immer vollständig sichtbar und identisch
+simuliert wie heute**, Verdunkelung gilt ausschließlich für Gänge/unbetretene
+Räume, in denen es keinen Kampf gibt — die KI muss die Verdunkelung deshalb
+nie kennen (D5 verlangt das ausdrücklich: „Die Verdunkelung ist ein reiner
+Rendereffekt und darf die Simulation nicht berühren"). Ein Raum größer als
+der Bildschirm entsteht mit der wahrscheinlichsten Umsetzung (s. Punkt 5)
+ohnehin nicht — die Räume selbst bleiben so groß wie heute, nur ihre
+Verbindung untereinander wird zu einem Gitter statt eines Knotengraphen.
+
+**4. Determinismus**: die einzige RNG-relevante Phase ist **D4**
+(Dungeon-Erzeugung) — D2 (Kamera), D3 (Türen) und D5 (Sichtbarkeit) sind
+reine Präsentations-/Zustandsänderungen ohne RNG-Berührung. In D4 betroffen:
+(a) `run.js: actRoomKey()`/`hashSeed(seed, actRoomKey, label)` — die
+Raum-Strom-Ableitung hängt heute an einer linearen Raumnummer
+(`actIndex×100 + roomIndex`); ersetzt ein Gitter den Graphen, braucht jeder
+Raum weiterhin einen stabilen, aus seiner Gitterposition ableitbaren
+Schlüssel statt der linearen Nummer — reine Umbenennung des Hash-Eingabewerts,
+kein neuer Mechanismus. (b) `run.js: generateMap()` selbst wird ersetzt (D4
+sagt das wörtlich: „Lies vorher generateMap() — das ist der Code, den du
+ersetzt") — der Auftrag erlaubt dabei explizit eine andere RNG-Aufrufzahl,
+verlangt nur weiterhin Reproduzierbarkeit pro Seed (deckt sich mit dem
+Projektprinzip aus früheren RNG-Umstellungen, z. B. Grundsteinumbau Phase 1:
+ein Seed bleibt in sich deterministisch, auch wenn er nicht mehr bitgleich
+zum Vorzustand ist). (c) Fixe, auf `COLS×ROWS` (24×16) hartkodierte
+Typed-Arrays/BFS-Suchen — `spidermine.js: rebuildFlowField()`
+(`new Int16Array(COLS*ROWS)`, Zeilen 13–112), `state_world.js:
+bfsReachable()`/`wouldIsolateArea()`, `generator.js`s
+Erreichbarkeits-Flood-Fill — laufen alle über die **raumlokale** Gitter-
+größe aus `config.js`. Solange jeder einzelne Raum weiterhin exakt 24×16
+Zellen groß bleibt (nur die Räume UNTEREINANDER neu als Gitter statt Graph
+verbunden werden — das legt Abschnitt 2.3 nahe: „Ein Akt besteht weiterhin
+aus 16 Räumen … Jeder Raum hat ein bis vier Türen"), bleibt die
+**Raumgenerierung selbst (`buildGrid()`, `buildCombatRoom()`, alle
+existierenden Regressionstests über Kampf-/Elite-/Schatz-/Shop-Räume)
+komplett unberührt** — nur die äußere Verknüpfung (welcher Raum liegt wo,
+welche Tür führt wohin) ist neu. Das ist der wichtigste Befund dieser Phase:
+der Dungeon-Umbau ist strukturell eine neue Schicht ÜBER dem bestehenden
+Raum-Generator, kein Ersatz dafür — die riesige bestehende Testbasis (5-Seed-
+Playthroughs, alle Kartenpool-/Kompositions-/Boss-Tests) bleibt dadurch zu
+weiten Teilen gültig.
+
+**5. Aufwandsschätzung** (eigene, nicht nur die im Auftrag selbst schon
+genannte Tabellenzeile „10 bis 15" übernommen):
+- **D2 (Kamera)**: 1–2 Sessions. Reines Refactoring, Ziel „pixelgenau wie
+  vorher" — durch die in Punkt 1 gefundene bestehende Trennung
+  (Shake-Transform-Block, HUD/Debug schon außerhalb) ist die Kapselung
+  strukturell vorbereitet, die Hauptarbeit ist der Umbau der drei gebackenen
+  Canvases + `toCanvas()`.
+- **D3 (Türen/Raumsperre, noch ohne echte Dungeon-Erzeugung)**: 1–2 Sessions.
+  Neuer Wandzelltyp „Tür" (Zustand/Symbol), Kamera-Cut auf Vollsicht beim
+  Raumeintritt, 8 Raumtyp-Symbole (neue Assets oder prozedural wie die
+  bisherigen Panzerungs-/Boss-Overlays), Geschoss-/Panzer-Containment an
+  Türgrenzen.
+- **D4 (Dungeon-Erzeugung)**: 2–4 Sessions, der mit Abstand größte Einzelposten
+  — ein neuer Gitter-Generator mit harten, über 200 Seeds testbaren Garantien
+  (Erreichbarkeit, Bossraum am Ende des längsten Pfads, mindestens ein
+  Rastplatz+Shop, mindestens eine echte Abzweigung) ist algorithmisch
+  deutlich anspruchsvoller als der heutige, einfache geschichtete
+  Knotengraph — plus Minimap.
+- **D5 (Sichtbarkeit in Gängen)**: 1–2 Sessions. Kann vermutlich den Großteil
+  der bestehenden P11-Lichtmaskeninfrastruktur wiederverwenden
+  (`renderer.js`s additive `fogCanvas`/`punchLight()`, ursprünglich für
+  Nebel-/Dunkelheit-Raummodifikatoren gebaut) — neu ist nur eine
+  persistente „bereits erkundet"-Zellkarte pro Gang und die harte Trennung
+  „Kampfraum immer voll sichtbar, Simulation unberührt".
+- **D6 (Abnahme)**: 1 Session, wie jede andere Abnahme-Phase in diesem
+  Projekt.
+- **Summe D2–D6: ca. 6–11 Sessions** — **innerhalb**, nicht über der vom
+  Auftrag selbst genannten Spanne (10–15) und weit unter der genannten
+  15-Session-Warnschwelle. Ehrliche Einschränkung: das ist eine Schätzung
+  ohne begonnenen Code, D4s Schwierigkeit hängt stark davon ab, wie strikt
+  die vier Garantien (Erreichbarkeit/Bossraum-Tiefe/Rastplatz+Shop/
+  Abzweigung) gleichzeitig einzuhalten sind — ein naiver Generator, der
+  nachträglich gegen alle vier Garantien verwirft und neu würfelt, kann bei
+  ungünstigen Parametern viele Versuche brauchen (Determinismus bleibt davon
+  unberührt, solange der Verwerf-RNG-Verbrauch selbst wieder aus dem Seed
+  gezogen wird).
+- **Kein Anlass zur 15-Session-Warnung** aus Abschnitt 2.5 Punkt „Sei ehrlich,
+  wenn … mehr als fünfzehn Sessions" — die Schätzung liegt darunter.
+
+Keine Codeänderung, kein neuer Test, kein `sw.js`-Bump (reine
+Analyse-/Dokumentationsphase, wie von der Phase verlangt). **Wie von der
+Phase vorgeschrieben: Stopp nach der Zusammenfassung** — die Entscheidung,
+ob D2 gestartet wird, liegt beim Nutzer.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
       (s. dort Abschnitt 5.5): (1) die **acht Umpolungs-Keystone-Karten**,

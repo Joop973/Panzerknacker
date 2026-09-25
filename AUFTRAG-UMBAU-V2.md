@@ -699,7 +699,7 @@ Ist-Stand ist `CLAUDE.md`.
 | M5a — Nekromanten-Pass uncommon | gebaut, gemergt | ja, mit einer Abweichung (s. 5.7) |
 | M5b — Nekromanten-Pass rare | gebaut, gemergt | ja, gleiche Abweichung wie M5a (s. 5.8) |
 | M5c–d — Nekromanten-Pass epic/legendary | gebaut, gemergt | ja, eigener Fund (Champion-HP-Kopplung, s. 5.9) |
-| D1 — Machbarkeitsprüfung Dungeon | offen | — |
+| D1 — Machbarkeitsprüfung Dungeon | geprüft, kein Code (s. 5.10) | ja |
 | D2–D6 — Dungeon-Umbau | offen | — |
 | G1 — Kulissen einbauen | offen | — |
 
@@ -968,3 +968,30 @@ wie bei M5a/M5b eine offene Balance-Frage für eine spätere Session.
 **Damit ist der komplette Nekromanten-Makel-Pass (M5a–d, 115 Karten)
 abgeschlossen.** Nächste Sitzung laut 4.1: Phase D1 (Machbarkeitsprüfung
 Dungeon).
+
+## 5.10 D1 — Machbarkeitsprüfung Dungeon (Umsetzung)
+
+Wortgetreu nach Phase D1: reine Prüfung, kein Produktivcode, Ergebnis in
+CLAUDE.md dokumentiert (eigener Abschnitt „AUFTRAG-UMBAU-V2 — Phase D1"),
+danach gestoppt.
+
+**Kurzfassung** (Details/Zeilenverweise in CLAUDE.md): der Umbau ist
+machbar und liegt bei geschätzt **6–11 Sessions für D2–D6** — innerhalb der
+im Auftrag selbst schon genannten Spanne (10–15) und deutlich unter der
+15-Session-Warnschwelle aus Abschnitt 2.5. Die Kamera-Kapselung ist
+strukturell zur Hälfte schon da (`renderer.js`s Screenshake-Block +
+`main.js` zeichnet HUD/Debug bereits außerhalb davon), die Eingabe hat
+bereits genau EINE Umrechnungsstelle (`input.js: toCanvas()`), die
+Gegner-KI-Raycasts sind kameraunabhängig und die Verdunkelung soll laut D5
+ohnehin nie in die Simulation eingreifen. Der wichtigste Befund: **die
+Dungeon-Erzeugung (D4) ist eine neue Schicht ÜBER dem bestehenden
+Raum-Generator, kein Ersatz** — jeder einzelne Raum bleibt vermutlich bei
+24×16 Zellen, nur die Verbindung der Räume untereinander wird zum Gitter.
+Die riesige bestehende Testbasis (Kampfraum-Generierung, Kompositionen,
+Bosse, 5-Seed-Playthroughs) bleibt dadurch zu weiten Teilen gültig; nur
+`run.js: generateMap()`/`actRoomKey()` und ein paar auf `COLS×ROWS`
+hartkodierte Systeme (`spidermine.js: rebuildFlowField()`,
+`state_world.js: bfsReachable()`) sind von D4 betroffen.
+
+Keine Codeänderung, kein `sw.js`-Bump. Nächste Sitzung: D2 (Kamera) — sofern
+der Nutzer nach diesem Stopp grünes Licht gibt.
