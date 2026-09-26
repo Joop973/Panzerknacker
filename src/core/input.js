@@ -37,6 +37,7 @@
 // Belegungen, Deadzones und Reichweiten kommen aus data/input.json.
 
 import { WIDTH, HEIGHT } from '../config.js';
+import { screenToWorld } from './camera.js';
 
 const EMPTY_AIM = null;
 
@@ -95,12 +96,15 @@ export function createInput(target, canvas, opts = {}) {
   // Backing-Store devicePixelRatio-fach groesser, canvas.width waere also
   // je nach Geraet das 2-fache der Arenabreite -- der Zielpunkt laege dann
   // weit ausserhalb des Raums.
+  // Ab Phase D2 (Kamera): die eigentliche Bildschirm->Welt-Umrechnung laeuft
+  // ueber screenToWorld() aus camera.js -- die EINE Stelle im Projekt, die
+  // das tut. Aktuell ist die Kamera Identitaet, das Ergebnis bleibt
+  // unveraendert.
   function toCanvas(e) {
     const rect = canvas.getBoundingClientRect();
-    return {
-      x: (e.clientX - rect.left) * (WIDTH / rect.width),
-      y: (e.clientY - rect.top) * (HEIGHT / rect.height),
-    };
+    const sx = (e.clientX - rect.left) * (WIDTH / rect.width);
+    const sy = (e.clientY - rect.top) * (HEIGHT / rect.height);
+    return screenToWorld(sx, sy);
   }
 
   // ---- Rohe Geraete-Events (nur hier!) --------------------------------
