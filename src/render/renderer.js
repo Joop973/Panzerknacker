@@ -5,6 +5,7 @@
 // Physikschritten interpoliert (alpha).
 
 import { WIDTH, HEIGHT, CELL } from '../config.js';
+import { applyCameraTransform } from '../core/camera.js';
 import { initSprites, sprite, championAuraFrame } from './sprites.js';
 import {
   drawMines,
@@ -1547,6 +1548,7 @@ export function createRenderer(ctx) {
       // Screenshake: deterministisches Wackeln aus der Spielzeit.
       const sh = renderOpts.reduceMotion ? 0 : state.shake || 0;
       ctx.save();
+      applyCameraTransform(ctx); // D2: aktuell Identitaet (volle Arena im Bild)
       if (sh > 0.1) {
         ctx.translate(Math.sin(state.time * 47) * sh, Math.cos(state.time * 53) * sh * 0.7);
       }

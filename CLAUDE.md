@@ -10340,6 +10340,55 @@ Analyse-/Dokumentationsphase, wie von der Phase verlangt). **Wie von der
 Phase vorgeschrieben: Stopp nach der Zusammenfassung** — die Entscheidung,
 ob D2 gestartet wird, liegt beim Nutzer.
 
+### AUFTRAG-UMBAU-V2 — Phase D2 (Kamera) — gemergt
+Reines Refactoring nach D1s Analyse: eine Kamera-Abstraktion (Position +
+Zoom), die aktuell IMMER Identität ist — die komplette Arena passt weiterhin
+exakt ins Bild, byte-identisch zum Vorzustand. Baseline vor der Änderung
+festgehalten (`node tests/regression.mjs`): 5 Seeds 31/32/29/38/38 geräumte
+Räume + die Mörser-/Raumdauer-Zeilen — nach der Änderung **zeichengenau
+identisch** reproduziert (Pflichtvorgabe der Phase, kein Toleranzspielraum).
+- **Neues Modul `src/core/camera.js`**: `camera = {x: WIDTH/2, y: HEIGHT/2,
+  zoom: 1}` (mutierbares Singleton-Objekt, kein Parameter-Threading durch
+  bestehende Signaturen), `resetCamera()`, `applyCameraTransform(ctx)`
+  (`translate(halfW,halfH) → scale(zoom,zoom) → translate(-x,-y)` — bei den
+  Startwerten eine mathematisch exakte Identität, die Translates heben sich
+  in IEEE-754 exakt auf), `screenToWorld(sx,sy)` (Umkehrfunktion, von
+  `input.js` genutzt), `worldToScreen(wx,wy)` (symmetrische Umkehrung, noch
+  ungenutzt — Vorgriff auf D3+, z. B. Minimap/HUD-Marker über Weltobjekten).
+- **Aufgabe 2 „EINE Stelle bündeln"**: D1 hatte bereits gezeigt, dass
+  `src/core/input.js: toCanvas()` die EINZIGE Bildschirm→Welt-Umrechnung im
+  ganzen Projekt ist (Touch-Sticks/Gamepad-Cursor rechnen nie in absolute
+  Weltkoordinaten). `toCanvas()` behält seine bestehende
+  Bildschirm-Skalierung (`(clientX-rect.left) * (WIDTH/rect.width)`) und
+  reicht das Ergebnis nur noch durch `screenToWorld()` — dieselbe eine
+  Stelle bleibt die eine Stelle, sie delegiert nur die eigentliche
+  Kamera-Mathematik.
+- **`renderer.js: render()`**: `applyCameraTransform(ctx)` direkt nach dem
+  bestehenden `ctx.save()`, VOR dem Screenshake-Translate — beide
+  komponieren sauber (dieselbe Technik wie DPR-Grundtransformation +
+  Shake schon vorher). HUD (`hud.js`) und Debug-Overlay werden laut D1-Fund
+  von `main.js` erst NACH `renderer.render()` gezeichnet, also außerhalb
+  dieses Blocks in reinen Bildschirmkoordinaten — bleiben unverändert.
+  `drawFloor()`/`drawVignette()`/`drawFog()` (alle drei einmalig auf
+  `WIDTH×HEIGHT` gebacken) bleiben in dieser Phase bewusst unangetastet —
+  ihr Umbau auf Weltkoordinaten ist Aufgabe von D3+, nicht dieses reinen
+  Refactorings.
+- **Verifikation über die Pflichtprobe hinaus**: alle vier Nebensuiten
+  (`gamepad`/`music`/`championsprite`/`spidersprites`) unverändert grün.
+  Zusätzlich die bereits bestehenden Playwright-Tests erneut gelaufen, weil
+  sie genau die in Aufgabe 3 geforderte Zielgenauigkeit über Touch/Maus
+  hinweg beweisen: `tests/viewport.mjs` (echter Mausklick bei DPR 1/2/3 +
+  drei Handy-/Tablet-Auflösungen — Zielpunkt bleibt exakt in Arena-Maßen,
+  bestätigt `toCanvas()`→`screenToWorld()` ist weiterhin korrekt),
+  `tests/gamepadcursor.mjs` (Cursor-Klick funktioniert unverändert),
+  `tests/uilayout.mjs` (kein Overlay-Element außerhalb des Bildschirms),
+  `tests/fogperf.mjs` (Lichtmaske korrekt, Renderzeit unverändert im
+  Budget). Alle grün, keine einzige Abweichung.
+- `sw.js` auf `v133` gebumpt (+ `src/core/camera.js` neu in `ASSETS`) +
+  `telemetry.js: GAME_VERSION` mitgezogen — laut expliziter Phasenvorgabe
+  in `AUFTRAG-UMBAU-V2.md`. **Nächste Sitzung: Phase D3** (Türen und
+  Raumsperre).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
       (s. dort Abschnitt 5.5): (1) die **acht Umpolungs-Keystone-Karten**,
