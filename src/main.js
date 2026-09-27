@@ -43,7 +43,7 @@ import {
 } from './game/run.js';
 import { createUpgradeScreen } from './ui/upgradescreen.js';
 import { createEventScreen, createShopScreen, createRestScreen, createActCompleteScreen } from './ui/roomscreens.js';
-import { createMapScreen } from './ui/mapscreen.js';
+import { createMinimapScreen } from './ui/minimap.js';
 import { validateArenas } from './game/generator.js';
 import { createPreview } from './ui/preview.js';
 import { createTouchControls } from './ui/touchcontrols.js';
@@ -253,7 +253,7 @@ async function init() {
   const restScreen = createRestScreen(); // Grundsteinumbau Phase 7 (Reparaturtrupp/Werkbank)
   const actCompleteScreen = createActCompleteScreen(); // Grundsteinumbau Phase 6
   const preview = createPreview();
-  const mapScreen = createMapScreen();
+  const mapScreen = createMinimapScreen(); // AUFTRAG-UMBAU-V2 Phase D4: ersetzt mapscreen.js
   const pause = createPause();
   const tutorial = createTutorial(getFlag('tutorial_seen'));
 
@@ -1053,6 +1053,7 @@ async function init() {
       mapScreen.show({
         map: run.map,
         currentId: run.mapCurrentId,
+        visited: run.mapVisited, // Phase D4: nur Betretenes + Erreichbares wird gezeigt
         lives: run.lives,
         treasureLifeCost: run.difficulty.treasure.lifeCost,
         typeInfo: ROOM_TYPE_INFO,

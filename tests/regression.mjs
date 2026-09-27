@@ -1348,54 +1348,97 @@ function passBossReward(run) {
 // ab -- der Run war nicht mehr bedienbar. Ursache: mapscreen.js war der
 // einzige der fuenf Screens, der sich im Click-Handler NICHT selbst versteckt
 // hat. Blinder Fleck: kein Test hatte die UI-Schicht je beruehrt.
+// AUFTRAG-UMBAU-V2 Phase D4: mapscreen.js ist durch minimap.js ersetzt
+// (Aufgabe 5) -- derselbe Regressionsschutz, jetzt gegen die neue Minimap
+// mit "visited"-Parameter (Aufgabe 4: nur Betretenes + direkt Erreichbares
+// wird ueberhaupt gerendert).
 {
   const { installDom } = await import('./domstub.mjs');
   const restore = installDom();
   try {
-    const { createMapScreen } = await import('../src/ui/mapscreen.js');
-    const ms = createMapScreen();
+    const { createMinimapScreen } = await import('../src/ui/minimap.js');
+    const ms = createMinimapScreen();
     const nodes = [
       { id: 10, layer: 1, col: 0, type: 'combat', isBoss: false, next: [20, 21] },
-      { id: 20, layer: 2, col: 0, type: 'combat', isBoss: false, next: [] },
+      { id: 20, layer: 2, col: 0, type: 'combat', isBoss: false, next: [30] },
       { id: 21, layer: 2, col: 1, type: 'treasure', isBoss: false, next: [] },
+      { id: 30, layer: 3, col: 0, type: 'combat', isBoss: false, next: [] },
     ];
-    const map = { layers: [[nodes[0]], [nodes[1], nodes[2]]], byId: new Map(nodes.map((n) => [n.id, n])) };
+    const map = {
+      layers: [[nodes[0]], [nodes[1], nodes[2]], [nodes[3]]],
+      byId: new Map(nodes.map((n) => [n.id, n])),
+    };
     const typeInfo = {
       combat: { name: 'Kampf', symbol: 'X', desc: '' },
       treasure: { name: 'Schatz', symbol: 'D', desc: '' },
     };
     const overlay = document.getElementById('map');
-    check(!!overlay, 'Kartenscreen legt kein #map-Overlay an');
+    check(!!overlay, 'Minimap legt kein #map-Overlay an');
 
     // (a) Gueltige Wahl -> Overlay muss zu sein.
     let chosen = null;
-    ms.show({ map, currentId: 10, lives: 3, treasureLifeCost: 1, typeInfo, onChoose: (id) => { chosen = id; return true; } });
-    check(!overlay.classList.contains('hidden'), 'Kartenscreen wird nicht sichtbar');
+    ms.show({
+      map, currentId: 10, visited: [10], lives: 3, treasureLifeCost: 1, typeInfo,
+      onChoose: (id) => { chosen = id; return true; },
+    });
+    check(!overlay.classList.contains('hidden'), 'Minimap wird nicht sichtbar');
     const reachable = overlay.querySelectorAll('button.mapnode.reachable');
     check(reachable.length === 2, `Erwartet 2 erreichbare Knoten, gefunden ${reachable.length}`);
+    // Aufgabe 4 woertlich: noch nicht betretene, aber erreichbare Knoten
+    // sind ein UMRISS (dashed border/transparenter Hintergrund), keine
+    // gefuellte Flaeche wie ein bereits betretener Raum.
+    check(
+      [...reachable].every((b) => b.classList.contains('outline')),
+      'Erreichbare, noch nicht betretene Knoten sind kein Umriss (Aufgabe 4)',
+    );
+    // Knoten 30 (Ebene 3) ist weder betreten noch von Ebene 1 aus direkt
+    // erreichbar -- Aufgabe 5: die alte "vollstaendig vorab einsehbare"
+    // Karte entfaellt, ein solcher Knoten wird gar nicht erst gerendert.
+    check(
+      overlay.querySelector('button.mapnode[data-id="30"]') === null,
+      'Ein weder betretener noch direkt erreichbarer Knoten wird trotzdem gerendert (Aufgabe 5 verletzt)',
+    );
     reachable[0].click();
     check(chosen === 20, `onChoose wurde nicht mit der Knoten-id aufgerufen (chosen=${chosen})`);
     check(
       overlay.classList.contains('hidden'),
-      'BLOCKER: Kartenscreen bleibt nach der Knotenwahl offen und blockiert jede Eingabe',
+      'BLOCKER: Minimap bleibt nach der Knotenwahl offen und blockiert jede Eingabe',
     );
 
     // (b) Abgelehnte Wahl -> Overlay bleibt offen (sonst haengt der Run ohne
     //     sichtbare Karte fest).
-    ms.show({ map, currentId: 10, lives: 3, treasureLifeCost: 1, typeInfo, onChoose: () => false });
+    ms.show({ map, currentId: 10, visited: [10], lives: 3, treasureLifeCost: 1, typeInfo, onChoose: () => false });
     overlay.querySelectorAll('button.mapnode.reachable')[0].click();
     check(
       !overlay.classList.contains('hidden'),
-      'Kartenscreen schließt sich auch bei abgelehnter Wahl -- der Run wäre ohne Karte blockiert',
+      'Minimap schließt sich auch bei abgelehnter Wahl -- der Run wäre ohne Karte blockiert',
     );
 
     // (c) Schatzkammer bei zu wenig Leben ist gesperrt UND nicht klickbar.
     let clickedLocked = false;
-    ms.show({ map, currentId: 10, lives: 1, treasureLifeCost: 1, typeInfo, onChoose: () => { clickedLocked = true; return true; } });
+    ms.show({
+      map, currentId: 10, visited: [10], lives: 1, treasureLifeCost: 1, typeInfo,
+      onChoose: () => { clickedLocked = true; return true; },
+    });
     const locked = overlay.querySelectorAll('button.mapnode.locked');
     check(locked.length === 1, `Schatzkammer bei 1 Leben nicht als gesperrt markiert (${locked.length})`);
     locked[0]?.click();
     check(!clickedLocked, 'Gesperrte Schatzkammer löst trotzdem eine Wahl aus');
+
+    // (d) Ein bereits BETRETENER (nicht mehr aktueller) Knoten wird
+    //     angezeigt -- gefuellt/nicht als Umriss, aber nicht mehr klickbar
+    //     (der Vorwaerts-Graph kennt keinen Rueckweg).
+    let clickedVisited = false;
+    ms.show({
+      map, currentId: 20, visited: [10, 20], lives: 3, treasureLifeCost: 1, typeInfo,
+      onChoose: () => { clickedVisited = true; return true; },
+    });
+    const visitedBtn = overlay.querySelector('button.mapnode[data-id="10"]');
+    check(!!visitedBtn, 'Ein betretener Vorgaengerknoten wird nicht gerendert');
+    check(visitedBtn.classList.contains('visited'), 'Betretener Knoten traegt nicht die Klasse "visited"');
+    check(!visitedBtn.classList.contains('outline'), 'Betretener Knoten ist faelschlich ein Umriss');
+    visitedBtn.click();
+    check(!clickedVisited, 'Ein bereits betretener (nicht mehr aktueller) Knoten loest trotzdem eine Wahl aus');
   } finally {
     restore();
   }
@@ -17584,6 +17627,170 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
     Math.abs(cfg2.bulletSpeed - base.bulletSpeed * vocab.kurzer_lauf.schwere.schwer) < 1e-6,
     `Abschnitt 92: ghost_103s Makel wirkt nicht (${cfg2.bulletSpeed})`,
   );
+}
+
+// ============================================================================
+// Abschnitt 93 -- AUFTRAG-UMBAU-V2 Phase D4 (Dungeon-Erzeugung)
+// Nutzerentscheidung (AskUserQuestion): "Vorwaerts-Graph mit Gitter-Optik" --
+// generateMap()s zugrunde liegende Struktur (layers/byId/node.next) bleibt
+// UNVERAENDERT, nur die interne Ebenen-Erzeugung bekommt eine zusaetzliche
+// Garantie (Shop) und die Anzeige (minimap.js) wird komplett neu gebaut.
+// Ist-Abgleich VOR dem Bau (per Skript, nicht nur behauptet): der bestehende
+// Algorithmus erfuellt Garantie 1/2/4 bereits STRUKTURELL (geprueft ueber
+// 900 Seed/Akt-Kombinationen, 0 Verletzungen) -- der einzige echte Fund war
+// Garantie 3 (Shop): ~22 % aller Akt-Karten hatten VOR dieser Phase gar
+// keinen Workshop-Knoten (Rastplatz war durch die erzwungene restLayer schon
+// immer garantiert). Diese Sektion bewacht deshalb (b)-(e) alle vier
+// Garantien mit EIGENEN 200-Seed-Laeufen (nicht nur den 25 aus Abschnitt 50),
+// auch dort, wo der Mechanismus schon vorher galt -- eine spaetere
+// Aenderung an generateMap() soll ALLE vier brechen koennen, nicht nur die
+// eine neu gebaute.
+// ============================================================================
+{
+  const { generateMap: genMap93 } = await import('../src/game/run.js');
+
+  // (a) Struktur: das neue Konfigurationsfeld existiert.
+  check(
+    typeof diffData.map.workshopLayerFraction === 'number',
+    'Phase D4: map.workshopLayerFraction fehlt oder ist keine Zahl',
+  );
+
+  const N = 200;
+  let unreachableFails = 0;
+  let bossEndFails = 0;
+  let missingRestOrShop = 0;
+  let noBranchFails = 0;
+  for (let seed = 1; seed <= N; seed++) {
+    for (const act of [1, 2, 3]) {
+      const map = genMap93(seed * 104729 + act, diffData, act);
+
+      // (b) Garantie 1: jeder Knoten ist vom Startknoten aus erreichbar.
+      const startId = map.layers[0][0].id;
+      const visited = new Set([startId]);
+      const stack = [startId];
+      while (stack.length) {
+        const id = stack.pop();
+        for (const nid of map.byId.get(id).next) {
+          if (!visited.has(nid)) { visited.add(nid); stack.push(nid); }
+        }
+      }
+      if (visited.size !== map.byId.size) unreachableFails++;
+
+      // (c) Garantie 2: der Bossraum liegt am Ende des laengsten Pfades --
+      // unter dem strikten Ebenenmodell hat JEDER Pfad vom Start zum Boss
+      // dieselbe Laenge (edges verbinden nur Ebene i -> i+1), der Boss ist
+      // also fuer JEDEN Pfad "das Ende", nicht nur fuer den laengsten.
+      // Geprueft ueber: kein Knoten liegt in einer tieferen Ebene als der
+      // (einzige) Bossknoten, UND der Bossknoten ist tatsaechlich als
+      // solcher markiert.
+      const bossLayer = map.layers[map.layers.length - 1];
+      const bossNode = bossLayer[0];
+      const deeper = [...map.byId.values()].some((n) => n.layer > bossNode.layer);
+      if (deeper || !bossNode.isBoss || bossLayer.length !== 1) bossEndFails++;
+
+      // (d) Garantie 3: mindestens ein Rastplatz UND ein Shop existieren.
+      const types = new Set([...map.byId.values()].map((n) => n.type));
+      if (!types.has('rest') || !types.has('workshop')) missingRestOrShop++;
+
+      // (e) Garantie 4: mindestens eine echte Abzweigung (ein Knoten mit
+      // mehr als einem moeglichen naechsten Raum -- der Spieler laesst die
+      // NICHT gewaehlten Optionen aus, genau das ist eine "skippable room").
+      const hasBranch = [...map.byId.values()].some((n) => n.next.length > 1);
+      if (!hasBranch) noBranchFails++;
+    }
+  }
+  check(unreachableFails === 0, `Phase D4 Garantie 1: ${unreachableFails}/${N * 3} Akt-Karten haben unerreichbare Knoten`);
+  check(bossEndFails === 0, `Phase D4 Garantie 2: ${bossEndFails}/${N * 3} Akt-Karten haben den Boss nicht am Ende jedes Pfades`);
+  check(missingRestOrShop === 0, `Phase D4 Garantie 3: ${missingRestOrShop}/${N * 3} Akt-Karten ohne Rastplatz und/oder Shop`);
+  check(noBranchFails === 0, `Phase D4 Garantie 4: ${noBranchFails}/${N * 3} Akt-Karten ohne echte Abzweigung`);
+
+  // (f) Der erzwungene Shop-Knoten verletzt nie die fruehen Ebenen (1-3
+  // duerfen kein elite/cursed/workshop tragen, EARLY_EXCLUDED_TYPES) und
+  // nie die letzte Ebene vor dem Boss (die ist immer komplett 'rest').
+  let earlyShopFails = 0;
+  let restLayerShopFails = 0;
+  const actRooms93 = diffData.acts[0].rooms;
+  for (let seed = 1; seed <= N; seed++) {
+    for (const act of [1, 2, 3]) {
+      const map = genMap93(seed * 104729 + act, diffData, act);
+      for (const n of [...map.layers[0], ...map.layers[1], ...map.layers[2]]) {
+        if (n.type === 'workshop') earlyShopFails++;
+      }
+      for (const n of map.layers[actRooms93 - 1]) {
+        if (n.type === 'workshop') restLayerShopFails++;
+      }
+    }
+  }
+  check(earlyShopFails === 0, `Phase D4: ${earlyShopFails} erzwungene Shop-Knoten in den gesperrten fruehen Ebenen 1-3`);
+  check(restLayerShopFails === 0, `Phase D4: ${restLayerShopFails} erzwungene Shop-Knoten in der garantierten Rast-Ebene vor dem Boss`);
+
+  // (g) actRoomKey-Mechanismus bleibt unberuehrt: gleicher Seed liefert in
+  // Akt 1 und Akt 2 weiterhin unterschiedliche Karten (unveraendert seit
+  // Grundsteinumbau Phase 6, hier gegengeprueft, weil D4 dieselbe Funktion
+  // anfasst).
+  {
+    const m1 = genMap93(4242, diffData, 1);
+    const m2 = genMap93(4242, diffData, 2);
+    const sig = (m) => m.layers.map((l) => l.map((n) => n.type).join(',')).join('|');
+    check(sig(m1) !== sig(m2), 'Phase D4: Akt 1 und Akt 2 (Seed 4242) erzeugen dieselbe Karte');
+  }
+
+  // (h) run.mapVisited: enthaelt den Startknoten, waechst monoton (nie
+  // geleert) waehrend eines echten Playthroughs, und wird bei einem
+  // Aktwechsel auf den neuen Startknoten zurueckgesetzt (akt-lokale ids,
+  // s. enterAct()) -- Muster wie das End-to-End des Abschnitt-50(g)-Tests
+  // (dieselben Helfer: cheatKillAll/pickMapNode/passRest/passBossReward).
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 646464);
+    check(
+      run.mapVisited instanceof Set && run.mapVisited.has(run.mapCurrentId) && run.mapVisited.size === 1,
+      'Phase D4: frischer Run hat nicht genau den Startknoten in mapVisited',
+    );
+    let shrink = false;
+    let sawActReset = false;
+    let sawGrowthThisAct = false;
+    let growthFails = 0;
+    let prevActIndex = run.actIndex;
+    let guard = 200000;
+    while (run.phase !== 'victory' && run.phase !== 'gameover' && guard-- > 0) {
+      const sizeBefore = run.mapVisited.size;
+      if (run.phase === 'preview') enterRoom(run);
+      else if (run.phase === 'transition') stepRun(run, CMD, STEP);
+      else if (run.phase === 'playing') { cheatKillAll(run.state); stepRun(run, CMD, STEP); }
+      else if (run.phase === 'upgrade') chooseUpgrade(run, 0);
+      else if (run.phase === 'map') pickMapNode(run);
+      else if (run.phase === 'workshop') leaveWorkshop(run);
+      else if (run.phase === 'event') chooseEventOption(run, 0);
+      else if (run.phase === 'rest') passRest(run);
+      else if (run.phase === 'bossReward') passBossReward(run);
+      else if (run.phase === 'actComplete') advanceAct(run);
+      else break;
+      // Ein Schrumpfen ist NUR ausserhalb eines Aktwechsels ein Bug -- der
+      // Aktwechsel selbst setzt mapVisited absichtlich zurueck (akt-lokale
+      // ids, s. enterAct()) und wird separat unten geprueft.
+      if (run.actIndex === prevActIndex) {
+        if (run.mapVisited.size < sizeBefore) shrink = true;
+        if (run.mapVisited.size > sizeBefore) sawGrowthThisAct = true;
+      }
+      if (run.actIndex !== prevActIndex) {
+        sawActReset = true;
+        check(run.mapVisited.size === 1 && run.mapVisited.has(run.mapCurrentId), `Phase D4: mapVisited nach Aktwechsel (${run.actIndex}) ${[...run.mapVisited]} statt nur [${run.mapCurrentId}]`);
+        // Waechst mapVisited waehrend des Akts NIE (echter, harter Fund waehrend
+        // der Gegenprobe: ein reines "schrumpft nie"-Kriterium bleibt auch dann
+        // gruen, wenn advanceToMapNode() den Eintrag gar nicht mehr eintraegt --
+        // die Groesse aendert sich dann einfach NIE, statt zu schrumpfen).
+        if (!sawGrowthThisAct) growthFails++;
+        sawGrowthThisAct = false;
+        prevActIndex = run.actIndex;
+      }
+    }
+    if (run.phase === 'victory' && !sawGrowthThisAct && run.mapVisited.size <= 1) growthFails++;
+    check(guard > 0, 'Phase D4: mapVisited-Playthrough haengt (Iterationslimit)');
+    check(run.phase === 'victory', `Phase D4: mapVisited-Playthrough endet in "${run.phase}" statt "victory"`);
+    check(!shrink, 'Phase D4: mapVisited schrumpft irgendwo im Playthrough (Rueckwaertsloeschung)');
+    check(sawActReset, 'Phase D4: kein Aktwechsel im Playthrough beobachtet -- Reset-Pruefung war wirkungslos');
+    check(growthFails === 0, `Phase D4: mapVisited waechst in ${growthFails} von 3 Akten nie ueber den Startknoten hinaus`);
+  }
 }
 
 if (failures) {

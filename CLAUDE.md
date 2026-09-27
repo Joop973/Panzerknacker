@@ -10475,7 +10475,164 @@ Risiko für die riesige bestehende Regressionssuite additiv daneben steht.
   ersetzt `run.js: generateMap()` durch ein verbundenes Raumgitter und wird
   dieses Modul erstmals wirklich anschließen).
 
+### AUFTRAG-UMBAU-V2 — Phase D4 (Dungeon-Erzeugung) — gemergt
+Die Zieldefinition „ein Akt erzeugt ein verbundenes Raumgitter statt eines
+Knotengraphen" ist architektonisch zweideutig — vor jedem Code wurde deshalb
+per `AskUserQuestion` geklärt, welche Lesart gemeint ist. **Nutzerentscheidung:
+Option 1 „Vorwärts-Graph mit Gitter-Optik"** — die bestehende, layer-basierte
+`node.next[]`-API aus `run.js: generateMap()`/`chooseMapNode()`/
+`advanceToMapNode()` bleibt strukturell unverändert (kein Rückweg, kein
+Einhängen von `dungeon.js`/D3 in den echten Spielablauf); nur die interne
+Ebenen-Erzeugung bekommt eine fehlende Garantie und die Anzeige (`mapscreen.js`
+→ `minimap.js`) wird komplett neu gebaut. Option 2 (echtes 2D-Dungeon mit
+Rückweg, `dungeon.js` live verdrahtet) wurde als deutlich größerer, riskanterer
+Umbau explizit abgelehnt.
+- **Ist-Abgleich per Skript VOR jedem Code** (nicht nur behauptet): ein
+  Wegwerf-Skript hat alle vier Auftrags-Garantien gegen den UNVERÄNDERTEN
+  Algorithmus über 900 Seed/Akt-Kombinationen geprüft. Ergebnis: Garantie 1
+  (Erreichbarkeit vom Start), 2 (Boss am Ende) und 4 (echte Abzweigung) waren
+  bereits **strukturell erfüllt** (0/900 Verletzungen) — der erzwungene
+  Ein-Knoten-Fächer der beiden ersten Kampf-Ebenen in eine ≥2-Knoten-Ebene
+  hinein macht Garantie 4 sogar **mathematisch aus Garantie 1 folgend**
+  (ein Ein-Quellknoten MUSS Out-Degree > 1 haben, um mehrere Ziele
+  abzudecken — beide Garantien sind an dieser Topologie untrennbar verknüpft,
+  bestätigt durch die Gegenprobe unten). **Garantie 3 (Shop) war die einzige
+  echte Lücke**: gemessen **194/900 (≈22 %)** aller Akt-Karten hatten
+  **gar keinen** Workshop-Knoten (Rastplatz war durch die erzwungene
+  Vor-Boss-Ebene schon immer garantiert, 0/900). Die eigentliche Bauarbeit
+  beschränkt sich deshalb auf genau diese Lücke plus die komplette Anzeige.
+- **`generateMap()`: erzwungener Shop-Knoten** (neuer Block direkt nach der
+  bestehenden Schatzkammer-Erzwingung, `data/difficulty.json:
+  map.workshopLayerFraction` 0.3 analog zu `treasureLayerFraction`):
+  anders als die Schatzkammer braucht ein Shop **keinen** Leben-Lock und
+  damit auch **kein** Orphan-Sicherheitsnetz (ein Shop ist nie eine
+  Sackgassen-Gefahr) — der Block ist deshalb bewusst einfacher. Sucht ab
+  einer bevorzugten Ebene zuerst vorwärts, dann rückwärts nach der nächsten
+  freien (Nicht-Schatzkammer-)Ebene, garantiert also **immer** Erfolg.
+  **Eigener Fund beim Bau**: die untere Ebenen-Grenze darf NICHT wie bei
+  `treasureNode` `forcedLayers+1` sein — `workshop` gehört zu
+  `EARLY_EXCLUDED_TYPES` (Ebenen 1–3 dürfen keinen Shop tragen), die Grenze
+  ist deshalb `max(EARLY_LAYERS+1, forcedLayers+1)`. Ohne diese Korrektur
+  hätte der erzwungene Shop die Ebene-3-Sperre aus Grundsteinumbau Phase 6
+  gebrochen — per eigenem Test (f) gegengeprüft (0/600 Verletzungen).
+  Nach dem Fix: **0/900** fehlende Shops.
+- **Ein echter, pre-existierender Bug beim Ist-Abgleich gefunden, bewusst
+  NICHT behoben** (Scope-Disziplin — gehört zu keiner der vier D4-Garantien):
+  „zwei Rastplätze in Folge" (Regel seit Grundsteinumbau Phase 6) verletzt
+  sich in **5–6 von 900** Fällen selbst. Root Cause per gezielter
+  Instrumentierung gefunden: die Schatzkammer-Orphan-Sicherheitsnetz (fügt
+  eine Fluchtkante zu einem Geschwisterknoten hinzu, wenn ein Knoten
+  AUSSCHLIESSLICH zur Schatzkammer führt) läuft **NACH** der „keine zwei
+  Rastplätze"-Reparatur — eine dabei neu hinzugefügte Kante wird deshalb nie
+  gegen diese Regel geprüft. Bestätigt (nicht nur vermutet): mit `git stash`
+  gegen den unveränderten Vorzustand reproduzierbar (6/900 vorher, 5/900
+  nachher — mein Shop-Zufallstreffer hat rein zufällig einen der sechs
+  Fälle mit-gefixt). Als To-do dokumentiert, nicht repariert.
+- **`run.mapVisited`** (neu, `Set`): akt-lokale Besuchsspur — `enterAct()`
+  setzt sie bei jedem (Akt-)Start neu auf `{Startknoten}` (Knoten-ids sind
+  NICHT akt-übergreifend eindeutig, `layer*10+col` kann in Akt 1 und 2
+  kollidieren), `advanceToMapNode()` fügt jeden neu betretenen Knoten hinzu
+  — wächst dadurch monoton innerhalb eines Akts, nie rückwärts gelöscht.
+  Persistiert im `runSnapshot()`; ein älterer Zwischenstand ohne das Feld
+  rekonstruiert beim Fortsetzen einen plausiblen Pfad über eine neue
+  BFS-Hilfsfunktion `findPathToNode()` (garantiert erfolgreich dank
+  Garantie 1).
+- **`src/ui/minimap.js`** (NEU, ersetzt `src/ui/mapscreen.js` **vollständig**
+  — Aufgabe 5 wörtlich: „Der alte Kartenbildschirm entfällt"): die frühere
+  Design-Prämisse „vollständig vorab einsehbar" (PLAN.md, Phase 12) ist
+  damit bewusst aufgegeben. Zeigt nur noch (Aufgabe 4 wörtlich): **betretene
+  Räume** voll sichtbar (Klasse `.visited`, gedämpft/nicht mehr anwählbar —
+  der Vorwärts-Graph kennt keinen Rückweg) und **vom aktuellen Raum aus
+  erreichbare, noch nicht betretene Räume als Umriss mit Symbol** (Klasse
+  `.outline`, transparenter Hintergrund + gestrichelter Rand statt
+  gefüllter Fläche — der Raumtyp ist bekannt, mehr nicht). Alle anderen
+  Knoten werden **gar nicht erst ins DOM gerendert** (kein
+  Fog-of-War-Overlay auf vorhandenen Elementen, echtes Weglassen). Zeilen
+  ohne sichtbaren Knoten bekommen keine leere Platzhalter-Reihe.
+  Kanten-Zeichnung (`drawEdges`) bleibt unverändert simpel: sie fragt nur
+  tatsächlich im DOM vorhandene Zielknoten ab, ein Ziel außerhalb von
+  `visited`/`reachable` existiert dort schlicht nicht.
+- **Bewusst unverändert**: `run.js: chooseMapNode()` bleibt die einzige
+  Navigations-/Gültigkeitsprüfung (reine Anzeige + Callback wie zuvor,
+  `onChoose`-Vertrag identisch — Overlay schließt sich nur bei `true`,
+  Muster aus dem alten „Kartenscreen blockierte den Run"-Bugfix bleibt
+  erhalten). `#map`-Element-id, `<button class="mapnode">`-Struktur und
+  CSS-Klassen (`mapwrap`/`mapedges`/`mapedge`/`maprows`/`maprow`/
+  `mapnode`/`reachable`/`locked`/`current`/`maphint`) sind unverändert
+  wiederverwendet (nur `.visited`/`.outline` neu in `style.css`) — der
+  Controller-/Gamepad-Cursor (`main.js: RUN_OVERLAY_IDS`, `runOverlayNav`)
+  funktioniert dadurch ohne jede Anpassung weiter, `<button>`-Elemente
+  bleiben `<button>`-Elemente.
+- **Neuer Testabschnitt 93** (`tests/regression.mjs`): (a) Struktur
+  (`map.workshopLayerFraction`); (b)–(e) alle vier Garantien über **200
+  Seeds × 3 Akte** (nicht nur die 25 aus dem bestehenden Abschnitt 50 —
+  eine spätere Änderung an `generateMap()` soll ALLE vier brechen können,
+  nicht nur die neu gebaute); (f) der erzwungene Shop verletzt nie die
+  frühen Ebenen 1–3 oder die garantierte Vor-Boss-Rast-Ebene; (g)
+  `actRoomKey`-Stromtrennung bleibt unberührt; (h) `run.mapVisited` über
+  einen echten Playthrough — enthält den Startknoten, wächst **nachweislich**
+  (nicht nur „schrumpft nie", s. u.) innerhalb jedes Akts, wird bei jedem
+  Aktwechsel korrekt zurückgesetzt. Testabschnitt 8 (Overlay-Regression) ist
+  auf `minimap.js`/`createMinimapScreen()` umgestellt und um die neuen
+  Fälle (d) „ein betretener Knoten ist ein Umriss? nein" und den bereits in
+  (a) mitgeprüften „unerreichbarer Knoten wird nicht gerendert" erweitert.
+- **Sechs Pflicht-Gegenproben am echten Quellcode bestanden** (jede einzeln
+  temporär gebrochen, Suite neu gelaufen, danach zurückgesetzt): Orphan-
+  Reparatur in `connectLayers()` deaktiviert → **ausschließlich** „Garantie
+  1" wird rot (542–834/900, isoliert reproduzierbar); `bossNode.isBoss`
+  testweise auf `false` → sowohl eine isolierte Messung (600/600) als auch
+  der bestehende Abschnitt-50-„Bossknoten"-Test schlagen zu (die volle
+  Suite crasht dabei hart in einem älteren Boss-Test, bevor sie Abschnitt 93
+  überhaupt erreicht — bestätigt als gültige Gegenprobe, Muster aus früheren
+  Sitzungen: ein harter Crash zählt); Shop-Erzwingung auskommentiert → **nur**
+  „Garantie 3" wird rot (144/600); jeden Knoten auf höchstens 1 `.next`-Eintrag
+  gekürzt → **sowohl** „Garantie 1" als auch „Garantie 4" werden rot
+  (600/600 je, plus zwei bereits bestehende Tests kaskadieren erwartungsgemäß
+  mit) — bestätigt die oben dokumentierte mathematische Verknüpfung beider
+  Garantien, ein isolierter Bruch NUR von Garantie 4 ist unter dieser
+  Topologie nicht konstruierbar; `advanceToMapNode()`s
+  `mapVisited.add()`-Aufruf deaktiviert → **zunächst kein einziger Test
+  rot** (echter Fund: die ursprüngliche Fassung von Test (h) prüfte nur
+  „schrumpft nie", das bleibt bei einem konstant `{Start}` bleibenden Set
+  trivial wahr) — Test um eine explizite Wachstums-Zusicherung je Akt
+  ergänzt, danach fängt dieselbe Gegenprobe zuverlässig (3/3 Akte ohne
+  Wachstum); `minimap.js`s Sichtbarkeits-Filter auf „alles zeigen wie im
+  alten mapscreen.js" zurückgebaut → **genau** die neue „Aufgabe-5"-Prüfung
+  in Abschnitt 8 wird rot, sonst nichts.
+- **Playwright-Smoke** (eigenständig, nicht eingecheckt — Muster wie bei
+  Champion-/Spinnenboss-Sprites): `createMinimapScreen()` isoliert in einem
+  echten Browser mit synthetischen Knoten gerendert und screenshotet —
+  bestätigt sichtbar: ein gefüllter, gedämpfter „betreten"-Knoten, ein
+  glühender „aktuell"-Knoten, ein gestrichelt umrandeter „erreichbar,
+  Umriss"-Shop-Knoten; ein nicht-erreichbarer Rastplatz-Knoten in derselben
+  Ebene wird korrekt gar nicht gezeichnet. Keine Konsolenfehler außer einem
+  harmlosen Favicon-404 der Test-Seite selbst.
+- **`node tests/regression.mjs` NICHT byte-identisch** (anders als D2/D3,
+  aber laut Aufgabe 1 ausdrücklich erlaubt: „Die Anzahl der rng-Aufrufe darf
+  sich ändern, aber die Erzeugung muss für denselben Seed reproduzierbar
+  sein") — die fünf Sieg-Seeds räumen jetzt 30/32/30/36/37 statt 31/32/29/
+  38/38 Räume, weil die Shop-Erzwingung Knotentypen (und damit Gegner-
+  budgets) an anderen Stellen umfärbt. Determinismus pro Seed bleibt
+  vollständig erhalten (Testschritt (g)). Alle vier Nebensuiten
+  (`gamepad`/`music`/`championsprite`/`spidersprites`) unverändert grün,
+  `tests/uilayout.mjs` (Playwright, prüft die übrige Overlay-Landschaft über
+  vier Viewports) ebenfalls grün.
+- `sw.js` auf `v135` gebumpt (`src/ui/mapscreen.js` aus `ASSETS` entfernt,
+  `src/ui/minimap.js` neu eingetragen) + `telemetry.js: GAME_VERSION`
+  mitgezogen. **Nächste Sitzung: Phase D5** (Sichtbarkeit in Gängen — mit
+  der im Auftrag selbst festgehaltenen harten Regel: ein Kampfraum ist
+  IMMER vollständig sichtbar, Verdunkelung gilt ausschließlich für Gänge/
+  unbetretene Räume und darf nie die Simulation berühren; bei jeder
+  Versuchung, das aufzuweichen, anhalten und den Nutzer fragen).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
+- [ ] **„Zwei Rastplätze in Folge" (Grundsteinumbau Phase 6) verletzt sich in
+      ~0,6 % der Fälle selbst** (Phase-D4-Fund, s. dort): die Schatzkammer-
+      Orphan-Sicherheitsnetz-Kante (`generateMap()`, ganz am Ende) wird nach
+      der „keine zwei Rastplätze"-Reparatur eingefügt und deshalb nie gegen
+      diese Regel geprüft. Trivialer Fix (Reihenfolge tauschen oder die neu
+      hinzugefügte Kante nachträglich mitprüfen), aber außerhalb des
+      D4-Aufgabenumfangs bewusst nicht angefasst.
 - [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
       (s. dort Abschnitt 5.5): (1) die **acht Umpolungs-Keystone-Karten**,
       (2) das Kartenmerkmal **„nicht entfernbar"** (hängt an 1), (3) der

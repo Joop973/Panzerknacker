@@ -1291,6 +1291,23 @@ body.touch-on .throwstick.slot-empty {
   box-shadow: 0 0 12px rgba(122, 222, 106, 0.7);
 }
 
+/* AUFTRAG-UMBAU-V2 Phase D4 (Minimap): betretene Raeume sind gefuellt,
+   aber gedaempft (Vergangenheit, nicht mehr anwaehlbar). */
+.mapnode.visited {
+  background: #24242c;
+  border-color: #4a4a5a;
+  opacity: 0.75;
+  cursor: default;
+}
+
+/* Aufgabe 4 woertlich: "angrenzende Raeume als Umriss mit Symbol" -- ein
+   noch nicht betretener, aber erreichbarer Raum ist ein Umriss statt einer
+   gefuellten Flaeche (transparenter Hintergrund, gestrichelter Rand). */
+.mapnode.outline {
+  background: transparent;
+  border-style: dashed;
+}
+
 .maphint {
   font-family: monospace;
   font-size: 13px;

@@ -380,7 +380,7 @@ export function createShopScreen() {
 // "Verlassen": die gewaehlte Aktion (onRepair/onUpgrade) beendet den Raum
 // selbst (run.js: repairAtRest()/upgradeCardAtRest() rufen afterRoomDone()
 // auf) und liefert true zurueck, dann schliesst der Screen sich SELBST
-// (Muster wie mapscreen.js/preview.js -- sonst bliebe das Overlay bei einer
+// (Muster wie minimap.js/preview.js -- sonst bliebe das Overlay bei einer
 // abgelehnten Aktion faelschlich offen oder bei einer angenommenen faelschlich
 // liegen).
 export function createRestScreen() {
