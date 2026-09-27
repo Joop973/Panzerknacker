@@ -380,6 +380,41 @@ export function generateMap(seed, diff, actIndex) {
     }
   }
 
+  // Shop (Phase D4, Garantie 3: "mindestens ein Rastplatz UND ein Shop
+  // existieren"). Rastplaetze sind schon durch die erzwungene restLayer
+  // (s. o.) garantiert -- fuer Shops gab es bisher KEINE Garantie, nur eine
+  // Zufallschance ueber map.nodeWeights (gemessen: ~22 % aller Akt-Karten
+  // hatten gar keinen Shop-Knoten). Anders als die Schatzkammer braucht ein
+  // Shop keinen Leben-Lock und damit auch kein Orphan-Sicherheitsnetz (ein
+  // Shop ist nie eine Sackgasse-Gefahr) -- daher hier bewusst einfacher als
+  // der treasureNode-Block oben.
+  // Untere Grenze ist EARLY_LAYERS+1 (nicht nur forcedLayers+1 wie bei
+  // treasure!) -- 'workshop' ist Teil von EARLY_EXCLUDED_TYPES, ein
+  // erzwungener Shop in Ebene <= EARLY_LAYERS wuerde diese Sperre brechen.
+  // Bei Kollision mit der Schatzkammer (gleicher Knoten) oder einer leeren
+  // Zielebene wird von der bevorzugten Ebene aus erst vorwaerts, dann
+  // rueckwaerts nach der naechsten freien Ebene gesucht -- das garantiert
+  // Erfolg, solange ueberhaupt mehr als ein Nicht-Schatzkammer-Knoten in den
+  // erlaubten Ebenen existiert (bei map.minNodesPerLayer >= 2 immer der Fall).
+  {
+    const lowerBound = Math.max(EARLY_LAYERS + 1, forcedLayers + 1);
+    const preferredLayer = Math.max(
+      lowerBound,
+      Math.min(actRooms - 1, Math.round(actRooms * (mapCfg.workshopLayerFraction ?? 0.3))),
+    );
+    const eligibleLayers = [];
+    for (let l = preferredLayer; l <= actRooms - 1; l++) eligibleLayers.push(l);
+    for (let l = preferredLayer - 1; l >= lowerBound; l--) eligibleLayers.push(l);
+    let workshopNode = null;
+    for (const l of eligibleLayers) {
+      const candidates = (layers[l - 1] || []).filter((n) => !treasureNode || n.id !== treasureNode.id);
+      if (!candidates.length) continue;
+      workshopNode = candidates[Math.floor(rng() * candidates.length)];
+      break;
+    }
+    if (workshopNode) workshopNode.type = 'workshop';
+  }
+
   // Reparatur "keine zwei Rastplaetze in Folge" (Phase 6): erst NACH der
   // Kantenerzeugung moeglich (die Nachbarschaft ergibt sich aus den Kanten,
   // nicht aus der Ebenenreihenfolge). Deterministisch in fester Reihenfolge
@@ -436,6 +471,34 @@ function findMapNodeFallback(run, roomIndex, roomType) {
   const layer = run.map.layers[roomIndex - 1];
   if (!layer) return null;
   return (layer.find((n) => n.type === roomType) || layer[0])?.id ?? null;
+}
+
+// Phase D4 (Minimap): BFS-Pfad vom Startknoten zu targetId, entlang der
+// bestehenden .next-Kanten -- garantiert erfolgreich (Garantie 1: jeder
+// Knoten ist vom Start aus erreichbar). Gebraucht nur als Fallback beim
+// Fortsetzen eines Zwischenstands ohne gespeicherte run.mapVisited (aeltere
+// Snapshots vor dieser Aenderung) -- rekonstruiert einen PLAUSIBLEN
+// (nicht zwingend den tatsaechlich gelaufenen) Besuchspfad, damit die
+// Minimap nach dem Laden nicht nur den aktuellen Knoten zeigt.
+function findPathToNode(map, targetId) {
+  const startId = map.layers[0][0].id;
+  const prev = new Map([[startId, null]]);
+  const queue = [startId];
+  while (queue.length) {
+    const id = queue.shift();
+    if (id === targetId) break;
+    const node = map.byId.get(id);
+    for (const nid of node.next) {
+      if (!prev.has(nid)) {
+        prev.set(nid, id);
+        queue.push(nid);
+      }
+    }
+  }
+  if (!prev.has(targetId)) return [startId];
+  const path = [];
+  for (let id = targetId; id != null; id = prev.get(id)) path.push(id);
+  return path;
 }
 
 // Grundsteinumbau Phase 6: run.roomIndex faengt in JEDEM Akt wieder bei 1 an
@@ -509,6 +572,7 @@ export function runSnapshot(run) {
     shopsVisited: run.shopsVisited,
     roomType: run.roomType,
     mapCurrentId: run.mapCurrentId, // Phase 12: Position auf der Karte (Wahl, nicht ableitbar)
+    mapVisited: [...run.mapVisited], // Phase D4: Besuchsspur fuer die Minimap (akt-lokale ids)
     lives: run.lives,
     shieldCharges: run.shieldCharges.slice(), // mit Restlaufzeit je Ladung
     scrap: run.scrap,
@@ -1169,6 +1233,7 @@ export function upgradeCardAtRest(run, id) {
 function advanceToMapNode(run, node) {
   run.roomIndex = node.layer;
   run.mapCurrentId = node.id;
+  run.mapVisited.add(node.id); // Phase D4 (Minimap): Besuchsspur waechst nur vorwaerts, nie rueckwaerts geleert
   // Kartenbelohnung/Shop-Ueberarbeitung: dies ist die EINZIGE Stelle, an der
   // der Spieler innerhalb eines Akts wirklich in einen NEUEN Raum wechselt
   // (sowohl beim automatischen Weiterzug als auch bei einer echten
@@ -1296,6 +1361,11 @@ function enterAct(run, actIndex) {
   buildActMap(run, actIndex);
   run.roomIndex = 1;
   run.mapCurrentId = run.map.layers[0][0].id;
+  // Phase D4 (Minimap): Besuchsspur ist AKT-LOKAL (Knoten-ids sind pro Akt
+  // eigenstaendig, layer*10+col kann in Akt 1 und 2 dieselbe Zahl ergeben) --
+  // ein neuer Akt faengt deshalb mit einer frischen Menge an, nicht mit der
+  // alten weitergefuehrt.
+  run.mapVisited = new Set([run.mapCurrentId]);
   startRoom(run, 'combat');
 }
 
@@ -1475,6 +1545,13 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     // Aeltere Zwischenstaende (vor Phase 12) kennen mapCurrentId noch
     // nicht -- bestmoegliches Fallback statt eines harten Fehlers.
     run.mapCurrentId = r.mapCurrentId ?? findMapNodeFallback(run, r.roomIndex, r.roomType) ?? run.mapCurrentId;
+    // Phase D4 (Minimap): aeltere Zwischenstaende (vor dieser Aenderung)
+    // kennen mapVisited noch nicht -- Fallback rekonstruiert einen
+    // plausiblen Besuchspfad vom Startknoten bis zur aktuellen Position
+    // (findPathToNode(), garantiert erfolgreich per Garantie 1).
+    run.mapVisited = new Set(
+      r.mapVisited && r.mapVisited.length ? r.mapVisited : findPathToNode(run.map, run.mapCurrentId),
+    );
     startRoom(run, r.roomType || 'combat');
     return run;
   }

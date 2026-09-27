@@ -189,6 +189,7 @@
     "maxNodesPerLayer": 3,
     "extraEdgeChance": 0.4,
     "treasureLayerFraction": 0.5,
+    "workshopLayerFraction": 0.3,
     "nodeWeights": {
       "combat": 42,
       "event": 18,
