@@ -10389,6 +10389,92 @@ identisch** reproduziert (Pflichtvorgabe der Phase, kein Toleranzspielraum).
   in `AUFTRAG-UMBAU-V2.md`. **Nächste Sitzung: Phase D3** (Türen und
   Raumsperre).
 
+### AUFTRAG-UMBAU-V2 — Phase D3 (Türen und Raumsperre) — gemergt
+Laut Phasentext ausdrücklich **ohne echte Dungeon-Erzeugung** gebaut ("Baue
+das zunächst OHNE Dungeon-Erzeugung: zwei fest verdrahtete Testräume,
+zwischen denen man hin- und herfahren kann") — D4 ersetzt erst
+`run.js: generateMap()`. Neues, komplett eigenständiges Modul
+**`src/game/dungeon.js`**, das an keiner bestehenden Raum-/Run-
+Orchestrierung hängt (`state.js`/`run.js` unangetastet) und deshalb ohne
+Risiko für die riesige bestehende Regressionssuite additiv daneben steht.
+- **Architekturentscheidung**: nur EIN Raum ist je "aktiv" — Spielerposition
+  bleibt immer lokal zum aktiven Raum (0..768×0..512, exakt wie überall
+  sonst im Spiel), ein Raumwechsel ist ein Teleport an die Eintrittsstelle
+  des Zielraums, kein durchgängiger Weltraum. Das erfüllt "zwischen denen
+  man hin- und herfahren kann" (Aufgabe 4), ohne eine zusammenhängende
+  Mehrraum-Weltkoordinate einzuführen — D4 kann das später zu einem echten
+  Raumgitter erweitern, ohne dass diese Phase dem vorgreift.
+- **Physik-Wiederverwendung statt zweitem System** (Aufgabe 5): eine Tür ist
+  — offen — schlicht NICHT im `walls[]`-Array vorhanden (voll passierbar),
+  — geschlossen — ein ganz normales `{x,y,w,h,type:'door'}`-Wandobjekt darin.
+  Panzer- (`collision.js: resolveCircleWalls`) UND Geschoss-Kollision
+  (`bullet.js: moveAxis`) iterieren generisch über `walls`/`state.walls` und
+  blockieren dadurch automatisch — kein Sonderfall in einer der beiden
+  Dateien nötig, dasselbe Muster wie die bestehenden beweglichen Wände
+  (`state_world.js: tickMovingWalls()`) und die Spinnenboss-Säulen
+  (`setWallSolid()`).
+- **`DOOR_ROOM_TYPES`** (Aufgabe 3, 8 Einträge — `symbol`+`color`): sieben
+  decken sich inhaltlich mit `run.js: ROOM_TYPE_INFO` (combat/elite/
+  treasure/workshop/event/cursed/rest, kein Import — D3 ist bewusst
+  eigenständig), der achte (`boss`) existiert dort nicht als eigener
+  Eintrag (der Bossraum ist heute ein `type:'combat'`-Knoten mit
+  `isBoss:true`), bekommt hier aber ein eigenes Symbol. `drawDoor(ctx, door)`
+  zeichnet Farbe+Symbol als gefüllten Kreis auf dunklem Zellhintergrund
+  (Farbe+Symbol zusammen sind aus der Distanz auf dem Handy zuverlässiger
+  erkennbar als Emoji allein) plus einen Rahmen, der offen (dünn, hell) von
+  geschlossen (dick, dunkel) unterscheidet.
+- **`roomLocks(type)`** (Aufgabe 2): nur Raumtypen mit Gegnern
+  (`combat`/`elite`/`cursed`) sperren beim Betreten — deckt sich mit
+  `ROOM_TYPE_INFO`s "Keine Gegner"-Beschreibung bei treasure/workshop/
+  event/rest. `enterRoom(world, roomId)` sperrt (falls zutreffend und noch
+  nicht geräumt) über `lockRoom()` (schließt jede Tür des Raums) und ruft
+  `resetCamera()` — "die Kamera fährt auf volle Arenasicht" ist für die
+  beiden lokal-deckungsgleichen Testräume exakt die bestehende
+  D2-Identitätskamera, jetzt explizit bei jedem Raumbetreten (re-)angewendet.
+  `clearRoom()` öffnet wieder. Ein bereits geräumter Kampfraum sperrt beim
+  Wiederbetreten NICHT erneut (Konvention: einmal geräumt bleibt offen, wie
+  beim bestehenden Kartengraphen).
+- **`buildTestDungeon()`**: die zwei fest verdrahteten Testräume — A (Kampf,
+  sperrt) und B (Rastplatz, sperrt nie), deckt damit in einem Testaufbau
+  beide Verhalten ab. Türen liegen auf dem rechten Rand von A / linken Rand
+  von B, Eintrittspunkte zwei Zellen hinter der jeweiligen Gegentür (sonst
+  löst ein Rückwechsel sofort wieder die Gegentür aus).
+  `tickDoorCrossing(world, player)` (Aufgabe 4): eine offene Tür löst den
+  Raumwechsel aus (Teleport + `enterRoom()`), eine geschlossene tut nichts
+  (zusätzliches Sicherheitsnetz — der Spieler wird ohnehin schon physisch
+  von `resolveCircleWalls` gestoppt).
+- **Pflicht-Gegenprobe bestanden**: `setDoorOpen()`s Wandobjekt-Push beim
+  Schließen entfernt (Türen physisch nie mehr blockierend) → genau die drei
+  erwarteten Prüfungen wurden rot ("Panzer sollte an der geschlossenen Tür
+  stoppen", "Geschoss sollte an der geschlossenen Tür sterben", "Geschoss
+  sollte die geschlossene Tür nicht durchquert haben"), alle Struktur-/
+  Kamera-/Raumwechsel-/Render-Prüfungen blieben unberührt grün — bestätigt,
+  dass diese drei Tests wirklich den Blockade-Mechanismus prüfen, nicht nur
+  Zufall. Danach zurückgesetzt.
+- **Neuer, eigenständiger Test `tests/dungeon.mjs`** (dependency-frei, Muster
+  `tests/gamepad.mjs`/`tests/music.mjs`): Struktur (8 Raumtypen, Sperr-Regel),
+  `buildTestDungeon()`s Aufbau (zwei Räume, Türzelle nie ein Randwand-Objekt),
+  `enterRoom()` sperrt + setzt Kamera zurück (Kampfraum) bzw. sperrt nie
+  (Rastplatz), geschlossene Tür blockt Panzer UND Geschoss über die ECHTEN
+  Kollisionsfunktionen (`resolveCircleWalls`/`updateBullet`, kein
+  Fake-Physik-Nachbau), `clearRoom()` öffnet wieder + Panzer/Geschoss
+  passieren dann, `tickDoorCrossing()` wechselt hin und zurück (inkl. "ein
+  bereits geräumter Raum sperrt beim Wiederbetreten nicht erneut") und bleibt
+  bei geschlossener Tür wirkungslos, `drawDoor()` zeichnet für alle acht
+  Raumtypen ohne Absturz und unterscheidet offen/geschlossen sichtbar
+  (`lineWidth`/Symbol über einen aufzeichnenden Fake-Ctx geprüft).
+- **`node tests/regression.mjs` byte-identisch zur D2-Baseline** (5 Seeds:
+  31/32/29/38/38 geräumte Räume + unveränderte Mörser-/Raumdauer-Zeilen) —
+  erwartungsgemäß, `dungeon.js` importiert nur lesend aus bestehenden
+  Modulen (`camera.js`/`collision.js`) und wird von keiner bestehenden Datei
+  aus aufgerufen. Alle vier Nebensuiten (`gamepad`/`music`/`championsprite`/
+  `spidersprites`) unverändert grün.
+- `sw.js` auf `v134` gebumpt (+ `src/game/dungeon.js` neu in `ASSETS`) +
+  `telemetry.js: GAME_VERSION` mitgezogen — laut expliziter Phasenvorgabe in
+  `AUFTRAG-UMBAU-V2.md`. **Nächste Sitzung: Phase D4** (Dungeon-Erzeugung —
+  ersetzt `run.js: generateMap()` durch ein verbundenes Raumgitter und wird
+  dieses Modul erstmals wirklich anschließen).
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
       (s. dort Abschnitt 5.5): (1) die **acht Umpolungs-Keystone-Karten**,
