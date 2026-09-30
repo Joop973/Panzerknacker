@@ -10625,14 +10625,13 @@ Umbau explizit abgelehnt.
   unbetretene Räume und darf nie die Simulation berühren; bei jeder
   Versuchung, das aufzuweichen, anhalten und den Nutzer fragen).
 
+### Fix „zwei Rastplätze in Folge" + D6-Abnahme (Nutzerauftrag) — gemergt
+- **D5 übersprungen** (Nutzerentscheidung): im Vorwärts-Graph-Modell gibt es keine begehbaren Gänge, die Minimap zeigt seit D4 nur betretene + angrenzende Räume.
+- **D6 (nur Zahlen, keine Änderung)**: 100 Seeds × 3 Akte: ~38 Knoten/Akt, 17 betreten, ~21 ausgelassen; Pfadlänge unverändert, also kein Erkundungsaufschlag. Bandenschuss-Vergleich gegenstandslos (seit Grundsteinumbau Phase 1 entfernt). Siegquote/Runzeit in Sekunden nicht messbar (kein spielender Bot im Repo).
+- **Fix**: in `run.js: generateMap()` läuft das Schatzkammer-Orphan-Sicherheitsnetz jetzt VOR der Rast-Reparatur (vorher lief es danach, seine neue Kante wurde nie geprüft). Kein RNG im Netz, Determinismus/Seed-Raumzahlen (30/32/30/36/37) unverändert. Vorher 13/3000 Verletzungen, jetzt 0.
+- **Test** Abschnitt 94 (1000 Seeds × 3 Akte), Gegenprobe (alte Reihenfolge) rot bestätigt. `sw.js` `v136`.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
-- [ ] **„Zwei Rastplätze in Folge" (Grundsteinumbau Phase 6) verletzt sich in
-      ~0,6 % der Fälle selbst** (Phase-D4-Fund, s. dort): die Schatzkammer-
-      Orphan-Sicherheitsnetz-Kante (`generateMap()`, ganz am Ende) wird nach
-      der „keine zwei Rastplätze"-Reparatur eingefügt und deshalb nie gegen
-      diese Regel geprüft. Trivialer Fix (Reihenfolge tauschen oder die neu
-      hinzugefügte Kante nachträglich mitprüfen), aber außerhalb des
-      D4-Aufgabenumfangs bewusst nicht angefasst.
 - [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
       (s. dort Abschnitt 5.5): (1) die **acht Umpolungs-Keystone-Karten**,
       (2) das Kartenmerkmal **„nicht entfernbar"** (hängt an 1), (3) der

@@ -17793,6 +17793,29 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
   }
 }
 
+// ============================================================================
+// Abschnitt 94 -- Fix "zwei Rastplaetze in Folge" (D4-Fund): die Schatzkammer-
+// Orphan-Kante wurde NACH der Rast-Reparatur eingefuegt und nie geprueft.
+// ============================================================================
+{
+  const { generateMap: genMap94 } = await import('../src/game/run.js');
+  let bad = 0;
+  for (let seed = 1; seed <= 1000; seed++) {
+    for (let act = 1; act <= 3; act++) {
+      const m = genMap94(seed, diffData, act);
+      const last = m.layers.length - 1;
+      for (const n of m.byId.values()) {
+        if (n.type !== 'rest') continue;
+        for (const id of n.next) {
+          const t = m.byId.get(id);
+          if (t.type === 'rest' && t.layer !== last) bad++;
+        }
+      }
+    }
+  }
+  check(bad === 0, `Rast-Fix: ${bad} Faelle "Rastplatz -> Rastplatz" in 3000 Karten`);
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);
