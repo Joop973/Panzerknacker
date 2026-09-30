@@ -415,29 +415,8 @@ export function generateMap(seed, diff, actIndex) {
     if (workshopNode) workshopNode.type = 'workshop';
   }
 
-  // Reparatur "keine zwei Rastplaetze in Folge" (Phase 6): erst NACH der
-  // Kantenerzeugung moeglich (die Nachbarschaft ergibt sich aus den Kanten,
-  // nicht aus der Ebenenreihenfolge). Deterministisch in fester Reihenfolge
-  // (Ebene, Knoten, Kante) -- ein Folgeknoten, der durch eine bereits
-  // reparierte Kante schon umgefaerbt wurde, wird nicht doppelt gewuerfelt.
-  // Die erzwungene Rast-Ebene direkt vor dem Boss (restLayer, s. o.) ist
-  // von der Reparatur ausgenommen -- sonst koennte sie hier wieder umgefaerbt
-  // und der garantierte Rastplatz vor dem Boss gebrochen werden.
-  for (const layer of layers) {
-    for (const node of layer) {
-      if (node.type !== 'rest') continue;
-      for (const nid of node.next) {
-        const target = byId.get(nid);
-        if (target.type === 'rest' && target.layer !== actRooms) {
-          const pool = target.layer <= EARLY_LAYERS
-            ? earlyTypes.filter((t) => t !== 'rest')
-            : noRestTypes;
-          target.type = weightedType(pool, weights, rng);
-        }
-      }
-    }
-  }
-
+  // Laeuft VOR der Rast-Reparatur (Fix: eine hier neu eingefuegte Kante wurde
+  // sonst nie gegen "keine zwei Rastplaetze in Folge" geprueft).
   // Sicherheitsnetz: `treasure` ist bei zu wenig Leben nicht waehlbar
   // (chooseMapNode()) -- ein Knoten, dessen EINZIGE Kante zur Schatzkammer
   // fuehrt, waere bei 1 Leben eine Sackgasse. Anders als im alten System
@@ -461,6 +440,29 @@ export function generateMap(seed, diff, actIndex) {
       }
     }
   }
+  // Reparatur "keine zwei Rastplaetze in Folge" (Phase 6): erst NACH der
+  // Kantenerzeugung moeglich (die Nachbarschaft ergibt sich aus den Kanten,
+  // nicht aus der Ebenenreihenfolge). Deterministisch in fester Reihenfolge
+  // (Ebene, Knoten, Kante) -- ein Folgeknoten, der durch eine bereits
+  // reparierte Kante schon umgefaerbt wurde, wird nicht doppelt gewuerfelt.
+  // Die erzwungene Rast-Ebene direkt vor dem Boss (restLayer, s. o.) ist
+  // von der Reparatur ausgenommen -- sonst koennte sie hier wieder umgefaerbt
+  // und der garantierte Rastplatz vor dem Boss gebrochen werden.
+  for (const layer of layers) {
+    for (const node of layer) {
+      if (node.type !== 'rest') continue;
+      for (const nid of node.next) {
+        const target = byId.get(nid);
+        if (target.type === 'rest' && target.layer !== actRooms) {
+          const pool = target.layer <= EARLY_LAYERS
+            ? earlyTypes.filter((t) => t !== 'rest')
+            : noRestTypes;
+          target.type = weightedType(pool, weights, rng);
+        }
+      }
+    }
+  }
+
   return { layers, byId };
 }
 
