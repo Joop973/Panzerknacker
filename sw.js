@@ -2,8 +2,8 @@
 // laeuft PANZERKNACKER komplett offline (Flugmodus). Cache-first mit
 // Netz-Fallback; neue Versionen ueber den CACHE-Namen ausrollen.
 
-const CACHE = 'panzerknacker-v136';
-const PREV_CACHE = 'panzerknacker-v135'; // bleibt fuer eine evtl. offene Alt-Seite intakt
+const CACHE = 'panzerknacker-v137';
+const PREV_CACHE = 'panzerknacker-v136'; // bleibt fuer eine evtl. offene Alt-Seite intakt
 
 const ASSETS = [
   './',
@@ -47,6 +47,7 @@ const ASSETS = [
   'src/game/bossai.js',
   'src/game/cfg.js',
   'src/game/dungeon.js',
+  'src/game/dungeongen.js',
   'src/game/ai_drives.js',
   'src/game/ai_turrets.js',
   'src/game/bullet.js',

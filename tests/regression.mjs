@@ -17816,6 +17816,59 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
   check(bad === 0, `Rast-Fix: ${bad} Faelle "Rastplatz -> Rastplatz" in 3000 Karten`);
 }
 
+// ============================================================================
+// Abschnitt 95 -- 2D-Dungeon-Generator (Phase DG1): harte Garantien ueber
+// 200 Seeds x 3 Akte, Determinismus, Tuer-Symmetrie.
+// ============================================================================
+{
+  const { generateDungeon, dungeonRoomKey } = await import('../src/game/dungeongen.js');
+  const cfg95 = { ...{ minOffPath: 3, minBossDist: 6, earlyDepth: 2 }, ...diffData.dungeon };
+  const bad = { count: 0, conn: 0, boss: 0, rest: 0, shop: 0, treasure: 0, off: 0, early: 0, restrest: 0, doors: 0, keys: 0 };
+  let n95 = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    for (let act = 1; act <= 3; act++) {
+      const d = generateDungeon(seed, diffData, act);
+      n95++;
+      const rooms = d.rooms;
+      const total = diffData.acts[act - 1].rooms + 1;
+      if (rooms.length !== total) bad.count++;
+      const nb = (r) => Object.values(r.doors).filter((x) => x !== null);
+      // Erreichbarkeit + kuerzester Weg
+      const seen = new Map([[d.startId, null]]);
+      const q = [d.startId];
+      for (let i = 0; i < q.length; i++) for (const m of nb(d.byId.get(q[i]))) if (!seen.has(m)) { seen.set(m, q[i]); q.push(m); }
+      if (seen.size !== rooms.length) bad.conn++;
+      const boss = d.byId.get(d.bossId);
+      const maxDist = Math.max(...rooms.map((r) => r.dist));
+      if (!boss.isBoss || nb(boss).length !== 1 || boss.dist !== maxDist || boss.dist < cfg95.minBossDist) bad.boss++;
+      const pre = d.byId.get(nb(boss)[0]);
+      if (pre.type !== 'rest') bad.rest++;
+      if (!rooms.some((r) => r.type === 'workshop')) bad.shop++;
+      const tr = rooms.filter((r) => r.type === 'treasure');
+      if (tr.length !== 1 || nb(tr[0]).length !== 1) bad.treasure++;
+      const path = new Set([d.bossId]);
+      for (let c = d.bossId; c !== d.startId; c = seen.get(c)) path.add(seen.get(c));
+      if (rooms.length - path.size < cfg95.minOffPath) bad.off++;
+      for (const r of rooms) {
+        if (r.dist <= cfg95.earlyDepth && ['elite', 'cursed', 'workshop'].includes(r.type)) bad.early++;
+        if (r.type === 'rest') for (const m of nb(r)) if (d.byId.get(m).type === 'rest') bad.restrest++;
+        for (const [k, o] of Object.entries(r.doors)) {
+          if (o === null) continue;
+          const back = { n: 's', e: 'w', s: 'n', w: 'e' }[k];
+          if (d.byId.get(o).doors[back] !== r.id) bad.doors++;
+        }
+      }
+      if (new Set(rooms.map((r) => dungeonRoomKey(act, r))).size !== rooms.length) bad.keys++;
+    }
+  }
+  check(n95 === 600, 'Dungeon: 600 Dungeons erzeugt');
+  for (const [k, v] of Object.entries(bad)) check(v === 0, `Dungeon-Garantie "${k}": ${v} Verletzungen in ${n95} Dungeons`);
+  const a = JSON.stringify(generateDungeon(42, diffData, 2).rooms);
+  check(a === JSON.stringify(generateDungeon(42, diffData, 2).rooms), 'Dungeon: gleicher Seed -> gleicher Dungeon');
+  check(a !== JSON.stringify(generateDungeon(43, diffData, 2).rooms), 'Dungeon: anderer Seed -> anderer Dungeon');
+  check(a !== JSON.stringify(generateDungeon(42, diffData, 3).rooms), 'Dungeon: anderer Akt -> anderer Dungeon');
+}
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);
