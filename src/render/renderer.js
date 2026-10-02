@@ -6,6 +6,7 @@
 
 import { WIDTH, HEIGHT, CELL } from '../config.js';
 import { applyCameraTransform } from '../core/camera.js';
+import { drawStateDoors } from '../game/dungeon.js';
 import { initSprites, sprite, championAuraFrame } from './sprites.js';
 import {
   drawMines,
@@ -1568,6 +1569,7 @@ export function createRenderer(ctx) {
       // nicht gezielt wird.
       if (gadgetAim !== null && gadgetAim !== undefined) drawHookPreview(ctx, state, gadgetAim);
       drawWalls(state.walls, state.time);
+      drawStateDoors(ctx, state); // DG2: Tueren mit Zielraum-Symbol
       drawMasonScaffolds(ctx, state); // G5: t_mason-Baugeruest, bevor die Zelle solide wird
       drawHazards(ctx, state);
       drawWaveWarning(ctx, state);

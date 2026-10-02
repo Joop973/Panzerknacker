@@ -215,3 +215,92 @@ export function drawDoor(ctx, door) {
   ctx.fillText(info.symbol, cx, cy + 1);
   ctx.restore();
 }
+
+// ---------------------------------------------------------------------------
+// DG2: Tueren im echten Raumzustand (state.doors). Jede Tuer sitzt mittig an
+// einer der vier Aussenwaende (zwei Zellen breit). Eine Tuer ist -- wie oben
+// beschrieben -- schlicht eine feste Wand (geschlossen) bzw. Boden (offen);
+// die Aussenwand-Zellen werden dafuer beim Raumaufbau freigeschnitten.
+// ---------------------------------------------------------------------------
+export const DOOR_OPP = { n: 's', s: 'n', e: 'w', w: 'e' };
+const MID_C = [COLS / 2 - 1, COLS / 2];
+const MID_R = [ROWS / 2 - 1, ROWS / 2];
+
+// cells = die beiden Tuerzellen in der Aussenwand, pocket = die zwei Zellen
+// dahinter (werden freigeraeumt, damit hinter der Tuer nie eine Innenwand steht).
+export function doorGeometry(dir) {
+  if (dir === 'n') return { cells: MID_C.map((c) => [c, 0]), pocket: MID_C.flatMap((c) => [[c, 1], [c, 2]]) };
+  if (dir === 's') return { cells: MID_C.map((c) => [c, ROWS - 1]), pocket: MID_C.flatMap((c) => [[c, ROWS - 2], [c, ROWS - 3]]) };
+  if (dir === 'w') return { cells: MID_R.map((r) => [0, r]), pocket: MID_R.flatMap((r) => [[1, r], [2, r]]) };
+  return { cells: MID_R.map((r) => [COLS - 1, r]), pocket: MID_R.flatMap((r) => [[COLS - 2, r], [COLS - 3, r]]) };
+}
+
+// Baut state.doors aus den Tueren eines Dungeon-Raums und schneidet die
+// Oeffnungen frei. locked=true schliesst sie sofort.
+export function installDoors(state, room, dungeon, locked) {
+  state.doors = [];
+  for (const dir of ['n', 'e', 's', 'w']) {
+    const toId = room.doors[dir];
+    if (toId === null || toId === undefined) continue;
+    const to = dungeon.byId.get(toId);
+    const g = doorGeometry(dir);
+    for (const [c, r] of g.pocket) state.setWallSolid(c, r, false);
+    for (const [c, r] of g.cells) state.setWallSolid(c, r, false);
+    state.doors.push({ dir, toId, roomType: to.isBoss ? 'boss' : to.type, cells: g.cells, open: true });
+  }
+  setDoorsLocked(state, locked);
+}
+
+export function setDoorsLocked(state, locked) {
+  for (const d of state.doors || []) {
+    d.open = !locked;
+    for (const [c, r] of d.cells) state.setWallSolid(c, r, !!locked);
+  }
+}
+
+// Richtung der Tuer, durch die der Spieler gerade hinausfaehrt (oder null).
+// Nur offene Tueren: eine geschlossene ist eine Wand, der Spieler erreicht sie nie.
+export function doorCrossing(state) {
+  const p = state.player;
+  if (!p || !p.alive) return null;
+  for (const d of state.doors || []) {
+    if (!d.open) continue;
+    const [c0, r0] = d.cells[0];
+    const [c1, r1] = d.cells[1];
+    const inX = p.x >= Math.min(c0, c1) * CELL && p.x <= (Math.max(c0, c1) + 1) * CELL;
+    const inY = p.y >= Math.min(r0, r1) * CELL && p.y <= (Math.max(r0, r1) + 1) * CELL;
+    if (d.dir === 'n' && p.y < CELL && inX) return 'n';
+    if (d.dir === 's' && p.y > (ROWS - 1) * CELL && inX) return 's';
+    if (d.dir === 'w' && p.x < CELL && inY) return 'w';
+    if (d.dir === 'e' && p.x > (COLS - 1) * CELL && inY) return 'e';
+  }
+  return null;
+}
+
+// Spieler knapp hinter die Tuer `dir` des neuen Raums stellen.
+export function placePlayerAtDoor(state, dir) {
+  const p = state.player;
+  const W = COLS * CELL;
+  const H = ROWS * CELL;
+  if (dir === 'n') { p.x = W / 2; p.y = 1.6 * CELL; }
+  else if (dir === 's') { p.x = W / 2; p.y = H - 1.6 * CELL; }
+  else if (dir === 'w') { p.x = 1.6 * CELL; p.y = H / 2; }
+  else { p.x = W - 1.6 * CELL; p.y = H / 2; }
+  p.prevX = p.x;
+  p.prevY = p.y;
+  p.vx = 0;
+  p.vy = 0;
+}
+
+// Zeichnet alle Tueren eines Raumzustands (Symbol des Zielraums).
+export function drawStateDoors(ctx, state) {
+  for (const d of state.doors || []) {
+    const [c0, r0] = d.cells[0];
+    const [c1, r1] = d.cells[1];
+    const x = Math.min(c0, c1) * CELL;
+    const y = Math.min(r0, r1) * CELL;
+    const w = (Math.abs(c1 - c0) + 1) * CELL;
+    const h = (Math.abs(r1 - r0) + 1) * CELL;
+    drawDoor(ctx, { x, y, w, h, roomType: d.roomType, open: d.open });
+  }
+}
