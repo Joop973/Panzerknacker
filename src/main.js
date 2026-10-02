@@ -15,7 +15,7 @@ import {
   chooseUpgrade,
   chooseBossReward,
   enterRoom,
-  totalRooms,
+  roomLabel,
   continueEndless,
   rerollOffers,
   banOffer,
@@ -571,6 +571,7 @@ async function init() {
       roomSpec: arenaSpec,
       resume: resume || null,
       starterTank, // Phase 9: bei Resume ueberschreibt der Snapshot (run.js)
+      dungeon: true, // DG2: begehbares Raumraster statt Kartenscreen
     });
     lastSeed = seed;
     updateSecondaryLabel();
@@ -598,16 +599,17 @@ async function init() {
   const resumeBtn = document.getElementById('resumeBtn');
   function refreshResumeBtn() {
     const saved = loadCurrentRun();
-    if (!saved) {
+    // DG2: Zwischenstaende aus der Kartenzeit (ohne Dungeon-Daten) sind nicht fortsetzbar.
+    if (!saved || saved.dungeonPos === undefined) {
       resumeBtn.classList.add('hidden');
       return;
     }
-    resumeBtn.textContent = `Run fortsetzen (Akt ${saved.actIndex || 1}, Raum ${saved.roomIndex}, ${saved.lives} ❤)`;
+    resumeBtn.textContent = `Run fortsetzen (Akt ${saved.actIndex || 1}, ${saved.dungeonVisited?.length || 1} Räume, ${saved.lives} ❤)`;
     resumeBtn.classList.remove('hidden');
   }
   resumeBtn.addEventListener('click', () => {
     const saved = loadCurrentRun();
-    if (!saved) {
+    if (!saved || saved.dungeonPos === undefined) {
       refreshResumeBtn();
       return;
     }
@@ -1129,7 +1131,7 @@ async function init() {
       for (const [ty, d] of Object.entries(diffData.danger)) dangerByType[ty] = d.points;
       const baseTitle = run.endless
         ? `Endlos-Raum ${run.roomIndex}`
-        : `Akt ${run.actIndex}/3 · Raum ${run.roomIndex}/${totalRooms(run.difficulty, run.actIndex)}`;
+        : roomLabel(run);
       const affixSuffix = { elite: ' ★ ELITE', cursed: ' ☠️ VERFLUCHT' }[run.roomType];
       preview.show(
         {

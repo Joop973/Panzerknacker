@@ -19,6 +19,8 @@ import { recordRun, loadStats, saveCurrentRun, clearCurrentRun } from '../core/s
 import { createState, stepState } from './state.js';
 import { rollOffers as rollFromPool, drawOne, rewardRarityWeights, shopRarityWeights, eliteRarityWeights, dedupeKey } from './upgradepool.js';
 import { arenaEnemySpawnCount } from './generator.js';
+import { generateDungeon } from './dungeongen.js';
+import { installDoors, setDoorsLocked, doorCrossing, placePlayerAtDoor, DOOR_OPP } from './dungeon.js';
 
 const TRANSITION_S = 1.5;
 const COMBO_WINDOW = 2.5; // s: Zeitfenster fuer die naechste Combo-Kill
@@ -573,8 +575,19 @@ export function runSnapshot(run) {
     totalRoomIndex: run.totalRoomIndex,
     shopsVisited: run.shopsVisited,
     roomType: run.roomType,
-    mapCurrentId: run.mapCurrentId, // Phase 12: Position auf der Karte (Wahl, nicht ableitbar)
-    mapVisited: [...run.mapVisited], // Phase D4: Besuchsspur fuer die Minimap (akt-lokale ids)
+    ...(run.dungeonMode
+      ? {
+          // DG2: Dungeon-Zustand (der Grundriss selbst entsteht aus Seed + Akt neu)
+          dungeonPos: run.dungeonPos,
+          dungeonVisited: [...run.dungeonVisited],
+          dungeonCleared: [...run.dungeonCleared],
+          dungeonRoomIdx: { ...run.dungeonRoomIdx },
+          entryDir: run.entryDir || null,
+        }
+      : {
+          mapCurrentId: run.mapCurrentId, // Phase 12: Position auf der Karte (Wahl, nicht ableitbar)
+          mapVisited: [...run.mapVisited], // Phase D4: Besuchsspur fuer die Minimap (akt-lokale ids)
+        }),
     lives: run.lives,
     shieldCharges: run.shieldCharges.slice(), // mit Restlaufzeit je Ladung
     scrap: run.scrap,
@@ -620,7 +633,7 @@ function resetRoomCounters(run) {
 // mehr zwingend das Ende des Runs -- run.isActBoss haelt das fest, stepRun()
 // entscheidet anhand von run.actIndex, ob danach der naechste Akt beginnt
 // oder der Run gewonnen ist (nur Akt 3).
-function startRoom(run, type = 'combat') {
+function startRoom(run, type = 'combat', opts = {}) {
   const diff = run.difficulty;
   const actCfg = diff.acts[run.actIndex - 1];
   const finalIdx = actCfg.rooms + 1;
@@ -628,11 +641,14 @@ function startRoom(run, type = 'combat') {
   // waechst run.roomIndex ueber finalIdx hinaus und traefe die Bedingung nie
   // wieder von selbst -- der explizite Ausschluss verhindert trotzdem jede
   // zukuenftige Ueberraschung, falls roomIndex je anders gefuehrt wird.
-  const isFinal = !run.endless && run.roomIndex === finalIdx;
+  // DG2: im Dungeon-Modus bestimmt der Raum selbst (isBoss), nicht die Nummer.
+  const dRoom = run.dungeonMode ? run.dungeon.byId.get(run.dungeonPos) : null;
+  const isFinal = dRoom ? !!dRoom.isBoss : !run.endless && run.roomIndex === finalIdx;
   // Der Bossraum ist immer Kampf (Sicherheitsnetz -- die Karte markiert die
   // letzte Reihe ohnehin schon als 'combat'-Boss-Knoten, siehe generateMap()).
   if (isFinal) type = 'combat';
   run.isActBoss = isFinal;
+  run.exploring = false;
   run.roomType = type;
   run.roomAffix = null;
   run.roomAffixes = [];
@@ -640,7 +656,23 @@ function startRoom(run, type = 'combat') {
   makeRoomStreams(run); // frische, aus dem Seed abgeleitete Stroeme
   resetRoomCounters(run);
   saveCurrentRun(runSnapshot(run)); // nur am Raumanfang, nie im Kampf
-  if (type === 'combat' || type === 'elite' || type === 'cursed') {
+  const locking = type === 'combat' || type === 'elite' || type === 'cursed';
+  if (dRoom && (opts.exploring || !locking)) {
+    // DG2: geraeumter bzw. gegnerloser Raum -- leere Arena mit offenen Tueren.
+    // Gebaut wie der urspruengliche Kampfraum (gleicher Typ + gleiche Raumnummer
+    // -> gleiche Streams), danach werden nur die Gegner entfernt.
+    buildCombatRoom(run, locking ? type : 'combat', false);
+    const st = run.state;
+    st.tanks = st.tanks.filter((t) => t === st.player);
+    st.pendingWave = null;
+    setDoorsLocked(st, false);
+    if (run.entryDir) placePlayerAtDoor(st, run.entryDir);
+    run.exploring = true;
+    run.phase = 'playing';
+    // Erstbesuch eines Nicht-Kampf-Raums: Interaktion (Shop/Rast/Ereignis/Schatz)
+    // als Overlay ueber der leeren Arena.
+    if (!opts.exploring) startNonCombatRoom(run, type);
+  } else if (locking) {
     buildCombatRoom(run, type, isFinal);
   } else {
     startNonCombatRoom(run, type);
@@ -792,6 +824,10 @@ function buildCombatRoom(run, type, isFinal) {
     necroRunDmgBonus: run.necroStacks._runDmgBonus || 0,
     necroRunHpBonus: run.necroStacks._runHpBonus || 0,
   });
+  // DG2: Tueren des Dungeon-Raums einbauen; ein Kampfraum startet verriegelt.
+  if (run.dungeonMode) {
+    installDoors(run.state, run.dungeon.byId.get(run.dungeonPos), run.dungeon, true);
+  }
   // Vorschau: Gegnerliste + "Weiter"-Button (main.js zeigt das Overlay);
   // erst der Klick startet den 1,5-s-Uebergang.
   run.phase = 'preview';
@@ -1259,6 +1295,14 @@ function afterRoomDone(run) {
     startRoom(run, 'combat');
     return;
   }
+  if (run.dungeonMode) {
+    // DG2: Raum erledigt -> bleibt leer, Tueren oeffnen, Spieler faehrt weiter.
+    run.dungeonCleared.add(run.dungeonPos);
+    run.exploring = true;
+    setDoorsLocked(run.state, false);
+    run.phase = 'playing';
+    return;
+  }
   const current = run.map.byId.get(run.mapCurrentId);
   const nextIds = current?.next || [];
   if (nextIds.length <= 1) {
@@ -1353,7 +1397,32 @@ export function enterRoom(run) {
 // mapCurrentId kommen dort aber aus dem Snapshot, nicht bei 1).
 function buildActMap(run, actIndex) {
   run.actIndex = actIndex;
-  run.map = generateMap(run.seed, run.difficulty, actIndex);
+  if (run.dungeonMode) run.dungeon = generateDungeon(run.seed, run.difficulty, actIndex);
+  else run.map = generateMap(run.seed, run.difficulty, actIndex);
+}
+
+// DG2: Zwischen zwei Raeumen des Dungeons wechseln (Tuerdurchfahrt).
+function enterDungeonRoom(run, id, entryDir) {
+  const room = run.dungeon.byId.get(id);
+  run.dungeonPos = id;
+  if (!run.dungeonVisited.has(id)) {
+    run.dungeonVisited.add(id);
+    run.dungeonRoomIdx[id] = Object.keys(run.dungeonRoomIdx).length + 1;
+    run.totalRoomIndex = (run.totalRoomIndex || 0) + 1;
+    if (room.type === 'workshop') run.shopsVisited = (run.shopsVisited || 0) + 1;
+  }
+  run.roomIndex = run.dungeonRoomIdx[id];
+  run.entryDir = entryDir;
+  const cleared = run.dungeonCleared.has(id);
+  startRoom(run, room.type === 'start' ? 'combat' : room.type, { exploring: cleared });
+}
+
+function crossDoor(run, dir) {
+  const room = run.dungeon.byId.get(run.dungeonPos);
+  const toId = room?.doors[dir];
+  if (toId === null || toId === undefined) return false;
+  enterDungeonRoom(run, toId, DOOR_OPP[dir]);
+  return true;
 }
 
 // Einen (neuen) Akt beginnen: frische Karte, Position auf den Startknoten,
@@ -1361,6 +1430,17 @@ function buildActMap(run, actIndex) {
 // sind ohnehin forced-combat, s. generateMap()).
 function enterAct(run, actIndex) {
   buildActMap(run, actIndex);
+  if (run.dungeonMode) {
+    const sid = run.dungeon.startId;
+    run.dungeonPos = sid;
+    run.dungeonVisited = new Set([sid]);
+    run.dungeonCleared = new Set([sid]); // der Startraum ist leer
+    run.dungeonRoomIdx = { [sid]: 1 };
+    run.roomIndex = 1;
+    run.entryDir = null;
+    startRoom(run, 'combat', { exploring: true });
+    return;
+  }
   run.roomIndex = 1;
   run.mapCurrentId = run.map.layers[0][0].id;
   // Phase D4 (Minimap): Besuchsspur ist AKT-LOKAL (Knoten-ids sind pro Akt
@@ -1392,7 +1472,13 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     budgetMult: 1,
     lives: difficulty.lives,
   };
+  // DG2: Dungeon-Modus (begehbares Raumraster). Ein aelterer Zwischenstand
+  // ohne Dungeon-Daten wird in diesem Modus verworfen (frischer Run).
+  const dungeonMode = !!opts.dungeon || opts.resume?.dungeonPos !== undefined;
+  if (dungeonMode && opts.resume && opts.resume.dungeonPos === undefined) opts = { ...opts, resume: null };
   const run = {
+    dungeonMode,
+    exploring: false,
     data,
     tiles,
     difficulty,
@@ -1546,6 +1632,16 @@ export function createRun(data, tiles, difficulty, upgradesData, seed, modeKey =
     run.roomsCleared = r.roomsCleared || 0;
     // Aeltere Zwischenstaende (vor Phase 12) kennen mapCurrentId noch
     // nicht -- bestmoegliches Fallback statt eines harten Fehlers.
+    if (run.dungeonMode) {
+      run.dungeonPos = r.dungeonPos;
+      run.dungeonVisited = new Set(r.dungeonVisited || [r.dungeonPos]);
+      run.dungeonCleared = new Set(r.dungeonCleared || []);
+      run.dungeonRoomIdx = { ...(r.dungeonRoomIdx || { [r.dungeonPos]: r.roomIndex }) };
+      run.entryDir = r.entryDir || null;
+      const dr = run.dungeon.byId.get(run.dungeonPos);
+      startRoom(run, dr.type === 'start' ? 'combat' : dr.type, { exploring: run.dungeonCleared.has(run.dungeonPos) });
+      return run;
+    }
     run.mapCurrentId = r.mapCurrentId ?? findMapNodeFallback(run, r.roomIndex, r.roomType) ?? run.mapCurrentId;
     // Phase D4 (Minimap): aeltere Zwischenstaende (vor dieser Aenderung)
     // kennen mapVisited noch nicht -- Fallback rekonstruiert einen
@@ -1586,6 +1682,12 @@ export function stepRun(run, cmd, dt) {
     return;
   }
   if (run.phase !== 'playing') return;
+
+  // DG2: Tuerdurchfahrt im geraeumten Raum -> naechster Raum.
+  if (run.dungeonMode && run.exploring && run.state.doors) {
+    const dir = doorCrossing(run.state);
+    if (dir && crossDoor(run, dir)) return;
+  }
 
   const st = run.state;
   // Berserker: Feuerrate/Tempo steigen mit fehlenden Leben (gedeckelt).
@@ -1702,7 +1804,7 @@ export function stepRun(run, cmd, dt) {
   // geraeumt, wenn die letzten Welle-1-Gegner WAEHREND der 1-s-Vorwarnung
   // starben -- die zweite Welle wurde dann stillschweigend verschluckt.
   const enemiesLeft = st.tanks.filter((t) => t !== st.player && t.alive).length;
-  if (enemiesLeft === 0 && !st.pendingWave && st.player.alive) {
+  if (enemiesLeft === 0 && !st.pendingWave && st.player.alive && !run.exploring) {
     run.roomsCleared++;
     st.sounds.push('clear');
     // Schrott fuer den geraeumten Raum (deterministisch ueber genRng);
@@ -2256,4 +2358,12 @@ export function enemyCount(run) {
   return { alive, total };
 }
 
-export { totalRooms };
+// Anzeigetext "Akt X/3 · Raum N/M" -- im Dungeon zaehlt N die betretenen Raeume.
+function roomLabel(run) {
+  if (run.dungeonMode && run.dungeon) {
+    return `Akt ${run.actIndex}/3 · Raum ${run.dungeonVisited.size}/${run.dungeon.rooms.length}`;
+  }
+  return `Akt ${run.actIndex}/3 · Raum ${run.roomIndex}/${totalRooms(run.difficulty, run.actIndex)}`;
+}
+
+export { totalRooms, roomLabel };

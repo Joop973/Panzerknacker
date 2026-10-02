@@ -5,7 +5,8 @@
 // Game-Over-Screen mit Statistik und Seed.
 
 import { WIDTH, HEIGHT } from '../config.js';
-import { enemyCount, totalRooms } from '../game/run.js';
+import { enemyCount, roomLabel } from '../game/run.js';
+import { DOOR_ROOM_TYPES } from '../game/dungeon.js';
 import { resolveCfg } from '../game/cfg.js';
 import { occupiedGhostSlots } from '../game/ghost.js';
 
@@ -49,7 +50,7 @@ export function createHud(ctx) {
     ctx.fillText(
       run.endless
         ? `Endlos ${run.roomIndex}`
-        : `Akt ${run.actIndex}/3 · Raum ${run.roomIndex}/${totalRooms(run.difficulty, run.actIndex)}`,
+        : roomLabel(run),
       10,
       16,
     );
@@ -207,11 +208,70 @@ export function createHud(ctx) {
     ctx.textAlign = 'left';
   }
 
+  // DG2: kleine Raster-Minimap (oben rechts unter der Kopfzeile): betretene
+  // Raeume gefuellt, direkt angrenzende noch unbetretene nur als Umriss mit
+  // Symbol, der aktuelle Raum hell umrandet. Alles andere bleibt unsichtbar.
+  function drawDungeonMap(run) {
+    const d = run.dungeon;
+    if (!d) return;
+    const cw = 20;
+    const ch = 14;
+    const x0 = WIDTH - 8 - d.cols * cw;
+    const y0 = HUD_H + 4;
+    const near = new Set();
+    for (const id of run.dungeonVisited) {
+      for (const n of Object.values(d.byId.get(id).doors)) if (n !== null) near.add(n);
+    }
+    ctx.save();
+    // Dunkle Unterlage, damit die Karte vor dem bunten Boden lesbar bleibt.
+    ctx.fillStyle = 'rgba(8,8,12,0.72)';
+    ctx.fillRect(x0 - 4, y0 - 3, d.cols * cw + 8, d.rows * ch + 6);
+    ctx.globalAlpha = 0.95;
+    for (const r of d.rooms) {
+      const seen = run.dungeonVisited.has(r.id);
+      if (!seen && !near.has(r.id)) continue;
+      const info = DOOR_ROOM_TYPES[r.isBoss ? 'boss' : r.type] || { color: '#888', symbol: '' };
+      const x = x0 + r.x * cw;
+      const y = y0 + r.y * ch;
+      // Verbindungen zu Nachbarn (nur ost/sued, jede Kante einmal)
+      ctx.strokeStyle = '#aaa';
+      ctx.lineWidth = 1;
+      if (r.doors.e !== null && (seen || run.dungeonVisited.has(r.doors.e))) {
+        ctx.beginPath(); ctx.moveTo(x + cw - 3, y + ch / 2); ctx.lineTo(x + cw + 1, y + ch / 2); ctx.stroke();
+      }
+      if (r.doors.s !== null && (seen || run.dungeonVisited.has(r.doors.s))) {
+        ctx.beginPath(); ctx.moveTo(x + cw / 2, y + ch - 2); ctx.lineTo(x + cw / 2, y + ch + 1); ctx.stroke();
+      }
+      if (seen) {
+        ctx.fillStyle = run.dungeonCleared.has(r.id) ? 'rgba(90,90,90,0.9)' : info.color;
+        ctx.fillRect(x + 1, y + 1, cw - 4, ch - 3);
+      } else {
+        ctx.strokeStyle = info.color;
+        ctx.setLineDash([2, 2]);
+        ctx.strokeRect(x + 1.5, y + 1.5, cw - 5, ch - 4);
+        ctx.setLineDash([]);
+      }
+      if (r.id === run.dungeonPos) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, cw - 2, ch - 1);
+      }
+      ctx.fillStyle = seen ? '#111' : info.color;
+      ctx.font = 'bold 9px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(info.symbol, x + (cw - 2) / 2, y + (ch - 1) / 2 + 1);
+    }
+    ctx.restore();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+  }
+
   function drawTransition(run) {
     dim(0.65);
     center(
       [
-        [`Akt ${run.actIndex}/3 · Raum ${run.roomIndex}/${totalRooms(run.difficulty, run.actIndex)}`, 'bold 32px monospace', '#e8e4d8'],
+        [roomLabel(run), 'bold 32px monospace', '#e8e4d8'],
         [`♥ Leben: ${run.lives}`, 'bold 18px monospace', '#ff6a5e'],
       ],
       HEIGHT / 2 - 10,
@@ -448,7 +508,10 @@ export function createHud(ctx) {
 
   return {
     render(run, opts = {}) {
-      if (run.phase === 'playing' || run.phase === 'transition') drawBar(run);
+      if (run.phase === 'playing' || run.phase === 'transition') {
+        drawBar(run);
+        if (run.dungeonMode) drawDungeonMap(run);
+      }
       if (opts.toast && run.phase === 'playing') drawToast(opts.toast);
       if (run.phase === 'transition') drawTransition(run);
       else if (run.phase === 'gameover') drawEnd(run, 'GAME OVER', '#ff6a5e');

@@ -17869,6 +17869,314 @@ function fieldHasTextMatch(value, textNums, tol = 0.05) {
   check(a !== JSON.stringify(generateDungeon(42, diffData, 3).rooms), 'Dungeon: anderer Akt -> anderer Dungeon');
 }
 
+// ---------------------------------------------------------------------------
+// 96. 2D-Dungeon DG2: begehbares Raumraster im Run (Tueren, Raumwechsel,
+// geraeumte Raeume bleiben leer, Snapshot/Fortsetzen). Der alte Kartenfluss
+// (createRun ohne { dungeon: true }) bleibt fuer die uebrige Suite unveraendert.
+// ---------------------------------------------------------------------------
+{
+  const { generateDungeon } = await import('../src/game/dungeongen.js');
+  const { doorGeometry, installDoors, setDoorsLocked, doorCrossing } = await import('../src/game/dungeon.js');
+  const { createHud } = await import('../src/ui/hud.js');
+  const CMDD = { move: { x: 0, y: 0 }, aim: { x: 400, y: 256 }, firing: false, secondary: false, secondaryThrow: null, dash: false };
+  const spot = (dir) => ({ n: [384, 16], s: [384, 496], w: [16, 256], e: [752, 256] })[dir];
+  const newRun = (seed, opts = {}) => createRun(tanksData, tilesData, diffData, upgradesData, seed, 'normal', { dungeon: true, ...opts });
+  const killAll = (run) => {
+    const st = run.state;
+    for (const t of st.tanks) if (t !== st.player && t.alive) st.killTank(t, 'test');
+    st.pendingWave = null;
+  };
+  // Treibt Phasen weiter, bis der Spieler frei im Raum steht (playing + exploring)
+  // oder ein Kampf laeuft. Gibt die Phasen-Aktion zurueck, die noch fehlt.
+  const settle = (run) => {
+    let g = 0;
+    while (g++ < 400) {
+      if (run.phase === 'preview') enterRoom(run);
+      else if (run.phase === 'transition') stepRun(run, CMDD, 1 / 60);
+      else if (run.phase === 'upgrade') chooseUpgrade(run, 0);
+      else if (run.phase === 'rest') passRest(run);
+      else if (run.phase === 'workshop') leaveWorkshop(run);
+      else if (run.phase === 'event') chooseEventOption(run, 0);
+      else if (run.phase === 'bossReward') passBossReward(run);
+      else if (run.phase === 'actComplete') advanceAct(run);
+      else return;
+    }
+  };
+  const cross = (run, dir) => {
+    const before = run.dungeonPos;
+    const [x, y] = spot(dir);
+    run.state.player.x = x;
+    run.state.player.y = y;
+    stepRun(run, CMDD, 1 / 60);
+    settle(run);
+    return run.dungeonPos !== before;
+  };
+  // Startet einen Run und liefert (run, room, dir, toRoom) fuer den ersten Nachbarn.
+  const firstStep = (seed) => {
+    const run = newRun(seed);
+    settle(run);
+    const room = run.dungeon.byId.get(run.dungeonPos);
+    const dir = ['n', 'e', 's', 'w'].find((k) => room.doors[k] !== null);
+    return { run, room, dir, to: run.dungeon.byId.get(room.doors[dir]) };
+  };
+
+  // (a) Startraum: leer, Tueren offen, Dungeon = generateDungeon(seed, Akt 1).
+  {
+    const run = newRun(5);
+    settle(run);
+    const d = generateDungeon(5, diffData, 1);
+    check(run.dungeonMode && run.dungeonPos === d.startId, 'DG2(a): Run startet nicht im Startraum des Dungeons');
+    check(run.phase === 'playing' && run.exploring, `DG2(a): Startraum ist nicht frei begehbar (${run.phase}, exploring=${run.exploring})`);
+    check(run.state.tanks.length === 1, 'DG2(a): Startraum enthaelt Gegner');
+    const nd = Object.values(run.dungeon.byId.get(run.dungeonPos).doors).filter((x) => x !== null).length;
+    check(run.state.doors.length === nd && run.state.doors.every((x) => x.open), 'DG2(a): Tuerzahl/-zustand im Startraum falsch');
+  }
+
+  // (b) Kampfraum verriegelt, oeffnet nach dem Raeumen; geschlossene Tuer blockt wirklich.
+  {
+    let tested = false;
+    for (let seed = 1; seed <= 30 && !tested; seed++) {
+      const run = newRun(seed);
+      settle(run);
+      const room = run.dungeon.byId.get(run.dungeonPos);
+      const cdir = ['n', 'e', 's', 'w'].find((k) => room.doors[k] !== null && ['combat', 'elite', 'cursed'].includes(run.dungeon.byId.get(room.doors[k]).type));
+      if (!cdir) continue;
+      tested = true;
+      check(cross(run, cdir), 'DG2(b): Tuerdurchfahrt in den Kampfraum schlug fehl');
+      check(run.exploring === false && run.state.tanks.length > 1, 'DG2(b): Kampfraum hat keine Gegner / ist nicht im Kampfmodus');
+      check(run.state.doors.length > 0 && run.state.doors.every((d) => !d.open), 'DG2(b): Kampfraum ist nicht verriegelt');
+      const g0 = doorGeometry(run.state.doors[0].dir).cells[0];
+      check(run.state.isSolid(g0[0] * 32 + 16, g0[1] * 32 + 16), 'DG2(b): geschlossene Tuer blockt nicht (kein solides Feld)');
+      check(doorCrossing(run.state) === null, 'DG2(b): doorCrossing meldet eine geschlossene Tuer');
+      killAll(run);
+      stepRun(run, CMDD, 1 / 60);
+      settle(run); // Belohnungskarte waehlen
+      check(run.phase === 'playing' && run.exploring, `DG2(b): nach dem Raeumen nicht frei begehbar (${run.phase})`);
+      check(run.state.doors.every((d) => d.open), 'DG2(b): Tueren oeffnen nach dem Raeumen nicht');
+      check(!run.state.isSolid(g0[0] * 32 + 16, g0[1] * 32 + 16), 'DG2(b): geoeffnete Tuer ist noch solide');
+      check(run.dungeonCleared.has(run.dungeonPos), 'DG2(b): Raum steht nicht in dungeonCleared');
+    }
+    check(tested, 'DG2(b): kein Seed mit benachbartem Kampfraum gefunden');
+  }
+
+  // (c) Rueckweg: ein geraeumter Raum bleibt leer, ohne neue Belohnung/Schrott.
+  {
+    let tested = false;
+    for (let seed = 1; seed <= 30 && !tested; seed++) {
+      const run = newRun(seed);
+      settle(run);
+      const room = run.dungeon.byId.get(run.dungeonPos);
+      const cdir = ['n', 'e', 's', 'w'].find((k) => room.doors[k] !== null && run.dungeon.byId.get(room.doors[k]).type === 'combat');
+      if (!cdir) continue;
+      tested = true;
+      cross(run, cdir);
+      killAll(run);
+      stepRun(run, CMDD, 1 / 60);
+      settle(run);
+      const cleared = run.roomsCleared;
+      const scrap = run.scrap;
+      const back = { n: 's', e: 'w', s: 'n', w: 'e' }[cdir];
+      check(cross(run, back), 'DG2(c): Rueckweg durch die Tuer schlug fehl');
+      check(run.dungeonPos === room.id, 'DG2(c): Rueckweg fuehrt nicht in den Ursprungsraum');
+      cross(run, cdir); // und wieder in den geraeumten Kampfraum
+      check(run.exploring && run.state.tanks.length === 1, 'DG2(c): geraeumter Raum ist beim Wiederbetreten nicht leer');
+      check(run.phase === 'playing', `DG2(c): Wiederbetreten startet Phase "${run.phase}" statt playing`);
+      stepRun(run, CMDD, 1 / 60);
+      check(run.roomsCleared === cleared && run.scrap === scrap, 'DG2(c): Wiederbetreten gibt erneut Belohnung/Schrott');
+    }
+    check(tested, 'DG2(c): kein Seed mit benachbartem Kampfraum gefunden');
+  }
+
+  // (d) Eintritt: Spieler steht nie in einer Wand (exploring-Raeume, alle Richtungen).
+  {
+    let n = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const run = newRun(seed);
+      settle(run);
+      for (let hop = 0; hop < 8; hop++) {
+        const room = run.dungeon.byId.get(run.dungeonPos);
+        const dirs = ['n', 'e', 's', 'w'].filter((k) => room.doors[k] !== null && !run.dungeon.byId.get(room.doors[k]).isBoss);
+        if (!dirs.length) break;
+        const dir = dirs[hop % dirs.length];
+        cross(run, dir);
+        if (run.phase === 'playing' && !run.exploring) { killAll(run); stepRun(run, CMDD, 1 / 60); settle(run); }
+        if (run.exploring) {
+          n++;
+          const p = run.state.player;
+          check(!run.state.isSolid(p.x, p.y), `DG2(d): Seed ${seed}, Hop ${hop}: Spieler steht in einer Wand`);
+        }
+      }
+    }
+    check(n >= 20, `DG2(d): zu wenige Eintritte geprueft (${n})`);
+  }
+
+  // (e) Voller Durchlauf: alle drei Akte, jeder Raum betretbar, Sieg am Ende.
+  {
+    const log = [];
+    for (const seed of [1, 42, 1337]) {
+      const run = newRun(seed);
+      let guard = 0;
+      let lastAct = 1;
+      let actsSeen = 0;
+      const seq = [];
+      const byAct = {}; // Akt -> { visited, total }
+      while (guard++ < 20000 && run.phase !== 'victory' && run.phase !== 'gameover') {
+        settle(run);
+        if (run.actIndex !== lastAct) { actsSeen++; lastAct = run.actIndex; }
+        if (run.phase === 'victory' || run.phase === 'gameover') break;
+        if (run.phase !== 'playing') break;
+        byAct[run.actIndex] = { visited: Math.max(byAct[run.actIndex]?.visited || 0, run.dungeonVisited.size), total: run.dungeon.rooms.length };
+        if (!run.exploring) { killAll(run); stepRun(run, CMDD, 1 / 60); continue; }
+        const d = run.dungeon;
+        const prev = new Map([[run.dungeonPos, null]]);
+        const q = [run.dungeonPos];
+        let tgt = null;
+        for (let i = 0; i < q.length && tgt === null; i++) {
+          const r = d.byId.get(q[i]);
+          for (const k of ['n', 'e', 's', 'w']) {
+            const nx = r.doors[k];
+            if (nx === null || prev.has(nx)) continue;
+            prev.set(nx, [q[i], k]);
+            q.push(nx);
+            if (!run.dungeonVisited.has(nx) && !d.byId.get(nx).isBoss) { tgt = nx; break; }
+          }
+        }
+        if (tgt === null) tgt = d.bossId;
+        let c = tgt;
+        while (prev.get(c)[0] !== run.dungeonPos) c = prev.get(c)[0];
+        const before = run.dungeonPos;
+        const actBefore = run.actIndex;
+        const [x, y] = spot(prev.get(c)[1]);
+        run.state.player.x = x; run.state.player.y = y;
+        stepRun(run, CMDD, 1 / 60);
+        if (run.dungeonPos === before && run.actIndex === actBefore && run.phase === 'playing') { check(false, `DG2(e): Seed ${seed}: Tuerdurchfahrt haengt in Raum ${before}`); break; }
+        seq.push(run.dungeonPos);
+      }
+      for (const [act, v] of Object.entries(byAct)) check(v.visited === v.total, `DG2(e): Seed ${seed} Akt ${act}: ${v.visited}/${v.total} Raeume besucht`);
+      check(run.phase === 'victory', `DG2(e): Seed ${seed} endet in "${run.phase}" statt victory`);
+      check(actsSeen === 2, `DG2(e): Seed ${seed}: ${actsSeen} Akt-Uebergaenge statt 2`);
+      log.push(seq.join(','));
+      // Determinismus: derselbe Seed liefert dieselbe Raumfolge (zweiter Lauf nur Akt 1 Start)
+      const r2 = newRun(seed);
+      settle(r2);
+      check(r2.dungeonPos === generateDungeon(seed, diffData, 1).startId, `DG2(e): Seed ${seed}: Startraum nicht reproduzierbar`);
+    }
+  }
+
+  // (f) Shop-Zaehler: Erstbesuch zaehlt einmal, Wiederbesuch nie.
+  {
+    let tested = false;
+    for (let seed = 1; seed <= 60 && !tested; seed++) {
+      const run = newRun(seed);
+      settle(run);
+      const d = run.dungeon;
+      // direkter Test ueber die Raum-API: Weg zum Shop per Teleport entlang der Tueren
+      const shop = d.rooms.find((r) => r.type === 'workshop');
+      const prev = new Map([[run.dungeonPos, null]]);
+      const q = [run.dungeonPos];
+      for (let i = 0; i < q.length; i++) {
+        const r = d.byId.get(q[i]);
+        for (const k of ['n', 'e', 's', 'w']) { const nx = r.doors[k]; if (nx !== null && !prev.has(nx)) { prev.set(nx, [q[i], k]); q.push(nx); } }
+      }
+      const path = [];
+      for (let c = shop.id; prev.get(c); c = prev.get(c)[0]) path.unshift(prev.get(c)[1]);
+      if (path.length > 14) continue;
+      tested = true;
+      let ok = true;
+      for (const k of path) {
+        if (!ok) break;
+        ok = cross(run, k);
+        if (run.phase === 'playing' && !run.exploring) { killAll(run); stepRun(run, CMDD, 1 / 60); settle(run); }
+      }
+      check(ok && run.dungeonPos === shop.id, `DG2(f): Seed ${seed}: Weg zum Shop gescheitert`);
+      check(run.shopsVisited === 1, `DG2(f): shopsVisited ${run.shopsVisited} statt 1 nach dem Erstbesuch`);
+      settle(run); // Shop verlassen
+      const back = { n: 's', e: 'w', s: 'n', w: 'e' }[path[path.length - 1]];
+      cross(run, back);
+      cross(run, path[path.length - 1]);
+      check(run.dungeonPos === shop.id && run.phase === 'playing' && run.exploring, `DG2(f): Shop-Wiederbesuch ist nicht leer/frei (${run.phase})`);
+      check(run.shopsVisited === 1, `DG2(f): Wiederbesuch zaehlt shopsVisited hoch (${run.shopsVisited})`);
+    }
+    check(tested, 'DG2(f): kein Shop-Weg <= 14 Tueren gefunden');
+  }
+
+  // (g) Snapshot/Fortsetzen: Position, Besuchsspur und geraeumte Raeume bleiben erhalten.
+  {
+    const { run, dir } = firstStep(9);
+    cross(run, dir);
+    if (!run.exploring) { killAll(run); stepRun(run, CMDD, 1 / 60); settle(run); }
+    const snap = JSON.parse(JSON.stringify(runSnapshot(run)));
+    check(snap.dungeonPos === run.dungeonPos && snap.dungeonVisited.length === run.dungeonVisited.size, 'DG2(g): Snapshot enthaelt Dungeon-Position/-Besuchsspur nicht');
+    check(snap.mapCurrentId === undefined, 'DG2(g): Snapshot traegt noch Kartendaten');
+    const r2 = createRun(tanksData, tilesData, diffData, upgradesData, 9, 'normal', { dungeon: true, resume: snap });
+    settle(r2);
+    check(r2.dungeonPos === run.dungeonPos, 'DG2(g): Fortsetzen landet in einem anderen Raum');
+    check([...r2.dungeonVisited].sort().join() === [...run.dungeonVisited].sort().join(), 'DG2(g): Besuchsspur nach Fortsetzen verschieden');
+    check([...r2.dungeonCleared].sort().join() === [...run.dungeonCleared].sort().join(), 'DG2(g): geraeumte Raeume nach Fortsetzen verschieden');
+    check(r2.roomIndex === run.roomIndex && r2.totalRoomIndex === run.totalRoomIndex, 'DG2(g): Raumzaehler nach Fortsetzen verschieden');
+    // Alter Zwischenstand ohne Dungeon-Daten wird im Dungeon-Modus verworfen.
+    const old = { ...snap };
+    delete old.dungeonPos; delete old.dungeonVisited; delete old.dungeonCleared; delete old.dungeonRoomIdx;
+    old.mapCurrentId = 12; old.mapVisited = [12];
+    const r3 = createRun(tanksData, tilesData, diffData, upgradesData, 9, 'normal', { dungeon: true, resume: old });
+    check(r3.dungeonPos === r3.dungeon.startId && r3.dungeonVisited.size === 1, 'DG2(g): alter Zwischenstand wird nicht verworfen');
+  }
+
+  // (h) Altmodus unberuehrt: ohne { dungeon: true } kein Dungeon-Zustand.
+  {
+    const run = createRun(tanksData, tilesData, diffData, upgradesData, 3);
+    check(!run.dungeonMode && run.map && !run.dungeon && !run.state.doors, 'DG2(h): Altmodus traegt Dungeon-Zustand');
+  }
+
+  // (i) Tuer-Mechanik direkt: schliessen/oeffnen schneidet Aussenwand frei und blockt.
+  {
+    const run = newRun(2);
+    settle(run);
+    const st = run.state;
+    const room = run.dungeon.byId.get(run.dungeonPos);
+    installDoors(st, room, run.dungeon, true);
+    const cells = st.doors.flatMap((d) => d.cells);
+    check(cells.length > 0 && cells.every(([c, r]) => st.isSolid(c * 32 + 16, r * 32 + 16)), 'DG2(i): verriegelte Tuerzellen sind nicht solide');
+    setDoorsLocked(st, false);
+    check(cells.every(([c, r]) => !st.isSolid(c * 32 + 16, r * 32 + 16)), 'DG2(i): geoeffnete Tuerzellen sind noch solide');
+    // Eine Richtung ohne Tuer bleibt Wand.
+    const missing = ['n', 'e', 's', 'w'].find((k) => room.doors[k] === null);
+    if (missing) {
+      const [c, r] = doorGeometry(missing).cells[0];
+      check(st.isSolid(c * 32 + 16, r * 32 + 16), 'DG2(i): Wand ohne Tuer wurde freigeschnitten');
+    }
+  }
+
+  // (j) Minimap-HUD rendert im echten Zeichenpfad und zeigt nur Betretenes/Angrenzendes.
+  {
+    const { run } = firstStep(4);
+    const calls = [];
+    const fakeCtx = new Proxy(
+      { canvas: { width: 768, height: 512 }, measureText: () => ({ width: 40 }) },
+      {
+        get: (t, k) => {
+          if (k in t) return t[k];
+          if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => ({ addColorStop() {} });
+          if (k === 'strokeRect' || k === 'fillRect') return (x, y, w, h) => calls.push([String(k), x, y, w, h]);
+          return () => {};
+        },
+        set: () => true,
+      },
+    );
+    const hud = createHud(fakeCtx);
+    hud.render(run, { paused: false, toast: null, stats: false });
+    const d = run.dungeon;
+    const near = new Set([...run.dungeonVisited]);
+    for (const id of run.dungeonVisited) for (const n of Object.values(d.byId.get(id).doors)) if (n !== null) near.add(n);
+    const x0 = 768 - 8 - d.cols * 20;
+    const mapRects = calls.filter((c) => c[1] >= x0 - 1 && c[2] > 50 && c[2] < 50 + 4 + d.rows * 14 + 2 && c[3] <= 20);
+    check(mapRects.length > 0, 'DG2(j): Minimap zeichnet nichts');
+    check(mapRects.length <= near.size * 2 + 2, `DG2(j): Minimap zeichnet ${mapRects.length} Rechtecke fuer ${near.size} sichtbare Raeume (zeigt Unbekanntes?)`);
+    check(mapRects.every((c) => [c[1], c[2], c[3], c[4]].every(Number.isFinite)), 'DG2(j): Minimap mit nicht-endlichen Werten');
+  }
+}
+
+
 if (failures) {
   console.error(`\n${failures} Pruefung(en) fehlgeschlagen.`);
   process.exit(1);

@@ -10639,6 +10639,49 @@ Nutzerentscheidung: "Echtes 2D-Dungeon" (begehbares Raumraster mit Tueren und We
 - **Test** Abschnitt 95 (200 Seeds x 3 Akte, 12 Garantien + Determinismus). Gegenproben rot: Boss-Nachpruefung, Shop, Schatz-Sackgasse, Vor-Boss-Rast, Tuersymmetrie (Absturz) einzeln gebrochen. `sw.js` `v137`.
 - Offen fuer DG2: `run.js` setzt `roomIndex=node.layer`, `next[]`, `phase='map'` voraus (Belohnungen, Shop-Zaehler, Rarity nach `totalRoomIndex`, Telemetrie); alte Zwischenstaende (`mapCurrentId`) werden verworfen.
 
+### 2D-Dungeon — Phase DG2 (Anschluss an den Run) — gemergt
+Der Generator aus DG1 ist live: im Spiel ist ein Akt jetzt ein begehbares Raumraster
+mit Tueren und Weg zurueck statt des Kartenscreens. `main.js` startet Runs mit
+`createRun(..., { dungeon: true })`; **ohne diese Option laeuft weiter der alte
+Kartenfluss** (`generateMap`/`chooseMapNode`), damit die uebrige Regressionssuite
+unveraendert gueltig bleibt (Altmodus, nur noch fuer Tests).
+- **Run-Zustand** (`run.js`): `dungeonMode`, `dungeon` (aus Seed+Akt), `dungeonPos`,
+  `dungeonVisited`/`dungeonCleared` (Sets), `dungeonRoomIdx` (Raum-id -> Erstbesuch-
+  nummer), `entryDir`, `exploring`. `roomIndex` = Erstbesuch-Nummer des Raums (treibt
+  Budget/HP-Skalierung/Freischaltung wie vorher, bleibt stabil beim Wiederbesuch);
+  `totalRoomIndex`/`shopsVisited` zaehlen nur ERSTbesuche. Der Boss wird ueber
+  `room.isBoss` erkannt, nicht ueber die Raumnummer.
+- **Ablauf**: `enterAct` -> leerer Startraum. Tuerdurchfahrt (`doorCrossing()` in
+  `stepRun`, nur bei `exploring`) -> `enterDungeonRoom()` -> `startRoom(type,
+  {exploring})`. Kampf/Elite/Fluch/Boss ungeraeumt: Kampfraum mit VERRIEGELTEN Tueren
+  (Vorschau wie bisher), nach Raeumen + Belohnung `afterRoomDone()` = Tueren auf,
+  Raum bleibt als leere Arena begehbar (`exploring`, keine neue Belohnung). Nicht-
+  Kampf-Raeume (Shop/Rast/Ereignis/Schatz) und geraeumte Raeume: leere Arena
+  (gleicher Typ + gleiche Raumnummer -> gleiche Streams, Gegner danach entfernt),
+  Erstbesuch zeigt die Interaktion als Overlay darueber, Wiederbesuch ist leer.
+- **Tueren** (`dungeon.js`): mittig an jeder Aussenwand, 2 Zellen breit
+  (`doorGeometry`), `installDoors()` schneidet Aussenwand + 2 Zellen dahinter frei,
+  `setDoorsLocked()` schliesst/oeffnet ueber `state.setWallSolid()` (geschlossen = feste
+  Wand, keine zweite Physik). Symbol des Zielraums auf jeder Tuer (`drawStateDoors()`).
+  Spieler erscheint beim Wiederbesuch/in Nicht-Kampf-Raeumen an der Eintrittstuer
+  (`placePlayerAtDoor`); in **Kampfraeumen bleibt er am Generator-Spawn** (der
+  garantiert Gegnerabstand).
+- **Snapshot**: statt `mapCurrentId`/`mapVisited` jetzt `dungeonPos`/`dungeonVisited`/
+  `dungeonCleared`/`dungeonRoomIdx`/`entryDir`; ein alter Zwischenstand ohne diese
+  Felder wird im Dungeon-Modus verworfen (Resume-Knopf blendet sich aus).
+- **Anzeige**: Raster-Minimap oben rechts im HUD (`hud.js: drawDungeonMap`, betreten =
+  gefuellt/grau wenn geraeumt, angrenzend unbetreten = Umriss mit Symbol, Rest
+  unsichtbar); `roomLabel(run)` -> "Raum n/m" zaehlt betretene Raeume.
+  `src/ui/minimap.js`/`mapscreen`-Overlay werden im Dungeon-Modus nicht mehr genutzt.
+- **Test** Abschnitt 96 (Startraum, Verriegelung/Oeffnen, Rueckweg ohne neue
+  Belohnung, Eintritt nie in Wand, voller 3-Akt-Durchlauf mit allen Raeumen besucht,
+  Shop-Zaehler, Snapshot/Fortsetzen + verworfener Altstand, Altmodus unberuehrt,
+  Tuer-Mechanik, Minimap). 9 Gegenproben rot.
+- **Bekannt**: `tests/fogperf.mjs` ist flaky (zufaellige Vergleichsposition,
+  schlaegt auch ohne diese Aenderung manchmal fehl). D5 (dunkle Gaenge) bleibt offen.
+  Legacy-Kartencode (`generateMap` & Co.) koennte nach einer Testbasis-Umstellung
+  entfernt werden.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
       (s. dort Abschnitt 5.5): (1) die **acht Umpolungs-Keystone-Karten**,
