@@ -199,6 +199,16 @@
       "workshop": 5
     }
   },
+  "_comment_dungeon": "2D-Dungeon (Phase DG1): Raster-Generator src/game/dungeongen.js. Gesamtzahl der Raeume = acts[].rooms + 1 (Start + Mitte + Boss). Harte Garantien (im Generator, getestet): zusammenhaengend, Boss ist Sackgasse am weitesten vom Start, genau ein Rastplatz direkt vor dem Boss, mindestens ein Shop, genau eine Schatzkammer (Sackgasse), mindestens minOffPath Raeume abseits des kuerzesten Wegs, kein elite/cursed/workshop bis Tiefe earlyDepth, keine zwei Rastplaetze nebeneinander.",
+  "dungeon": {
+    "cols": 6,
+    "rows": 4,
+    "extraEdgeChance": 0.25,
+    "minOffPath": 3,
+    "minBossDist": 6,
+    "earlyDepth": 2,
+    "maxAttempts": 60
+  },
   "elite": {
     "budgetMult": 1.6,
     "hpMult": 2,

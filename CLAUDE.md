@@ -10631,6 +10631,14 @@ Umbau explizit abgelehnt.
 - **Fix**: in `run.js: generateMap()` läuft das Schatzkammer-Orphan-Sicherheitsnetz jetzt VOR der Rast-Reparatur (vorher lief es danach, seine neue Kante wurde nie geprüft). Kein RNG im Netz, Determinismus/Seed-Raumzahlen (30/32/30/36/37) unverändert. Vorher 13/3000 Verletzungen, jetzt 0.
 - **Test** Abschnitt 94 (1000 Seeds × 3 Akte), Gegenprobe (alte Reihenfolge) rot bestätigt. `sw.js` `v136`.
 
+### 2D-Dungeon — Phase DG1 (Raster-Generator) — gemergt
+Nutzerentscheidung: "Echtes 2D-Dungeon" (begehbares Raumraster mit Tueren und Weg zurueck, `dungeon.js` live verdrahten, spaeter D5 dunkle Gaenge), Raster-Form, geraeumte Raeume bleiben leer. Geplant in Phasen: DG1 Generator (diese), DG2 Anschluss an `run.js` (Phasen, Tuerwechsel, Snapshot, Minimap), DG3 Abnahme.
+- **`src/game/dungeongen.js`** (neu, reine Funktion, noch an KEINEN Spielablauf angeschlossen): `generateDungeon(seed, diff, actIndex)` -> `{cols, rows, rooms[], byId, startId, bossId}`; Raum `{id=y*cols+x, x, y, type, isBoss, isStart, dist, doors:{n,e,s,w -> Nachbar-id|null}}`. `dungeonRoomKey(act, room)` ersetzt spaeter `actRoomKey` fuer die RNG-Stroeme. Eigener Strom `dungeon_act<N>`.
+- Raster 6x4 (`difficulty.json: dungeon`), Raumzahl = `acts[].rooms + 1` (Start `type:'start'` + Mitte + Boss `type:'combat', isBoss`). Wachstum als Zufallsbaum ab linkem Rand, danach Zusatzkanten (Schleifen, nie am Boss).
+- **Harte Garantien** (Versuch wird bei Verletzung verworfen, max. 60 Versuche, danach Fehler; gemessen im Mittel 1,4 Versuche): zusammenhaengend; Boss = Sackgasse und weitester Raum (Distanz >= 6, nach den Schleifen neu geprueft); genau ein Rastplatz direkt vor dem Boss; mindestens ein Shop (Tiefe > 2); genau eine Schatzkammer als Sackgasse; mindestens 3 Raeume abseits des kuerzesten Wegs; kein elite/cursed/workshop bis Tiefe 2; keine zwei Rastplaetze nebeneinander; Tuer-Symmetrie.
+- **Test** Abschnitt 95 (200 Seeds x 3 Akte, 12 Garantien + Determinismus). Gegenproben rot: Boss-Nachpruefung, Shop, Schatz-Sackgasse, Vor-Boss-Rast, Tuersymmetrie (Absturz) einzeln gebrochen. `sw.js` `v137`.
+- Offen fuer DG2: `run.js` setzt `roomIndex=node.layer`, `next[]`, `phase='map'` voraus (Belohnungen, Shop-Zaehler, Rarity nach `totalRoomIndex`, Telemetrie); alte Zwischenstaende (`mapCurrentId`) werden verworfen.
+
 ### Offene Punkte / To-do (nice-to-have, nicht dringend)
 - [ ] **Drei Stücke aus `AUFTRAG-UMBAU-V2.md` fehlen im gebauten Makel-System**
       (s. dort Abschnitt 5.5): (1) die **acht Umpolungs-Keystone-Karten**,
